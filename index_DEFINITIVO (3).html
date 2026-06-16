@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IES Gregorio Prieto - Gestión Digital</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .login-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #54993e 0%, #3a6b1a 100%);
+            padding: 20px;
+        }
+
+        .login-box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+        }
+
+        .login-box h1 {
+            color: #3a6b1a;
+            margin-bottom: 10px;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .login-box p {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #3a6b1a;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #54993e;
+        }
+
+        .btn-login {
+            width: 100%;
+            padding: 12px;
+            background-color: #54993e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .btn-login:hover:not(:disabled) {
+            background-color: #3a6b1a;
+        }
+
+        .btn-login:disabled {
+            background-color: #999;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #d32f2f;
+            margin-bottom: 20px;
+            font-size: 14px;
+            text-align: center;
+            padding: 10px;
+            background-color: #ffebee;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #54993e;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .role-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .role-modal.active {
+            display: flex;
+        }
+
+        .role-modal-content {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .role-modal-content h2 {
+            color: #3a6b1a;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+
+        .role-options {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .role-btn {
+            padding: 15px;
+            border: 2px solid #ddd;
+            background: white;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .role-btn:hover {
+            border-color: #54993e;
+            background-color: #f9f9f9;
+        }
+
+        .role-btn.selected {
+            border-color: #54993e;
+            background-color: #e8f5e9;
+            color: #3a6b1a;
+        }
+
+        .btn-confirm {
+            width: 100%;
+            padding: 12px;
+            background-color: #54993e;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-confirm:hover {
+            background-color: #3a6b1a;
+        }
+
+        .app-container {
+            display: none;
+            min-height: 100vh;
+            background-color: #f5f5f5;
+            flex-direction: column;
+        }
+
+        .app-container.active {
+            display: flex;
+        }
+
+        header {
+            background-color: white;
+            border-bottom: 3px solid #54993e;
+            padding: 15px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .header-logo {
+            width: 50px;
+            height: 50px;
+        }
+
+        .header-title {
+            flex: 1;
+            margin-left: 15px;
+        }
+
+        .header-title h1 {
+            color: #3a6b1a;
+            font-size: 20px;
+            margin: 0;
+        }
+
+        .header-title p {
+            color: #666;
+            font-size: 12px;
+            margin: 3px 0 0 0;
+        }
+
+        .header-user {
+            text-align: right;
+        }
+
+        .header-user p {
+            margin: 0;
+            color: #333;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .role-badge {
+            background-color: #54993e;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            display: inline-block;
+            margin-top: 3px;
+        }
+
+        .btn-logout {
+            background: none;
+            border: none;
+            color: #54993e;
+            cursor: pointer;
+            font-weight: 600;
+            padding: 0;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+
+        .btn-logout:hover {
+            text-decoration: underline;
+        }
+
+        .content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .module-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
+        .module-btn {
+            padding: 20px;
+            background: white;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .module-btn:hover {
+            border-color: #54993e;
+            box-shadow: 0 3px 10px rgba(84, 153, 62, 0.2);
+        }
+
+        .module-btn span {
+            font-size: 32px;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        .form-section h2 {
+            color: #3a6b1a;
+            margin-bottom: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .login-box {
+                max-width: 95%;
+            }
+
+            header {
+                flex-wrap: wrap;
+            }
+
+            .module-selector {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen" class="login-container" style="display:flex;">
+        <div class="login-box">
+            <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#54993e" stroke="#3a6b1a" stroke-width="2"/>
+                <text x="50" y="60" font-size="40" font-weight="bold" fill="white" text-anchor="middle">P</text>
+            </svg>
+            <h1>IES Gregorio Prieto</h1>
+            <p>Gestión Digital</p>
+            
+            <div id="errorMessage" class="error-message"></div>
+
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="email">📧 Email</label>
+                    <input type="email" id="email" placeholder="tu.email@somosdelprieto.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">🔐 Contraseña</label>
+                    <input type="password" id="password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn-login" id="btnLogin">Acceder</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- ROLE SELECTOR MODAL -->
+    <div id="roleModal" class="role-modal">
+        <div class="role-modal-content">
+            <h2>👤 Elige tu rol</h2>
+            <p>¿Con qué rol deseas entrar hoy?</p>
+            <div class="role-options" id="roleOptions"></div>
+            <button type="button" class="btn-confirm" id="confirmRoleBtn">Acceder</button>
+        </div>
+    </div>
+
+    <!-- APP CONTAINER -->
+    <div id="appContainer" class="app-container">
+        <header>
+            <svg class="header-logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="45" fill="#54993e" stroke="#3a6b1a" stroke-width="2"/>
+                <text x="50" y="60" font-size="40" font-weight="bold" fill="white" text-anchor="middle">P</text>
+            </svg>
+            <div class="header-title">
+                <h1>IES Gregorio Prieto</h1>
+                <p>Carrocería - Ciclos Formativos</p>
+            </div>
+            <div class="header-user">
+                <p id="userDisplay">Usuario</p>
+                <div id="roleDisplay"></div>
+                <button type="button" class="btn-logout" id="logoutBtn">🚪 Salir</button>
+            </div>
+        </header>
+
+        <div class="content">
+            <div class="module-selector">
+                <button type="button" class="module-btn" onclick="alert('Módulo Mantenimiento - En desarrollo')">
+                    <span>🔧</span>
+                    Mantenimiento
+                </button>
+                <button type="button" class="module-btn" onclick="alert('Módulo Días Libres - En desarrollo')">
+                    <span>📅</span>
+                    Días Libres
+                </button>
+                <button type="button" class="module-btn" id="adminBtn" style="display:none;" onclick="alert('Panel Admin - En desarrollo')">
+                    <span>🔐</span>
+                    Admin
+                </button>
+            </div>
+
+            <div class="form-section">
+                <h2>✅ Bienvenido a Gestión Digital</h2>
+                <p>La app está lista. Los módulos están en desarrollo. Vuelve pronto.</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
+    <script>
+        // ── CONFIG - IMPORTANTE: Multi-tenant para soportar ambos tenants ──
+        const msalConfig = {
+            auth: {
+                clientId: 'e5034649-9f51-4a15-9684-931f479bf618',
+                authority: 'https://login.microsoftonline.com/common', // MULTI-TENANT
+                redirectUri: window.location.href.split('#')[0]
+            },
+            cache: { cacheLocation: 'localStorage' }
+        };
+
+        const SCOPES = ['Sites.Read.All', 'Sites.ReadWrite.All'];
+        const SITE_REF = 'iesgregorioprieto.sharepoint.com:/sites/GestinDigitalIESGregorioPrieto';
+
+        let msalInstance = new msal.PublicClientApplication(msalConfig);
+
+        const data = {
+            currentUser: null,
+            selectedRole: null,
+            users: []
+        };
+
+        // ── LOGIN FORM - SIN MSAL, SOLO EMAIL + PASSWORD ──
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value.toLowerCase().trim();
+            const password = document.getElementById('password').value;
+            const errorDiv = document.getElementById('errorMessage');
+            const btn = document.getElementById('btnLogin');
+
+            errorDiv.classList.remove('show');
+            btn.textContent = 'Accediendo...';
+            btn.disabled = true;
+
+            try {
+                // PASO 1: Validar contra SharePoint USUARIOS
+                const usuarios = await obtenerUsuarios();
+                
+                let usuario = null;
+                for (const u of usuarios) {
+                    if (!u.fields) continue;
+                    const uEmail = (u.fields.username || '').toLowerCase().trim();
+                    if (uEmail === email) {
+                        usuario = u;
+                        break;
+                    }
+                }
+
+                if (!usuario) {
+                    throw new Error(`Email no encontrado: ${email}`);
+                }
+
+                if (usuario.fields.password && usuario.fields.password !== password) {
+                    throw new Error('Contraseña incorrecta');
+                }
+
+                // PASO 2: Guardar usuario
+                data.currentUser = {
+                    email: email,
+                    username: usuario.fields.displayName || email.split('@')[0],
+                    role: usuario.fields.role || 'profesor'
+                };
+
+                // PASO 3: Mostrar selector de rol si aplica
+                const rolesDisponibles = getRolesDisponibles(data.currentUser.role);
+                if (rolesDisponibles.length > 1) {
+                    mostrarSelectorRoles(rolesDisponibles);
+                } else {
+                    data.selectedRole = rolesDisponibles[0];
+                    entrarAlApp();
+                }
+
+            } catch (error) {
+                errorDiv.textContent = '❌ ' + error.message;
+                errorDiv.classList.add('show');
+                btn.textContent = 'Acceder';
+                btn.disabled = false;
+            }
+        });
+
+        // ── OBTENER USUARIOS DE SHAREPOINT ──
+        async function obtenerUsuarios() {
+            let token = null;
+
+            // 1. Intentar token silencioso si ya hay sesión
+            const accounts = msalInstance.getAllAccounts();
+            if (accounts.length > 0) {
+                try {
+                    const resp = await msalInstance.acquireTokenSilent({
+                        scopes: SCOPES,
+                        account: accounts[0]
+                    });
+                    token = resp.accessToken;
+                } catch (e) { /* intentaremos popup */ }
+            }
+
+            // 2. Si no hay token, pedir popup Microsoft
+            if (!token) {
+                try {
+                    const resp = await msalInstance.loginPopup({
+                        scopes: SCOPES,
+                        prompt: 'select_account'
+                    });
+                    token = resp.accessToken;
+                } catch (e) {
+                    throw new Error('Necesitas iniciar sesión con Microsoft para acceder. ' + (e.message || ''));
+                }
+            }
+
+            // 3. Con token, leer SharePoint
+            return await fetchUsersFromSharePoint(token);
+        }
+
+        async function fetchUsersFromSharePoint(token) {
+            try {
+                const siteResp = await fetch(`https://graph.microsoft.com/v1.0/sites/${SITE_REF}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                const site = await siteResp.json();
+                if (!site.id) return [];
+
+                const listResp = await fetch(
+                    `https://graph.microsoft.com/v1.0/sites/${site.id}/lists?$filter=displayName eq 'USUARIOS'`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                const listData = await listResp.json();
+                if (!listData.value || listData.value.length === 0) return [];
+
+                const itemsResp = await fetch(
+                    `https://graph.microsoft.com/v1.0/sites/${site.id}/lists/${listData.value[0].id}/items?$expand=fields`,
+                    { headers: { 'Authorization': `Bearer ${token}` } }
+                );
+                const items = await itemsResp.json();
+                
+                // Guardar en localStorage para fallback
+                if (items.value) {
+                    localStorage.setItem('usuariosCache', JSON.stringify(items.value));
+                }
+                return items.value || [];
+
+            } catch (error) {
+                console.error('Error obteniendo usuarios:', error);
+                return loadUsersFromStorage();
+            }
+        }
+
+        function loadUsersFromStorage() {
+            const cached = localStorage.getItem('usuariosCache');
+            return cached ? JSON.parse(cached) : [];
+        }
+
+        // ── ROLES ──
+        // El campo "role" en SharePoint puede contener uno o varios roles separados por coma
+        // Ejemplos: "profesor"  /  "admin,profesor"  /  "jefe_estudios,jefe_departamento,profesor"
+        function getRolesDisponibles(roleField) {
+            if (!roleField) return ['profesor'];
+            // Separar por coma y limpiar espacios
+            const roles = roleField.split(',').map(r => r.trim()).filter(Boolean);
+            // Asegurarse de que "profesor" siempre está disponible si tiene otros roles
+            if (roles.length > 1 && !roles.includes('profesor')) {
+                roles.push('profesor');
+            }
+            return roles;
+        }
+
+        function getRoleLabel(role) {
+            const labels = {
+                'profesor':           '👨‍🏫 Profesor',
+                'jefe_departamento':  '📁 Jefe de Departamento',
+                'jefe_estudios':      '📊 Jefe de Estudios',
+                'director':           '🏫 Director',
+                'admin':              '🔐 Secretario/Admin'
+            };
+            return labels[role] || role;
+        }
+
+        function mostrarSelectorRoles(roles) {
+            const modal = document.getElementById('roleModal');
+            const rolesDiv = document.getElementById('roleOptions');
+            
+            rolesDiv.innerHTML = '';
+            data.selectedRole = roles[0];
+
+            roles.forEach((role, idx) => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'role-btn' + (idx === 0 ? ' selected' : '');
+                btn.textContent = getRoleLabel(role);
+                btn.onclick = () => {
+                    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    data.selectedRole = role;
+                };
+                rolesDiv.appendChild(btn);
+            });
+
+            modal.classList.add('active');
+        }
+
+        document.getElementById('confirmRoleBtn').addEventListener('click', function() {
+            document.getElementById('roleModal').classList.remove('active');
+            entrarAlApp();
+        });
+
+        // ── ENTRAR A LA APP ──
+        function entrarAlApp() {
+            document.getElementById('loginScreen').style.display = 'none';
+            document.getElementById('appContainer').classList.add('active');
+            
+            document.getElementById('userDisplay').textContent = data.currentUser.username;
+            document.getElementById('roleDisplay').innerHTML = `<div class="role-badge">${getRoleLabel(data.selectedRole)}</div>`;
+            
+            const rolesConAdmin = ['admin', 'jefe_estudios', 'director', 'jefe_departamento'];
+            if (rolesConAdmin.includes(data.selectedRole)) {
+                document.getElementById('adminBtn').style.display = 'block';
+            } else {
+                document.getElementById('adminBtn').style.display = 'none';
+            }
+        }
+
+        // ── LOGOUT ──
+        document.getElementById('logoutBtn').addEventListener('click', function() {
+            data.currentUser = null;
+            data.selectedRole = null;
+            document.getElementById('appContainer').classList.remove('active');
+            document.getElementById('loginScreen').style.display = 'flex';
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+            document.getElementById('errorMessage').classList.remove('show');
+        });
+
+        // ── INIT ──
+        msalInstance.initialize();
+    </script>
+</body>
+</html>
