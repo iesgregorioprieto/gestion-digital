@@ -1,5 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
+
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -8,138 +9,477 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
-export default function PanelSecretario() {
-  const [profesores, setProfesores] = useState([]);
-  const [filtro, setFiltro] = useState('pendiente');
-  const [cargando, setCargando] = useState(true);
+const DEPARTAMENTOS = [
+  'TMV/Carrocería','Hostelería','Informática','Electricidad','Comercio',
+  'Administración','Industrias Alimentarias','FOL','Física y Química',
+  'Ciencias Naturales/Biología','Matemáticas','Lengua y Literatura','Inglés',
+  'Educación Física','Dibujo/Plástica','Geografía e Historia','Filosofía',
+  'Música','Tecnología','Orientación','PT/AL'
+];
 
-  const cargarProfesores = async () => {
+const TIPOS_CONTRATO = [
+  'Funcionario de carrera',
+  'Interino con vacante',
+  'Interino sin vacante',
+  'Comisión de servicios'
+];
+
+const ROLES_DOCENTES = [
+  { valor: 'profesor', etiqueta: '📚 Profesor/a' },
+  { valor: 'tutor', etiqueta: '🤝 Tutor/a' },
+  { valor: 'jefe_departamento', etiqueta: '📂 Jefe/a de Departamento' },
+];
+
+export default function PanelSecretario() {
+  const [pestana, setPestana] = useState('profesores');
+  const [filtroEstado, setFiltroEstado] = useState('pendiente');
+  const [busqueda, setBusqueda] = useState('');
+  const [filtroDpto, setFiltroDpto] = useState('');
+  const [profesores, setProfesores] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [profesorSeleccionado, setProfesorSeleccionado] = useState(null);
+  const [modoVista, setModoVista] = useState(null);
+  const [formEdicion, setFormEdicion] = useState({});
+  const [guardando, setGuardando] = useState(false);
+  const [mensaje, setMensaje] = useState(null);
+
+  useEffect(() => { cargarProfesores(); }, [filtroEstado]);
+
+  async function cargarProfesores() {
     setCargando(true);
     const { data, error } = await supabase
       .from('profesores')
       .select('*')
-      .eq('estado', filtro)
-      .order('created_at', { ascending: true });
+      .eq('estado', filtroEstado)
+      .order('created_at', { ascending: false });
     if (!error) setProfesores(data || []);
     setCargando(false);
-  };
+  }
 
-  useEffect(() => { cargarProfesores(); }, [filtro]);
-
-  const cambiarEstado = async (id, nuevoEstado) => {
-    await supabase.from('profesores').update({ estado: nuevoEstado }).eq('id', id);
+  async function aprobar(id) {
+    await supabase.from('profesores').update({ estado: 'activo' }).eq('id', id);
+    mostrarMensaje('✅ Profesor aprobado', 'ok');
     cargarProfesores();
-  };
+    cerrarModal();
+  }
 
-  const eliminarInterinos = async () => {
+  async function rechazar(id) {
+    await supabase.from('profesores').update({ estado: 'inactivo' }).eq('id', id);
+    mostrarMensaje('❌ Profesor rechazado', 'error');
+    cargarProfesores();
+    cerrarModal();
+  }
+
+  async function eliminarInterinos() {
     if (!confirm('¿Eliminar TODOS los interinos? Esta acción no se puede deshacer.')) return;
-    await supabase.from('profesores').delete().eq('tipo_contrato', 'Interino sin vacante');
-    await supabase.from('profesores').delete().eq('tipo_contrato', 'Interino con vacante');
+    await supabase.from('profesores').delete().like('tipo_contrato', 'Interino%');
+    mostrarMensaje('🗑️ Interinos eliminados', 'ok');
     cargarProfesores();
-  };
+  }
 
-  const colorEstado = { pendiente: '#ff9800', activo: '#2E7023', inactivo: '#999' };
-  const labelEstado = { pendiente: '⏳ Pendiente', activo: '✅ Activo', inactivo: '❌ Inactivo' };
+  async function guardarEdicion() {
+    setGuardando(true);
+    // Asegurarse de que rol es siempre un array y tiene al menos 'profesor'
+    let rolesFinales = Array.isArray(formEdicion.rol) ? formEdicion.rol : [formEdicion.rol];
+    if (!rolesFinales.includes('profesor')) rolesFinales = ['profesor', ...rolesFinales];
+    const datosAGuardar = { ...formEdicion, rol: rolesFinales };
+    const { error } = await supabase
+      .from('profesores')
+      .update(datosAGuardar)
+      .eq('id', profesorSeleccionado.id);
+    setGuardando(false);
+    if (!error) {
+      mostrarMensaje('💾 Datos guardados correctamente', 'ok');
+      cargarProfesores();
+      cerrarModal();
+    } else {
+      mostrarMensaje('⚠️ Error al guardar: ' + error.message, 'error');
+    }
+  }
+
+  function toggleRol(valor) {
+    const rolesActuales = Array.isArray(formEdicion.rol) ? formEdicion.rol : ['profesor'];
+    if (rolesActuales.includes(valor)) {
+      // No permitir desmarcar 'profesor'
+      if (valor === 'profesor') return;
+      setFormEdicion(f => ({ ...f, rol: rolesActuales.filter(r => r !== valor) }));
+    } else {
+      setFormEdicion(f => ({ ...f, rol: [...rolesActuales, valor] }));
+    }
+  }
+
+  function abrirFicha(profesor) {
+    setProfesorSeleccionado(profesor);
+    setModoVista('ficha');
+  }
+
+  function abrirEdicion(profesor) {
+    setProfesorSeleccionado(profesor);
+    const rolesActuales = Array.isArray(profesor.rol) ? profesor.rol : ['profesor'];
+    setFormEdicion({
+      nombre: profesor.nombre,
+      apellidos: profesor.apellidos,
+      email: profesor.email,
+      departamento: profesor.departamento,
+      especialidad: profesor.especialidad || '',
+      tipo_contrato: profesor.tipo_contrato,
+      antiguedad_centro: profesor.antiguedad_centro || '',
+      antiguedad_cuerpo: profesor.antiguedad_cuerpo || '',
+      rol: rolesActuales,
+      rol_gestion: profesor.rol_gestion || '',
+      estado: profesor.estado,
+    });
+    setModoVista('editar');
+  }
+
+  function cerrarModal() {
+    setProfesorSeleccionado(null);
+    setModoVista(null);
+    setFormEdicion({});
+  }
+
+  function mostrarMensaje(texto, tipo) {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje(null), 3000);
+  }
+
+  const profesoresFiltrados = profesores.filter(p => {
+    const nombre = `${p.nombre} ${p.apellidos}`.toLowerCase();
+    const coincideBusqueda = nombre.includes(busqueda.toLowerCase());
+    const coincideDpto = filtroDpto === '' || p.departamento === filtroDpto;
+    return coincideBusqueda && coincideDpto;
+  });
+
+  function etiquetaRoles(p) {
+    const roles = Array.isArray(p.rol) ? p.rol : [p.rol];
+    const etiquetas = [];
+    if (p.rol_gestion === 'director') etiquetas.push('👔 Director/a');
+    if (p.rol_gestion === 'jefe_estudios') etiquetas.push('📋 Jefe/a de Estudios');
+    if (p.rol_gestion === 'secretario') etiquetas.push('📁 Secretario/a');
+    if (roles.includes('jefe_departamento')) etiquetas.push('📂 Jefe/a Dpto.');
+    if (roles.includes('tutor')) etiquetas.push('🤝 Tutor/a');
+    if (roles.includes('profesor')) etiquetas.push('📚 Profesor/a');
+    return etiquetas.join(' · ');
+  }
+
+  function badgeEstado(estado) {
+    if (estado === 'activo') return { bg: '#d1fae5', color: '#065f46', texto: '✅ Activo' };
+    if (estado === 'pendiente') return { bg: '#fef3c7', color: '#92400e', texto: '⏳ Pendiente' };
+    return { bg: '#fee2e2', color: '#991b1b', texto: '❌ Inactivo' };
+  }
+
+  const verde = '#1e6b2e';
 
   return (
-    <div style={{ fontFamily: 'Arial, sans-serif', minHeight: '100vh', background: '#f0f4f0' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
       {/* HEADER */}
-      <header style={{ background: '#2E7023', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ margin: 0, color: 'white', fontSize: '18px' }}>🏫 Panel del Secretario</h1>
-          <p style={{ margin: 0, color: '#8DC63F', fontSize: '13px' }}>IES Gregorio Prieto</p>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>🏫 Panel del Secretario</div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto</div>
         </div>
-        <a href="/" style={{ color: 'white', fontSize: '13px', textDecoration: 'none' }}>← Inicio</a>
-      </header>
+        <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
+      </div>
 
-      <div style={{ padding: '24px', maxWidth: '900px', margin: '0 auto' }}>
+      {/* TOAST */}
+      {mensaje && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          backgroundColor: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b',
+          color: 'white', padding: '12px 20px', borderRadius: 8,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.2)', fontSize: 15
+        }}>
+          {mensaje.texto}
+        </div>
+      )}
 
-        {/* MÓDULOS DEL SECRETARIO */}
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '24px' }}>
+      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
+
+        {/* PESTAÑAS */}
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           {[
-            { icon: '👥', label: 'Profesores', activo: true },
-            { icon: '🔧', label: 'Mantenimiento', activo: false },
-            { icon: '📅', label: 'Guardias', activo: false },
-            { icon: '📋', label: 'DLD', activo: false },
-            { icon: '📢', label: 'Noticias', activo: false },
-          ].map((m, i) => (
-            <div key={i} style={{ background: m.activo ? '#2E7023' : 'white', borderRadius: '10px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', opacity: m.activo ? 1 : 0.5, cursor: m.activo ? 'pointer' : 'not-allowed' }}>
-              <span style={{ fontSize: '20px' }}>{m.icon}</span>
-              <span style={{ color: m.activo ? 'white' : '#555', fontWeight: 'bold', fontSize: '14px' }}>{m.label}</span>
-              {!m.activo && <span style={{ fontSize: '10px', color: '#aaa' }}>Próximo</span>}
-            </div>
+            { id: 'profesores', label: '👥 Profesores', activo: true },
+            { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: false },
+            { id: 'guardias', label: '📅 Guardias', activo: false },
+            { id: 'dld', label: '📄 DLD', activo: false },
+            { id: 'noticias', label: '📢 Noticias', activo: false },
+          ].map(t => (
+            <button key={t.id} onClick={() => t.activo && setPestana(t.id)} style={{
+              padding: '10px 18px', borderRadius: 10, border: '1.5px solid',
+              borderColor: pestana === t.id ? verde : '#ccc',
+              backgroundColor: pestana === t.id ? verde : 'white',
+              color: pestana === t.id ? 'white' : t.activo ? '#333' : '#aaa',
+              cursor: t.activo ? 'pointer' : 'default',
+              fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6
+            }}>
+              {t.label}
+              {!t.activo && <span style={{ fontSize: 11, opacity: 0.6 }}>Próximo</span>}
+            </button>
           ))}
         </div>
 
-        {/* FILTROS */}
-        <div style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              {['pendiente', 'activo', 'inactivo'].map(e => (
-                <button key={e} onClick={() => setFiltro(e)}
-                  style={{ padding: '8px 16px', borderRadius: '8px', border: `2px solid ${filtro === e ? '#2E7023' : '#ddd'}`, background: filtro === e ? '#2E7023' : 'white', color: filtro === e ? 'white' : '#555', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-                  {labelEstado[e]}
-                </button>
-              ))}
+        {pestana === 'profesores' && (
+          <>
+            {/* BUSCADOR */}
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="text"
+                placeholder="🔍 Buscar por nombre..."
+                value={busqueda}
+                onChange={e => setBusqueda(e.target.value)}
+                style={{ flex: 1, minWidth: 200, padding: '9px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, outline: 'none' }}
+              />
+              <select
+                value={filtroDpto}
+                onChange={e => setFiltroDpto(e.target.value)}
+                style={{ padding: '9px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, minWidth: 200 }}
+              >
+                <option value="">📂 Todos los departamentos</option>
+                {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              {(busqueda || filtroDpto) && (
+                <button onClick={() => { setBusqueda(''); setFiltroDpto(''); }} style={{
+                  padding: '9px 14px', borderRadius: 8, border: '1.5px solid #ddd',
+                  backgroundColor: '#f5f5f5', cursor: 'pointer', fontSize: 13
+                }}>✖ Limpiar</button>
+              )}
             </div>
-            <button onClick={eliminarInterinos}
-              style={{ padding: '8px 16px', borderRadius: '8px', border: 'none', background: '#ffebee', color: '#c62828', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-              🗑️ Eliminar interinos
-            </button>
-          </div>
-        </div>
 
-        {/* LISTA DE PROFESORES */}
-        {cargando ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>Cargando...</div>
-        ) : profesores.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px', background: 'white', borderRadius: '12px', color: '#888' }}>
-            No hay profesores en estado "{filtro}"
-          </div>
-        ) : (
-          profesores.map(p => (
-            <div key={p.id} style={{ background: 'white', borderRadius: '12px', padding: '20px', marginBottom: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                <div>
-                  <h3 style={{ margin: '0 0 6px', color: '#2E7023', fontSize: '16px' }}>{p.nombre} {p.apellidos}</h3>
-                  <p style={{ margin: '2px 0', color: '#666', fontSize: '13px' }}>📧 {p.email}</p>
-                  <p style={{ margin: '2px 0', color: '#666', fontSize: '13px' }}>🏫 {p.departamento} {p.especialidad ? `· ${p.especialidad}` : ''}</p>
-                  <p style={{ margin: '2px 0', color: '#666', fontSize: '13px' }}>💼 {p.tipo_contrato} · {p.rol}</p>
-                  {p.es_tutor && <p style={{ margin: '2px 0', color: '#666', fontSize: '13px' }}>🤝 Tutor/a de {p.grupo_tutoria}</p>}
-                  <p style={{ margin: '4px 0 0', color: '#aaa', fontSize: '11px' }}>Registrado: {new Date(p.created_at).toLocaleDateString('es-ES')}</p>
-                </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  {p.estado === 'pendiente' && (
-                    <>
-                      <button onClick={() => cambiarEstado(p.id, 'activo')}
-                        style={{ padding: '10px 18px', background: '#2E7023', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-                        ✅ Aprobar
-                      </button>
-                      <button onClick={() => cambiarEstado(p.id, 'inactivo')}
-                        style={{ padding: '10px 18px', background: '#ffebee', color: '#c62828', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-                        ❌ Rechazar
-                      </button>
-                    </>
-                  )}
-                  {p.estado === 'activo' && (
-                    <button onClick={() => cambiarEstado(p.id, 'inactivo')}
-                      style={{ padding: '10px 18px', background: '#ffebee', color: '#c62828', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-                      ❌ Desactivar
-                    </button>
-                  )}
-                  {p.estado === 'inactivo' && (
-                    <button onClick={() => cambiarEstado(p.id, 'activo')}
-                      style={{ padding: '10px 18px', background: '#2E7023', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}>
-                      ✅ Activar
-                    </button>
-                  )}
-                </div>
+            {/* FILTROS ESTADO */}
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', gap: 10 }}>
+                {['pendiente', 'activo', 'inactivo'].map(e => (
+                  <button key={e} onClick={() => setFiltroEstado(e)} style={{
+                    padding: '8px 18px', borderRadius: 8,
+                    border: `1.5px solid ${filtroEstado === e ? verde : '#ddd'}`,
+                    backgroundColor: filtroEstado === e ? verde : 'white',
+                    color: filtroEstado === e ? 'white' : '#555',
+                    cursor: 'pointer', fontWeight: 600, fontSize: 14
+                  }}>
+                    {e === 'pendiente' ? '⏳ Pendiente' : e === 'activo' ? '✅ Activo' : '❌ Inactivo'}
+                  </button>
+                ))}
               </div>
+              <button onClick={eliminarInterinos} style={{
+                padding: '8px 16px', borderRadius: 8, border: '1.5px solid #fca5a5',
+                backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 13
+              }}>🗑️ Eliminar interinos</button>
             </div>
-          ))
+
+            {/* CONTADOR */}
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 10, paddingLeft: 4 }}>
+              {cargando ? 'Cargando...' : `${profesoresFiltrados.length} profesor${profesoresFiltrados.length !== 1 ? 'es' : ''} encontrado${profesoresFiltrados.length !== 1 ? 's' : ''}`}
+            </div>
+
+            {/* LISTA */}
+            {cargando ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando profesores...</div>
+            ) : profesoresFiltrados.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#aaa', backgroundColor: 'white', borderRadius: 12 }}>
+                No hay profesores en este estado
+              </div>
+            ) : (
+              profesoresFiltrados.map(p => {
+                const badge = badgeEstado(p.estado);
+                return (
+                  <div key={p.id} style={{
+                    backgroundColor: 'white', borderRadius: 12, padding: 18,
+                    marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                    borderLeft: `4px solid ${verde}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 16, color: verde }}>{p.nombre} {p.apellidos}</div>
+                        <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>📧 {p.email}</div>
+                        <div style={{ fontSize: 13, color: '#555' }}>🏫 {p.departamento}{p.especialidad ? ` · ${p.especialidad}` : ''}</div>
+                        <div style={{ fontSize: 13, color: '#555' }}>💼 {p.tipo_contrato}</div>
+                        <div style={{ fontSize: 13, color: '#555' }}>🎭 {etiquetaRoles(p)}</div>
+                        <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
+                          Registrado: {new Date(p.created_at).toLocaleDateString('es-ES')}
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                        <span style={{ fontSize: 12, backgroundColor: badge.bg, color: badge.color, padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>
+                          {badge.texto}
+                        </span>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                          <button onClick={() => abrirFicha(p)} style={btnEstilo('#e8f5e9', verde, verde)}>👁️ Ficha</button>
+                          <button onClick={() => abrirEdicion(p)} style={btnEstilo('#e8f0fe', '#1a56db', '#1a56db')}>✏️ Editar</button>
+                          {p.estado === 'pendiente' && <>
+                            <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>✅ Aprobar</button>
+                            <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>❌ Rechazar</button>
+                          </>}
+                          {p.estado === 'activo' && (
+                            <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>🚫 Desactivar</button>
+                          )}
+                          {p.estado === 'inactivo' && (
+                            <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </>
         )}
+      </div>
+
+      {/* MODAL FICHA */}
+      {modoVista === 'ficha' && profesorSeleccionado && (
+        <Modal onClose={cerrarModal} titulo="📋 Ficha del Profesor">
+          <FilaInfo label="Nombre" valor={`${profesorSeleccionado.nombre} ${profesorSeleccionado.apellidos}`} />
+          <FilaInfo label="Email" valor={profesorSeleccionado.email} />
+          <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento} />
+          <FilaInfo label="Especialidad" valor={profesorSeleccionado.especialidad || '—'} />
+          <FilaInfo label="Tipo contrato" valor={profesorSeleccionado.tipo_contrato} />
+          <FilaInfo label="Roles" valor={etiquetaRoles(profesorSeleccionado)} />
+          <FilaInfo label="Rol gestión" valor={profesorSeleccionado.rol_gestion || '—'} />
+          <FilaInfo label="Antigüedad centro" valor={profesorSeleccionado.antiguedad_centro ? `${profesorSeleccionado.antiguedad_centro} años` : '—'} />
+          <FilaInfo label="Antigüedad cuerpo" valor={profesorSeleccionado.antiguedad_cuerpo ? `${profesorSeleccionado.antiguedad_cuerpo} años` : '—'} />
+          <FilaInfo label="Estado" valor={badgeEstado(profesorSeleccionado.estado).texto} />
+          <FilaInfo label="Registrado" valor={new Date(profesorSeleccionado.created_at).toLocaleDateString('es-ES')} />
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button onClick={() => abrirEdicion(profesorSeleccionado)} style={{ ...btnEstilo('#e8f0fe', '#1a56db', '#1a56db'), padding: '10px 20px' }}>✏️ Editar datos</button>
+            <button onClick={cerrarModal} style={{ ...btnEstilo('#f5f5f5', '#555', '#ddd'), padding: '10px 20px' }}>Cerrar</button>
+          </div>
+        </Modal>
+      )}
+
+      {/* MODAL EDICIÓN */}
+      {modoVista === 'editar' && profesorSeleccionado && (
+        <Modal onClose={cerrarModal} titulo="✏️ Editar Profesor">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+            <Campo label="Nombre" value={formEdicion.nombre} onChange={v => setFormEdicion(f => ({ ...f, nombre: v }))} />
+            <Campo label="Apellidos" value={formEdicion.apellidos} onChange={v => setFormEdicion(f => ({ ...f, apellidos: v }))} />
+            <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
+            <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
+            <Campo label="Especialidad" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} />
+            <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
+            <Campo label="Antigüedad centro (años)" value={formEdicion.antiguedad_centro} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_centro: v }))} tipo="number" />
+            <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
+          </div>
+
+          {/* CHECKBOXES ROLES DOCENTES */}
+          <div style={{ marginTop: 16, padding: 14, backgroundColor: '#f8fdf8', borderRadius: 10, border: '1.5px solid #c8e6c9' }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: verde, marginBottom: 10 }}>🎭 Roles docentes (puedes marcar varios)</div>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              {ROLES_DOCENTES.map(r => {
+                const rolesActuales = Array.isArray(formEdicion.rol) ? formEdicion.rol : ['profesor'];
+                const marcado = rolesActuales.includes(r.valor);
+                return (
+                  <label key={r.valor} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: r.valor === 'profesor' ? 'default' : 'pointer', fontSize: 14, userSelect: 'none' }}>
+                    <input
+                      type="checkbox"
+                      checked={marcado}
+                      onChange={() => toggleRol(r.valor)}
+                      disabled={r.valor === 'profesor'}
+                      style={{ width: 18, height: 18, accentColor: verde }}
+                    />
+                    {r.etiqueta}
+                    {r.valor === 'profesor' && <span style={{ fontSize: 11, color: '#999' }}>(siempre)</span>}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ROL GESTIÓN */}
+          <div style={{ marginTop: 14 }}>
+            <label style={labelEstilo}>👔 Cargo directivo</label>
+            <select value={formEdicion.rol_gestion} onChange={e => setFormEdicion(f => ({ ...f, rol_gestion: e.target.value }))} style={inputEstilo}>
+              <option value="">— Sin cargo directivo —</option>
+              <option value="director">👔 Director/a</option>
+              <option value="jefe_estudios">📋 Jefe/a de Estudios</option>
+              <option value="secretario">📁 Secretario/a</option>
+            </select>
+          </div>
+
+          {/* ESTADO */}
+          <div style={{ marginTop: 14 }}>
+            <label style={labelEstilo}>Estado</label>
+            <select value={formEdicion.estado} onChange={e => setFormEdicion(f => ({ ...f, estado: e.target.value }))} style={inputEstilo}>
+              <option value="pendiente">⏳ Pendiente</option>
+              <option value="activo">✅ Activo</option>
+              <option value="inactivo">❌ Inactivo</option>
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            <button onClick={guardarEdicion} disabled={guardando} style={{
+              padding: '11px 24px', borderRadius: 8, border: 'none',
+              backgroundColor: verde, color: 'white', fontWeight: 700,
+              cursor: guardando ? 'not-allowed' : 'pointer', fontSize: 15
+            }}>
+              {guardando ? 'Guardando...' : '💾 Guardar cambios'}
+            </button>
+            <button onClick={cerrarModal} style={{ ...btnEstilo('#f5f5f5', '#555', '#ddd'), padding: '11px 20px' }}>Cancelar</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function Modal({ children, onClose, titulo }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 1000, padding: 16
+    }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        backgroundColor: 'white', borderRadius: 14, padding: 28,
+        maxWidth: 680, width: '100%', maxHeight: '90vh', overflowY: 'auto',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h2 style={{ margin: 0, fontSize: 20, color: '#1e6b2e' }}>{titulo}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
+        </div>
+        {children}
       </div>
     </div>
   );
+}
+
+function FilaInfo({ label, valor }) {
+  return (
+    <div style={{ display: 'flex', gap: 12, padding: '8px 0', borderBottom: '1px solid #f0f0f0' }}>
+      <span style={{ width: 160, fontWeight: 600, color: '#555', fontSize: 14, flexShrink: 0 }}>{label}</span>
+      <span style={{ fontSize: 14, color: '#222' }}>{valor}</span>
+    </div>
+  );
+}
+
+function Campo({ label, value, onChange, tipo = 'text' }) {
+  return (
+    <div>
+      <label style={labelEstilo}>{label}</label>
+      <input type={tipo} value={value || ''} onChange={e => onChange(e.target.value)} style={inputEstilo} />
+    </div>
+  );
+}
+
+function CampoSelect({ label, value, onChange, opciones }) {
+  return (
+    <div>
+      <label style={labelEstilo}>{label}</label>
+      <select value={value || ''} onChange={e => onChange(e.target.value)} style={inputEstilo}>
+        {opciones.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+const labelEstilo = { display: 'block', fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 4 };
+const inputEstilo = { width: '100%', padding: '8px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' };
+
+function btnEstilo(bg, color, border) {
+  return {
+    padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${border}`,
+    backgroundColor: bg, color, cursor: 'pointer', fontWeight: 600, fontSize: 13
+  };
 }
