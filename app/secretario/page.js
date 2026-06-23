@@ -42,8 +42,24 @@ export default function PanelSecretario() {
   const [formEdicion, setFormEdicion] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  const [nombreUsuario, setNombreUsuario] = useState('');
 
-  useEffect(() => { cargarProfesores(); }, [filtroEstado]);
+  // PROTECCIÓN: si no has hecho login como secretario, te manda al login
+  useEffect(() => {
+    const id = sessionStorage.getItem('profesor_id');
+    const rol = sessionStorage.getItem('profesor_rol_gestion');
+    const nombre = sessionStorage.getItem('profesor_nombre');
+    if (!id || rol !== 'secretario') {
+      window.location.href = '/login';
+      return;
+    }
+    setNombreUsuario(nombre || '');
+    cargarProfesores();
+  }, []);
+
+  useEffect(() => {
+    if (nombreUsuario) cargarProfesores();
+  }, [filtroEstado]);
 
   async function cargarProfesores() {
     setCargando(true);
@@ -79,7 +95,6 @@ export default function PanelSecretario() {
 
   async function guardarEdicion() {
     setGuardando(true);
-    // Asegurarse de que rol es siempre un array y tiene al menos 'profesor'
     let rolesFinales = Array.isArray(formEdicion.rol) ? formEdicion.rol : [formEdicion.rol];
     if (!rolesFinales.includes('profesor')) rolesFinales = ['profesor', ...rolesFinales];
     const datosAGuardar = { ...formEdicion, rol: rolesFinales };
@@ -100,7 +115,6 @@ export default function PanelSecretario() {
   function toggleRol(valor) {
     const rolesActuales = Array.isArray(formEdicion.rol) ? formEdicion.rol : ['profesor'];
     if (rolesActuales.includes(valor)) {
-      // No permitir desmarcar 'profesor'
       if (valor === 'profesor') return;
       setFormEdicion(f => ({ ...f, rol: rolesActuales.filter(r => r !== valor) }));
     } else {
@@ -143,6 +157,11 @@ export default function PanelSecretario() {
     setTimeout(() => setMensaje(null), 3000);
   }
 
+  function cerrarSesion() {
+    sessionStorage.clear();
+    window.location.href = '/login';
+  }
+
   const profesoresFiltrados = profesores.filter(p => {
     const nombre = `${p.nombre} ${p.apellidos}`.toLowerCase();
     const coincideBusqueda = nombre.includes(busqueda.toLowerCase());
@@ -177,9 +196,15 @@ export default function PanelSecretario() {
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>🏫 Panel del Secretario</div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto</div>
+          <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto · {nombreUsuario}</div>
         </div>
-        <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
+          <button onClick={cerrarSesion} style={{
+            padding: '7px 14px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.4)',
+            backgroundColor: 'transparent', color: 'white', cursor: 'pointer', fontSize: 13
+          }}>🚪 Salir</button>
+        </div>
       </div>
 
       {/* TOAST */}
