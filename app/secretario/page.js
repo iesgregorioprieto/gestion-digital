@@ -44,21 +44,24 @@ export default function PanelSecretario() {
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
 
-  // PROTECCIÓN: si no has hecho login como secretario, te manda al login
+  // PROTECCIÓN: si no has hecho login, te manda al login
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
     const nombre = sessionStorage.getItem('profesor_nombre');
-    if (!id || rol !== 'secretario') {
+    if (!id) {
       window.location.href = '/login';
       return;
     }
+    if (rol !== 'secretario') {
+      window.location.href = '/profesor';
+      return;
+    }
     setNombreUsuario(nombre || '');
-    cargarProfesores();
   }, []);
 
   useEffect(() => {
-    if (nombreUsuario) cargarProfesores();
+    cargarProfesores();
   }, [filtroEstado]);
 
   async function cargarProfesores() {
