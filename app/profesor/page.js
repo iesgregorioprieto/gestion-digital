@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 
 export default function PanelProfesor() {
   const [nombre, setNombre] = useState('');
-  const [roles, setRoles] = useState([]);
+  const [roles, setRoles] = useState(['profesor']);
   const [rolGestion, setRolGestion] = useState('');
 
   useEffect(() => {
@@ -88,7 +88,15 @@ export default function PanelProfesor() {
     },
   ];
 
-  // Mostrar módulo si es para todos o si el profesor tiene ese rol
+  // Paneles directivos según rol_gestion
+  const PANELES_DIRECTIVOS = [
+    { rol: 'secretario', emoji: '📁', titulo: 'Panel Secretaría', href: '/secretario', color: '#1e6b2e' },
+    { rol: 'director', emoji: '👔', titulo: 'Panel Dirección', href: '/director', color: '#1a56db' },
+    { rol: 'jefe_estudios', emoji: '📋', titulo: 'Panel Jefatura', href: '/jefe-estudios', color: '#7e22ce' },
+  ];
+
+  const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
+
   const modulosVisibles = MODULOS.filter(m =>
     m.roles.includes('todos') || m.roles.some(r => roles.includes(r))
   );
@@ -102,12 +110,27 @@ export default function PanelProfesor() {
           <div style={{ fontSize: 20, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
           <div style={{ fontSize: 13, opacity: 0.8 }}>Hola, {nombre}</div>
         </div>
-        <button onClick={cerrarSesion} style={{
-          padding: '7px 14px', borderRadius: 8,
-          border: '1.5px solid rgba(255,255,255,0.4)',
-          backgroundColor: 'transparent', color: 'white',
-          cursor: 'pointer', fontSize: 13
-        }}>🚪 Salir</button>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          {/* CANDADO — solo visible si tiene cargo directivo */}
+          {panelDirectivo && (
+            <a href={panelDirectivo.href} style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '7px 14px', borderRadius: 8,
+              border: '1.5px solid rgba(255,255,255,0.5)',
+              backgroundColor: 'rgba(255,255,255,0.15)',
+              color: 'white', textDecoration: 'none',
+              fontSize: 13, fontWeight: 600
+            }}>
+              🔐 {panelDirectivo.titulo}
+            </a>
+          )}
+          <button onClick={cerrarSesion} style={{
+            padding: '7px 14px', borderRadius: 8,
+            border: '1.5px solid rgba(255,255,255,0.4)',
+            backgroundColor: 'transparent', color: 'white',
+            cursor: 'pointer', fontSize: 13
+          }}>🚪 Salir</button>
+        </div>
       </div>
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '28px 16px' }}>
@@ -118,10 +141,10 @@ export default function PanelProfesor() {
             👋 Bienvenido/a, {nombre.split(' ')[0]}
           </div>
           <div style={{ fontSize: 14, color: '#666' }}>
-            Portal de gestión del IES Gregorio Prieto · Valdepeñas
+            Portal de gestión · IES Gregorio Prieto · Valdepeñas
           </div>
           {rolGestion && (
-            <div style={{ marginTop: 8, fontSize: 13, backgroundColor: '#e8f5e9', color: verde, padding: '4px 12px', borderRadius: 20, display: 'inline-block', fontWeight: 600 }}>
+            <div style={{ marginTop: 10, fontSize: 13, backgroundColor: '#e8f5e9', color: verde, padding: '4px 12px', borderRadius: 20, display: 'inline-block', fontWeight: 600 }}>
               {rolGestion === 'director' ? '👔 Director/a' :
                rolGestion === 'jefe_estudios' ? '📋 Jefe/a de Estudios' :
                rolGestion === 'secretario' ? '📁 Secretario/a' : ''}

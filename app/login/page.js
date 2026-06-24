@@ -28,7 +28,7 @@ export default function Login() {
 
     const { data, error: err } = await supabase
       .from('profesores')
-      .select('id, nombre, apellidos, rol_gestion, estado, password_hash')
+      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash')
       .eq('email', email.trim().toLowerCase())
       .single();
 
@@ -49,22 +49,14 @@ export default function Login() {
       return;
     }
 
-    // Guardar datos en sessionStorage para usar en los paneles
+    // Guardar datos en sessionStorage
     sessionStorage.setItem('profesor_id', data.id);
     sessionStorage.setItem('profesor_nombre', `${data.nombre} ${data.apellidos}`);
     sessionStorage.setItem('profesor_rol_gestion', data.rol_gestion || '');
+    sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
-    // Redirigir según rol
-    const rol = data.rol_gestion || '';
-    if (rol === 'secretario') {
-      window.location.href = '/secretario';
-    } else if (rol === 'director') {
-      window.location.href = '/director';
-    } else if (rol === 'jefe_estudios') {
-      window.location.href = '/jefe-estudios';
-    } else {
-      window.location.href = '/profesor';
-    }
+    // Todos van al panel del profesor
+    window.location.href = '/profesor';
   }
 
   return (
@@ -75,7 +67,7 @@ export default function Login() {
       fontFamily: 'system-ui, sans-serif', padding: 16
     }}>
 
-      {/* LOGO / CABECERA */}
+      {/* LOGO */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🏫</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: verde }}>IES Gregorio Prieto</div>
