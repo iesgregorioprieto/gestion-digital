@@ -42,20 +42,20 @@ export default function PanelProfesor() {
       roles: ['todos'],
     },
     {
-      id: 'guardias',
-      emoji: '📅',
-      titulo: 'Guardias',
-      descripcion: 'Consulta tus guardias asignadas',
-      href: '/guardias',
-      disponible: false,
-      roles: ['todos'],
-    },
-    {
       id: 'dld',
       emoji: '📄',
       titulo: 'Días Libre Disposición',
       descripcion: 'Solicita tus días de libre disposición',
       href: '/dld',
+      disponible: true,
+      roles: ['todos'],
+    },
+    {
+      id: 'guardias',
+      emoji: '📅',
+      titulo: 'Guardias',
+      descripcion: 'Consulta tus guardias asignadas',
+      href: '/guardias',
       disponible: false,
       roles: ['todos'],
     },
@@ -88,11 +88,10 @@ export default function PanelProfesor() {
     },
   ];
 
-  // Paneles directivos según rol_gestion
   const PANELES_DIRECTIVOS = [
-    { rol: 'secretario', emoji: '📁', titulo: 'Panel Secretaría', href: '/secretario', color: '#1e6b2e' },
-    { rol: 'director', emoji: '👔', titulo: 'Panel Dirección', href: '/director', color: '#1a56db' },
-    { rol: 'jefe_estudios', emoji: '📋', titulo: 'Panel Jefatura', href: '/jefe-estudios', color: '#7e22ce' },
+    { rol: 'secretario', emoji: '📁', titulo: 'Panel Secretaría', href: '/secretario' },
+    { rol: 'director', emoji: '👔', titulo: 'Panel Dirección', href: '/director' },
+    { rol: 'jefe_estudios', emoji: '📋', titulo: 'Panel Jefatura', href: '/jefe-estudios' },
   ];
 
   const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
@@ -111,7 +110,6 @@ export default function PanelProfesor() {
           <div style={{ fontSize: 13, opacity: 0.8 }}>Hola, {nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {/* CANDADO — solo visible si tiene cargo directivo */}
           {panelDirectivo && (
             <a href={panelDirectivo.href} style={{
               display: 'flex', alignItems: 'center', gap: 6,
