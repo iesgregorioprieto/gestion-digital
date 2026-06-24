@@ -9,6 +9,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 );
 
+const HORAS = ['1ª hora', '2ª hora', '3ª hora', 'Recreo', '4ª hora', '5ª hora', '6ª hora'];
+
 const GRUPOS = {
   ESO: {
     emoji: '🏫',
@@ -34,14 +36,10 @@ const GRUPOS = {
     emoji: '🔰',
     label: 'Grado Básico',
     cursos: {
-      '1º GB CR': null,
-      '2º GB CR': null,
-      '1º GB EE': null,
-      '2º GB EE': null,
-      '1º GB MV': null,
-      '2º GB MV': null,
-      '1º GB SC': null,
-      '2º GB SC': null,
+      '1º GB CR': null, '2º GB CR': null,
+      '1º GB EE': null, '2º GB EE': null,
+      '1º GB MV': null, '2º GB MV': null,
+      '1º GB SC': null, '2º GB SC': null,
     },
   },
   GM: {
@@ -76,11 +74,7 @@ const GRUPOS = {
       '1º VIT': null,
     },
   },
-  OTRO: {
-    emoji: '📝',
-    label: 'Otro',
-    cursos: null,
-  },
+  OTRO: { emoji: '📝', label: 'Otro', cursos: null },
 };
 
 const TIPOS_DLD = [
@@ -111,13 +105,15 @@ export default function DLD() {
     tipo_guardia: '',
     causa_sobrevenida: false,
     descripcion_causa: '',
-    grupos: [],
+    grupos: [], // [{grupo: '2º CAR', horas: ['1ª hora', '2ª hora']}]
   });
 
+  // Para añadir grupos
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [cursoSeleccionado, setCursoSeleccionado] = useState('');
   const [grupoSeleccionado, setGrupoSeleccionado] = useState('');
   const [textoOtro, setTextoOtro] = useState('');
+  const [horasSeleccionadas, setHorasSeleccionadas] = useState([]);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -129,11 +125,7 @@ export default function DLD() {
   }, []);
 
   async function cargarDatosProfesor(id) {
-    const { data } = await supabase
-      .from('profesores')
-      .select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
-      .eq('id', id)
-      .single();
+    const { data } = await supabase.from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id).single();
     if (data) {
       setTipoContrato(data.tipo_contrato || '');
       setAntiguedadCentro(data.antiguedad_centro || 0);
@@ -147,10 +139,18 @@ export default function DLD() {
     return 1;
   }
 
+  function toggleHora(hora) {
+    setHorasSeleccionadas(prev =>
+      prev.includes(hora) ? prev.filter(h => h !== hora) : [...prev, hora]
+    );
+  }
+
   function añadirGrupo() {
     if (!etapaSeleccionada) return;
-    let texto = '';
+    if (horasSeleccionadas.length === 0) { setError('Selecciona al menos una hora para este grupo.'); return; }
+    setError('');
 
+    let texto = '';
     if (etapaSeleccionada === 'OTRO') {
       if (!textoOtro.trim()) return;
       texto = textoOtro.trim();
@@ -159,25 +159,29 @@ export default function DLD() {
       texto = grupoSeleccionado ? `${cursoSeleccionado} ${grupoSeleccionado}` : cursoSeleccionado;
     } else {
       if (!cursoSeleccionado) return;
-      if (cursoSeleccionado === 'Otro') {
-        if (!textoOtro.trim()) return;
-        texto = textoOtro.trim();
-      } else {
-        texto = cursoSeleccionado;
-      }
+      texto = cursoSeleccionado === 'Otro' ? (textoOtro.trim() || 'Otro') : cursoSeleccionado;
     }
 
-    if (!form.grupos.includes(texto)) {
-      setForm(f => ({ ...f, grupos: [...f.grupos, texto] }));
+    // Comprobar si ya existe ese grupo
+    const existente = form.grupos.findIndex(g => g.grupo === texto);
+    if (existente >= 0) {
+      // Actualizar horas del grupo existente
+      const nuevosGrupos = [...form.grupos];
+      nuevosGrupos[existente] = { grupo: texto, horas: [...new Set([...nuevosGrupos[existente].horas, ...horasSeleccionadas])] };
+      setForm(f => ({ ...f, grupos: nuevosGrupos }));
+    } else {
+      setForm(f => ({ ...f, grupos: [...f.grupos, { grupo: texto, horas: horasSeleccionadas }] }));
     }
+
     setEtapaSeleccionada('');
     setCursoSeleccionado('');
     setGrupoSeleccionado('');
     setTextoOtro('');
+    setHorasSeleccionadas([]);
   }
 
   function quitarGrupo(grupo) {
-    setForm(f => ({ ...f, grupos: f.grupos.filter(g => g !== grupo) }));
+    setForm(f => ({ ...f, grupos: f.grupos.filter(g => g.grupo !== grupo) }));
   }
 
   async function enviar() {
@@ -224,15 +228,8 @@ export default function DLD() {
             El director la resolverá en un máximo de 3 días hábiles.
           </p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, justifyContent: 'center' }}>
-            <button onClick={() => { setEnviado(false); setForm({ tipo_dld: '', fecha_solicitada: '', tipo_guardia: '', causa_sobrevenida: false, descripcion_causa: '', grupos: [] }); }} style={{
-              padding: '12px 20px', borderRadius: 10, border: `2px solid ${verde}`,
-              backgroundColor: 'white', color: verde, fontWeight: 700, cursor: 'pointer', fontSize: 14
-            }}>+ Nueva solicitud</button>
-            <a href="/profesor" style={{
-              padding: '12px 20px', borderRadius: 10, border: 'none',
-              backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14,
-              textDecoration: 'none', display: 'inline-block'
-            }}>← Volver</a>
+            <button onClick={() => { setEnviado(false); setForm({ tipo_dld: '', fecha_solicitada: '', tipo_guardia: '', causa_sobrevenida: false, descripcion_causa: '', grupos: [] }); }} style={{ padding: '12px 20px', borderRadius: 10, border: `2px solid ${verde}`, backgroundColor: 'white', color: verde, fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>+ Nueva solicitud</button>
+            <a href="/profesor" style={{ padding: '12px 20px', borderRadius: 10, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, textDecoration: 'none', display: 'inline-block' }}>← Volver</a>
           </div>
         </div>
       </div>
@@ -241,13 +238,10 @@ export default function DLD() {
 
   const etapaActual = etapaSeleccionada ? GRUPOS[etapaSeleccionada] : null;
   const cursosEtapa = etapaActual?.cursos ? Object.keys(etapaActual.cursos) : [];
-  const gruposDelCurso = etapaSeleccionada === 'ESO' && cursoSeleccionado && GRUPOS.ESO.cursos[cursoSeleccionado]
-    ? GRUPOS.ESO.cursos[cursoSeleccionado] : [];
+  const gruposDelCurso = etapaSeleccionada === 'ESO' && cursoSeleccionado && GRUPOS.ESO.cursos[cursoSeleccionado] ? GRUPOS.ESO.cursos[cursoSeleccionado] : [];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
-
-      {/* HEADER */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>📄 Días de Libre Disposición</div>
@@ -276,12 +270,7 @@ export default function DLD() {
             <label style={{ ...labelEstilo, fontSize: 15 }}>🌙 Tipo de DLD solicitado *</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
               {TIPOS_DLD.map(t => (
-                <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_dld: t.valor }))} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                  borderRadius: 10, border: `2px solid ${form.tipo_dld === t.valor ? verde : '#e0e0e0'}`,
-                  backgroundColor: form.tipo_dld === t.valor ? verdeClaro : 'white',
-                  cursor: 'pointer',
-                }}>
+                <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_dld: t.valor }))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, border: `2px solid ${form.tipo_dld === t.valor ? verde : '#e0e0e0'}`, backgroundColor: form.tipo_dld === t.valor ? verdeClaro : 'white', cursor: 'pointer' }}>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${form.tipo_dld === t.valor ? verde : '#ccc'}`, backgroundColor: form.tipo_dld === t.valor ? verde : 'white', flexShrink: 0 }} />
                   <span style={{ fontSize: 20 }}>{t.emoji}</span>
                   <span style={{ fontSize: 14, fontWeight: form.tipo_dld === t.valor ? 700 : 400, color: form.tipo_dld === t.valor ? verde : '#444' }}>{t.label}</span>
@@ -296,29 +285,38 @@ export default function DLD() {
             <input type="date" value={form.fecha_solicitada} onChange={e => setForm(f => ({ ...f, fecha_solicitada: e.target.value }))} style={{ ...inputEstilo, marginTop: 8 }} />
           </div>
 
-          {/* GRUPOS */}
+          {/* GRUPOS Y HORAS */}
           <div style={{ marginBottom: 24 }}>
-            <label style={{ ...labelEstilo, fontSize: 15 }}>👥 Grupos a los que afectará la ausencia</label>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Añade todos los grupos que tengas ese día</div>
+            <label style={{ ...labelEstilo, fontSize: 15 }}>👥 Grupos y horas afectadas</label>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>Añade cada grupo e indica en qué horas tienes clase ese día</div>
 
+            {/* Grupos añadidos */}
             {form.grupos.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+              <div style={{ marginBottom: 12 }}>
                 {form.grupos.map(g => (
-                  <div key={g} style={{ display: 'flex', alignItems: 'center', gap: 6, backgroundColor: verdeClaro, border: `1px solid ${verde}`, borderRadius: 20, padding: '4px 12px', fontSize: 13, fontWeight: 600, color: verde }}>
-                    {g}
-                    <button onClick={() => quitarGrupo(g)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: verde, fontSize: 16, padding: 0 }}>✕</button>
+                  <div key={g.grupo} style={{ backgroundColor: verdeClaro, border: `1.5px solid ${verde}`, borderRadius: 10, padding: '10px 14px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, color: verde, fontSize: 14 }}>📚 {g.grupo}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
+                        {g.horas.map(h => (
+                          <span key={h} style={{ fontSize: 11, backgroundColor: verde, color: 'white', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{h}</span>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={() => quitarGrupo(g.grupo)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 18, padding: 0 }}>✕</button>
                   </div>
                 ))}
               </div>
             )}
 
+            {/* Selector añadir grupo */}
             <div style={{ backgroundColor: '#f8fdf8', borderRadius: 10, padding: 14, border: '1.5px solid #c8e6c9' }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: verde, marginBottom: 10 }}>➕ Añadir grupo</div>
 
-              {/* Botones etapa */}
+              {/* Etapas */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
                 {Object.entries(GRUPOS).map(([key, val]) => (
-                  <button key={key} onClick={() => { setEtapaSeleccionada(key); setCursoSeleccionado(''); setGrupoSeleccionado(''); setTextoOtro(''); }} style={{
+                  <button key={key} onClick={() => { setEtapaSeleccionada(key); setCursoSeleccionado(''); setGrupoSeleccionado(''); setTextoOtro(''); setHorasSeleccionadas([]); }} style={{
                     padding: '8px 6px', borderRadius: 8,
                     border: `1.5px solid ${etapaSeleccionada === key ? verde : '#ddd'}`,
                     backgroundColor: etapaSeleccionada === key ? verdeClaro : 'white',
@@ -332,36 +330,58 @@ export default function DLD() {
 
               {/* Selector curso */}
               {etapaSeleccionada && etapaSeleccionada !== 'OTRO' && cursosEtapa.length > 0 && (
-                <div style={{ marginBottom: 10 }}>
+                <div style={{ marginBottom: 12 }}>
                   <select value={cursoSeleccionado} onChange={e => { setCursoSeleccionado(e.target.value); setGrupoSeleccionado(''); }} style={{ ...inputEstilo, marginBottom: 8 }}>
                     <option value="">— Selecciona curso/grupo —</option>
                     {cursosEtapa.map(c => <option key={c} value={c}>{c}</option>)}
                     <option value="Otro">📝 Otro</option>
                   </select>
 
-                  {/* Letra grupo ESO */}
                   {etapaSeleccionada === 'ESO' && cursoSeleccionado && gruposDelCurso.length > 0 && cursoSeleccionado !== 'Otro' && (
-                    <select value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={inputEstilo}>
+                    <select value={grupoSeleccionado} onChange={e => setGrupoSeleccionado(e.target.value)} style={{ ...inputEstilo, marginBottom: 8 }}>
                       <option value="">— Letra del grupo (opcional) —</option>
                       {gruposDelCurso.map(g => <option key={g} value={g}>{g}</option>)}
                     </select>
                   )}
 
                   {cursoSeleccionado === 'Otro' && (
-                    <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Escribe el grupo..." style={{ ...inputEstilo, marginTop: 8 }} />
+                    <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Escribe el grupo..." style={{ ...inputEstilo, marginBottom: 8 }} />
                   )}
                 </div>
               )}
 
               {etapaSeleccionada === 'OTRO' && (
-                <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Describe el grupo o situación..." style={{ ...inputEstilo, marginBottom: 10 }} />
+                <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Describe el grupo o situación..." style={{ ...inputEstilo, marginBottom: 12 }} />
+              )}
+
+              {/* SELECTOR DE HORAS */}
+              {etapaSeleccionada && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 8 }}>🕐 ¿En qué horas tienes este grupo?</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {HORAS.map(h => {
+                      const seleccionada = horasSeleccionadas.includes(h);
+                      const esRecreo = h === 'Recreo';
+                      return (
+                        <button key={h} onClick={() => toggleHora(h)} style={{
+                          padding: '8px 14px', borderRadius: 8,
+                          border: `2px solid ${seleccionada ? verde : esRecreo ? '#f59e0b' : '#ddd'}`,
+                          backgroundColor: seleccionada ? verde : esRecreo ? '#fffbeb' : 'white',
+                          color: seleccionada ? 'white' : esRecreo ? '#92400e' : '#555',
+                          cursor: 'pointer', fontWeight: 600, fontSize: 13
+                        }}>
+                          {esRecreo ? '☕ ' : ''}{h}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
               )}
 
               {etapaSeleccionada && (
-                <button onClick={añadirGrupo} style={{
-                  width: '100%', padding: 10, borderRadius: 8, border: 'none',
-                  backgroundColor: verde, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14
-                }}>➕ Añadir este grupo</button>
+                <button onClick={añadirGrupo} style={{ width: '100%', padding: 10, borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>
+                  ➕ Añadir este grupo
+                </button>
               )}
             </div>
           </div>
@@ -371,12 +391,7 @@ export default function DLD() {
             <label style={{ ...labelEstilo, fontSize: 15 }}>🛡️ Desempeño de guardias *</label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
               {TIPOS_GUARDIA.map(t => (
-                <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_guardia: t.valor }))} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
-                  borderRadius: 10, border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#e0e0e0'}`,
-                  backgroundColor: form.tipo_guardia === t.valor ? verdeClaro : 'white',
-                  cursor: 'pointer',
-                }}>
+                <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_guardia: t.valor }))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#e0e0e0'}`, backgroundColor: form.tipo_guardia === t.valor ? verdeClaro : 'white', cursor: 'pointer' }}>
                   <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#ccc'}`, backgroundColor: form.tipo_guardia === t.valor ? verde : 'white', flexShrink: 0 }} />
                   <span style={{ fontSize: 20 }}>{t.emoji}</span>
                   <span style={{ fontSize: 14, fontWeight: form.tipo_guardia === t.valor ? 700 : 400, color: form.tipo_guardia === t.valor ? verde : '#444' }}>{t.label}</span>
@@ -397,16 +412,10 @@ export default function DLD() {
           </div>
 
           {error && (
-            <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: 12, marginBottom: 16, color: '#b91c1c', fontSize: 14 }}>
-              ⚠️ {error}
-            </div>
+            <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: 12, marginBottom: 16, color: '#b91c1c', fontSize: 14 }}>⚠️ {error}</div>
           )}
 
-          <button onClick={enviar} disabled={enviando} style={{
-            width: '100%', padding: 14, borderRadius: 10, border: 'none',
-            backgroundColor: verde, color: 'white', fontWeight: 700,
-            fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1
-          }}>
+          <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 16, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
             {enviando ? 'Enviando...' : '📨 Enviar solicitud'}
           </button>
 
