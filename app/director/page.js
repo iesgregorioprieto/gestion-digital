@@ -33,10 +33,12 @@ function Fila({ label, valor }) {
 
 export default function PanelDirector() {
   const [nombreUsuario, setNombreUsuario] = useState('');
-  const [solicitudes, setSolicitudes] = useState([]);
   const [todasSolicitudes, setTodasSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [vista, setVista] = useState('calendario'); // 'calendario' | 'lista'
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
+  const [mesActual, setMesActual] = useState(new Date());
+  const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [mensaje, setMensaje] = useState(null);
   const [solicitudAbierta, setSolicitudAbierta] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
@@ -49,18 +51,13 @@ export default function PanelDirector() {
     if (!id) { window.location.href = '/login'; return; }
     if (rol !== 'director') { window.location.href = '/profesor'; return; }
     setNombreUsuario(nombre || '');
-  }, []);
-
-  useEffect(() => {
     cargarSolicitudes();
-  }, [filtroEstado]);
+  }, []);
 
   async function cargarSolicitudes() {
     setCargando(true);
-    const { data: todas } = await supabase.from('dld').select('*').order('created_at', { ascending: false });
-    setTodasSolicitudes(todas || []);
-    const { data } = await supabase.from('dld').select('*').eq('estado', filtroEstado).order('created_at', { ascending: false });
-    setSolicitudes(data || []);
+    const { data } = await supabase.from('dld').select('*').order('created_at', { ascending: false });
+    setTodasSolicitudes(data || []);
     setCargando(false);
   }
 
@@ -68,12 +65,9 @@ export default function PanelDirector() {
     const alertas = [];
     const fecha = solicitud.fecha_solicitada;
     const grupos = Array.isArray(solicitud.grupos_afectados) ? solicitud.grupos_afectados : [];
+    const mismaFecha = todasSolicitudes.filter(s => s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado !== 'rechazada' && s.estado !== 'cancelada');
 
-    const mismaFecha = todasSolicitudes.filter(s => s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado !== 'rechazada');
-
-    if (mismaFecha.length + 1 > 4) {
-      alertas.push({ tipo: 'rojo', texto: `⚠️ Hay ${mismaFecha.length + 1} solicitudes ese día (límite orientativo: 4)` });
-    }
+    if (mismaFecha.length + 1 > 4) alertas.push({ tipo: 'rojo', texto: `⚠️ Hay ${mismaFecha.length + 1} solicitudes ese día` });
 
     grupos.forEach(g => {
       const nombreGrupo = typeof g === 'object' ? g.grupo : g;
@@ -81,26 +75,20 @@ export default function PanelDirector() {
         const otrosGrupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
         return otrosGrupos.some(og => (typeof og === 'object' ? og.grupo : og) === nombreGrupo);
       });
-      conflictos.forEach(c => {
-        alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: también solicitado por ${c.profesor_nombre}` });
-      });
+      conflictos.forEach(c => alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: también por ${c.profesor_nombre}` }));
     });
 
     const diasDisfrutados = todasSolicitudes.filter(s => s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada').length;
-    const diasCorrespondientes = solicitud.tipo_contrato === 'Funcionario de carrera' || solicitud.tipo_contrato === 'Interino con vacante' ? 3 : solicitud.tipo_contrato === 'Interino sin vacante' ? 2 : 1;
-
-    if (diasDisfrutados >= diasCorrespondientes) {
-      alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha disfrutado ${diasDisfrutados} de ${diasCorrespondientes} días` });
-    } else if (diasDisfrutados > 0) {
-      alertas.push({ tipo: 'amarillo', texto: `🟡 Ha disfrutado ${diasDisfrutados} de ${diasCorrespondientes} días` });
-    }
+    const diasMax = solicitud.tipo_contrato === 'Funcionario de carrera' || solicitud.tipo_contrato === 'Interino con vacante' ? 3 : solicitud.tipo_contrato === 'Interino sin vacante' ? 2 : 1;
+    if (diasDisfrutados >= diasMax) alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha disfrutado ${diasDisfrutados} de ${diasMax} días` });
+    else if (diasDisfrutados > 0) alertas.push({ tipo: 'amarillo', texto: `🟡 Ha disfrutado ${diasDisfrutados} de ${diasMax} días` });
 
     return alertas;
   }
 
   function calcularPrelacion(solicitud) {
     const mismaFecha = todasSolicitudes.filter(s => s.id !== solicitud.id && s.fecha_solicitada === solicitud.fecha_solicitada && s.estado === 'pendiente');
-    if (mismaFecha.length === 0) return null;
+    if (!mismaFecha.length) return null;
     return mismaFecha.map(s => ({
       nombre: s.profesor_nombre,
       causa_sobrevenida: s.causa_sobrevenida,
@@ -130,14 +118,49 @@ export default function PanelDirector() {
     setProcesando(false);
   }
 
+  async function eliminar(id) {
+    if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
+    setProcesando(true);
+    await supabase.from('dld').delete().eq('id', id);
+    mostrarMensaje('🗑️ Solicitud eliminada', 'ok');
+    setSolicitudAbierta(null);
+    setDiaSeleccionado(null);
+    cargarSolicitudes();
+    setProcesando(false);
+  }
+
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 3000);
   }
 
-  function cerrarSesion() {
-    sessionStorage.clear();
-    window.location.href = '/login';
+  function cerrarSesion() { sessionStorage.clear(); window.location.href = '/login'; }
+
+  // CALENDARIO
+  function getDiasDelMes() {
+    const year = mesActual.getFullYear();
+    const month = mesActual.getMonth();
+    const primerDia = new Date(year, month, 1).getDay();
+    const diasEnMes = new Date(year, month + 1, 0).getDate();
+    const offset = primerDia === 0 ? 6 : primerDia - 1; // Lunes primero
+    return { diasEnMes, offset };
+  }
+
+  function getSolicitudesDia(dia) {
+    const year = mesActual.getFullYear();
+    const month = String(mesActual.getMonth() + 1).padStart(2, '0');
+    const diaStr = String(dia).padStart(2, '0');
+    const fecha = `${year}-${month}-${diaStr}`;
+    return todasSolicitudes.filter(s => s.fecha_solicitada === fecha);
+  }
+
+  function getColorDia(solicitudesDia) {
+    if (!solicitudesDia.length) return null;
+    const tieneConflicto = solicitudesDia.some(s => calcularAlertas(s).some(a => a.tipo === 'rojo'));
+    const tienePendientes = solicitudesDia.some(s => s.estado === 'pendiente');
+    if (tieneConflicto) return { bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5' };
+    if (tienePendientes) return { bg: '#fef3c7', color: '#92400e', border: '#fcd34d' };
+    return { bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' };
   }
 
   const contadores = {
@@ -146,11 +169,19 @@ export default function PanelDirector() {
     rechazada: todasSolicitudes.filter(s => s.estado === 'rechazada').length,
   };
 
+  const solicitudesFiltradas = todasSolicitudes.filter(s => s.estado === filtroEstado);
+  const solicitudesDiaSeleccionado = diaSeleccionado ? getSolicitudesDia(diaSeleccionado) : [];
+
+  const { diasEnMes, offset } = getDiasDelMes();
+  const DIAS_SEMANA = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+  const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+
   const azul = '#1a3a6b';
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
+      {/* HEADER */}
       <div style={{ backgroundColor: azul, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>👔 Panel del Director</div>
@@ -177,10 +208,9 @@ export default function PanelDirector() {
             { estado: 'aprobada', emoji: '✅', label: 'Aprobadas', bg: '#d1fae5', color: '#065f46', border: '#6ee7b7' },
             { estado: 'rechazada', emoji: '❌', label: 'Rechazadas', bg: '#fee2e2', color: '#991b1b', border: '#fca5a5' },
           ].map(c => (
-            <div key={c.estado} onClick={() => setFiltroEstado(c.estado)} style={{
-              backgroundColor: filtroEstado === c.estado ? c.bg : 'white',
-              border: `2px solid ${filtroEstado === c.estado ? c.border : '#e5e7eb'}`,
-              borderRadius: 12, padding: '16px 12px', textAlign: 'center', cursor: 'pointer'
+            <div key={c.estado} style={{
+              backgroundColor: c.bg, border: `2px solid ${c.border}`,
+              borderRadius: 12, padding: '16px 12px', textAlign: 'center'
             }}>
               <div style={{ fontSize: 28, marginBottom: 4 }}>{c.emoji}</div>
               <div style={{ fontSize: 32, fontWeight: 800, color: c.color }}>{contadores[c.estado]}</div>
@@ -189,69 +219,197 @@ export default function PanelDirector() {
           ))}
         </div>
 
-        {/* LISTA */}
-        {cargando ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando solicitudes...</div>
-        ) : solicitudes.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40, color: '#aaa', backgroundColor: 'white', borderRadius: 12 }}>
-            No hay solicitudes {filtroEstado === 'pendiente' ? 'pendientes' : filtroEstado === 'aprobada' ? 'aprobadas' : 'rechazadas'}
-          </div>
-        ) : solicitudes.map(s => {
-          const alertas = calcularAlertas(s);
-          const grupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
-          return (
-            <div key={s.id} style={{
-              backgroundColor: 'white', borderRadius: 12, padding: 18, marginBottom: 12,
-              boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-              borderLeft: `4px solid ${alertas.length > 0 ? '#ef4444' : filtroEstado === 'aprobada' ? '#10b981' : filtroEstado === 'rechazada' ? '#6b7280' : '#f59e0b'}`
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 700, fontSize: 16, color: azul, marginBottom: 4 }}>{s.profesor_nombre}</div>
-                  <div style={{ fontSize: 13, color: '#555' }}>📅 {new Date(s.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
-                  <div style={{ fontSize: 13, color: '#555' }}>{etiquetaTipoDLD(s.tipo_dld)} · {s.tipo_contrato}</div>
-                  {grupos.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
-                      {grupos.map((g, i) => {
-                        const nombre = typeof g === 'object' ? g.grupo : g;
-                        const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
-                        return (
-                          <span key={i} style={{ fontSize: 12, backgroundColor: '#e8f0fe', color: '#1a56db', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>
-                            {nombre}{horas ? ` (${horas})` : ''}
+        {/* TOGGLE VISTA */}
+        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+          <button onClick={() => setVista('calendario')} style={{
+            padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'calendario' ? azul : '#ddd'}`,
+            backgroundColor: vista === 'calendario' ? azul : 'white',
+            color: vista === 'calendario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14
+          }}>📅 Calendario</button>
+          <button onClick={() => setVista('lista')} style={{
+            padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'lista' ? azul : '#ddd'}`,
+            backgroundColor: vista === 'lista' ? azul : 'white',
+            color: vista === 'lista' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14
+          }}>📋 Lista</button>
+        </div>
+
+        {/* ═══ VISTA CALENDARIO ═══ */}
+        {vista === 'calendario' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+
+            {/* Navegación mes */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <button onClick={() => setMesActual(new Date(mesActual.getFullYear(), mesActual.getMonth() - 1))} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: 18 }}>‹</button>
+              <div style={{ fontWeight: 700, fontSize: 18, color: azul }}>{MESES[mesActual.getMonth()]} {mesActual.getFullYear()}</div>
+              <button onClick={() => setMesActual(new Date(mesActual.getFullYear(), mesActual.getMonth() + 1))} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: 18 }}>›</button>
+            </div>
+
+            {/* Leyenda */}
+            <div style={{ display: 'flex', gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
+              {[
+                { bg: '#fee2e2', color: '#b91c1c', label: 'Con conflictos' },
+                { bg: '#fef3c7', color: '#92400e', label: 'Pendientes' },
+                { bg: '#d1fae5', color: '#065f46', label: 'Resueltas' },
+              ].map(l => (
+                <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#666' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 4, backgroundColor: l.bg, border: `1px solid ${l.color}` }} />
+                  {l.label}
+                </div>
+              ))}
+            </div>
+
+            {/* Días semana */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, marginBottom: 4 }}>
+              {DIAS_SEMANA.map(d => (
+                <div key={d} style={{ textAlign: 'center', fontSize: 12, fontWeight: 700, color: '#888', padding: '4px 0' }}>{d}</div>
+              ))}
+            </div>
+
+            {/* Días */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
+              {Array(offset).fill(null).map((_, i) => <div key={`e${i}`} />)}
+              {Array(diasEnMes).fill(null).map((_, i) => {
+                const dia = i + 1;
+                const solicitudesDia = getSolicitudesDia(dia);
+                const colorDia = getColorDia(solicitudesDia);
+                const esHoy = new Date().getDate() === dia && new Date().getMonth() === mesActual.getMonth() && new Date().getFullYear() === mesActual.getFullYear();
+                const seleccionado = diaSeleccionado === dia;
+
+                return (
+                  <div key={dia} onClick={() => { setDiaSeleccionado(seleccionado ? null : dia); }} style={{
+                    aspectRatio: '1', borderRadius: 8, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', cursor: solicitudesDia.length ? 'pointer' : 'default',
+                    backgroundColor: seleccionado ? azul : colorDia ? colorDia.bg : esHoy ? '#f0f4ff' : 'white',
+                    border: `2px solid ${seleccionado ? azul : colorDia ? colorDia.border : esHoy ? '#93c5fd' : '#f0f0f0'}`,
+                    transition: 'all 0.15s',
+                  }}>
+                    <div style={{ fontSize: 14, fontWeight: esHoy ? 800 : 400, color: seleccionado ? 'white' : colorDia ? colorDia.color : '#333' }}>{dia}</div>
+                    {solicitudesDia.length > 0 && (
+                      <div style={{ fontSize: 10, fontWeight: 700, color: seleccionado ? 'white' : colorDia.color }}>{solicitudesDia.length}</div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Solicitudes del día seleccionado */}
+            {diaSeleccionado && solicitudesDiaSeleccionado.length > 0 && (
+              <div style={{ marginTop: 20, borderTop: '1.5px solid #e5e7eb', paddingTop: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: 16, color: azul, marginBottom: 12 }}>
+                  📅 {diaSeleccionado} de {MESES[mesActual.getMonth()]} — {solicitudesDiaSeleccionado.length} solicitud{solicitudesDiaSeleccionado.length > 1 ? 'es' : ''}
+                </div>
+                {solicitudesDiaSeleccionado.map(s => {
+                  const alertas = calcularAlertas(s);
+                  const grupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
+                  const badgeColor = s.estado === 'aprobada' ? { bg: '#d1fae5', color: '#065f46' } : s.estado === 'rechazada' ? { bg: '#fee2e2', color: '#991b1b' } : s.estado === 'cancelada' ? { bg: '#f3f4f6', color: '#6b7280' } : { bg: '#fef3c7', color: '#92400e' };
+                  return (
+                    <div key={s.id} style={{
+                      backgroundColor: '#f8faff', borderRadius: 10, padding: 14, marginBottom: 10,
+                      border: `1.5px solid ${alertas.some(a => a.tipo === 'rojo') ? '#fca5a5' : '#e0e7ff'}`,
+                      borderLeft: `4px solid ${alertas.some(a => a.tipo === 'rojo') ? '#ef4444' : s.estado === 'aprobada' ? '#10b981' : '#f59e0b'}`
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{s.profesor_nombre}</div>
+                          <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{etiquetaTipoDLD(s.tipo_dld)} · {s.tipo_contrato}</div>
+                          {grupos.length > 0 && (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                              {grupos.map((g, i) => {
+                                const nombre = typeof g === 'object' ? g.grupo : g;
+                                const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
+                                return <span key={i} style={{ fontSize: 11, backgroundColor: '#e8f0fe', color: '#1a56db', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{nombre}{horas ? ` (${horas})` : ''}</span>;
+                              })}
+                            </div>
+                          )}
+                          {s.causa_sobrevenida && <div style={{ marginTop: 4, fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠️ Causa sobrevenida</div>}
+                          {alertas.map((a, i) => <div key={i} style={{ fontSize: 12, color: a.tipo === 'rojo' ? '#b91c1c' : '#92400e', marginTop: 2 }}>{a.texto}</div>)}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                          <span style={{ fontSize: 11, backgroundColor: badgeColor.bg, color: badgeColor.color, padding: '2px 10px', borderRadius: 10, fontWeight: 700 }}>
+                            {s.estado === 'pendiente' ? '⏳ Pendiente' : s.estado === 'aprobada' ? '✅ Aprobada' : s.estado === 'rechazada' ? '❌ Rechazada' : '🚫 Cancelada'}
                           </span>
-                        );
-                      })}
+                          {s.estado === 'pendiente' && (
+                            <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>📋 Revisar</button>
+                          )}
+                          <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  {s.causa_sobrevenida && (
-                    <div style={{ marginTop: 6, fontSize: 12, backgroundColor: '#fffbeb', color: '#92400e', padding: '3px 10px', borderRadius: 10, display: 'inline-block', fontWeight: 600 }}>⚠️ Causa sobrevenida</div>
-                  )}
-                  {alertas.length > 0 && (
-                    <div style={{ marginTop: 8 }}>
+                  );
+                })}
+              </div>
+            )}
+
+            {diaSeleccionado && solicitudesDiaSeleccionado.length === 0 && (
+              <div style={{ marginTop: 16, textAlign: 'center', color: '#aaa', fontSize: 14 }}>No hay solicitudes para este día</div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ VISTA LISTA ═══ */}
+        {vista === 'lista' && (
+          <>
+            <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+              {['pendiente', 'aprobada', 'rechazada'].map(e => (
+                <button key={e} onClick={() => setFiltroEstado(e)} style={{
+                  padding: '8px 18px', borderRadius: 8,
+                  border: `1.5px solid ${filtroEstado === e ? azul : '#ddd'}`,
+                  backgroundColor: filtroEstado === e ? azul : 'white',
+                  color: filtroEstado === e ? 'white' : '#555',
+                  cursor: 'pointer', fontWeight: 600, fontSize: 14
+                }}>
+                  {e === 'pendiente' ? '⏳ Pendiente' : e === 'aprobada' ? '✅ Aprobada' : '❌ Rechazada'}
+                </button>
+              ))}
+            </div>
+
+            {cargando ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
+            ) : solicitudesFiltradas.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#aaa', backgroundColor: 'white', borderRadius: 12 }}>No hay solicitudes</div>
+            ) : solicitudesFiltradas.map(s => {
+              const alertas = calcularAlertas(s);
+              const grupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
+              return (
+                <div key={s.id} style={{
+                  backgroundColor: 'white', borderRadius: 12, padding: 18, marginBottom: 12,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+                  borderLeft: `4px solid ${alertas.length > 0 ? '#ef4444' : filtroEstado === 'aprobada' ? '#10b981' : filtroEstado === 'rechazada' ? '#6b7280' : '#f59e0b'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 16, color: azul }}>{s.profesor_nombre}</div>
+                      <div style={{ fontSize: 13, color: '#555' }}>📅 {new Date(s.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>
+                      <div style={{ fontSize: 13, color: '#555' }}>{etiquetaTipoDLD(s.tipo_dld)} · {s.tipo_contrato}</div>
+                      {grupos.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
+                          {grupos.map((g, i) => {
+                            const nombre = typeof g === 'object' ? g.grupo : g;
+                            const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
+                            return <span key={i} style={{ fontSize: 12, backgroundColor: '#e8f0fe', color: '#1a56db', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{nombre}{horas ? ` (${horas})` : ''}</span>;
+                          })}
+                        </div>
+                      )}
+                      {s.causa_sobrevenida && <div style={{ marginTop: 6, fontSize: 12, backgroundColor: '#fffbeb', color: '#92400e', padding: '3px 10px', borderRadius: 10, display: 'inline-block', fontWeight: 600 }}>⚠️ Causa sobrevenida</div>}
                       {alertas.map((a, i) => <div key={i} style={{ fontSize: 12, color: a.tipo === 'rojo' ? '#b91c1c' : '#92400e', marginTop: 2 }}>{a.texto}</div>)}
                     </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                  <div style={{ fontSize: 12, color: '#888' }}>Solicitado: {new Date(s.created_at).toLocaleDateString('es-ES')}</div>
-                  {filtroEstado === 'pendiente' && (
-                    <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>📋 Revisar</button>
-                  )}
-                  {filtroEstado === 'aprobada' && <span style={{ fontSize: 13, color: '#10b981', fontWeight: 600 }}>✅ Aprobada</span>}
-                  {filtroEstado === 'rechazada' && (
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>❌ Rechazada</span>
-                      {s.motivo_rechazo && <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{s.motivo_rechazo}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+                      <div style={{ fontSize: 12, color: '#888' }}>{new Date(s.created_at).toLocaleDateString('es-ES')}</div>
+                      {filtroEstado === 'pendiente' && (
+                        <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>📋 Revisar</button>
+                      )}
+                      <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
+                      {filtroEstado === 'rechazada' && s.motivo_rechazo && <div style={{ fontSize: 12, color: '#888', maxWidth: 200, textAlign: 'right' }}>{s.motivo_rechazo}</div>}
                     </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
-          );
-        })}
+              );
+            })}
+          </>
+        )}
       </div>
 
-      {/* MODAL */}
+      {/* MODAL REVISIÓN */}
       {solicitudAbierta && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}
           onClick={e => e.target === e.currentTarget && setSolicitudAbierta(null)}>
@@ -279,7 +437,7 @@ export default function PanelDirector() {
 
             {(() => {
               const grupos = Array.isArray(solicitudAbierta.grupos_afectados) ? solicitudAbierta.grupos_afectados : [];
-              if (grupos.length === 0) return null;
+              if (!grupos.length) return null;
               return (
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 15 }}>👥 Grupos y horas afectadas</div>
@@ -319,9 +477,7 @@ export default function PanelDirector() {
                         <div key={i} style={{ fontSize: 13, color: '#555', marginBottom: 6, padding: '6px 10px', backgroundColor: 'white', borderRadius: 8 }}>
                           <strong>{p.nombre}</strong>
                           {p.causa_sobrevenida && <span style={{ color: '#b91c1c' }}> · ⚠️ Causa sobrevenida</span>}
-                          {' · '}Días disfrutados: {p.dias_disfrutados}
-                          {' · '}Centro: {p.antiguedad_centro} años
-                          {' · '}Cuerpo: {p.antiguedad_cuerpo} años
+                          {' · '}Días: {p.dias_disfrutados} · Centro: {p.antiguedad_centro}a · Cuerpo: {p.antiguedad_cuerpo}a
                         </div>
                       ))}
                     </div>
@@ -338,6 +494,7 @@ export default function PanelDirector() {
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => aprobar(solicitudAbierta.id)} disabled={procesando} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', backgroundColor: '#065f46', color: 'white', fontWeight: 700, cursor: procesando ? 'not-allowed' : 'pointer', fontSize: 15 }}>✅ Aprobar</button>
               <button onClick={() => rechazar(solicitudAbierta.id)} disabled={procesando} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', backgroundColor: '#b91c1c', color: 'white', fontWeight: 700, cursor: procesando ? 'not-allowed' : 'pointer', fontSize: 15 }}>❌ Rechazar</button>
+              <button onClick={() => eliminar(solicitudAbierta.id)} disabled={procesando} style={{ padding: '13px 16px', borderRadius: 10, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', fontWeight: 700, cursor: procesando ? 'not-allowed' : 'pointer', fontSize: 15 }}>🗑️</button>
             </div>
           </div>
         </div>
