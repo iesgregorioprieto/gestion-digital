@@ -15,10 +15,17 @@ const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
   { id: '3', label: '3ª hora', emoji: '🕚' },
-  { id: 'recreo', label: 'Recreo', emoji: '☕' },
+  { id: 'recreo', label: 'Recreo', emoji: '☕', soloGuardia: true },
   { id: '4', label: '4ª hora', emoji: '🕛' },
   { id: '5', label: '5ª hora', emoji: '🕐' },
   { id: '6', label: '6ª hora', emoji: '🕑' },
+];
+
+const TIPOS_GUARDIA = [
+  { valor: 'cuadrante_general', emoji: '📋', label: 'Cuadrante general' },
+  { valor: 'familias_profesionales', emoji: '🏭', label: 'Familias profesionales' },
+  { valor: 'recreo', emoji: '☕', label: 'Guardia de recreo' },
+  { valor: 'otras', emoji: '📝', label: 'Otras situaciones' },
 ];
 
 const GRUPOS_POR_ETAPA = {
@@ -50,8 +57,14 @@ const TIPOS_DLD = [
   { valor: '2_lectivo', emoji: '📖', label: '2º DLD en período lectivo' },
 ];
 
+// horario[horaId] = {
+//   tipo: 'clase' | 'guardia' | 'libre'
+//   grupo: string (si tipo==='clase')
+//   tipo_guardia: string (si tipo==='guardia')
+// }
+
 export default function DLD() {
-  const [vista, setVista] = useState('historial'); // 'historial' | 'nueva'
+  const [vista, setVista] = useState('historial');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
   const [profesorNombre, setProfesorNombre] = useState('');
@@ -62,16 +75,16 @@ export default function DLD() {
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
 
-  // horario[horaId] = { tipo: 'clase'|'guardia'|'libre', grupo: '' }
+  // horario
   const [horario, setHorario] = useState({});
-  const [horaEditando, setHoraEditando] = useState(null);
+  // qué hora está en modo "expandido" para editar detalle
+  const [horaExpandida, setHoraExpandida] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [textoOtro, setTextoOtro] = useState('');
 
   const [form, setForm] = useState({
     tipo_dld: '',
     fecha_solicitada: '',
-    tipo_guardia: '',
     causa_sobrevenida: false,
     descripcion_causa: '',
   });
@@ -88,7 +101,11 @@ export default function DLD() {
   async function cargarDatos(id) {
     setCargando(true);
     const { data: prof } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id).single();
-    if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); }
+    if (prof) {
+      setTipoContrato(prof.tipo_contrato || '');
+      setAntiguedadCentro(prof.antiguedad_centro || 0);
+      setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0);
+    }
     const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
     setMisSolicitudes(sols || []);
     setCargando(false);
@@ -104,24 +121,36 @@ export default function DLD() {
   const diasRestantes = diasCorrespondientes() - diasAprobados;
   const sinDias = diasRestantes <= 0;
 
-  function setHoraTipo(horaId, tipo) {
-    setHorario(h => ({ ...h, [horaId]: { tipo, grupo: tipo === 'clase' ? '' : tipo } }));
-    if (tipo === 'clase') setHoraEditando(horaId);
-    else setHoraEditando(null);
-    setEtapaSeleccionada('');
-    setTextoOtro('');
+  // ── Funciones de edición del horario ──────────────────────────
+
+  function seleccionarTipoHora(horaId, tipo) {
+    if (tipo === 'libre') {
+      setHorario(h => ({ ...h, [horaId]: { tipo: 'libre' } }));
+      setHoraExpandida(null);
+    } else {
+      // clase o guardia → expandir para configurar detalle
+      setHorario(h => ({ ...h, [horaId]: { tipo, grupo: '', tipo_guardia: '' } }));
+      setHoraExpandida(horaId);
+      setEtapaSeleccionada('');
+      setTextoOtro('');
+    }
   }
 
   function asignarGrupo(horaId, grupo) {
     setHorario(h => ({ ...h, [horaId]: { tipo: 'clase', grupo } }));
-    setHoraEditando(null);
+    setHoraExpandida(null);
     setEtapaSeleccionada('');
     setTextoOtro('');
   }
 
+  function asignarTipoGuardia(horaId, tipoGuardia) {
+    setHorario(h => ({ ...h, [horaId]: { tipo: 'guardia', tipo_guardia: tipoGuardia } }));
+    setHoraExpandida(null);
+  }
+
   function limpiarHora(horaId) {
     setHorario(h => { const nuevo = { ...h }; delete nuevo[horaId]; return nuevo; });
-    if (horaEditando === horaId) setHoraEditando(null);
+    if (horaExpandida === horaId) setHoraExpandida(null);
   }
 
   function construirGruposAfectados() {
@@ -136,15 +165,34 @@ export default function DLD() {
     return Object.entries(grupos).map(([grupo, horas]) => ({ grupo, horas }));
   }
 
+  function construirGuardiasHorario() {
+    // guarda las guardias por hora para que el director lo vea
+    return Object.entries(horario)
+      .filter(([, val]) => val.tipo === 'guardia')
+      .map(([horaId, val]) => {
+        const hora = HORAS.find(h => h.id === horaId);
+        const tg = TIPOS_GUARDIA.find(t => t.valor === val.tipo_guardia);
+        return { hora: hora?.label || horaId, tipo_guardia: val.tipo_guardia, tipo_guardia_label: tg?.label || val.tipo_guardia };
+      });
+  }
+
   async function enviar() {
     setError('');
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
     if (!form.fecha_solicitada) { setError('Indica la fecha solicitada.'); return; }
-    if (!form.tipo_guardia) { setError('Indica el tipo de guardia.'); return; }
+
+    // Validar que las guardias tienen tipo seleccionado
+    const guardiasSinTipo = Object.entries(horario).filter(([, v]) => v.tipo === 'guardia' && !v.tipo_guardia);
+    if (guardiasSinTipo.length > 0) {
+      const horas = guardiasSinTipo.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+      setError(`Indica el tipo de guardia en: ${horas}`);
+      return;
+    }
 
     setEnviando(true);
     try {
       const gruposAfectados = construirGruposAfectados();
+      const guardiasHorario = construirGuardiasHorario();
       const { error: err } = await getSupabase().from('dld').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,
@@ -152,7 +200,8 @@ export default function DLD() {
         tipo_dld: form.tipo_dld,
         fecha_solicitada: form.fecha_solicitada,
         grupos_afectados: gruposAfectados,
-        tipo_guardia: form.tipo_guardia,
+        guardias_horario: guardiasHorario,
+        tipo_guardia: guardiasHorario.length > 0 ? guardiasHorario[0].tipo_guardia : null,
         causa_sobrevenida: form.causa_sobrevenida,
         descripcion_causa: form.descripcion_causa.trim(),
         estado: 'pendiente',
@@ -162,7 +211,7 @@ export default function DLD() {
       if (err) { setError('Error al enviar: ' + err.message); }
       else {
         setVista('historial');
-        setForm({ tipo_dld: '', fecha_solicitada: '', tipo_guardia: '', causa_sobrevenida: false, descripcion_causa: '' });
+        setForm({ tipo_dld: '', fecha_solicitada: '', causa_sobrevenida: false, descripcion_causa: '' });
         setHorario({});
         cargarDatos(profesorId);
       }
@@ -172,6 +221,25 @@ export default function DLD() {
 
   const verde = '#1e6b2e';
   const verdeClaro = '#e8f5e9';
+  const labelEstilo = { display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 4 };
+  const inputEstilo = { width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none', fontFamily: 'system-ui, sans-serif' };
+
+  function colorFranja(asig) {
+    if (!asig) return { bg: '#fafafa', border: '#e0e0e0' };
+    if (asig.tipo === 'clase') return { bg: verdeClaro, border: verde };
+    if (asig.tipo === 'guardia') return { bg: '#dbeafe', border: '#93c5fd' };
+    return { bg: '#f5f5f5', border: '#ddd' };
+  }
+
+  function etiquetaFranja(asig) {
+    if (!asig) return null;
+    if (asig.tipo === 'clase') return { texto: `📚 ${asig.grupo || '—'}`, color: verde };
+    if (asig.tipo === 'guardia') {
+      const tg = TIPOS_GUARDIA.find(t => t.valor === asig.tipo_guardia);
+      return { texto: `🛡️ ${tg ? tg.label : 'Guardia'}`, color: '#1e40af' };
+    }
+    return { texto: '⬜ Libre', color: '#888' };
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -210,7 +278,7 @@ export default function DLD() {
           <button onClick={() => setVista('historial')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'historial' ? verde : '#ddd'}`, backgroundColor: vista === 'historial' ? verde : 'white', color: vista === 'historial' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
             📋 Mis solicitudes
           </button>
-          <button onClick={() => !sinDias && setVista('nueva')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'nueva' ? verde : sinDias ? '#ddd' : '#ddd'}`, backgroundColor: vista === 'nueva' ? verde : sinDias ? '#f5f5f5' : 'white', color: vista === 'nueva' ? 'white' : sinDias ? '#bbb' : '#555', cursor: sinDias ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 14 }}>
+          <button onClick={() => !sinDias && setVista('nueva')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'nueva' ? verde : '#ddd'}`, backgroundColor: vista === 'nueva' ? verde : sinDias ? '#f5f5f5' : 'white', color: vista === 'nueva' ? 'white' : sinDias ? '#bbb' : '#555', cursor: sinDias ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 14 }}>
             {sinDias ? '🚫 Sin días disponibles' : '+ Nueva solicitud'}
           </button>
         </div>
@@ -230,6 +298,7 @@ export default function DLD() {
               s.estado === 'cancelada' ? { bg: '#f3f4f6', color: '#6b7280', texto: '🚫 Cancelada' } :
               { bg: '#fef3c7', color: '#92400e', texto: '⏳ Pendiente' };
             const grupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
+            const guardias = Array.isArray(s.guardias_horario) ? s.guardias_horario : [];
             return (
               <div key={s.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.07)', borderLeft: `4px solid ${s.estado === 'aprobada' ? '#10b981' : s.estado === 'rechazada' ? '#ef4444' : '#f59e0b'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
@@ -245,6 +314,13 @@ export default function DLD() {
                           const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
                           return <div key={i} style={{ fontSize: 12, color: '#555', marginTop: 2 }}>📚 {nombre} — {horas}</div>;
                         })}
+                      </div>
+                    )}
+                    {guardias.length > 0 && (
+                      <div style={{ marginTop: 4 }}>
+                        {guardias.map((g, i) => (
+                          <div key={i} style={{ fontSize: 12, color: '#1e40af', marginTop: 2 }}>🛡️ {g.hora} — {g.tipo_guardia_label}</div>
+                        ))}
                       </div>
                     )}
                     {s.estado === 'rechazada' && s.motivo_rechazo && (
@@ -297,60 +373,89 @@ export default function DLD() {
             {/* HORARIO DEL DÍA */}
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>🕐 ¿Qué tienes en cada hora ese día?</label>
-              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Indica para cada hora si tienes clase, guardia o estás libre</div>
+              <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Indica para cada franja si tienes clase (con su grupo), guardia o estás libre</div>
 
               {HORAS.map(hora => {
-                const asignacion = horario[hora.id];
-                const esRecreo = hora.id === 'recreo';
+                const asig = horario[hora.id];
+                const expandida = horaExpandida === hora.id;
+                const col = colorFranja(asig);
+                const etiq = etiquetaFranja(asig);
+                const esRecreo = hora.soloGuardia;
+
                 return (
                   <div key={hora.id} style={{ marginBottom: 8 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 10, backgroundColor: asignacion ? (asignacion.tipo === 'clase' ? verdeClaro : asignacion.tipo === 'guardia' ? '#dbeafe' : '#f5f5f5') : '#fafafa', border: `1.5px solid ${asignacion ? (asignacion.tipo === 'clase' ? verde : asignacion.tipo === 'guardia' ? '#93c5fd' : '#ddd') : '#e0e0e0'}` }}>
+                    {/* Fila principal de la hora */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: expandida ? '10px 10px 0 0' : 10, backgroundColor: col.bg, border: `1.5px solid ${col.border}` }}>
                       <span style={{ fontSize: 18 }}>{hora.emoji}</span>
                       <span style={{ fontWeight: 600, fontSize: 14, color: '#333', width: 80, flexShrink: 0 }}>{hora.label}</span>
 
-                      {asignacion ? (
+                      {asig ? (
                         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: 13, color: asignacion.tipo === 'clase' ? verde : asignacion.tipo === 'guardia' ? '#1e40af' : '#888', fontWeight: 600 }}>
-                            {asignacion.tipo === 'clase' ? `📚 ${asignacion.grupo}` : asignacion.tipo === 'guardia' ? '🛡️ Guardia' : '⬜ Libre'}
-                          </span>
+                          <span style={{ fontSize: 13, color: etiq.color, fontWeight: 600 }}>{etiq.texto}</span>
                           <button onClick={() => limpiarHora(hora.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', fontSize: 16 }}>✕</button>
                         </div>
                       ) : (
-                        <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+                        <div style={{ flex: 1, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                           {!esRecreo && (
-                            <button onClick={() => setHoraTipo(hora.id, 'clase')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #c8e6c9', backgroundColor: 'white', color: verde, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📚 Clase</button>
+                            <button onClick={() => seleccionarTipoHora(hora.id, 'clase')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #c8e6c9', backgroundColor: 'white', color: verde, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📚 Clase</button>
                           )}
-                          <button onClick={() => setHoraTipo(hora.id, 'guardia')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🛡️ Guardia</button>
-                          <button onClick={() => setHoraTipo(hora.id, 'libre')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#888', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⬜ Libre</button>
+                          <button onClick={() => seleccionarTipoHora(hora.id, 'guardia')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🛡️ Guardia</button>
+                          <button onClick={() => seleccionarTipoHora(hora.id, 'libre')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#888', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⬜ Libre</button>
                         </div>
                       )}
                     </div>
 
-                    {/* Selector de grupo para esta hora */}
-                    {horaEditando === hora.id && (
-                      <div style={{ backgroundColor: '#f8fdf8', borderRadius: 10, padding: 14, marginTop: 4, border: '1.5px solid #c8e6c9' }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: verde, marginBottom: 10 }}>¿Con qué grupo tienes clase en {hora.label}?</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
-                          {Object.entries(GRUPOS_POR_ETAPA).map(([key, val]) => (
-                            <button key={key} onClick={() => setEtapaSeleccionada(key)} style={{
-                              padding: '7px 4px', borderRadius: 7, border: `1.5px solid ${etapaSeleccionada === key ? verde : '#ddd'}`,
-                              backgroundColor: etapaSeleccionada === key ? verdeClaro : 'white',
-                              color: etapaSeleccionada === key ? verde : '#555', cursor: 'pointer', fontSize: 11, fontWeight: 600
-                            }}>{val.emoji} {val.label}</button>
-                          ))}
-                        </div>
-                        {etapaSeleccionada && etapaSeleccionada !== 'OTRO' && (
-                          <select onChange={e => e.target.value && asignarGrupo(hora.id, e.target.value)} defaultValue="" style={{ ...inputEstilo, marginBottom: 8 }}>
-                            <option value="">— Selecciona grupo —</option>
-                            {Object.keys(GRUPOS_POR_ETAPA[etapaSeleccionada].cursos).map(c => <option key={c} value={c}>{c}</option>)}
-                            <option value="__otro__">📝 Otro...</option>
-                          </select>
+                    {/* Panel expandido */}
+                    {expandida && asig && (
+                      <div style={{ backgroundColor: asig.tipo === 'clase' ? '#f8fdf8' : '#eff6ff', borderRadius: '0 0 10px 10px', padding: 14, border: `1.5px solid ${asig.tipo === 'clase' ? '#c8e6c9' : '#93c5fd'}`, borderTop: 'none' }}>
+
+                        {/* ── Selector de GRUPO (si es clase) ── */}
+                        {asig.tipo === 'clase' && (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: verde, marginBottom: 10 }}>¿Con qué grupo tienes clase?</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6, marginBottom: 10 }}>
+                              {Object.entries(GRUPOS_POR_ETAPA).map(([key, val]) => (
+                                <button key={key} onClick={() => setEtapaSeleccionada(key)} style={{
+                                  padding: '7px 4px', borderRadius: 7, border: `1.5px solid ${etapaSeleccionada === key ? verde : '#ddd'}`,
+                                  backgroundColor: etapaSeleccionada === key ? verdeClaro : 'white',
+                                  color: etapaSeleccionada === key ? verde : '#555', cursor: 'pointer', fontSize: 11, fontWeight: 600
+                                }}>{val.emoji} {val.label}</button>
+                              ))}
+                            </div>
+                            {etapaSeleccionada && (
+                              <select onChange={e => e.target.value && asignarGrupo(hora.id, e.target.value)} defaultValue="" style={{ ...inputEstilo, marginBottom: 8 }}>
+                                <option value="">— Selecciona grupo —</option>
+                                {Object.keys(GRUPOS_POR_ETAPA[etapaSeleccionada].cursos).map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="__otro__">📝 Otro...</option>
+                              </select>
+                            )}
+                            {(textoOtro !== '' || etapaSeleccionada === '__otro__') && (
+                              <div style={{ display: 'flex', gap: 8 }}>
+                                <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Escribe el grupo..." style={{ ...inputEstilo, flex: 1 }} />
+                                <button onClick={() => textoOtro.trim() && asignarGrupo(hora.id, textoOtro.trim())} style={{ padding: '0 14px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', cursor: 'pointer', fontWeight: 700 }}>OK</button>
+                              </div>
+                            )}
+                          </>
                         )}
-                        {(etapaSeleccionada === 'OTRO' || textoOtro) && (
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Escribe el grupo..." style={{ ...inputEstilo, flex: 1 }} />
-                            <button onClick={() => textoOtro.trim() && asignarGrupo(hora.id, textoOtro.trim())} style={{ padding: '0 14px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', cursor: 'pointer', fontWeight: 700 }}>OK</button>
-                          </div>
+
+                        {/* ── Selector de TIPO DE GUARDIA ── */}
+                        {asig.tipo === 'guardia' && (
+                          <>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#1e40af', marginBottom: 10 }}>
+                              ¿Qué tipo de guardia tienes{esRecreo ? ' en el recreo' : ''}?
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              {TIPOS_GUARDIA
+                                .filter(t => esRecreo ? t.valor === 'recreo' : t.valor !== 'recreo')
+                                .map(t => (
+                                  <div key={t.valor} onClick={() => asignarTipoGuardia(hora.id, t.valor)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 8, border: `1.5px solid ${asig.tipo_guardia === t.valor ? '#3b82f6' : '#dbeafe'}`, backgroundColor: asig.tipo_guardia === t.valor ? '#dbeafe' : 'white', cursor: 'pointer' }}>
+                                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: `2px solid ${asig.tipo_guardia === t.valor ? '#3b82f6' : '#93c5fd'}`, backgroundColor: asig.tipo_guardia === t.valor ? '#3b82f6' : 'white', flexShrink: 0 }} />
+                                    <span style={{ fontSize: 18 }}>{t.emoji}</span>
+                                    <span style={{ fontSize: 13, fontWeight: asig.tipo_guardia === t.valor ? 700 : 400, color: asig.tipo_guardia === t.valor ? '#1e40af' : '#444' }}>{t.label}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
@@ -359,29 +464,11 @@ export default function DLD() {
               })}
             </div>
 
-            {/* TIPO GUARDIA */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ ...labelEstilo, fontSize: 15 }}>🛡️ Desempeño de guardias *</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                {[
-                  { valor: 'cuadrante_general', emoji: '📋', label: 'Guardias del cuadrante general' },
-                  { valor: 'familias_profesionales', emoji: '🏭', label: 'Guardias de familias profesionales' },
-                  { valor: 'otras', emoji: '📝', label: 'Otras situaciones' },
-                ].map(t => (
-                  <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_guardia: t.valor }))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#e0e0e0'}`, backgroundColor: form.tipo_guardia === t.valor ? verdeClaro : 'white', cursor: 'pointer' }}>
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#ccc'}`, backgroundColor: form.tipo_guardia === t.valor ? verde : 'white', flexShrink: 0 }} />
-                    <span style={{ fontSize: 20 }}>{t.emoji}</span>
-                    <span style={{ fontSize: 14, fontWeight: form.tipo_guardia === t.valor ? 700 : 400, color: form.tipo_guardia === t.valor ? verde : '#444' }}>{t.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* CAUSA SOBREVENIDA */}
             <div style={{ marginBottom: 24, backgroundColor: '#fffbeb', borderRadius: 10, padding: 16, border: '1.5px solid #fcd34d' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, fontWeight: 600 }}>
                 <input type="checkbox" checked={form.causa_sobrevenida} onChange={e => setForm(f => ({ ...f, causa_sobrevenida: e.target.checked }))} style={{ width: 18, height: 18, accentColor: verde }} />
-                ⚠️ Es una causa sobrevenida
+                ⚠️ Es una causa sobrevenida (enfermedad, hospitalización...)
               </label>
               {form.causa_sobrevenida && (
                 <textarea value={form.descripcion_causa} onChange={e => setForm(f => ({ ...f, descripcion_causa: e.target.value }))} placeholder="Describe la causa sobrevenida..." rows={3} style={{ ...inputEstilo, marginTop: 12, resize: 'vertical' }} />
@@ -400,6 +487,3 @@ export default function DLD() {
     </div>
   );
 }
-
-const labelEstilo = { display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 4 };
-const inputEstilo = { width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none', fontFamily: 'system-ui, sans-serif' };
