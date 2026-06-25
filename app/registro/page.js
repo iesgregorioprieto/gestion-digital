@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
 
 const DEPARTAMENTOS = [
   'TMV/Carrocería','Hostelería','Informática','Electricidad','Comercio',
@@ -91,7 +93,7 @@ export default function Registro() {
 
     setEnviando(true);
     try {
-      const { error: err } = await supabase.from('profesores').insert([{
+      const { error: err } = await getSupabase().from('profesores').insert([{
         nombre: form.nombre.trim(),
         apellidos: form.apellidos.trim(),
         email: form.email.trim().toLowerCase(),

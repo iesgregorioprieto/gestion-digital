@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -49,13 +51,11 @@ export default function Login() {
       return;
     }
 
-    // Guardar datos en sessionStorage
     sessionStorage.setItem('profesor_id', data.id);
     sessionStorage.setItem('profesor_nombre', `${data.nombre} ${data.apellidos}`);
     sessionStorage.setItem('profesor_rol_gestion', data.rol_gestion || '');
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
-    // Todos van al panel del profesor
     window.location.href = '/profesor';
   }
 
@@ -66,15 +66,12 @@ export default function Login() {
       alignItems: 'center', justifyContent: 'center',
       fontFamily: 'system-ui, sans-serif', padding: 16
     }}>
-
-      {/* LOGO */}
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🏫</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: verde }}>IES Gregorio Prieto</div>
         <div style={{ fontSize: 14, color: '#777', marginTop: 4 }}>Valdepeñas · Castilla-La Mancha</div>
       </div>
 
-      {/* TARJETA LOGIN */}
       <div style={{
         backgroundColor: 'white', borderRadius: 16, padding: 32,
         maxWidth: 420, width: '100%',
@@ -85,26 +82,30 @@ export default function Login() {
         </h2>
 
         <div style={{ marginBottom: 16 }}>
-          <label style={labelEstilo}>Email institucional</label>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 6 }}>
+            Email institucional
+          </label>
           <input
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && entrar()}
             placeholder="llcc12@educastillalamancha.es"
-            style={inputEstilo}
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
           />
         </div>
 
         <div style={{ marginBottom: 24 }}>
-          <label style={labelEstilo}>Contraseña</label>
+          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 6 }}>
+            Contraseña
+          </label>
           <input
             type="password"
             value={password}
             onChange={e => setPassword(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && entrar()}
             placeholder="Tu contraseña"
-            style={inputEstilo}
+            style={{ width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
           />
         </div>
 
@@ -145,10 +146,3 @@ export default function Login() {
     </div>
   );
 }
-
-const labelEstilo = { display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 6 };
-const inputEstilo = {
-  width: '100%', padding: '11px 14px', borderRadius: 8,
-  border: '1.5px solid #ddd', fontSize: 14,
-  boxSizing: 'border-box', outline: 'none'
-};

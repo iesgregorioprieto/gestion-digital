@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
 
 const ESTANCIAS = [
   { valor: 'aula', emoji: '🏫', etiqueta: 'Aula' },
@@ -76,18 +78,18 @@ export default function Mantenimiento() {
       // Subir foto si hay una
       if (form.foto) {
         const nombreArchivo = `${Date.now()}_${form.foto.name}`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await getSupabase().storage
           .from('mantenimiento-fotos')
           .upload(nombreArchivo, form.foto);
         if (!uploadError && uploadData) {
-          const { data: urlData } = supabase.storage
+          const { data: urlData } = getSupabase().storage
             .from('mantenimiento-fotos')
             .getPublicUrl(nombreArchivo);
           foto_url = urlData.publicUrl;
         }
       }
 
-      const { error: err } = await supabase.from('mantenimiento').insert([{
+      const { error: err } = await getSupabase().from('mantenimiento').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,
         estancia: form.estancia,

@@ -4,10 +4,12 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
 
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -85,9 +87,9 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: prof } = await supabase.from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id).single();
+    const { data: prof } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id).single();
     if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); }
-    const { data: sols } = await supabase.from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
+    const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
     setMisSolicitudes(sols || []);
     setCargando(false);
   }
@@ -143,7 +145,7 @@ export default function DLD() {
     setEnviando(true);
     try {
       const gruposAfectados = construirGruposAfectados();
-      const { error: err } = await supabase.from('dld').insert([{
+      const { error: err } = await getSupabase().from('dld').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,
         tipo_contrato: tipoContrato,
