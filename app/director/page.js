@@ -63,6 +63,63 @@ function GruposAfectados({ grupos }) {
   );
 }
 
+function GuardiasHorario({ guardias }) {
+  if (!guardias || !guardias.length) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 8, fontSize: 15 }}>🛡️ Guardias ese día</div>
+      {guardias.map((g, i) => (
+        <div key={i} style={{ backgroundColor: '#eff6ff', borderRadius: 8, padding: '8px 12px', marginBottom: 6, border: '1px solid #93c5fd', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, backgroundColor: '#1e40af', color: 'white', padding: '2px 10px', borderRadius: 10, fontWeight: 700, flexShrink: 0 }}>{g.hora}</span>
+          <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>{g.tipo_guardia}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HorarioCompleto({ grupos, guardias }) {
+  const HORAS = ['1ª hora','2ª hora','3ª hora','Recreo','4ª hora','5ª hora','6ª hora'];
+  const mapaClases = {};
+  if (Array.isArray(grupos)) {
+    grupos.forEach(g => {
+      const nombre = typeof g === 'object' ? g.grupo : g;
+      const horas = typeof g === 'object' && g.horas ? g.horas : [];
+      horas.forEach(h => { mapaClases[h] = nombre; });
+    });
+  }
+  const mapaGuardias = {};
+  if (Array.isArray(guardias)) {
+    guardias.forEach(g => { mapaGuardias[g.hora] = g.tipo_guardia; });
+  }
+  const tieneAlgo = HORAS.some(h => mapaClases[h] || mapaGuardias[h]);
+  if (!tieneAlgo) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 15 }}>🕐 Horario del día</div>
+      <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+        {HORAS.map((hora, i) => {
+          const clase = mapaClases[hora];
+          const guardia = mapaGuardias[hora];
+          const esRecreo = hora === 'Recreo';
+          const bgColor = clase ? '#e8f5e9' : guardia ? '#eff6ff' : esRecreo ? '#fafafa' : '#fafafa';
+          const borderColor = clase ? '#c8e6c9' : guardia ? '#93c5fd' : '#f0f0f0';
+          return (
+            <div key={hora} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', backgroundColor: bgColor, borderBottom: i < HORAS.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+              <span style={{ width: 70, fontSize: 12, fontWeight: 700, color: esRecreo ? '#92400e' : '#555', flexShrink: 0 }}>
+                {esRecreo ? '☕ Recreo' : hora}
+              </span>
+              {clase && <span style={{ fontSize: 13, color: verde, fontWeight: 700 }}>📚 {clase}</span>}
+              {guardia && <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 700 }}>🛡️ {guardia}</span>}
+              {!clase && !guardia && <span style={{ fontSize: 12, color: '#ccc' }}>— libre —</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function AlertasPanel({ alertas, prelacion }) {
   return (
     <>
@@ -456,6 +513,8 @@ export default function PanelDirector() {
               )}
             </div>
             <GruposAfectados grupos={solicitudAbierta.grupos_afectados} />
+            <GuardiasHorario guardias={solicitudAbierta.guardias_horario} />
+            <HorarioCompleto grupos={solicitudAbierta.grupos_afectados} guardias={solicitudAbierta.guardias_horario} />
             <AlertasPanel alertas={calcularAlertas(solicitudAbierta)} prelacion={calcularPrelacion(solicitudAbierta)} />
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Motivo de rechazo (obligatorio si rechazas)</label>
