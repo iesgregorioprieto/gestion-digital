@@ -24,23 +24,27 @@ const HORAS = [
 const GRUPOS_POR_ETAPA = {
   ESO: {
     emoji: '🏫', label: 'ESO',
-    cursos: { '1º ESO AM': null, '1º ESO AZ': null, '1º ESO NA': null, '1º ESO VE': null, '2º ESO AM': null, '2º ESO AZ': null, '2º ESO VE': null, '3º ESO AM': null, '3º ESO AZ': null, '3º ESO NA': null, '3º ESO VE': null, '3º ESO DIV': null, '4º ESO AM': null, '4º ESO AZ': null, '4º ESO VE': null },
+    cursos: { 'ESO-1A': null, 'ESO-1B': null, 'ESO-1C': null, 'ESO-1D': null, 'ESO-2A': null, 'ESO-2B': null, 'ESO-2C': null, 'ESO-3A': null, 'ESO-3B': null, 'ESO-3C': null, 'ESO-3DIV': null, 'ESO-4A': null, 'ESO-4B': null, 'ESO-4C': null, 'ESO-4D': null, 'ESO-4DIV': null },
   },
   BACH: {
     emoji: '🎓', label: 'Bachillerato',
-    cursos: { '1º BTO CT': null, '1º BTO HCS': null, '2º BTO A': null, '2º BTO B': null },
+    cursos: { 'BTO-1CTA': null, 'BTO-1CTB': null, 'BTO-1HCS': null, 'BTO-2CT': null, 'BTO-2HU': null },
   },
   GB: {
     emoji: '🔰', label: 'Grado Básico',
-    cursos: { '1º GB CR': null, '2º GB CR': null, '1º GB EE': null, '2º GB EE': null, '1º GB MV': null, '2º GB MV': null, '1º GB SC': null, '2º GB SC': null },
+    cursos: { 'GB-1CR': null, 'GB-1EE': null, 'GB-1MV': null, 'GB-1SC': null, 'GB-2CR': null, 'GB-2EE': null, 'GB-2MV': null, 'GB-2SC': null },
   },
   GM: {
     emoji: '🔧', label: 'FP Grado Medio',
-    cursos: { '1º CAR': null, '2º CAR': null, '1º SMR': null, '2º SMR': null, '1º COC': null, '2º COC': null, '1º EVA': null, '2º EVA': null, '1º GAD': null, '2º GAD': null, '1º IEA': null, '2º IEA': null, '1º ITE': null, '2º ITE': null, '1º ACC': null, '2º ACC': null, '1º AOV': null, '2º AOV': null },
+    cursos: { 'GM-1ACC': null, 'GM-1AOV': null, 'GM-1CAR': null, 'GM-1COC': null, 'GM-1EVA.A': null, 'GM-1EVA.B': null, 'GM-1GAD': null, 'GM-1IEA': null, 'GM-1ITE': null, 'GM-1SMR.A': null, 'GM-1SMR.B': null, 'GM-2ACC': null, 'GM-2AOV': null, 'GM-2CAR': null, 'GM-2COC': null, 'GM-2EVA': null, 'GM-2GAD': null, 'GM-2IEA': null, 'GM-2ITE': null, 'GM-2SMR.A': null, 'GM-2SMR.B': null },
   },
   GS: {
     emoji: '🎯', label: 'FP Grado Superior',
-    cursos: { '1º DAW': null, '2º DAW': null, '1º DAM': null, '2º DAM': null, '1º ASIR': null, '2º ASIR': null, '1º AFI': null, '2º AFI': null, '1º AUT': null, '2º AUT': null, '1º DDC': null, '2º DDC': null, '1º GVEC': null, '2º GVEC': null, '1º SEA': null, '2º SEA': null, '1º STI': null, '2º STI': null, '1º TLO': null, '2º TLO': null, '1º VIT': null },
+    cursos: { 'GS-1AAD': null, 'GS-1AFI': null, 'GS-1ASIR': null, 'GS-1AUT': null, 'GS-1DAM': null, 'GS-1DAW': null, 'GS-1DDC': null, 'GS-1GVEC': null, 'GS-1SEA': null, 'GS-1STI': null, 'GS-1TLO': null, 'GS-1VITI': null, 'GS-2AAD': null, 'GS-2AFI': null, 'GS-2ASIR': null, 'GS-2AUT': null, 'GS-2DAM': null, 'GS-2DAW': null, 'GS-2DDC': null, 'GS-2GVEC': null, 'GS-2SEA': null, 'GS-2STI': null, 'GS-2TLO': null, 'GS-2VITI': null },
+  },
+  FPPE: {
+    emoji: '🌱', label: 'PEFP',
+    cursos: { 'FPPE-1JAR': null, 'FPPE-2JAR': null },
   },
   GUARDIA: {
     emoji: '🛡️', label: 'Guardia',
