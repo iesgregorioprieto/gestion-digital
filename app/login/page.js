@@ -29,18 +29,18 @@ export default function Login() {
     setCargando(true);
 
     const supabase = getSupabase();
-    const { data, error: err } = await supabase
+    const { data: rows, error: err } = await supabase
       .from('profesores')
       .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash')
-      .eq('email', email.trim().toLowerCase())
-      .single();
+      .eq('email', email.trim().toLowerCase());
 
     setCargando(false);
 
-    if (err || !data) {
+    if (err || !rows || rows.length === 0) {
       setError('Email o contraseña incorrectos.');
       return;
     }
+    const data = rows[0];
 
     if (data.estado !== 'activo') {
       setError('Tu cuenta aún no está activada. Contacta con el secretario.');
