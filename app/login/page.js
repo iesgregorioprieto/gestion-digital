@@ -28,6 +28,7 @@ export default function Login() {
 
     setCargando(true);
 
+    const supabase = getSupabase();
     const { data, error: err } = await supabase
       .from('profesores')
       .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash')
