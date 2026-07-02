@@ -148,7 +148,6 @@ export default function DLD() {
     setError('');
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
     if (!form.fecha_solicitada) { setError('Indica la fecha solicitada.'); return; }
-    if (!form.tipo_guardia) { setError('Indica el tipo de guardia.'); return; }
 
     setEnviando(true);
     try {
@@ -377,24 +376,6 @@ export default function DLD() {
                   </div>
                 );
               })}
-            </div>
-
-            {/* TIPO GUARDIA */}
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ ...labelEstilo, fontSize: 15 }}>🛡️ Desempeño de guardias *</label>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                {[
-                  { valor: 'cuadrante_general', emoji: '📋', label: 'Guardias del cuadrante general' },
-                  { valor: 'familias_profesionales', emoji: '🏭', label: 'Guardias de familias profesionales' },
-                  { valor: 'otras', emoji: '📝', label: 'Otras situaciones' },
-                ].map(t => (
-                  <div key={t.valor} onClick={() => setForm(f => ({ ...f, tipo_guardia: t.valor }))} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10, border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#e0e0e0'}`, backgroundColor: form.tipo_guardia === t.valor ? verdeClaro : 'white', cursor: 'pointer' }}>
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${form.tipo_guardia === t.valor ? verde : '#ccc'}`, backgroundColor: form.tipo_guardia === t.valor ? verde : 'white', flexShrink: 0 }} />
-                    <span style={{ fontSize: 20 }}>{t.emoji}</span>
-                    <span style={{ fontSize: 14, fontWeight: form.tipo_guardia === t.valor ? 700 : 400, color: form.tipo_guardia === t.valor ? verde : '#444' }}>{t.label}</span>
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* CAUSA SOBREVENIDA */}
