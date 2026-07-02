@@ -23,12 +23,6 @@ function etiquetaTipoDLD(tipo) {
   return tipo;
 }
 
-function etiquetaGuardia(tipo) {
-  if (tipo === 'cuadrante_general') return '📋 Cuadrante general';
-  if (tipo === 'familias_profesionales') return '🏭 Familias profesionales';
-  return '📝 Otras situaciones';
-}
-
 function Fila({ label, valor }) {
   return (
     <div style={{ display: 'flex', gap: 12, padding: '6px 0', borderBottom: '1px solid #e8ecf4' }}>
@@ -503,7 +497,6 @@ export default function PanelDirector() {
               <Fila label="Contrato" valor={solicitudAbierta.tipo_contrato} />
               <Fila label="Tipo DLD" valor={etiquetaTipoDLD(solicitudAbierta.tipo_dld)} />
               <Fila label="Fecha" valor={new Date(solicitudAbierta.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} />
-              <Fila label="Guardias" valor={etiquetaGuardia(solicitudAbierta.tipo_guardia)} />
               <Fila label="Antigüedad centro" valor={`${solicitudAbierta.antiguedad_centro || 0} años`} />
               <Fila label="Antigüedad cuerpo" valor={`${solicitudAbierta.antiguedad_cuerpo || 0} años`} />
               {solicitudAbierta.causa_sobrevenida && (

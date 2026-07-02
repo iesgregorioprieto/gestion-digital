@@ -68,7 +68,7 @@ export default function PanelSecretario() {
 
   async function cargarProfesores() {
     setCargando(true);
-    const { data, error } = await supabase
+    const { data, error } = await getSupabase()
       .from('profesores')
       .select('*')
       .eq('estado', filtroEstado)
