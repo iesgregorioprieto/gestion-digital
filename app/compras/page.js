@@ -247,14 +247,27 @@ export default function Compras() {
 
                       {/* Adjunto por artículo SOLO para tipo=pedir */}
                       {tipo === 'pedir' && (
-                        <div>
-                          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>📎 Presupuesto (foto/PDF) — opcional</label>
-                          <input type="file" accept="image/*,application/pdf" onChange={e => {
-                            const f = e.target.files[0];
-                            if (f) updateArticulo(i, 'archivo', f);
-                            if (f) updateArticulo(i, 'archivoNombre', f.name);
-                          }} style={{ fontSize: 12, width: '100%' }} />
-                          {a.archivoNombre && <div style={{ fontSize: 11, color: verde, marginTop: 3 }}>📎 {a.archivoNombre}</div>}
+                        <div style={{ marginTop: 4 }}>
+                          {!a.archivoNombre ? (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, border: '2px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                              <span style={{ fontSize: 20 }}>📎</span>
+                              <div>
+                                <div>Adjuntar presupuesto (opcional)</div>
+                                <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}>Foto o PDF</div>
+                              </div>
+                              <input type="file" accept="image/*,application/pdf" onChange={e => {
+                                const f = e.target.files[0];
+                                if (f) updateArticulo(i, 'archivo', f);
+                                if (f) updateArticulo(i, 'archivoNombre', f.name);
+                              }} style={{ display: 'none' }} />
+                            </label>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8, border: '1.5px solid #6ee7b7' }}>
+                              <span>✅</span>
+                              <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {a.archivoNombre}</span>
+                              <button onClick={() => { updateArticulo(i, 'archivo', null); updateArticulo(i, 'archivoNombre', ''); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 5, color: '#888', fontSize: 11, cursor: 'pointer', padding: '3px 7px' }}>✕</button>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -275,18 +288,32 @@ export default function Compras() {
 
                 {/* ALBARÁN GLOBAL (solo para ya_comprado) */}
                 {tipo === 'ya_comprado' && (
-                  <div style={{ marginBottom: 20, backgroundColor: '#fffbeb', borderRadius: 10, padding: 14, border: '1.5px solid #fcd34d' }}>
-                    <label style={{ fontWeight: 700, fontSize: 13, color: '#92400e', display: 'block', marginBottom: 6 }}>🧾 Albarán de la compra *</label>
-                    <div style={{ fontSize: 12, color: '#92400e', marginBottom: 10, opacity: 0.8 }}>Adjunta la foto o PDF del albarán. El secretario lo usará para cotejar la factura cuando llegue.</div>
-                    <input type="file" accept="image/*,application/pdf" onChange={e => {
-                      const f = e.target.files[0];
-                      if (f) { setAlbaran(f); setAlbaranNombre(f.name); }
-                    }} style={{ fontSize: 13, width: '100%' }} />
-                    {albaranNombre && (
-                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
-                        <span style={{ fontSize: 16 }}>📎</span>
-                        <span style={{ fontSize: 13, color: verde, fontWeight: 600 }}>{albaranNombre}</span>
-                        <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#aaa', fontSize: 16, cursor: 'pointer' }}>✕</button>
+                  <div style={{ marginBottom: 20, backgroundColor: '#fffbeb', borderRadius: 12, padding: 16, border: '2px solid #fcd34d' }}>
+                    <label style={{ fontWeight: 800, fontSize: 14, color: '#92400e', display: 'block', marginBottom: 4 }}>🧾 Albarán de la compra</label>
+                    <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, opacity: 0.85 }}>
+                      Adjunta la foto o PDF del albarán. El secretario lo usará para cotejar la factura cuando llegue.
+                    </div>
+
+                    {!albaranNombre ? (
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 20px', borderRadius: 10, border: '2.5px dashed #f59e0b', backgroundColor: 'white', color: '#92400e', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                        <span style={{ fontSize: 28 }}>📎</span>
+                        <div>
+                          <div>Toca aquí para adjuntar el albarán</div>
+                          <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>Foto de la cámara, galería o PDF</div>
+                        </div>
+                        <input type="file" accept="image/*,application/pdf" capture="environment" onChange={e => {
+                          const f = e.target.files[0];
+                          if (f) { setAlbaran(f); setAlbaranNombre(f.name); }
+                        }} style={{ display: 'none' }} />
+                      </label>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', backgroundColor: '#d1fae5', borderRadius: 10, border: '1.5px solid #6ee7b7' }}>
+                        <span style={{ fontSize: 24 }}>✅</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: verde }}>Albarán adjunto</div>
+                          <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>📎 {albaranNombre}</div>
+                        </div>
+                        <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 6, color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ Quitar</button>
                       </div>
                     )}
                   </div>
