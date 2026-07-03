@@ -596,16 +596,40 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
             <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
               {arts.map((a, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 4 }}>
-                  <span>• {a.nombre} × {a.cantidad}</span>
+                  <span>• {a.nombre} × {a.cantidad}{a.descripcion ? ` — ${a.descripcion}` : ''}</span>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {a.precio && <span style={{ color: verde, fontWeight: 600 }}>{(a.precio * a.cantidad).toFixed(2)} €</span>}
+                    {a.precio && (
+                      <span style={{ color: '#888', fontSize: 12 }}>
+                        {(a.precio * a.cantidad).toFixed(2)} € + IVA {a.iva || 21}% = <strong style={{ color: verde }}>{(a.precio * a.cantidad * (1 + (a.iva || 21) / 100)).toFixed(2)} €</strong>
+                      </span>
+                    )}
                     {a.enlace && <a href={a.enlace} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontSize: 12, fontWeight: 600 }}>🔗 Ver</a>}
                     {a.archivo_url && <a href={a.archivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#7c3aed', fontSize: 12, fontWeight: 600 }}>📎 Doc</a>}
                   </div>
                 </div>
               ))}
               {c.total_estimado > 0 && (
-                <div style={{ textAlign: 'right', fontWeight: 700, color: azul, fontSize: 14, marginTop: 6 }}>Total: {parseFloat(c.total_estimado).toFixed(2)} €</div>
+                <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#f8fdf8', borderRadius: 7, border: '1px solid #e0e0e0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666' }}>
+                    <span>Base imponible:</span>
+                    <span>{arts.reduce((s, a) => s + (a.precio || 0) * a.cantidad, 0).toFixed(2)} €</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#666' }}>
+                    <span>IVA:</span>
+                    <span>{(parseFloat(c.total_estimado) - arts.reduce((s, a) => s + (a.precio || 0) * a.cantidad, 0)).toFixed(2)} €</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: azul, fontSize: 14, borderTop: '1px solid #ddd', marginTop: 4, paddingTop: 4 }}>
+                    <span>Total (con IVA):</span>
+                    <span>{parseFloat(c.total_estimado).toFixed(2)} €</span>
+                  </div>
+                </div>
+              )}
+              {c.albaran_url && (
+                <div style={{ marginTop: 8 }}>
+                  <a href={c.albaran_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 8, color: '#92400e', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                    🧾 Ver albarán adjunto
+                  </a>
+                </div>
               )}
             </div>
 

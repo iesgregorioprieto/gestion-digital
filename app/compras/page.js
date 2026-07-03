@@ -37,7 +37,7 @@ export default function Compras() {
   const [proveedor, setProveedor] = useState('');
   const [albaran, setAlbaran] = useState(null);
   const [albaranNombre, setAlbaranNombre] = useState('');
-  const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+  const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -73,7 +73,7 @@ export default function Compras() {
   }
 
   function addArticulo() {
-    setArticulos(prev => [...prev, { nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+    setArticulos(prev => [...prev, { nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
   }
 
   function removeArticulo(i) {
@@ -115,13 +115,18 @@ export default function Compras() {
         descripcion: a.descripcion?.trim() || null,
         cantidad: Number(a.cantidad) || 1,
         precio: a.precio ? parseFloat(a.precio) : null,
+        iva: a.iva ? parseFloat(a.iva) : 21,
         enlace: a.enlace.trim() || null,
         archivo_url: urlArchivo,
         archivo_nombre: a.archivoNombre || null,
       };
     }));
 
-    const total = articulosConUrl.reduce((sum, a) => sum + (a.precio || 0) * a.cantidad, 0);
+    const total = articulosConUrl.reduce((sum, a) => {
+      const base = (a.precio || 0) * a.cantidad;
+      const conIva = base * (1 + (a.iva || 21) / 100);
+      return sum + conIva;
+    }, 0);
 
     const { error } = await getSupabase().from('compras').insert([{
       profesor_id: profesorId,
@@ -143,7 +148,7 @@ export default function Compras() {
     setProveedor('');
     setAlbaran(null);
     setAlbaranNombre('');
-    setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+    setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 1500);
   }
@@ -151,8 +156,17 @@ export default function Compras() {
   const totalEstimado = articulos.reduce((sum, a) => {
     const p = parseFloat(a.precio) || 0;
     const q = parseInt(a.cantidad) || 1;
+    const iv = parseFloat(a.iva) || 21;
+    return sum + p * q * (1 + iv / 100);
+  }, 0);
+
+  const baseImponible = articulos.reduce((sum, a) => {
+    const p = parseFloat(a.precio) || 0;
+    const q = parseInt(a.cantidad) || 1;
     return sum + p * q;
   }, 0);
+
+  const totalIva = totalEstimado - baseImponible;
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -228,15 +242,24 @@ export default function Compras() {
                       {/* Descripción / Concepto */}
                       <input value={a.descripcion || ''} onChange={e => updateArticulo(i, 'descripcion', e.target.value)} placeholder={tipo === 'ya_comprado' ? '📝 Concepto para el albarán (ej: material didáctico cocina)' : '📝 Descripción (opcional)'} style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
 
-                      {/* Cantidad + Precio */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+                      {/* Cantidad + Precio + IVA */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 8 }}>
                         <div>
                           <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Cantidad</label>
                           <input type="number" min="1" value={a.cantidad} onChange={e => updateArticulo(i, 'cantidad', e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
                         </div>
                         <div>
-                          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Precio unitario (€)</label>
+                          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Precio unitario (€ sin IVA)</label>
                           <input type="number" min="0" step="0.01" value={a.precio} onChange={e => updateArticulo(i, 'precio', e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>IVA (%)</label>
+                          <select value={a.iva || '21'} onChange={e => updateArticulo(i, 'iva', e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}>
+                            <option value="0">0% (exento)</option>
+                            <option value="4">4% (superreducido)</option>
+                            <option value="10">10% (reducido)</option>
+                            <option value="21">21% (general)</option>
+                          </select>
                         </div>
                       </div>
 
@@ -272,7 +295,24 @@ export default function Compras() {
                       )}
 
                       {/* Subtotal */}
-                      {a.precio && <div style={{ marginTop: 8, textAlign: 'right', fontSize: 12, fontWeight: 700, color: azul }}>Subtotal: {(parseFloat(a.precio) * (parseInt(a.cantidad) || 1)).toFixed(2)} €</div>}
+                      {a.precio && (() => {
+                        const base = parseFloat(a.precio) * (parseInt(a.cantidad) || 1);
+                        const iv = parseFloat(a.iva) || 21;
+                        const ivaImporte = base * iv / 100;
+                        return (
+                          <div style={{ marginTop: 8, backgroundColor: '#f0f4f0', borderRadius: 6, padding: '6px 10px', fontSize: 12 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666' }}>
+                              <span>Base imponible:</span><span>{base.toFixed(2)} €</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#666' }}>
+                              <span>IVA ({iv}%):</span><span>{ivaImporte.toFixed(2)} €</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: azul, borderTop: '1px solid #ddd', marginTop: 4, paddingTop: 4 }}>
+                              <span>Subtotal:</span><span>{(base + ivaImporte).toFixed(2)} €</span>
+                            </div>
+                          </div>
+                        );
+                      })()}
 
                       {/* Quitar artículo */}
                       {articulos.length > 1 && (
@@ -321,9 +361,17 @@ export default function Compras() {
 
                 {/* TOTAL */}
                 {totalEstimado > 0 && (
-                  <div style={{ backgroundColor: verdeClaro, borderRadius: 10, padding: '12px 16px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 700, color: verde, fontSize: 15 }}>💶 Total estimado</span>
-                    <span style={{ fontWeight: 800, color: verde, fontSize: 18 }}>{totalEstimado.toFixed(2)} €</span>
+                  <div style={{ backgroundColor: verdeClaro, borderRadius: 10, padding: '14px 16px', marginBottom: 20, border: '1.5px solid #6ee7b7' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 4 }}>
+                      <span>Base imponible:</span><span>{baseImponible.toFixed(2)} €</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 8 }}>
+                      <span>IVA:</span><span>{totalIva.toFixed(2)} €</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, color: verde, fontSize: 17, borderTop: '1.5px solid #6ee7b7', paddingTop: 8 }}>
+                      <span>💶 Total estimado (con IVA)</span>
+                      <span>{totalEstimado.toFixed(2)} €</span>
+                    </div>
                   </div>
                 )}
 
