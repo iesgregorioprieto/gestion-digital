@@ -153,6 +153,7 @@ export default function PanelDirector() {
   const [solicitudAbierta, setSolicitudAbierta] = useState(null);
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [procesando, setProcesando] = useState(false);
+  const [diasVistos, setDiasVistos] = useState(new Set());
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -402,16 +403,33 @@ export default function PanelDirector() {
                 const colorDia = getColorDia(sols);
                 const esHoy = new Date().getDate() === dia && new Date().getMonth() === month && new Date().getFullYear() === year;
                 const seleccionado = diaSeleccionado === dia;
+                const tienePendientes = sols.some(s => s.estado === 'pendiente');
+                const fechaKey = `${year}-${String(month+1).padStart(2,'0')}-${String(dia).padStart(2,'0')}`;
+                const yaVisto = diasVistos.has(fechaKey);
+                const parpadeante = tienePendientes && !yaVisto && !seleccionado;
                 return (
-                  <div key={dia} onClick={() => setDiaSeleccionado(seleccionado ? null : dia)} style={{
+                  <div key={dia} onClick={() => {
+                    if (sols.length) {
+                      setDiasVistos(prev => new Set([...prev, fechaKey]));
+                      setDiaSeleccionado(seleccionado ? null : dia);
+                    }
+                  }} style={{
                     aspectRatio: '1', borderRadius: 8, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center',
+                    alignItems: 'center', justifyContent: 'center', position: 'relative',
                     cursor: sols.length ? 'pointer' : 'default',
                     backgroundColor: seleccionado ? azul : colorDia ? colorDia.bg : esHoy ? '#f0f4ff' : 'white',
                     border: `2px solid ${seleccionado ? azul : colorDia ? colorDia.border : esHoy ? '#93c5fd' : '#f0f0f0'}`,
                   }}>
                     <div style={{ fontSize: 14, fontWeight: esHoy ? 800 : 400, color: seleccionado ? 'white' : colorDia ? colorDia.color : '#333' }}>{dia}</div>
                     {sols.length > 0 && <div style={{ fontSize: 10, fontWeight: 700, color: seleccionado ? 'white' : colorDia.color }}>{sols.length}</div>}
+                    {parpadeante && (
+                      <div style={{
+                        position: 'absolute', top: 3, right: 3,
+                        width: 8, height: 8, borderRadius: '50%',
+                        backgroundColor: '#ef4444',
+                        animation: 'parpadeo 1s ease-in-out infinite',
+                      }} />
+                    )}
                   </div>
                 );
               })}
