@@ -144,6 +144,17 @@ export default function DLD() {
     return Object.entries(grupos).map(([grupo, horas]) => ({ grupo, horas }));
   }
 
+  function construirGuardiasHorario() {
+    const guardias = [];
+    Object.entries(horario).forEach(([horaId, val]) => {
+      if (val.tipo === 'guardia') {
+        const hora = HORAS.find(h => h.id === horaId);
+        if (hora) guardias.push({ hora: hora.label, tipo_guardia: val.grupo || 'Sin especificar' });
+      }
+    });
+    return guardias;
+  }
+
   async function enviar() {
     setError('');
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
@@ -152,6 +163,7 @@ export default function DLD() {
     setEnviando(true);
     try {
       const gruposAfectados = construirGruposAfectados();
+      const guardiasHorario = construirGuardiasHorario();
       const { error: err } = await getSupabase().from('dld').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,
@@ -159,6 +171,7 @@ export default function DLD() {
         tipo_dld: form.tipo_dld,
         fecha_solicitada: form.fecha_solicitada,
         grupos_afectados: gruposAfectados,
+        guardias_horario: guardiasHorario,
         tipo_guardia: form.tipo_guardia,
         causa_sobrevenida: form.causa_sobrevenida,
         descripcion_causa: form.descripcion_causa.trim(),
@@ -327,7 +340,7 @@ export default function DLD() {
                           {!esRecreo && (
                             <button onClick={() => setHoraTipo(hora.id, 'clase')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #c8e6c9', backgroundColor: 'white', color: verde, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>📚 Clase</button>
                           )}
-                          <button onClick={() => { setHoraTipo(hora.id, 'clase'); if (esRecreo) setEtapaSeleccionada('GUARDIA'); }} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🛡️ Guardia</button>
+                          <button onClick={() => { setHoraTipo(hora.id, 'clase'); setEtapaSeleccionada('GUARDIA'); }} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>🛡️ Guardia</button>
                           <button onClick={() => setHoraTipo(hora.id, 'libre')} style={{ padding: '5px 12px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#888', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>⬜ Libre</button>
                         </div>
                       )}
