@@ -175,6 +175,21 @@ export default function PanelDirector() {
     setCargando(false);
   }
 
+  function normalizarGrupo(nombre) {
+    // Iguala "GM-2CAR", "gm-2car", "2º CAR", "2 CAR", "2ºCAR" → "2CAR"
+    if (!nombre) return '';
+    return String(nombre)
+      .toUpperCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita acentos
+      .replace(/[^A-Z0-9]/g, '') // quita todo lo no alfanumérico (º, -, espacios, .)
+      .replace(/^(GM|GS|ESO|BACH|FPPE|FPBAS)/, ''); // quita prefijos de etapa
+  }
+
+  function horasDeGrupo(g) {
+    if (typeof g !== 'object' || !g) return [];
+    return Array.isArray(g.horas) ? g.horas : [];
+  }
+
   function calcularAlertas(solicitud) {
     const alertas = [];
     const fecha = solicitud.fecha_solicitada;
@@ -186,14 +201,35 @@ export default function PanelDirector() {
     if (mismaFecha.length + 1 > 4) {
       alertas.push({ tipo: 'rojo', texto: `⚠️ Hay ${mismaFecha.length + 1} solicitudes ese día` });
     }
+    // Aviso general: hay más de una solicitud ese día (aunque no choquen grupos)
+    if (mismaFecha.length > 0 && mismaFecha.length + 1 <= 4) {
+      alertas.push({ tipo: 'amarillo', texto: `🟡 Hay ${mismaFecha.length + 1} profesores solicitando ese mismo día` });
+    }
+    // Conflictos por grupo (comparando nombres normalizados) y por hora
     grupos.forEach(g => {
       const nombreGrupo = typeof g === 'object' ? g.grupo : g;
-      const conflictos = mismaFecha.filter(s => {
+      const nombreNorm = normalizarGrupo(nombreGrupo);
+      if (!nombreNorm) return;
+      const horasEste = horasDeGrupo(g);
+      mismaFecha.forEach(s => {
         const otrosGrupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
-        return otrosGrupos.some(og => (typeof og === 'object' ? og.grupo : og) === nombreGrupo);
-      });
-      conflictos.forEach(c => {
-        alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: también por ${c.profesor_nombre}` });
+        otrosGrupos.forEach(og => {
+          const otroNombre = typeof og === 'object' ? og.grupo : og;
+          if (normalizarGrupo(otroNombre) !== nombreNorm) return;
+          const otrasHoras = horasDeGrupo(og);
+          // Si alguno no tiene horas guardadas, avisar en amarillo (posible solape)
+          if (!horasEste.length || !otrasHoras.length) {
+            alertas.push({ tipo: 'amarillo', texto: `🟡 ${nombreGrupo}: también solicitado por ${s.profesor_nombre}` });
+            return;
+          }
+          // Ver si comparten alguna hora
+          const horasComunes = horasEste.filter(h => otrasHoras.includes(h));
+          if (horasComunes.length > 0) {
+            alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: choca con ${s.profesor_nombre} en ${horasComunes.join(', ')}` });
+          } else {
+            alertas.push({ tipo: 'amarillo', texto: `🟡 ${nombreGrupo}: también lo solicita ${s.profesor_nombre} (otras horas)` });
+          }
+        });
       });
     });
     const diasDisfrutados = todasSolicitudes.filter(s =>
