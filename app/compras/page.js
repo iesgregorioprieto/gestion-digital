@@ -135,7 +135,7 @@ export default function Compras() {
     }]);
 
     setEnviando(false);
-    if (error) { mostrarMensaje('Error al enviar. Inténtalo de nuevo.', 'error'); return; }
+    if (error) { mostrarMensaje(`Error: ${error.message || JSON.stringify(error)}`, 'error'); return; }
 
     mostrarMensaje('✅ Solicitud enviada correctamente.', 'ok');
     // Resetear formulario
