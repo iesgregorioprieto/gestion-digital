@@ -563,7 +563,7 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
             <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button onClick={() => { setFiltroEstado('todos'); setFiltroDpto(''); setFiltroProveedor(''); setFiltroDesde(''); setFiltroHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Limpiar</button>
+            <button onClick={() => { setFiltroEstado('todos'); setFiltroDpto(''); setFiltroProveedor(''); setFiltroDesde(''); setFiltroHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
           </div>
         </div>
         <div style={{ marginTop: 10, fontSize: 13, color: '#888' }}>
@@ -646,6 +646,18 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
             {c.estado === 'aprobada' && (
               <div style={{ marginTop: 12 }}>
                 <button onClick={() => cambiarEstado(c.id, 'comprado')} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📦 Marcar como comprado</button>
+              </div>
+            )}
+            {c.estado === 'comprado' && (
+              <div style={{ marginTop: 12 }}>
+                <button onClick={async () => {
+                  if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
+                  await getSupabase().from('compras').delete().eq('id', c.id);
+                  mostrarMensaje('🗑️ Solicitud eliminada correctamente', 'ok');
+                  cargar();
+                }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
+                  🗑️ Eliminar (factura contabilizada)
+                </button>
               </div>
             )}
           </div>
