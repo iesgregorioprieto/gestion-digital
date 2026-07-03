@@ -43,6 +43,16 @@ export default function PanelSecretario() {
   const [modoVista, setModoVista] = useState(null);
   const [formEdicion, setFormEdicion] = useState({});
   const [guardando, setGuardando] = useState(false);
+  const [compras, setCompras] = useState([]);
+  const [cargandoCompras, setCargandoCompras] = useState(false);
+  const [filtroCompraEstado, setFiltroCompraEstado] = useState('todos');
+  const [filtroCompraDpto, setFiltroCompraDpto] = useState('');
+  const [filtroCompraProveedor, setFiltroCompraProveedor] = useState('');
+  const [filtroCompraFechaDesde, setFiltroCompraFechaDesde] = useState('');
+  const [filtroCompraFechaHasta, setFiltroCompraFechaHasta] = useState('');
+  const [compraAbierta, setCompraAbierta] = useState(null);
+  const [comentarioSecretario, setComentarioSecretario] = useState('');
+  const [procesandoCompra, setProcesandoCompra] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
 
@@ -231,6 +241,7 @@ export default function PanelSecretario() {
           {[
             { id: 'profesores', label: '👥 Profesores', activo: true },
             { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: false },
+            { id: 'compras', label: '🛒 Compras', activo: true },
             { id: 'guardias', label: '📅 Guardias', activo: false },
             { id: 'dld', label: '📄 DLD', activo: false },
             { id: 'noticias', label: '📢 Noticias', activo: false },
@@ -448,6 +459,195 @@ export default function PanelSecretario() {
             <button onClick={cerrarModal} style={{ ...btnEstilo('#f5f5f5', '#555', '#ddd'), padding: '11px 20px' }}>Cancelar</button>
           </div>
         </Modal>
+      )}
+
+      {/* ========== PESTAÑA COMPRAS ========== */}
+      {pestana === 'compras' && <SeccionCompras
+        compras={compras} setCompras={setCompras}
+        cargando={cargandoCompras} setCargando={setCargandoCompras}
+        filtroEstado={filtroCompraEstado} setFiltroEstado={setFiltroCompraEstado}
+        filtroDpto={filtroCompraDpto} setFiltroDpto={setFiltroCompraDpto}
+        filtroProveedor={filtroCompraProveedor} setFiltroProveedor={setFiltroCompraProveedor}
+        filtroDesde={filtroCompraFechaDesde} setFiltroDesde={setFiltroCompraFechaDesde}
+        filtroHasta={filtroCompraFechaHasta} setFiltroHasta={setFiltroCompraFechaHasta}
+        compraAbierta={compraAbierta} setCompraAbierta={setCompraAbierta}
+        comentario={comentarioSecretario} setComentario={setComentarioSecretario}
+        procesando={procesandoCompra} setProcesando={setProcesandoCompra}
+      />}
+
+    </div>
+  );
+}
+
+function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEstado, setFiltroEstado, filtroDpto, setFiltroDpto, filtroProveedor, setFiltroProveedor, filtroDesde, setFiltroDesde, filtroHasta, setFiltroHasta, compraAbierta, setCompraAbierta, comentario, setComentario, procesando, setProcesando }) {
+  const verde = '#1e6b2e';
+  const azul = '#1e3a5f';
+  const [mensaje, setMensaje] = useState(null);
+
+  function getSupabase() {
+    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  }
+
+  useEffect(() => { cargar(); }, []);
+
+  async function cargar() {
+    setCargando(true);
+    const { data } = await getSupabase().from('compras').select('*').order('created_at', { ascending: false });
+    setCompras(data || []);
+    setCargando(false);
+  }
+
+  async function cambiarEstado(id, estado) {
+    setProcesando(true);
+    await getSupabase().from('compras').update({ estado, comentario_secretario: comentario || null }).eq('id', id);
+    setProcesando(false);
+    setCompraAbierta(null);
+    setComentario('');
+    mostrarMensaje(`✅ Solicitud marcada como "${estado}"`, 'ok');
+    cargar();
+  }
+
+  function mostrarMensaje(texto, tipo) {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje(null), 4000);
+  }
+
+  const ESTADOS = {
+    todos:     { label: 'Todas',    bg: '#f5f5f5', color: '#555' },
+    pendiente: { label: 'Pendiente', bg: '#fef3c7', color: '#92400e', emoji: '⏳' },
+    aprobada:  { label: 'Aprobada',  bg: '#d1fae5', color: '#065f46', emoji: '✅' },
+    rechazada: { label: 'Rechazada', bg: '#fee2e2', color: '#991b1b', emoji: '❌' },
+    comprado:  { label: 'Comprado',  bg: '#dbeafe', color: '#1e40af', emoji: '📦' },
+  };
+
+  // Filtros aplicados
+  const comprasFiltradas = compras.filter(c => {
+    if (filtroEstado !== 'todos' && c.estado !== filtroEstado) return false;
+    if (filtroDpto && !c.departamento?.toLowerCase().includes(filtroDpto.toLowerCase())) return false;
+    if (filtroProveedor && !c.proveedor?.toLowerCase().includes(filtroProveedor.toLowerCase())) return false;
+    if (filtroDesde && c.created_at < filtroDesde) return false;
+    if (filtroHasta && c.created_at.slice(0,10) > filtroHasta) return false;
+    return true;
+  });
+
+  const totalFiltrado = comprasFiltradas.reduce((sum, c) => sum + (parseFloat(c.total_estimado) || 0), 0);
+
+  return (
+    <div>
+      {mensaje && <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>{mensaje.texto}</div>}
+
+      {/* FILTROS */}
+      <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+        <div style={{ fontWeight: 700, fontSize: 13, color: azul, marginBottom: 12 }}>🔍 Filtros de búsqueda</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Estado</label>
+            <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
+              {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Departamento</label>
+            <input value={filtroDpto} onChange={e => setFiltroDpto(e.target.value)} placeholder="Todos..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Proveedor</label>
+            <input value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)} placeholder="Amazon, Leroy..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Desde</label>
+            <input type="date" value={filtroDesde} onChange={e => setFiltroDesde(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Hasta</label>
+            <input type="date" value={filtroHasta} onChange={e => setFiltroHasta(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+            <button onClick={() => { setFiltroEstado('todos'); setFiltroDpto(''); setFiltroProveedor(''); setFiltroDesde(''); setFiltroHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Limpiar</button>
+          </div>
+        </div>
+        <div style={{ marginTop: 10, fontSize: 13, color: '#888' }}>
+          <strong style={{ color: azul }}>{comprasFiltradas.length}</strong> solicitudes · Total estimado: <strong style={{ color: verde }}>{totalFiltrado.toFixed(2)} €</strong>
+        </div>
+      </div>
+
+      {/* LISTA */}
+      {cargando ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
+      ) : comprasFiltradas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}><div style={{ fontSize: 36, marginBottom: 8 }}>🛒</div>No hay solicitudes con esos filtros</div>
+      ) : comprasFiltradas.map(c => {
+        const est = ESTADOS[c.estado] || ESTADOS.pendiente;
+        const arts = Array.isArray(c.articulos) ? c.articulos : [];
+        return (
+          <div key={c.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{c.profesor_nombre}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{c.departamento} · {new Date(c.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+                <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
+                  {c.tipo === 'ya_comprado' ? '🧾 Ya comprado' : '🛍️ Solicitud de pedido'}
+                  {c.proveedor ? ` · ${c.proveedor}` : ''}
+                </div>
+              </div>
+              <span style={{ padding: '4px 12px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
+            </div>
+
+            <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
+              {arts.map((a, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#555', marginBottom: 4 }}>
+                  <span>• {a.nombre} × {a.cantidad}</span>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    {a.precio && <span style={{ color: verde, fontWeight: 600 }}>{(a.precio * a.cantidad).toFixed(2)} €</span>}
+                    {a.enlace && <a href={a.enlace} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontSize: 12, fontWeight: 600 }}>🔗 Ver</a>}
+                    {a.archivo_url && <a href={a.archivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#7c3aed', fontSize: 12, fontWeight: 600 }}>📎 Doc</a>}
+                  </div>
+                </div>
+              ))}
+              {c.total_estimado > 0 && (
+                <div style={{ textAlign: 'right', fontWeight: 700, color: azul, fontSize: 14, marginTop: 6 }}>Total: {parseFloat(c.total_estimado).toFixed(2)} €</div>
+              )}
+            </div>
+
+            {c.comentario_secretario && (
+              <div style={{ marginTop: 8, padding: '7px 12px', backgroundColor: '#f0f4f0', borderRadius: 7, fontSize: 12, color: '#444' }}>💬 {c.comentario_secretario}</div>
+            )}
+
+            {/* BOTONES DE ACCIÓN */}
+            {c.estado === 'pendiente' && (
+              <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => { setCompraAbierta(c); setComentario(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#333', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📝 Gestionar</button>
+              </div>
+            )}
+            {c.estado === 'aprobada' && (
+              <div style={{ marginTop: 12 }}>
+                <button onClick={() => cambiarEstado(c.id, 'comprado')} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📦 Marcar como comprado</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* MODAL GESTIÓN */}
+      {compraAbierta && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => e.target === e.currentTarget && setCompraAbierta(null)}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>🛒 Gestionar solicitud</div>
+              <button onClick={() => setCompraAbierta(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 14, color: '#555', marginBottom: 4 }}><strong>{compraAbierta.profesor_nombre}</strong> · {compraAbierta.departamento}</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>{compraAbierta.tipo === 'ya_comprado' ? '🧾 Ya comprado' : '🛍️ Solicitud de pedido'}{compraAbierta.proveedor ? ` · ${compraAbierta.proveedor}` : ''}</div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 6 }}>💬 Comentario (opcional)</label>
+              <textarea value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Motivo de aprobación o rechazo..." rows={3} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => cambiarEstado(compraAbierta.id, 'aprobada')} disabled={procesando} style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>✅ Aprobar</button>
+              <button onClick={() => cambiarEstado(compraAbierta.id, 'rechazada')} disabled={procesando} style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', backgroundColor: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>❌ Rechazar</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

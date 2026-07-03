@@ -51,6 +51,15 @@ export default function PanelProfesor() {
       roles: ['todos'],
     },
     {
+      id: 'compras',
+      emoji: '🛒',
+      titulo: 'Solicitud de Compras',
+      descripcion: 'Solicita material o registra compras realizadas',
+      href: '/compras',
+      disponible: true,
+      roles: ['todos'],
+    },
+    {
       id: 'guardias',
       emoji: '📅',
       titulo: 'Guardias',
