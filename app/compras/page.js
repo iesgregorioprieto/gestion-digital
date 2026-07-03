@@ -41,9 +41,13 @@ export default function Compras() {
     const id = sessionStorage.getItem('profesor_id');
     const nombre = sessionStorage.getItem('profesor_nombre');
     if (!id) { window.location.href = '/login'; return; }
+    const roles = JSON.parse(sessionStorage.getItem('profesor_roles') || '[]');
+    if (!roles.includes('jefe_departamento')) {
+      window.location.href = '/profesor';
+      return;
+    }
     setProfesorId(id);
     setProfesorNombre(nombre || '');
-    // Cargar departamento del profesor
     getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
       if (data && data[0]) setDepartamento(data[0].departamento || '');
     });

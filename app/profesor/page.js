@@ -57,7 +57,7 @@ export default function PanelProfesor() {
       descripcion: 'Solicita material o registra compras realizadas',
       href: '/compras',
       disponible: true,
-      roles: ['todos'],
+      roles: ['jefe_departamento'],
     },
     {
       id: 'guardias',
