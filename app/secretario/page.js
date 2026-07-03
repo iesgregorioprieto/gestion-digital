@@ -684,6 +684,9 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
   const verde = '#1e6b2e';
   const azul = '#1e3a5f';
   const [mensaje, setMensaje] = useState(null);
+  const [modalRegistro, setModalRegistro] = useState(false);
+  const [registro, setRegistro] = useState({ proveedor: '', articulos: [{ nombre: '', cantidad: 1, precio: '', iva: '21' }] });
+  const [enviandoRegistro, setEnviandoRegistro] = useState(false);
 
   function getSupabase() {
     return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
@@ -707,6 +710,49 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
     mostrarMensaje(`✅ Solicitud marcada como "${estado}"`, 'ok');
     cargar();
   }
+
+  async function registrarCompraDirecta() {
+    const arts = registro.articulos.filter(a => a.nombre.trim());
+    if (!arts.length) { mostrarMensaje('Añade al menos un artículo.', 'error'); return; }
+    setEnviandoRegistro(true);
+    const articulosConIva = arts.map(a => ({
+      nombre: a.nombre.trim(),
+      cantidad: Number(a.cantidad) || 1,
+      precio: a.precio ? parseFloat(a.precio) : null,
+      iva: parseFloat(a.iva) || 21,
+    }));
+    const total = articulosConIva.reduce((sum, a) => sum + (a.precio || 0) * a.cantidad * (1 + (a.iva || 21) / 100), 0);
+    const nombreSecretario = typeof window !== 'undefined' ? (sessionStorage.getItem('profesor_nombre') || 'Secretaría') : 'Secretaría';
+    const { error } = await getSupabase().from('compras').insert([{
+      profesor_id: '00000000-0000-0000-0000-000000000000',
+      profesor_nombre: nombreSecretario,
+      departamento: 'Secretaría',
+      tipo: 'ya_comprado',
+      estado: 'aprobada',
+      proveedor: registro.proveedor.trim() || null,
+      articulos: articulosConIva,
+      total_estimado: total > 0 ? total : null,
+      comentario_secretario: 'Compra registrada directamente por secretaría',
+    }]);
+    setEnviandoRegistro(false);
+    if (error) { mostrarMensaje('Error: ' + error.message, 'error'); return; }
+    mostrarMensaje('✅ Compra registrada correctamente', 'ok');
+    setModalRegistro(false);
+    setRegistro({ proveedor: '', articulos: [{ nombre: '', cantidad: 1, precio: '', iva: '21' }] });
+    cargar();
+  }
+
+  function addArticuloRegistro() {
+    setRegistro(r => ({ ...r, articulos: [...r.articulos, { nombre: '', cantidad: 1, precio: '', iva: '21' }] }));
+  }
+
+  function updateArticuloRegistro(i, campo, valor) {
+    setRegistro(r => ({ ...r, articulos: r.articulos.map((a, idx) => idx === i ? { ...a, [campo]: valor } : a) }));
+  }
+
+  const totalRegistro = registro.articulos.reduce((sum, a) => {
+    return sum + (parseFloat(a.precio) || 0) * (parseInt(a.cantidad) || 1) * (1 + (parseFloat(a.iva) || 21) / 100);
+  }, 0);
 
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
@@ -767,8 +813,9 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
             <button onClick={() => { setFiltroEstado('todos'); setFiltroDpto(''); setFiltroProveedor(''); setFiltroDesde(''); setFiltroHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
           </div>
         </div>
-        <div style={{ marginTop: 10, fontSize: 13, color: '#888' }}>
-          <strong style={{ color: azul }}>{comprasFiltradas.length}</strong> solicitudes · Total estimado: <strong style={{ color: verde }}>{totalFiltrado.toFixed(2)} €</strong>
+        <div style={{ marginTop: 10, fontSize: 13, color: '#888', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span><strong style={{ color: azul }}>{comprasFiltradas.length}</strong> solicitudes · Total estimado: <strong style={{ color: verde }}>{totalFiltrado.toFixed(2)} €</strong></span>
+          <button onClick={() => setModalRegistro(true)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>➕ Registrar compra</button>
         </div>
       </div>
 
@@ -883,6 +930,68 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
               <button onClick={() => cambiarEstado(compraAbierta.id, 'aprobada')} disabled={procesando} style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>✅ Aprobar</button>
               <button onClick={() => cambiarEstado(compraAbierta.id, 'rechazada')} disabled={procesando} style={{ flex: 1, padding: '11px', borderRadius: 8, border: 'none', backgroundColor: '#fee2e2', color: '#991b1b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>❌ Rechazar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REGISTRO DIRECTO SECRETARÍA */}
+      {modalRegistro && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => e.target === e.currentTarget && setModalRegistro(false)}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 520, width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>➕ Registrar compra (Secretaría)</div>
+              <button onClick={() => setModalRegistro(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 16, padding: '8px 12px', backgroundColor: '#f0f4f0', borderRadius: 8 }}>
+              Esta compra quedará registrada directamente como <strong>Aprobada</strong> sin pasar por pendiente.
+            </div>
+
+            {/* Proveedor */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 5 }}>🏪 Proveedor</label>
+              <input value={registro.proveedor} onChange={e => setRegistro(r => ({ ...r, proveedor: e.target.value }))} placeholder="Amazon, Leroy Merlín..." style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+            </div>
+
+            {/* Artículos */}
+            <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 8 }}>📦 Artículos *</label>
+            {registro.articulos.map((a, i) => (
+              <div key={i} style={{ backgroundColor: '#f8fdf8', borderRadius: 8, padding: 12, marginBottom: 8, border: '1.5px solid #e0e0e0', position: 'relative' }}>
+                <input value={a.nombre} onChange={e => updateArticuloRegistro(i, 'nombre', e.target.value)} placeholder="Nombre del artículo *" style={{ width: '100%', padding: '8px 10px', borderRadius: 6, border: '1.5px solid #ddd', fontSize: 13, marginBottom: 6, boxSizing: 'border-box' }} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                  <div>
+                    <label style={{ fontSize: 10, color: '#888', display: 'block', marginBottom: 2 }}>Cantidad</label>
+                    <input type="number" min="1" value={a.cantidad} onChange={e => updateArticuloRegistro(i, 'cantidad', e.target.value)} style={{ width: '100%', padding: '7px 8px', borderRadius: 6, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: '#888', display: 'block', marginBottom: 2 }}>Precio s/IVA (€)</label>
+                    <input type="number" min="0" step="0.01" value={a.precio} onChange={e => updateArticuloRegistro(i, 'precio', e.target.value)} placeholder="0.00" style={{ width: '100%', padding: '7px 8px', borderRadius: 6, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, color: '#888', display: 'block', marginBottom: 2 }}>IVA (%)</label>
+                    <select value={a.iva} onChange={e => updateArticuloRegistro(i, 'iva', e.target.value)} style={{ width: '100%', padding: '7px 8px', borderRadius: 6, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }}>
+                      <option value="0">0%</option>
+                      <option value="4">4%</option>
+                      <option value="10">10%</option>
+                      <option value="21">21%</option>
+                    </select>
+                  </div>
+                </div>
+                {registro.articulos.length > 1 && (
+                  <button onClick={() => setRegistro(r => ({ ...r, articulos: r.articulos.filter((_, idx) => idx !== i) }))} style={{ position: 'absolute', top: 8, right: 8, background: 'none', border: 'none', color: '#ccc', fontSize: 16, cursor: 'pointer' }}>✕</button>
+                )}
+              </div>
+            ))}
+            <button onClick={addArticuloRegistro} style={{ width: '100%', padding: 9, borderRadius: 7, border: `2px dashed ${verde}`, backgroundColor: 'white', color: verde, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 14 }}>＋ Añadir artículo</button>
+
+            {totalRegistro > 0 && (
+              <div style={{ backgroundColor: '#f0fdf4', borderRadius: 8, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', fontWeight: 700, color: verde, fontSize: 14 }}>
+                <span>Total con IVA:</span><span>{totalRegistro.toFixed(2)} €</span>
+              </div>
+            )}
+
+            <button onClick={registrarCompraDirecta} disabled={enviandoRegistro} style={{ width: '100%', padding: 13, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviandoRegistro ? 'not-allowed' : 'pointer', opacity: enviandoRegistro ? 0.7 : 1 }}>
+              {enviandoRegistro ? '⏳ Registrando...' : '✅ Registrar compra'}
+            </button>
           </div>
         </div>
       )}
