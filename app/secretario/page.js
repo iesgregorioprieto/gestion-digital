@@ -240,7 +240,7 @@ export default function PanelSecretario() {
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           {[
             { id: 'profesores', label: '👥 Profesores', activo: true },
-            { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: false },
+            { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: true },
             { id: 'compras', label: '🛒 Compras', activo: true },
             { id: 'guardias', label: '📅 Guardias', activo: false },
             { id: 'dld', label: '📄 DLD', activo: false },
@@ -462,6 +462,8 @@ export default function PanelSecretario() {
       )}
 
       {/* ========== PESTAÑA COMPRAS ========== */}
+      {pestana === 'mantenimiento' && <SeccionMantenimiento />}
+
       {pestana === 'compras' && <SeccionCompras
         compras={compras} setCompras={setCompras}
         cargando={cargandoCompras} setCargando={setCargandoCompras}
@@ -475,6 +477,205 @@ export default function PanelSecretario() {
         procesando={procesandoCompra} setProcesando={setProcesandoCompra}
       />}
 
+    </div>
+  );
+}
+
+function SeccionMantenimiento() {
+  const verde = '#1e6b2e';
+  const azul = '#1e3a5f';
+  const [incidencias, setIncidencias] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [filtroEstado, setFiltroEstado] = useState('todos');
+  const [filtroEstancia, setFiltroEstancia] = useState('');
+  const [abierta, setAbierta] = useState(null);
+  const [comentario, setComentario] = useState('');
+  const [procesando, setProcesando] = useState(false);
+  const [mensaje, setMensaje] = useState(null);
+
+  function getSupabase() {
+    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  }
+
+  useEffect(() => { cargar(); }, []);
+
+  async function cargar() {
+    setCargando(true);
+    const { data } = await getSupabase().from('mantenimiento').select('*').order('created_at', { ascending: false });
+    setIncidencias(data || []);
+    setCargando(false);
+  }
+
+  function mostrarMensaje(texto, tipo) {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje(null), 4000);
+  }
+
+  async function cambiarEstado(id, estado) {
+    setProcesando(true);
+    await getSupabase().from('mantenimiento').update({ estado, comentario_secretario: comentario || null }).eq('id', id);
+    setProcesando(false);
+    setAbierta(null);
+    setComentario('');
+    mostrarMensaje(`✅ Incidencia marcada como "${estado}"`, 'ok');
+    cargar();
+  }
+
+  async function eliminar(id) {
+    if (!confirm('¿Eliminar esta incidencia? No se puede deshacer.')) return;
+    await getSupabase().from('mantenimiento').delete().eq('id', id);
+    mostrarMensaje('🗑️ Incidencia eliminada', 'ok');
+    cargar();
+  }
+
+  function generarInforme() {
+    const filas = incidenciasFiltradas.map(i => [
+      new Date(i.created_at).toLocaleDateString('es-ES'),
+      i.profesor_nombre || '',
+      i.estancia || '',
+      i.ubicacion_exacta || '',
+      i.descripcion || '',
+      i.estado || '',
+      i.comentario_secretario || '',
+    ]);
+
+    const cabecera = ['Fecha', 'Profesor', 'Estancia', 'Ubicación', 'Descripción', 'Estado', 'Comentario secretario'];
+    const contenido = [cabecera, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + contenido], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `incidencias_mantenimiento_${new Date().getFullYear()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    mostrarMensaje('📊 Informe descargado correctamente', 'ok');
+  }
+
+  const ESTADOS = {
+    todos:      { label: 'Todas' },
+    pendiente:  { label: 'Pendiente',  bg: '#fef3c7', color: '#92400e', emoji: '⏳' },
+    en_proceso: { label: 'En proceso', bg: '#dbeafe', color: '#1e40af', emoji: '🔧' },
+    resuelta:   { label: 'Resuelta',   bg: '#d1fae5', color: '#065f46', emoji: '✅' },
+  };
+
+  const estancias = [...new Set(incidencias.map(i => i.estancia).filter(Boolean))].sort();
+
+  const incidenciasFiltradas = incidencias.filter(i => {
+    if (filtroEstado !== 'todos' && i.estado !== filtroEstado) return false;
+    if (filtroEstancia && i.estancia !== filtroEstancia) return false;
+    return true;
+  });
+
+  const contadores = {
+    pendiente:  incidencias.filter(i => i.estado === 'pendiente').length,
+    en_proceso: incidencias.filter(i => i.estado === 'en_proceso').length,
+    resuelta:   incidencias.filter(i => i.estado === 'resuelta').length,
+  };
+
+  return (
+    <div>
+      {mensaje && <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>{mensaje.texto}</div>}
+
+      {/* CONTADORES */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+        {[['pendiente','⏳','#fef3c7','#92400e'], ['en_proceso','🔧','#dbeafe','#1e40af'], ['resuelta','✅','#d1fae5','#065f46']].map(([est, emoji, bg, color]) => (
+          <div key={est} onClick={() => setFiltroEstado(filtroEstado === est ? 'todos' : est)} style={{ backgroundColor: bg, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', border: `2px solid ${filtroEstado === est ? color : 'transparent'}`, textAlign: 'center' }}>
+            <div style={{ fontSize: 22 }}>{emoji}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color }}>{contadores[est]}</div>
+            <div style={{ fontSize: 12, color, fontWeight: 600 }}>{ESTADOS[est].label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* FILTROS */}
+      <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Estancia</label>
+          <select value={filtroEstancia} onChange={e => setFiltroEstancia(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
+            <option value="">Todas las estancias</option>
+            {estancias.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </div>
+        <button onClick={() => { setFiltroEstado('todos'); setFiltroEstancia(''); }} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
+        <button onClick={generarInforme} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>📊 Informe CSV</button>
+      </div>
+
+      {/* LISTA */}
+      {cargando ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
+      ) : incidenciasFiltradas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}><div style={{ fontSize: 36, marginBottom: 8 }}>🔧</div>No hay incidencias con esos filtros</div>
+      ) : incidenciasFiltradas.map(inc => {
+        const est = ESTADOS[inc.estado] || ESTADOS.pendiente;
+        return (
+          <div key={inc.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color || '#f59e0b'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{inc.estancia}</div>
+                <div style={{ fontSize: 12, color: '#888' }}>{inc.profesor_nombre} · {inc.created_at ? new Date(inc.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Sin fecha'}</div>
+                {inc.ubicacion_exacta && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>📍 {inc.ubicacion_exacta}</div>}
+              </div>
+              <span style={{ padding: '4px 12px', borderRadius: 20, backgroundColor: est.bg || '#fef3c7', color: est.color || '#92400e', fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
+            </div>
+
+            <div style={{ fontSize: 14, color: '#444', marginBottom: 10, lineHeight: 1.5 }}>{inc.descripcion}</div>
+
+            {inc.foto_url && (
+              <div style={{ marginBottom: 10 }}>
+                <a href={inc.foto_url} target="_blank" rel="noopener noreferrer">
+                  <img src={inc.foto_url} alt="Foto incidencia" style={{ maxHeight: 140, borderRadius: 8, border: '1px solid #e0e0e0', cursor: 'pointer' }} />
+                </a>
+              </div>
+            )}
+
+            {inc.comentario_secretario && (
+              <div style={{ marginBottom: 10, padding: '7px 12px', backgroundColor: '#f0f4f0', borderRadius: 7, fontSize: 13, color: '#444' }}>
+                💬 {inc.comentario_secretario}
+              </div>
+            )}
+
+            {/* BOTONES */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {inc.estado === 'pendiente' && (
+                <button onClick={() => { setAbierta(inc); setComentario(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔧 Poner en proceso</button>
+              )}
+              {inc.estado === 'en_proceso' && (
+                <button onClick={() => { setAbierta(inc); setComentario(inc.comentario_secretario || ''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✅ Marcar como resuelta</button>
+              )}
+              {inc.estado === 'resuelta' && (
+                <button onClick={() => eliminar(inc.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* MODAL GESTIÓN */}
+      {abierta && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => e.target === e.currentTarget && setAbierta(null)}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 480, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>🔧 Gestionar incidencia</div>
+              <button onClick={() => setAbierta(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 14, color: '#555', marginBottom: 4 }}><strong>{abierta.estancia}</strong>{abierta.ubicacion_exacta ? ` · ${abierta.ubicacion_exacta}` : ''}</div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>{abierta.descripcion}</div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 6 }}>💬 Comentario (opcional)</label>
+              <textarea value={comentario} onChange={e => setComentario(e.target.value)} placeholder="Ej: Avisado el técnico, se revisará el martes..." rows={3} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {abierta.estado === 'pendiente' && (
+                <button onClick={() => cambiarEstado(abierta.id, 'en_proceso')} disabled={procesando} style={{ flex: 1, padding: 11, borderRadius: 8, border: 'none', backgroundColor: '#dbeafe', color: '#1e40af', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>🔧 Poner en proceso</button>
+              )}
+              {abierta.estado === 'en_proceso' && (
+                <button onClick={() => cambiarEstado(abierta.id, 'resuelta')} disabled={procesando} style={{ flex: 1, padding: 11, borderRadius: 8, border: 'none', backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>✅ Marcar como resuelta</button>
+              )}
+              <button onClick={() => setAbierta(null)} style={{ padding: '11px 18px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
