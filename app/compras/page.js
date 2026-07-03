@@ -35,7 +35,9 @@ export default function Compras() {
   // Formulario
   const [tipo, setTipo] = useState(''); // 'ya_comprado' | 'pedir'
   const [proveedor, setProveedor] = useState('');
-  const [articulos, setArticulos] = useState([{ nombre: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+  const [albaran, setAlbaran] = useState(null);
+  const [albaranNombre, setAlbaranNombre] = useState('');
+  const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -71,7 +73,7 @@ export default function Compras() {
   }
 
   function addArticulo() {
-    setArticulos(prev => [...prev, { nombre: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+    setArticulos(prev => [...prev, { nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
   }
 
   function removeArticulo(i) {
@@ -98,12 +100,19 @@ export default function Compras() {
     if (!articulosValidos.length) { mostrarMensaje('Añade al menos un artículo.', 'error'); return; }
     setEnviando(true);
 
-    // Subir archivos de cada artículo
+    // Subir albarán global (solo para ya_comprado)
+    let albaranUrl = null;
+    if (tipo === 'ya_comprado' && albaran) {
+      albaranUrl = await subirArchivo(albaran, 'albaranes');
+    }
+
+    // Subir archivos de cada artículo (presupuestos para tipo=pedir)
     const articulosConUrl = await Promise.all(articulosValidos.map(async (a) => {
       let urlArchivo = null;
-      if (a.archivo) urlArchivo = await subirArchivo(a.archivo, tipo === 'ya_comprado' ? 'albaranes' : 'presupuestos');
+      if (tipo === 'pedir' && a.archivo) urlArchivo = await subirArchivo(a.archivo, 'presupuestos');
       return {
         nombre: a.nombre.trim(),
+        descripcion: a.descripcion?.trim() || null,
         cantidad: Number(a.cantidad) || 1,
         precio: a.precio ? parseFloat(a.precio) : null,
         enlace: a.enlace.trim() || null,
@@ -121,6 +130,7 @@ export default function Compras() {
       tipo,
       proveedor: proveedor.trim() || null,
       articulos: articulosConUrl,
+      albaran_url: albaranUrl,
       total_estimado: total > 0 ? total : null,
     }]);
 
@@ -131,7 +141,9 @@ export default function Compras() {
     // Resetear formulario
     setTipo('');
     setProveedor('');
-    setArticulos([{ nombre: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
+    setAlbaran(null);
+    setAlbaranNombre('');
+    setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', enlace: '', archivo: null, archivoNombre: '' }]);
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 1500);
   }
@@ -213,6 +225,9 @@ export default function Compras() {
                       {/* Nombre */}
                       <input value={a.nombre} onChange={e => updateArticulo(i, 'nombre', e.target.value)} placeholder="Nombre del artículo *" style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
 
+                      {/* Descripción / Concepto */}
+                      <input value={a.descripcion || ''} onChange={e => updateArticulo(i, 'descripcion', e.target.value)} placeholder={tipo === 'ya_comprado' ? '📝 Concepto para el albarán (ej: material didáctico cocina)' : '📝 Descripción (opcional)'} style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
+
                       {/* Cantidad + Precio */}
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                         <div>
@@ -230,18 +245,18 @@ export default function Compras() {
                         <input value={a.enlace} onChange={e => updateArticulo(i, 'enlace', e.target.value)} placeholder="🔗 Enlace del producto (Amazon, etc.)" style={{ width: '100%', padding: '9px 12px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 12, marginBottom: 8, boxSizing: 'border-box' }} />
                       )}
 
-                      {/* Archivo */}
-                      <div>
-                        <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>
-                          {tipo === 'ya_comprado' ? '📎 Albarán (foto/PDF)' : '📎 Presupuesto (foto/PDF) — opcional'}
-                        </label>
-                        <input type="file" accept="image/*,application/pdf" onChange={e => {
-                          const f = e.target.files[0];
-                          if (f) updateArticulo(i, 'archivo', f);
-                          if (f) updateArticulo(i, 'archivoNombre', f.name);
-                        }} style={{ fontSize: 12, width: '100%' }} />
-                        {a.archivoNombre && <div style={{ fontSize: 11, color: verde, marginTop: 3 }}>📎 {a.archivoNombre}</div>}
-                      </div>
+                      {/* Adjunto por artículo SOLO para tipo=pedir */}
+                      {tipo === 'pedir' && (
+                        <div>
+                          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>📎 Presupuesto (foto/PDF) — opcional</label>
+                          <input type="file" accept="image/*,application/pdf" onChange={e => {
+                            const f = e.target.files[0];
+                            if (f) updateArticulo(i, 'archivo', f);
+                            if (f) updateArticulo(i, 'archivoNombre', f.name);
+                          }} style={{ fontSize: 12, width: '100%' }} />
+                          {a.archivoNombre && <div style={{ fontSize: 11, color: verde, marginTop: 3 }}>📎 {a.archivoNombre}</div>}
+                        </div>
+                      )}
 
                       {/* Subtotal */}
                       {a.precio && <div style={{ marginTop: 8, textAlign: 'right', fontSize: 12, fontWeight: 700, color: azul }}>Subtotal: {(parseFloat(a.precio) * (parseInt(a.cantidad) || 1)).toFixed(2)} €</div>}
@@ -257,6 +272,25 @@ export default function Compras() {
                     ＋ Añadir otro artículo
                   </button>
                 </div>
+
+                {/* ALBARÁN GLOBAL (solo para ya_comprado) */}
+                {tipo === 'ya_comprado' && (
+                  <div style={{ marginBottom: 20, backgroundColor: '#fffbeb', borderRadius: 10, padding: 14, border: '1.5px solid #fcd34d' }}>
+                    <label style={{ fontWeight: 700, fontSize: 13, color: '#92400e', display: 'block', marginBottom: 6 }}>🧾 Albarán de la compra *</label>
+                    <div style={{ fontSize: 12, color: '#92400e', marginBottom: 10, opacity: 0.8 }}>Adjunta la foto o PDF del albarán. El secretario lo usará para cotejar la factura cuando llegue.</div>
+                    <input type="file" accept="image/*,application/pdf" onChange={e => {
+                      const f = e.target.files[0];
+                      if (f) { setAlbaran(f); setAlbaranNombre(f.name); }
+                    }} style={{ fontSize: 13, width: '100%' }} />
+                    {albaranNombre && (
+                      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
+                        <span style={{ fontSize: 16 }}>📎</span>
+                        <span style={{ fontSize: 13, color: verde, fontWeight: 600 }}>{albaranNombre}</span>
+                        <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); }} style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#aaa', fontSize: 16, cursor: 'pointer' }}>✕</button>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* TOTAL */}
                 {totalEstimado > 0 && (
@@ -310,6 +344,14 @@ export default function Compras() {
 
                   {s.total_estimado > 0 && (
                     <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 700, color: azul, fontSize: 14 }}>Total: {parseFloat(s.total_estimado).toFixed(2)} €</div>
+                  )}
+
+                  {s.albaran_url && (
+                    <div style={{ marginTop: 8 }}>
+                      <a href={s.albaran_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 7, color: '#92400e', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
+                        🧾 Ver albarán adjunto
+                      </a>
+                    </div>
                   )}
 
                   {s.comentario_secretario && (
