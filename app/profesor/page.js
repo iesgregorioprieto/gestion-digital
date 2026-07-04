@@ -57,7 +57,7 @@ export default function PanelProfesor() {
       descripcion: 'Solicita material o registra compras realizadas',
       href: '/compras',
       disponible: true,
-      roles: ['jefe_departamento'],
+      roles: ['jefe_departamento', 'secretario'],
     },
     {
       id: 'guardias',
@@ -106,7 +106,7 @@ export default function PanelProfesor() {
   const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
 
   const modulosVisibles = MODULOS.filter(m =>
-    m.roles.includes('todos') || m.roles.some(r => roles.includes(r))
+    m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
   );
 
   return (
