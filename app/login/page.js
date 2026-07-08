@@ -60,7 +60,6 @@ export default function Login() {
     const rol = data.rol_gestion || '';
     if (rol === 'secretario') window.location.href = '/secretario';
     else if (rol === 'director') window.location.href = '/director';
-    else if (rol === 'jefe_estudios') window.location.href = '/jefe-estudios';
     else window.location.href = '/profesor';
   }
 
