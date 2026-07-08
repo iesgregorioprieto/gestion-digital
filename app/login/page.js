@@ -57,7 +57,11 @@ export default function Login() {
     sessionStorage.setItem('profesor_rol_gestion', data.rol_gestion || '');
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
-    window.location.href = '/profesor';
+    const rol = data.rol_gestion || '';
+    if (rol === 'secretario') window.location.href = '/secretario';
+    else if (rol === 'director') window.location.href = '/director';
+    else if (rol === 'jefe_estudios') window.location.href = '/jefe-estudios';
+    else window.location.href = '/profesor';
   }
 
   return (
