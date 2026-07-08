@@ -66,7 +66,8 @@ export default function PanelProfesor() {
       descripcion: 'Solicita material o registra compras realizadas',
       href: '/compras',
       disponible: true,
-      roles: ['jefe_departamento', 'secretario'],
+      roles: ['todos'],
+      restringido: ['jefe_departamento', 'secretario'],
     },
     {
       id: 'guardias',
@@ -117,6 +118,11 @@ export default function PanelProfesor() {
   const modulosVisibles = MODULOS.filter(m =>
     m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
   );
+
+  function tieneAcceso(m) {
+    if (!m.restringido) return true;
+    return m.restringido.some(r => roles.includes(r) || r === rolGestion);
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -177,11 +183,11 @@ export default function PanelProfesor() {
           {modulosVisibles.map(m => (
             <div
               key={m.id}
-              onClick={() => m.disponible && (window.location.href = m.href)}
+              onClick={() => m.disponible && tieneAcceso(m) && (window.location.href = m.href)}
               style={{
                 backgroundColor: 'white', borderRadius: 14, padding: 20,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-                cursor: m.disponible ? 'pointer' : 'default',
+                cursor: m.disponible && tieneAcceso(m) ? 'pointer' : 'default',
                 opacity: m.disponible ? 1 : 0.6,
                 border: `2px solid ${m.disponible ? 'transparent' : '#eee'}`,
                 transition: 'all 0.15s',
@@ -189,7 +195,7 @@ export default function PanelProfesor() {
               }}
             >
               <div style={{ fontSize: 36, marginBottom: 10 }}>{m.emoji}</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: m.disponible ? verde : '#aaa', marginBottom: 4 }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: m.disponible ? (tieneAcceso(m) ? verde : '#aaa') : '#aaa', marginBottom: 4 }}>
                 {m.titulo}
               </div>
               <div style={{ fontSize: 13, color: '#888', lineHeight: 1.4 }}>
@@ -202,7 +208,13 @@ export default function PanelProfesor() {
                   padding: '2px 8px', borderRadius: 10, fontWeight: 600
                 }}>Próximo</div>
               )}
-              {m.disponible && (
+              {m.disponible && !tieneAcceso(m) && (
+                <div style={{
+                  position: 'absolute', top: 12, right: 12,
+                  fontSize: 16
+                }}>🔒</div>
+              )}
+              {m.disponible && tieneAcceso(m) && (
                 <div style={{ marginTop: 12, fontSize: 13, color: verde, fontWeight: 600 }}>
                   Acceder →
                 </div>
