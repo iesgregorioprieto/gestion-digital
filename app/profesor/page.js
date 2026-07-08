@@ -51,6 +51,15 @@ export default function PanelProfesor() {
       roles: ['todos'],
     },
     {
+      id: 'autorizaciones',
+      emoji: '📋',
+      titulo: 'Autorizaciones',
+      descripcion: 'Consulta las autorizaciones y restricciones de los alumnos',
+      href: '/autorizaciones',
+      disponible: true,
+      roles: ['todos'],
+    },
+    {
       id: 'compras',
       emoji: '🛒',
       titulo: 'Solicitud de Compras',
