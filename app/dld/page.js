@@ -143,44 +143,22 @@ export default function DLD() {
     const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
     if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
     setCargandoHorario(true);
-
     let nPdf = nombrePdf;
     if (!nPdf) {
       const id = sessionStorage.getItem('profesor_id');
-      const { data: prof } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id).then(r => r);
-      if (prof && prof[0]) {
-        const { data: rows } = await getSupabase()
-          .from('horarios_profesores')
-          .select('profesor_nombre_pdf')
-          .ilike('profesor_nombre_pdf', `%${prof[0].apellidos.split(' ')[0]}%`)
-          .limit(5);
-        if (rows && rows.length > 0) {
-          nPdf = rows[0].profesor_nombre_pdf;
-          setNombrePdf(nPdf);
-        }
+      const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
+      if (rows0?.[0]) {
+        const { data: rows } = await getSupabase().from('horarios_profesores').select('profesor_nombre_pdf').ilike('profesor_nombre_pdf', `%${rows0[0].apellidos.split(' ')[0]}%`).limit(5);
+        if (rows?.length > 0) { nPdf = rows[0].profesor_nombre_pdf; setNombrePdf(nPdf); }
       }
     }
-
     if (!nPdf) { setCargandoHorario(false); return; }
-
-    const { data: horas } = await getSupabase()
-      .from('horarios_profesores')
-      .select('hora_id, hora_label, tipo, grupo')
-      .eq('profesor_nombre_pdf', nPdf)
-      .eq('dia', diaSemana)
-      .eq('curso_academico', '2025-2026');
-
-    if (!horas || horas.length === 0) { setCargandoHorario(false); return; }
-
-    const nuevoHorario = {};
-    horas.forEach(h => {
-      nuevoHorario[h.hora_id] = {
-        tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo,
-        grupo: h.grupo || '',
-        precargado: true,
-      };
-    });
-    setHorario(nuevoHorario);
+    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', '2025-2026');
+    if (horas?.length > 0) {
+      const nuevoHorario = {};
+      horas.forEach(h => { nuevoHorario[h.hora_id] = { tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo, grupo: h.grupo || '', instrucciones: '', archivo: null, archivoNombre: '', precargado: true }; });
+      setHorario(nuevoHorario);
+    }
     setCargandoHorario(false);
   }
 
@@ -211,6 +189,15 @@ export default function DLD() {
     setError('');
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
     if (!form.fecha_solicitada) { setError('Indica la fecha solicitada.'); return; }
+
+    // Validar tareas obligatorias en horas de clase
+    const horasClaseSinTarea = Object.entries(horario)
+      .filter(([_, v]) => v.tipo === 'clase' && v.grupo && !v.instrucciones?.trim() && !v.archivoNombre);
+    if (horasClaseSinTarea.length > 0) {
+      const labels = horasClaseSinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+      setError(`⚠️ Faltan tareas en: ${labels}. Es obligatorio dejar tarea para cada grupo (normativa DLD).`);
+      return;
+    }
 
     setEnviando(true);
     try {
@@ -375,15 +362,12 @@ export default function DLD() {
               <label style={{ ...labelEstilo, fontSize: 15 }}>🕐 ¿Qué tienes en cada hora ese día?</label>
 
               {cargandoHorario && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>
-                  ⏳ Cargando tu horario del día...
-                </div>
+                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>⏳ Cargando tu horario del día...</div>
               )}
-
-              {!cargandoHorario && Object.keys(horario).length > 0 && Object.values(horario).some(h => h.precargado) && (
+              {!cargandoHorario && Object.values(horario).some(h => h.precargado) && (
                 <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>✅ Horario cargado automáticamente. Puedes modificarlo si es necesario.</span>
-                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Borrar y rellenar manualmente</button>
+                  <span>✅ Horario cargado automáticamente. Añade las tareas para cada clase.</span>
+                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Rellenar manualmente</button>
                 </div>
               )}
 
@@ -452,6 +436,34 @@ export default function DLD() {
                           <div style={{ display: 'flex', gap: 8 }}>
                             <input type="text" value={textoOtro} onChange={e => setTextoOtro(e.target.value)} placeholder="Escribe el grupo..." style={{ ...inputEstilo, flex: 1 }} />
                             <button onClick={() => textoOtro.trim() && asignarGrupo(hora.id, textoOtro.trim())} style={{ padding: '0 14px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', cursor: 'pointer', fontWeight: 700 }}>OK</button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* TAREA OBLIGATORIA para horas de clase */}
+                    {horario[hora.id]?.tipo === 'clase' && horario[hora.id]?.grupo && (
+                      <div style={{ padding: '10px 14px', backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderTop: 'none', borderRadius: '0 0 8px 8px' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+                          📝 Tarea para {horario[hora.id].grupo} <span style={{ color: '#ef4444' }}>* obligatoria</span>
+                        </div>
+                        <textarea
+                          value={horario[hora.id].instrucciones || ''}
+                          onChange={e => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], instrucciones: e.target.value } }))}
+                          placeholder="Ej: Página 45, ejercicios 1-5..."
+                          rows={2}
+                          style={{ width: '100%', padding: '7px 10px', borderRadius: 6, border: `1.5px solid ${!horario[hora.id].instrucciones?.trim() && !horario[hora.id].archivoNombre ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 6 }}
+                        />
+                        {!horario[hora.id].archivoNombre ? (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', borderRadius: 6, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            <span>📎</span><span>Adjuntar archivo (examen, ficha...)</span>
+                            <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { const f = e.target.files[0]; if (f) setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], archivo: f, archivoNombre: f.name } })); }} style={{ display: 'none' }} />
+                          </label>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', backgroundColor: '#d1fae5', borderRadius: 6 }}>
+                            <span>✅</span>
+                            <span style={{ fontSize: 12, color: '#065f46', fontWeight: 600, flex: 1 }}>📎 {horario[hora.id].archivoNombre}</span>
+                            <button onClick={() => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], archivo: null, archivoNombre: '' } }))} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
                           </div>
                         )}
                       </div>
