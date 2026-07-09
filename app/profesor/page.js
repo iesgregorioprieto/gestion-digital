@@ -76,7 +76,7 @@ export default function PanelProfesor() {
       href: '/compras',
       disponible: true,
       roles: ['todos'],
-      restringido: ['jefe_departamento', 'secretario'],
+      restringido: ['jefe_departamento', 'secretario', 'director'],
     },
     {
       id: 'guardias',

@@ -45,7 +45,7 @@ export default function Compras() {
     if (!id) { window.location.href = '/login'; return; }
     const roles = JSON.parse(sessionStorage.getItem('profesor_roles') || '[]');
     const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
-    if (!roles.includes('jefe_departamento') && rolGestion !== 'secretario') {
+    if (!roles.includes('jefe_departamento') && rolGestion !== 'secretario' && rolGestion !== 'director') {
       window.location.href = '/profesor';
       return;
     }
