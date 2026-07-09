@@ -47,11 +47,78 @@ export default function Ausencias() {
   const [profesorId, setProfesorId] = useState('');
   const [profesorNombre, setProfesorNombre] = useState('');
   const [departamento, setDepartamento] = useState('');
+  const [nombrePdf, setNombrePdf] = useState(''); // nombre en horarios_profesores
   const [vista, setVista] = useState('formulario');
   const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  const [cargandoHorario, setCargandoHorario] = useState(false);
+
+  // Días de la semana
+  const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+
+  async function buscarNombrePdf(id) {
+    // Busca el nombre del profesor en horarios_profesores
+    // comparando apellidos y nombre con el formato "Apellido1 Apellido2, Nombre"
+    const { data: prof } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id).single();
+    if (!prof) return null;
+    // Formato en PDF: "Apellidos, Nombre"
+    const candidato = `${prof.apellidos}, ${prof.nombre}`;
+    // Buscar coincidencia exacta o aproximada
+    const { data: rows } = await getSupabase()
+      .from('horarios_profesores')
+      .select('profesor_nombre_pdf')
+      .ilike('profesor_nombre_pdf', `%${prof.apellidos.split(' ')[0]}%`)
+      .limit(5);
+    if (!rows || rows.length === 0) return null;
+    // Intentar coincidencia exacta primero
+    const exacto = rows.find(r => r.profesor_nombre_pdf === candidato);
+    if (exacto) return exacto.profesor_nombre_pdf;
+    // Si no, devolver el primero que coincida
+    return rows[0].profesor_nombre_pdf;
+  }
+
+  async function cargarHorarioDelDia(fecha) {
+    if (!fecha || !profesorId) return;
+    const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
+    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
+
+    setCargandoHorario(true);
+    // Buscar nombre en PDF si no lo tenemos
+    let nPdf = nombrePdf;
+    if (!nPdf) {
+      nPdf = await buscarNombrePdf(profesorId);
+      if (nPdf) setNombrePdf(nPdf);
+    }
+
+    if (!nPdf) { setCargandoHorario(false); return; }
+
+    const { data: horas } = await getSupabase()
+      .from('horarios_profesores')
+      .select('hora_id, hora_label, tipo, grupo')
+      .eq('profesor_nombre_pdf', nPdf)
+      .eq('dia', diaSemana)
+      .eq('curso_academico', '2025-2026');
+
+    if (!horas || horas.length === 0) { setCargandoHorario(false); return; }
+
+    // Precargar el horario
+    const nuevoHorario = {};
+    horas.forEach(h => {
+      nuevoHorario[h.hora_id] = {
+        tipo: h.tipo,
+        grupo: h.grupo || '',
+        instrucciones: '',
+        archivo: null,
+        archivoNombre: '',
+        archivoUrl: null,
+        precargado: true, // marca para distinguir del manual
+      };
+    });
+    setHorario(nuevoHorario);
+    setCargandoHorario(false);
+  }
 
   // Formulario
   const [fechaInicio, setFechaInicio] = useState('');
@@ -256,7 +323,12 @@ export default function Ausencias() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
-                <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); if (!fechaFin) setFechaFin(e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                <input type="date" value={fechaInicio} onChange={e => {
+                setFechaInicio(e.target.value);
+                if (!fechaFin) setFechaFin(e.target.value);
+                setHorario({});
+                cargarHorarioDelDia(e.target.value);
+              }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin *</label>
@@ -287,7 +359,21 @@ export default function Ausencias() {
             {/* HORARIO */}
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 4 }}>🕐 Horario afectado</label>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Marca las horas que estarás ausente. Las horas de clase requieren tarea obligatoria.</div>
+
+              {cargandoHorario && (
+                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>
+                  ⏳ Cargando tu horario del día...
+                </div>
+              )}
+
+              {!cargandoHorario && Object.keys(horario).length > 0 && Object.values(horario).some(h => h.precargado) && (
+                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>✅ Horario cargado automáticamente. Revisa y añade las tareas.</span>
+                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Borrar y rellenar manualmente</button>
+                </div>
+              )}
+
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Las horas de clase requieren tarea obligatoria.</div>
 
               {HORAS.map(hora => {
                 const val = horario[hora.id];

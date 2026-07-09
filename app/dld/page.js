@@ -78,6 +78,9 @@ export default function DLD() {
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [textoOtro, setTextoOtro] = useState('');
+  const [nombrePdf, setNombrePdf] = useState('');
+  const [cargandoHorario, setCargandoHorario] = useState(false);
+  const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
   const [form, setForm] = useState({
     tipo_dld: '',
@@ -133,6 +136,52 @@ export default function DLD() {
   function limpiarHora(horaId) {
     setHorario(h => { const nuevo = { ...h }; delete nuevo[horaId]; return nuevo; });
     if (horaEditando === horaId) setHoraEditando(null);
+  }
+
+  async function cargarHorarioDelDia(fecha) {
+    if (!fecha) return;
+    const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
+    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
+    setCargandoHorario(true);
+
+    let nPdf = nombrePdf;
+    if (!nPdf) {
+      const id = sessionStorage.getItem('profesor_id');
+      const { data: prof } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id).then(r => r);
+      if (prof && prof[0]) {
+        const { data: rows } = await getSupabase()
+          .from('horarios_profesores')
+          .select('profesor_nombre_pdf')
+          .ilike('profesor_nombre_pdf', `%${prof[0].apellidos.split(' ')[0]}%`)
+          .limit(5);
+        if (rows && rows.length > 0) {
+          nPdf = rows[0].profesor_nombre_pdf;
+          setNombrePdf(nPdf);
+        }
+      }
+    }
+
+    if (!nPdf) { setCargandoHorario(false); return; }
+
+    const { data: horas } = await getSupabase()
+      .from('horarios_profesores')
+      .select('hora_id, hora_label, tipo, grupo')
+      .eq('profesor_nombre_pdf', nPdf)
+      .eq('dia', diaSemana)
+      .eq('curso_academico', '2025-2026');
+
+    if (!horas || horas.length === 0) { setCargandoHorario(false); return; }
+
+    const nuevoHorario = {};
+    horas.forEach(h => {
+      nuevoHorario[h.hora_id] = {
+        tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo,
+        grupo: h.grupo || '',
+        precargado: true,
+      };
+    });
+    setHorario(nuevoHorario);
+    setCargandoHorario(false);
   }
 
   function construirGruposAfectados() {
@@ -314,12 +363,30 @@ export default function DLD() {
             {/* FECHA */}
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>📅 Día solicitado *</label>
-              <input type="date" value={form.fecha_solicitada} onChange={e => setForm(f => ({ ...f, fecha_solicitada: e.target.value }))} style={{ ...inputEstilo, marginTop: 8 }} />
+              <input type="date" value={form.fecha_solicitada} onChange={e => {
+                setForm(f => ({ ...f, fecha_solicitada: e.target.value }));
+                setHorario({});
+                cargarHorarioDelDia(e.target.value);
+              }} style={{ ...inputEstilo, marginTop: 8 }} />
             </div>
 
             {/* HORARIO DEL DÍA */}
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>🕐 ¿Qué tienes en cada hora ese día?</label>
+
+              {cargandoHorario && (
+                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>
+                  ⏳ Cargando tu horario del día...
+                </div>
+              )}
+
+              {!cargandoHorario && Object.keys(horario).length > 0 && Object.values(horario).some(h => h.precargado) && (
+                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>✅ Horario cargado automáticamente. Puedes modificarlo si es necesario.</span>
+                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Borrar y rellenar manualmente</button>
+                </div>
+              )}
+
               <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Indica para cada hora si tienes clase, guardia o estás libre</div>
 
               {HORAS.map(hora => {
