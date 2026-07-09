@@ -19,9 +19,9 @@ const MODULOS = [
     id: 'ausencias',
     emoji: '🏥',
     titulo: 'Gestión de Ausencias',
-    descripcion: 'Supervisa las ausencias del profesorado y organiza las guardias',
-    href: '/ausencias/gestion',
-    disponible: false,
+    descripcion: 'Supervisa ausencias, gestiona justificaciones y registra ausencias manualmente',
+    href: '/jefe-estudios/ausencias',
+    disponible: true,
   },
   {
     id: 'autorizaciones',
