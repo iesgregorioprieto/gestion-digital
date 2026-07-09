@@ -1,0 +1,514 @@
+'use client';
+export const dynamic = 'force-dynamic';
+
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+const verde = '#1e6b2e';
+const verdeClaro = '#f0fdf4';
+const azul = '#1e3a5f';
+const rojo = '#991b1b';
+
+const HORAS = [
+  { id: 'h1', label: '1ª hora' },
+  { id: 'h2', label: '2ª hora' },
+  { id: 'h3', label: '3ª hora' },
+  { id: 'recreo', label: 'Recreo', soloGuardia: true },
+  { id: 'h4', label: '4ª hora' },
+  { id: 'h5', label: '5ª hora' },
+  { id: 'h6', label: '6ª hora' },
+];
+
+const ETAPAS = {
+  'ESO': ['ESO-1A','ESO-1B','ESO-1C','ESO-2A','ESO-2B','ESO-2C','ESO-3A','ESO-3B','ESO-3C','ESO-4A','ESO-4B','ESO-4C'],
+  'BACH': ['BACH-1A','BACH-1B','BACH-2A','BACH-2B'],
+  'GM': ['GM-1CAR','GM-2CAR','GM-1COC','GM-2COC','GM-1FAR','GM-2FAR','GM-1SMR','GM-2SMR'],
+  'GS': ['GS-1DAW','GS-2DAW','GS-1ASI','GS-2ASI','GS-1FPB','GS-2FPB'],
+  'FPPE': ['FPPE-1JAR','FPPE-2JAR','FPPE-1AES','FPPE-2AES'],
+  'GUARDIA': ['Cuadrante general','Familias profesionales','Guardia de recreo','Otras situaciones'],
+};
+
+const ESTADOS = {
+  pendiente:      { label: 'Pendiente',       bg: '#fef3c7', color: '#92400e', emoji: '⏳' },
+  justificada:    { label: 'Justificada',      bg: '#d1fae5', color: '#065f46', emoji: '✅' },
+  sin_justificar: { label: 'Sin justificar',   bg: '#fee2e2', color: '#991b1b', emoji: '❌' },
+};
+
+export default function Ausencias() {
+  const [profesorId, setProfesorId] = useState('');
+  const [profesorNombre, setProfesorNombre] = useState('');
+  const [departamento, setDepartamento] = useState('');
+  const [vista, setVista] = useState('formulario');
+  const [historial, setHistorial] = useState([]);
+  const [cargando, setCargando] = useState(false);
+  const [mensaje, setMensaje] = useState(null);
+  const [enviando, setEnviando] = useState(false);
+
+  // Formulario
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState('');
+  const [horario, setHorario] = useState({});
+  const [horaEditando, setHoraEditando] = useState(null);
+  const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
+
+  // Justificación
+  const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
+  const [justTexto, setJustTexto] = useState('');
+  const [justArchivo, setJustArchivo] = useState(null);
+  const [justArchNombre, setJustArchNombre] = useState('');
+  const [enviandoJust, setEnviandoJust] = useState(false);
+
+  useEffect(() => {
+    const id = sessionStorage.getItem('profesor_id');
+    if (!id) { window.location.href = '/login'; return; }
+    setProfesorId(id);
+    setProfesorNombre(sessionStorage.getItem('profesor_nombre') || '');
+    getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
+      if (data?.[0]) setDepartamento(data[0].departamento || '');
+    });
+    cargarHistorial(id);
+  }, []);
+
+  async function cargarHistorial(id) {
+    setCargando(true);
+    const { data } = await getSupabase().from('ausencias').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
+    setHistorial(data || []);
+    setCargando(false);
+  }
+
+  function mostrarMensaje(texto, tipo) {
+    setMensaje({ texto, tipo });
+    setTimeout(() => setMensaje(null), 5000);
+  }
+
+  // ===== HORARIO =====
+  function setHoraTipo(horaId, tipo) {
+    setHorario(h => ({ ...h, [horaId]: { tipo, grupo: '', instrucciones: '', archivo: null, archivoNombre: '', archivoUrl: null } }));
+    setHoraEditando(horaId);
+    setEtapaSeleccionada(tipo === 'guardia' ? 'GUARDIA' : '');
+  }
+
+  function limpiarHora(horaId) {
+    setHorario(h => { const n = { ...h }; delete n[horaId]; return n; });
+    if (horaEditando === horaId) setHoraEditando(null);
+  }
+
+  function setGrupo(horaId, grupo) {
+    setHorario(h => ({ ...h, [horaId]: { ...h[horaId], grupo } }));
+    setHoraEditando(null);
+    setEtapaSeleccionada('');
+  }
+
+  function setInstrucciones(horaId, instrucciones) {
+    setHorario(h => ({ ...h, [horaId]: { ...h[horaId], instrucciones } }));
+  }
+
+  function setArchivoHora(horaId, archivo) {
+    setHorario(h => ({ ...h, [horaId]: { ...h[horaId], archivo, archivoNombre: archivo?.name || '' } }));
+  }
+
+  // ===== SUBIR ARCHIVO =====
+  async function subirArchivo(archivo, carpeta) {
+    if (!archivo) return null;
+    const ext = archivo.name.split('.').pop();
+    const nombre = `${carpeta}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await getSupabase().storage.from('ausencias-docs').upload(nombre, archivo);
+    if (error) return null;
+    const { data } = getSupabase().storage.from('ausencias-docs').getPublicUrl(nombre);
+    return data.publicUrl;
+  }
+
+  // ===== ENVIAR AUSENCIA =====
+  async function enviar() {
+    if (!fechaInicio) { mostrarMensaje('Indica la fecha de inicio.', 'error'); return; }
+    if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
+    if (!motivo.trim()) { mostrarMensaje('Explica el motivo de la ausencia.', 'error'); return; }
+    if (!tipo) { mostrarMensaje('Indica si es prevista o imprevista.', 'error'); return; }
+
+    // Validar que horas de clase tienen tarea
+    const horasClase = Object.entries(horario).filter(([_, v]) => v.tipo === 'clase');
+    const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
+    if (sinTarea.length > 0) {
+      const labels = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+      mostrarMensaje(`⚠️ Faltan tareas en: ${labels}. Añade instrucciones o adjunta un archivo.`, 'error');
+      return;
+    }
+
+    setEnviando(true);
+
+    // Subir archivos de cada hora
+    const horasConUrl = await Promise.all(
+      Object.entries(horario).map(async ([horaId, val]) => {
+        let archivoUrl = null;
+        if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
+        return {
+          hora: HORAS.find(h => h.id === horaId)?.label || horaId,
+          tipo: val.tipo,
+          grupo: val.grupo || null,
+          instrucciones: val.instrucciones?.trim() || null,
+          archivo_url: archivoUrl,
+          archivo_nombre: val.archivoNombre || null,
+        };
+      })
+    );
+
+    const { error } = await getSupabase().from('ausencias').insert([{
+      profesor_id: profesorId,
+      profesor_nombre: profesorNombre,
+      departamento,
+      fecha_inicio: fechaInicio,
+      fecha_fin: fechaFin,
+      motivo: motivo.trim(),
+      tipo,
+      horas: horasConUrl,
+    }]);
+
+    setEnviando(false);
+    if (error) { mostrarMensaje('Error al enviar: ' + error.message, 'error'); return; }
+
+    mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({});
+    cargarHistorial(profesorId);
+    setTimeout(() => setVista('historial'), 2000);
+  }
+
+  // ===== JUSTIFICAR =====
+  async function justificar() {
+    if (!justTexto.trim() && !justArchivo) {
+      mostrarMensaje('Añade una explicación o adjunta un documento.', 'error'); return;
+    }
+    setEnviandoJust(true);
+    let url = null;
+    if (justArchivo) url = await subirArchivo(justArchivo, 'justificantes');
+    await getSupabase().from('ausencias').update({
+      estado: 'justificada',
+      justificacion_texto: justTexto.trim() || null,
+      justificacion_url: url,
+    }).eq('id', ausenciaJustificando.id);
+    setEnviandoJust(false);
+    setAusenciaJustificando(null);
+    setJustTexto(''); setJustArchivo(null); setJustArchNombre('');
+    mostrarMensaje('✅ Ausencia justificada correctamente.', 'ok');
+    cargarHistorial(profesorId);
+  }
+
+  // Días restantes para justificar
+  function diasParaJustificar(createdAt) {
+    const limite = new Date(createdAt);
+    limite.setDate(limite.getDate() + 3);
+    const hoy = new Date();
+    const diff = Math.ceil((limite - hoy) / (1000 * 60 * 60 * 24));
+    return diff;
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
+
+      {/* HEADER */}
+      <div style={{ backgroundColor: '#7c2d12', color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button onClick={() => window.location.href = '/profesor'} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+        <span style={{ fontSize: 22 }}>🏥</span>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 17 }}>Notifica una Ausencia</div>
+          <div style={{ fontSize: 12, opacity: 0.85 }}>{profesorNombre} · {departamento}</div>
+        </div>
+      </div>
+
+      {/* MENSAJE */}
+      {mensaje && (
+        <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : rojo, fontWeight: 600, fontSize: 14 }}>
+          {mensaje.texto}
+        </div>
+      )}
+
+      {/* TABS */}
+      <div style={{ display: 'flex', gap: 8, padding: '16px 16px 0' }}>
+        {[{ id: 'formulario', label: '🏥 Nueva ausencia' }, { id: 'historial', label: `📋 Mis ausencias (${historial.length})` }].map(t => (
+          <button key={t.id} onClick={() => setVista(t.id)} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === t.id ? '#7c2d12' : '#ddd'}`, backgroundColor: vista === t.id ? '#7c2d12' : 'white', color: vista === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{ padding: 16 }}>
+
+        {/* ===== FORMULARIO ===== */}
+        {vista === 'formulario' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+
+            {/* AVISO */}
+            <div style={{ backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
+              ⚠️ <strong>Importante:</strong> Tienes <strong>3 días</strong> para justificar tu ausencia tras notificarla. Las horas de clase requieren tarea obligatoria.
+            </div>
+
+            {/* FECHAS */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
+                <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); if (!fechaFin) setFechaFin(e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin *</label>
+                <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+              </div>
+            </div>
+
+            {/* TIPO */}
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>⚠️ Tipo de ausencia *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                {[{ valor: 'prevista', emoji: '📆', label: 'Prevista', desc: 'Conocida con antelación' }, { valor: 'imprevista', emoji: '🚨', label: 'Imprevista', desc: 'Enfermedad u otras causas' }].map(t => (
+                  <div key={t.valor} onClick={() => setTipo(t.valor)} style={{ padding: 12, borderRadius: 10, border: `2px solid ${tipo === t.valor ? '#7c2d12' : '#e0e0e0'}`, backgroundColor: tipo === t.valor ? '#fff7ed' : 'white', cursor: 'pointer' }}>
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>{t.emoji}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: tipo === t.valor ? '#7c2d12' : '#333' }}>{t.label}</div>
+                    <div style={{ fontSize: 11, color: '#888' }}>{t.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* MOTIVO */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📝 Motivo de la ausencia *</label>
+              <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Describe brevemente el motivo de tu ausencia..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
+
+            {/* HORARIO */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 4 }}>🕐 Horario afectado</label>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Marca las horas que estarás ausente. Las horas de clase requieren tarea obligatoria.</div>
+
+              {HORAS.map(hora => {
+                const val = horario[hora.id];
+                const esRecreo = hora.id === 'recreo';
+                const esEditando = horaEditando === hora.id;
+                return (
+                  <div key={hora.id} style={{ borderRadius: 10, border: `1.5px solid ${val ? (val.tipo === 'clase' ? '#fbbf24' : '#93c5fd') : '#e0e0e0'}`, marginBottom: 8, overflow: 'hidden' }}>
+                    {/* FILA PRINCIPAL */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', backgroundColor: val ? (val.tipo === 'clase' ? '#fffbeb' : '#eff6ff') : 'white' }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: azul, minWidth: 60 }}>{hora.label}</span>
+                      <div style={{ display: 'flex', gap: 6, flex: 1 }}>
+                        {!esRecreo && (
+                          <button onClick={() => val?.tipo === 'clase' ? limpiarHora(hora.id) : setHoraTipo(hora.id, 'clase')}
+                            style={{ padding: '5px 12px', borderRadius: 7, border: `1.5px solid ${val?.tipo === 'clase' ? '#fbbf24' : '#e0e0e0'}`, backgroundColor: val?.tipo === 'clase' ? '#fef3c7' : 'white', color: val?.tipo === 'clase' ? '#92400e' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            📚 Clase
+                          </button>
+                        )}
+                        <button onClick={() => val?.tipo === 'guardia' ? limpiarHora(hora.id) : setHoraTipo(hora.id, 'guardia')}
+                          style={{ padding: '5px 12px', borderRadius: 7, border: `1.5px solid ${val?.tipo === 'guardia' ? '#93c5fd' : '#e0e0e0'}`, backgroundColor: val?.tipo === 'guardia' ? '#dbeafe' : 'white', color: val?.tipo === 'guardia' ? '#1e40af' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                          🛡️ Guardia
+                        </button>
+                        {!esRecreo && (
+                          <button onClick={() => val?.tipo === 'complementaria' ? limpiarHora(hora.id) : setHoraTipo(hora.id, 'complementaria')}
+                            style={{ padding: '5px 12px', borderRadius: 7, border: `1.5px solid ${val?.tipo === 'complementaria' ? '#a78bfa' : '#e0e0e0'}`, backgroundColor: val?.tipo === 'complementaria' ? '#ede9fe' : 'white', color: val?.tipo === 'complementaria' ? '#6d28d9' : '#555', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                            📋 Complementaria
+                          </button>
+                        )}
+                      </div>
+                      {val && <button onClick={() => limpiarHora(hora.id)} style={{ background: 'none', border: 'none', color: '#ccc', fontSize: 18, cursor: 'pointer' }}>✕</button>}
+                    </div>
+
+                    {/* SELECTOR DE GRUPO */}
+                    {esEditando && val && (
+                      <div style={{ padding: '12px 14px', backgroundColor: '#f8f8f8', borderTop: '1px solid #eee' }}>
+                        {!etapaSeleccionada ? (
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: '#666', marginBottom: 8 }}>Selecciona la etapa:</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {Object.keys(ETAPAS).filter(e => val.tipo === 'guardia' ? e === 'GUARDIA' : e !== 'GUARDIA').map(etapa => (
+                                <button key={etapa} onClick={() => setEtapaSeleccionada(etapa)} style={{ padding: '6px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: azul }}>
+                                  {etapa}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <button onClick={() => setEtapaSeleccionada('')} style={{ fontSize: 12, color: '#888', background: 'none', border: 'none', cursor: 'pointer', marginBottom: 8 }}>← Cambiar etapa</button>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {ETAPAS[etapaSeleccionada].map(g => (
+                                <button key={g} onClick={() => setGrupo(hora.id, g)} style={{ padding: '6px 12px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: 'white', cursor: 'pointer', fontSize: 12, color: '#333', fontWeight: 500 }}>
+                                  {g}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* GRUPO SELECCIONADO + TAREA */}
+                    {val && val.grupo && !esEditando && (
+                      <div style={{ padding: '10px 14px', borderTop: '1px solid #eee', backgroundColor: '#fafafa' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: val.tipo === 'clase' ? 10 : 0 }}>
+                          <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}</span>
+                          <button onClick={() => { setHoraEditando(hora.id); setEtapaSeleccionada(''); }} style={{ fontSize: 11, color: '#888', background: 'none', border: 'none', cursor: 'pointer' }}>Cambiar</button>
+                        </div>
+
+                        {/* TAREA (solo para clase) */}
+                        {val.tipo === 'clase' && (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: rojo, marginBottom: 6 }}>📝 Tarea para el alumnado * (obligatoria)</div>
+                            <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5. Copiar en el cuaderno..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
+                            {!val.archivoNombre ? (
+                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                                <span style={{ fontSize: 18 }}>📎</span>
+                                <span>Adjuntar archivo (examen, ficha, PDF...)</span>
+                                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { if (e.target.files[0]) setArchivoHora(hora.id, e.target.files[0]); }} style={{ display: 'none' }} />
+                              </label>
+                            ) : (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
+                                <span>✅</span>
+                                <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {val.archivoNombre}</span>
+                                <button onClick={() => setArchivoHora(hora.id, null)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* GRUPO SIN SELECCIONAR AÚN */}
+                    {val && !val.grupo && !esEditando && (
+                      <div style={{ padding: '8px 14px', borderTop: '1px solid #eee', fontSize: 12, color: '#888' }}>
+                        <button onClick={() => { setHoraEditando(hora.id); setEtapaSeleccionada(val.tipo === 'guardia' ? 'GUARDIA' : ''); }} style={{ color: '#1e40af', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12 }}>
+                          + Seleccionar grupo →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* BOTÓN ENVIAR */}
+            <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
+              {enviando ? '⏳ Enviando...' : '🏥 Notificar ausencia'}
+            </button>
+          </div>
+        )}
+
+        {/* ===== HISTORIAL ===== */}
+        {vista === 'historial' && (
+          <div>
+            {cargando ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
+            ) : historial.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>🏥</div>
+                <div>No has notificado ninguna ausencia</div>
+              </div>
+            ) : historial.map(a => {
+              const est = ESTADOS[a.estado] || ESTADOS.pendiente;
+              const dias = diasParaJustificar(a.created_at);
+              const horas = Array.isArray(a.horas) ? a.horas : [];
+              const horasClase = horas.filter(h => h.tipo === 'clase');
+              return (
+                <div key={a.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>
+                        {a.fecha_inicio === a.fecha_fin
+                          ? new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
+                          : `${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                        {a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista'} · {horas.length} hora{horas.length !== 1 ? 's' : ''} afectada{horas.length !== 1 ? 's' : ''}
+                      </div>
+                      <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{a.motivo}</div>
+                    </div>
+                    <span style={{ padding: '4px 10px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12, whiteSpace: 'nowrap' }}>{est.emoji} {est.label}</span>
+                  </div>
+
+                  {/* Horas */}
+                  {horas.length > 0 && (
+                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {horas.map((h, i) => (
+                        <div key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, backgroundColor: h.tipo === 'clase' ? '#fef3c7' : h.tipo === 'guardia' ? '#dbeafe' : '#ede9fe', color: h.tipo === 'clase' ? '#92400e' : h.tipo === 'guardia' ? '#1e40af' : '#6d28d9', fontWeight: 600 }}>
+                          {h.hora} · {h.grupo || h.tipo}
+                          {h.archivo_url && <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 6, color: 'inherit' }}>📎</a>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Aviso justificación */}
+                  {a.estado === 'pendiente' && (
+                    <div style={{ marginTop: 10 }}>
+                      {dias > 0 ? (
+                        <div style={{ fontSize: 12, color: dias <= 1 ? rojo : '#92400e', backgroundColor: dias <= 1 ? '#fee2e2' : '#fef3c7', padding: '6px 12px', borderRadius: 7, marginBottom: 8 }}>
+                          ⏰ Te quedan <strong>{dias} día{dias !== 1 ? 's' : ''}</strong> para justificar esta ausencia
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: rojo, backgroundColor: '#fee2e2', padding: '6px 12px', borderRadius: 7, marginBottom: 8 }}>
+                          ❌ Plazo de justificación vencido
+                        </div>
+                      )}
+                      <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivo(null); setJustArchNombre(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                        📄 Justificar ausencia
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Ya justificada */}
+                  {a.estado === 'justificada' && (a.justificacion_texto || a.justificacion_url) && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: verdeClaro, borderRadius: 8, fontSize: 13 }}>
+                      <strong>Justificación:</strong> {a.justificacion_texto}
+                      {a.justificacion_url && <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: verde, fontWeight: 600 }}>📎 Ver documento</a>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* MODAL JUSTIFICACIÓN */}
+      {ausenciaJustificando && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => e.target === e.currentTarget && setAusenciaJustificando(null)}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>📄 Justificar ausencia</div>
+              <button onClick={() => setAusenciaJustificando(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
+            </div>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
+              {new Date(ausenciaJustificando.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })} · {ausenciaJustificando.motivo}
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 6 }}>📝 Explicación</label>
+              <textarea value={justTexto} onChange={e => setJustTexto(e.target.value)} placeholder="Explica el motivo justificado de tu ausencia..." rows={4} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              {!justArchNombre ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, border: '2px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  <span style={{ fontSize: 20 }}>📎</span>
+                  <span>Adjuntar documento justificante</span>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={e => { const f = e.target.files[0]; if (f) { setJustArchivo(f); setJustArchNombre(f.name); }}} style={{ display: 'none' }} />
+                </label>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8 }}>
+                  <span>✅</span>
+                  <span style={{ fontSize: 13, color: verde, fontWeight: 600, flex: 1 }}>📎 {justArchNombre}</span>
+                  <button onClick={() => { setJustArchivo(null); setJustArchNombre(''); }} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                </div>
+              )}
+            </div>
+            <button onClick={justificar} disabled={enviandoJust} style={{ width: '100%', padding: 13, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviandoJust ? 'not-allowed' : 'pointer', opacity: enviandoJust ? 0.7 : 1 }}>
+              {enviandoJust ? '⏳ Enviando...' : '✅ Enviar justificación'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -8,6 +8,14 @@ const verde = '#1e6b2e';
 
 const MODULOS = [
   {
+    id: 'ausencias',
+    emoji: '🏥',
+    titulo: 'Gestión de Ausencias',
+    descripcion: 'Supervisa las ausencias del profesorado y organiza las guardias',
+    href: '/ausencias/gestion',
+    disponible: false,
+  },
+  {
     id: 'autorizaciones',
     emoji: '📋',
     titulo: 'Autorizaciones',

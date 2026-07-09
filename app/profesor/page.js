@@ -51,6 +51,15 @@ export default function PanelProfesor() {
       roles: ['todos'],
     },
     {
+      id: 'ausencias',
+      emoji: '🏥',
+      titulo: 'Notifica una Ausencia',
+      descripcion: 'Notifica tu ausencia e indica las tareas para tus grupos',
+      href: '/ausencias',
+      disponible: true,
+      roles: ['todos'],
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones',
