@@ -8,6 +8,14 @@ const verde = '#1e6b2e';
 
 const MODULOS = [
   {
+    id: 'datos',
+    emoji: '📊',
+    titulo: 'Datos del Centro',
+    descripcion: 'Importa grupos y alumnos desde Delphos al inicio de curso',
+    href: '/jefe-estudios/datos',
+    disponible: true,
+  },
+  {
     id: 'ausencias',
     emoji: '🏥',
     titulo: 'Gestión de Ausencias',

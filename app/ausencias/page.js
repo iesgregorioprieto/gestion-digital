@@ -27,12 +27,14 @@ const HORAS = [
 ];
 
 const ETAPAS = {
-  'ESO': ['ESO-1A','ESO-1B','ESO-1C','ESO-2A','ESO-2B','ESO-2C','ESO-3A','ESO-3B','ESO-3C','ESO-4A','ESO-4B','ESO-4C'],
-  'BACH': ['BACH-1A','BACH-1B','BACH-2A','BACH-2B'],
-  'GM': ['GM-1CAR','GM-2CAR','GM-1COC','GM-2COC','GM-1FAR','GM-2FAR','GM-1SMR','GM-2SMR'],
-  'GS': ['GS-1DAW','GS-2DAW','GS-1ASI','GS-2ASI','GS-1FPB','GS-2FPB'],
-  'FPPE': ['FPPE-1JAR','FPPE-2JAR','FPPE-1AES','FPPE-2AES'],
-  'GUARDIA': ['Cuadrante general','Familias profesionales','Guardia de recreo','Otras situaciones'],
+  'ESO':    ['ESO-1AM','ESO-1AZ','ESO-1NA','ESO-1VE','ESO-2AM','ESO-2AZ','ESO-2VE','ESO-3AM','ESO-3AZ','ESO-3DIV','ESO-3NA','ESO-3VE','ESO-4AM','ESO-4AZ','ESO-4VE'],
+  'BTO':    ['BTO-1CT','BTO-1HCS','BTO-2A','BTO-2B'],
+  'GB':     ['GB-1CR','GB-1EE','GB-1MV','GB-1SC','GB-2CR','GB-2EE','GB-2MV','GB-2SC'],
+  'GM':     ['GM-1ACC','GM-1AOV','GM-1CAR','GM-1COC','GM-1EVA.A','GM-1EVA.B','GM-1GAD','GM-1IEA','GM-1ITE','GM-1SMR.A','GM-1SMR.B','GM-2ACC','GM-2AOV','GM-2CAR','GM-2COC','GM-2EVA','GM-2GAD','GM-2IEA','GM-2ITE','GM-2SMR.A','GM-2SMR.B'],
+  'GS':     ['GS-1AAD','GS-1AFI','GS-1ASIR','GS-1AUT','GS-1DAM','GS-1DAW','GS-1DDC','GS-1GVEC','GS-1SEA','GS-1STI','GS-1TLO','GS-1VIT','GS-2AFI','GS-2ASIR','GS-2AUT','GS-2DAM','GS-2DAW','GS-2DDC','GS-2GVEC','GS-2SEA','GS-2STI','GS-2TLO','GS-2VITI'],
+  'CA':     ['CA-CFGS-A','CA-CFGS-B','CA-CFGS-C'],
+  'FPPE':   ['FPPE-1JAR','FPPE-2JAR'],
+  'GUARDIA':['Cuadrante general','Familias profesionales','Guardia de recreo','Otras situaciones'],
 };
 
 const ESTADOS = {
