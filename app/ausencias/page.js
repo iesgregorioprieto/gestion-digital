@@ -59,24 +59,23 @@ export default function Ausencias() {
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
   async function buscarNombrePdf(id) {
-    // Busca el nombre del profesor en horarios_profesores
-    // comparando apellidos y nombre con el formato "Apellido1 Apellido2, Nombre"
-    const { data: prof } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id).single();
-    if (!prof) return null;
-    // Formato en PDF: "Apellidos, Nombre"
-    const candidato = `${prof.apellidos}, ${prof.nombre}`;
-    // Buscar coincidencia exacta o aproximada
+    const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
+    if (!rows0?.[0]) return null;
+    const { nombre, apellidos } = rows0[0];
+    // Buscar por nombre (menos probable que tenga tilde diferente)
     const { data: rows } = await getSupabase()
       .from('horarios_profesores')
       .select('profesor_nombre_pdf')
-      .ilike('profesor_nombre_pdf', `%${prof.apellidos.split(' ')[0]}%`)
-      .limit(5);
+      .ilike('profesor_nombre_pdf', `%${nombre}%`)
+      .limit(10);
     if (!rows || rows.length === 0) return null;
-    // Intentar coincidencia exacta primero
-    const exacto = rows.find(r => r.profesor_nombre_pdf === candidato);
-    if (exacto) return exacto.profesor_nombre_pdf;
-    // Si no, devolver el primero que coincida
-    return rows[0].profesor_nombre_pdf;
+    // Si hay varios con ese nombre, filtrar por apellido (ignorando acentos)
+    const apNorm = apellidos.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const mejor = rows.find(r => {
+      const rNorm = r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      return rNorm.includes(apNorm.split(' ')[0]);
+    });
+    return mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
   }
 
   async function cargarHorarioDelDia(fecha) {

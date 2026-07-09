@@ -148,8 +148,14 @@ export default function DLD() {
       const id = sessionStorage.getItem('profesor_id');
       const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
       if (rows0?.[0]) {
-        const { data: rows } = await getSupabase().from('horarios_profesores').select('profesor_nombre_pdf').ilike('profesor_nombre_pdf', `%${rows0[0].apellidos.split(' ')[0]}%`).limit(5);
-        if (rows?.length > 0) { nPdf = rows[0].profesor_nombre_pdf; setNombrePdf(nPdf); }
+        const { nombre, apellidos } = rows0[0];
+        const { data: rows } = await getSupabase().from('horarios_profesores').select('profesor_nombre_pdf').ilike('profesor_nombre_pdf', `%${nombre}%`).limit(10);
+        if (rows?.length > 0) {
+          const apNorm = apellidos.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const mejor = rows.find(r => r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(apNorm.split(' ')[0]));
+          nPdf = mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
+          setNombrePdf(nPdf);
+        }
       }
     }
     if (!nPdf) { setCargandoHorario(false); return; }
