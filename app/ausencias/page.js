@@ -569,11 +569,23 @@ export default function Ausencias() {
 
                   {/* Horas */}
                   {horas.length > 0 && (
-                    <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    <div style={{ marginTop: 10 }}>
                       {horas.map((h, i) => (
-                        <div key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 20, backgroundColor: h.tipo === 'clase' ? '#fef3c7' : h.tipo === 'guardia' ? '#dbeafe' : '#ede9fe', color: h.tipo === 'clase' ? '#92400e' : h.tipo === 'guardia' ? '#1e40af' : '#6d28d9', fontWeight: 600 }}>
-                          {h.hora} · {h.grupo || h.tipo}
-                          {h.archivo_url && <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 6, color: 'inherit' }}>📎</a>}
+                        <div key={i} style={{ marginBottom: 6 }}>
+                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '4px 10px', borderRadius: 20, backgroundColor: h.tipo === 'clase' ? '#fef3c7' : h.tipo === 'guardia' ? '#dbeafe' : '#ede9fe', color: h.tipo === 'clase' ? '#92400e' : h.tipo === 'guardia' ? '#1e40af' : '#6d28d9', fontWeight: 600 }}>
+                            {h.hora} · {h.grupo || h.tipo}
+                          </div>
+                          {/* Mostrar tarea e instrucciones para horas de clase */}
+                          {h.tipo === 'clase' && (h.instrucciones || h.archivo_url) && (
+                            <div style={{ marginTop: 4, marginLeft: 8, padding: '6px 10px', backgroundColor: '#fffbeb', borderRadius: 7, border: '1px solid #fcd34d', fontSize: 12 }}>
+                              {h.instrucciones && <div style={{ color: '#92400e', marginBottom: h.archivo_url ? 4 : 0 }}>📝 {h.instrucciones}</div>}
+                              {h.archivo_url && (
+                                <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}>
+                                  📎 Ver archivo adjunto
+                                </a>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

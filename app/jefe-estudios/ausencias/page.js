@@ -322,11 +322,15 @@ export default function GestionAusencias() {
                   )}
 
                   {/* Tarea detalle */}
-                  {horas.filter(h => h.instrucciones).length > 0 && (
+                  {horas.filter(h => h.instrucciones || h.archivo_url).length > 0 && (
                     <div style={{ marginTop: 8, backgroundColor: '#fffbeb', borderRadius: 8, padding: '8px 12px' }}>
-                      {horas.filter(h => h.instrucciones).map((h, i) => (
-                        <div key={i} style={{ fontSize: 12, color: '#92400e', marginBottom: 4 }}>
-                          <strong>{h.hora} — {h.grupo}:</strong> {h.instrucciones}
+                      {horas.filter(h => h.instrucciones || h.archivo_url).map((h, i) => (
+                        <div key={i} style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>
+                          <strong>{h.hora} — {h.grupo}{h.materia ? ` (${h.materia})` : ''}:</strong>
+                          {h.instrucciones && <span> {h.instrucciones}</span>}
+                          {h.archivo_url && (
+                            <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#1e40af', fontWeight: 600 }}>📎 Ver archivo</a>
+                          )}
                         </div>
                       ))}
                     </div>
