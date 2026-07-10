@@ -61,8 +61,6 @@ export default function Ausencias() {
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
-  const [ausenciaEditando, setAusenciaEditando] = useState(null);
-  const [enviandoEdicion, setEnviandoEdicion] = useState(false);
   const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
   const [justTexto, setJustTexto] = useState('');
   const [justArchivo, setJustArchivo] = useState(null);
@@ -144,80 +142,6 @@ export default function Ausencias() {
     });
     cargarHistorial(id);
   }, []);
-
-  async function eliminarAusencia(id) {
-    if (!confirm('¿Eliminar esta ausencia? No se puede deshacer.')) return;
-    await getSupabase().from('ausencias').delete().eq('id', id);
-    mostrarMensaje('🗑️ Ausencia eliminada', 'ok');
-    cargarHistorial(profesorId);
-  }
-
-  function abrirEdicion(a) {
-    setFechaInicio(a.fecha_inicio);
-    setFechaFin(a.fecha_fin);
-    setMotivo(a.motivo);
-    setTipo(a.tipo);
-    // Reconstruir horario desde horas guardadas
-    const horarioReconstruido = {};
-    (a.horas || []).forEach(h => {
-      const horaObj = HORAS.find(hora => hora.label === h.hora);
-      if (horaObj) {
-        horarioReconstruido[horaObj.id] = {
-          tipo: h.tipo,
-          grupo: h.grupo || '',
-          materia: h.materia || '',
-          instrucciones: h.instrucciones || '',
-          archivo: null,
-          archivoNombre: h.archivo_nombre || '',
-          archivoUrl: h.archivo_url || null,
-          precargado: false,
-        };
-      }
-    });
-    setHorario(horarioReconstruido);
-    setAusenciaEditando(a);
-    setVista('formulario');
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  async function guardarEdicion() {
-    if (!motivo.trim()) { mostrarMensaje('Indica el motivo.', 'error'); return; }
-    setEnviandoEdicion(true);
-
-    // Subir archivos nuevos si los hay
-    const horasConUrl = await Promise.all(
-      Object.entries(horario).map(async ([horaId, val]) => {
-        let archivoUrl = val.archivoUrl || null;
-        if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
-        return {
-          hora: HORAS.find(h => h.id === horaId)?.label || horaId,
-          tipo: val.tipo,
-          grupo: val.grupo || null,
-          materia: val.materia || null,
-          instrucciones: val.instrucciones?.trim() || null,
-          archivo_url: archivoUrl,
-          archivo_nombre: val.archivoNombre || null,
-        };
-      })
-    );
-
-    const { error } = await getSupabase().from('ausencias').update({
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin,
-      motivo: motivo.trim(),
-      tipo,
-      horas: horasConUrl,
-    }).eq('id', ausenciaEditando.id);
-
-    setEnviandoEdicion(false);
-    if (error) { mostrarMensaje('Error: ' + error.message, 'error'); return; }
-
-    mostrarMensaje('✅ Ausencia actualizada correctamente', 'ok');
-    setAusenciaEditando(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({});
-    cargarHistorial(profesorId);
-    setVista('historial');
-  }
 
   async function cargarHistorial(id) {
     setCargando(true);
@@ -604,22 +528,10 @@ export default function Ausencias() {
               </div>
             )}
 
-            {/* BOTÓN ENVIAR / GUARDAR */}
-            {ausenciaEditando && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                <button onClick={guardarEdicion} disabled={enviandoEdicion} style={{ flex: 1, padding: 14, borderRadius: 10, border: 'none', backgroundColor: '#1e40af', color: 'white', fontWeight: 800, fontSize: 15, cursor: 'pointer', opacity: enviandoEdicion ? 0.7 : 1 }}>
-                  {enviandoEdicion ? '⏳ Guardando...' : '💾 Guardar cambios'}
-                </button>
-                <button onClick={() => { setAusenciaEditando(null); setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({}); setVista('historial'); }} style={{ padding: '14px 18px', borderRadius: 10, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: 'pointer' }}>
-                  Cancelar
-                </button>
-              </div>
-            )}
-            {!ausenciaEditando && (
+            {/* BOTÓN ENVIAR */}
             <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
               {enviando ? '⏳ Enviando...' : '🏥 Notificar ausencia'}
             </button>
-            )}
           </div>
         )}
 
@@ -680,12 +592,6 @@ export default function Ausencias() {
                   )}
 
                   {/* Aviso justificación */}
-                  {/* BOTONES EDITAR / ELIMINAR */}
-                  <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    <button onClick={() => abrirEdicion(a)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Editar</button>
-                    <button onClick={() => eliminarAusencia(a.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: rojo, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
-                  </div>
-
                   {a.estado === 'pendiente' && (
                     <div style={{ marginTop: 10 }}>
                       {dias > 0 ? (
