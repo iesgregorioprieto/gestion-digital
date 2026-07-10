@@ -62,6 +62,8 @@ export default function Ausencias() {
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
+  const [gruposUnicos, setGruposUnicos] = useState([]); // para ausencias largas (3+ días)
+  const [tareasBloque, setTareasBloque] = useState({}); // {grupo_materia: {instrucciones, archivo, archivoNombre}}
   const [justTexto, setJustTexto] = useState('');
   const [justArchivo, setJustArchivo] = useState(null);
   const [justArchNombre, setJustArchNombre] = useState('');
@@ -88,6 +90,40 @@ export default function Ausencias() {
       return rNorm.includes(apNorm.split(' ')[0]);
     });
     return mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
+  }
+
+  function calcularDiasAusencia(inicio, fin) {
+    if (!inicio || !fin) return 0;
+    const d1 = new Date(inicio + 'T12:00:00');
+    const d2 = new Date(fin + 'T12:00:00');
+    return Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
+  }
+
+  async function cargarGruposUnicos(nPdf) {
+    if (!nPdf) return;
+    const { data } = await getSupabase()
+      .from('horarios_profesores')
+      .select('grupo, materia, tipo')
+      .eq('profesor_nombre_pdf', nPdf)
+      .eq('tipo', 'clase')
+      .eq('curso_academico', '2025-2026');
+    if (!data) return;
+    // Grupos únicos por grupo+materia
+    const vistos = new Set();
+    const unicos = [];
+    data.forEach(h => {
+      if (!h.grupo) return;
+      const key = `${h.grupo}|${h.materia || ''}`;
+      if (!vistos.has(key)) {
+        vistos.add(key);
+        unicos.push({ grupo: h.grupo, materia: h.materia || '' });
+      }
+    });
+    setGruposUnicos(unicos);
+    // Inicializar tareasBloque
+    const bloque = {};
+    unicos.forEach(u => { bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '', archivo: null, archivoNombre: '' }; });
+    setTareasBloque(bloque);
   }
 
   async function cargarHorarioDelDia(fecha) {
@@ -200,32 +236,73 @@ export default function Ausencias() {
     if (!motivo.trim()) { mostrarMensaje('Explica el motivo de la ausencia.', 'error'); return; }
     if (!tipo) { mostrarMensaje('Indica si es prevista o imprevista.', 'error'); return; }
 
-    // Validar que horas de clase tienen tarea
-    const horasClase = Object.entries(horario).filter(([_, v]) => v.tipo === 'clase');
-    const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
-    if (sinTarea.length > 0) {
-      const labels = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
-      mostrarMensaje(`⚠️ Faltan tareas en: ${labels}. Añade instrucciones o adjunta un archivo.`, 'error');
-      return;
+    const diasAusencia = calcularDiasAusencia(fechaInicio, fechaFin);
+    const esAusenciaLarga = diasAusencia >= 3;
+
+    if (esAusenciaLarga) {
+      // Validar que todos los grupos tienen tarea
+      const sinTarea = gruposUnicos.filter(u => {
+        const key = `${u.grupo}|${u.materia}`;
+        const t = tareasBloque[key];
+        return !t?.instrucciones?.trim() && !t?.archivoNombre;
+      });
+      if (sinTarea.length > 0) {
+        const labels = sinTarea.map(u => `${u.grupo}${u.materia ? ` (${u.materia})` : ''}`).join(', ');
+        mostrarMensaje(`⚠️ Faltan tareas en: ${labels}.`, 'error');
+        return;
+      }
+    } else {
+      // Validar horas de clase con tarea
+      const horasClase = Object.entries(horario).filter(([_, v]) => v.tipo === 'clase');
+      const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
+      if (sinTarea.length > 0) {
+        const labels = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+        mostrarMensaje(`⚠️ Faltan tareas en: ${labels}. Añade instrucciones o adjunta un archivo.`, 'error');
+        return;
+      }
     }
 
     setEnviando(true);
 
-    // Subir archivos de cada hora
-    const horasConUrl = await Promise.all(
-      Object.entries(horario).map(async ([horaId, val]) => {
-        let archivoUrl = null;
-        if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
-        return {
-          hora: HORAS.find(h => h.id === horaId)?.label || horaId,
-          tipo: val.tipo,
-          grupo: val.grupo || null,
-          instrucciones: val.instrucciones?.trim() || null,
-          archivo_url: archivoUrl,
-          archivo_nombre: val.archivoNombre || null,
-        };
-      })
-    );
+    let horasConUrl;
+
+    if (esAusenciaLarga) {
+      // Subir archivos de tareas en bloque
+      horasConUrl = await Promise.all(
+        gruposUnicos.map(async u => {
+          const key = `${u.grupo}|${u.materia}`;
+          const tarea = tareasBloque[key] || {};
+          let archivoUrl = null;
+          if (tarea.archivo) archivoUrl = await subirArchivo(tarea.archivo, 'tareas');
+          return {
+            hora: 'Ausencia larga',
+            tipo: 'clase',
+            grupo: u.grupo,
+            materia: u.materia || null,
+            instrucciones: tarea.instrucciones?.trim() || null,
+            archivo_url: archivoUrl,
+            archivo_nombre: tarea.archivoNombre || null,
+          };
+        })
+      );
+    } else {
+      // Subir archivos de cada hora
+      horasConUrl = await Promise.all(
+        Object.entries(horario).map(async ([horaId, val]) => {
+          let archivoUrl = null;
+          if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
+          return {
+            hora: HORAS.find(h => h.id === horaId)?.label || horaId,
+            tipo: val.tipo,
+            grupo: val.grupo || null,
+            materia: val.materia || null,
+            instrucciones: val.instrucciones?.trim() || null,
+            archivo_url: archivoUrl,
+            archivo_nombre: val.archivoNombre || null,
+          };
+        })
+      );
+    }
 
     const { error } = await getSupabase().from('ausencias').insert([{
       profesor_id: profesorId,
@@ -243,6 +320,7 @@ export default function Ausencias() {
 
     mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({});
+    setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
   }
@@ -320,16 +398,40 @@ export default function Ausencias() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
-                <input type="date" value={fechaInicio} onChange={e => {
-                setFechaInicio(e.target.value);
-                if (!fechaFin) setFechaFin(e.target.value);
-                setHorario({});
-                cargarHorarioDelDia(e.target.value);
+                <input type="date" value={fechaInicio} onChange={async e => {
+                const nuevaFechaInicio = e.target.value;
+                setFechaInicio(nuevaFechaInicio);
+                if (!fechaFin) setFechaFin(nuevaFechaInicio);
+                const dias = calcularDiasAusencia(nuevaFechaInicio, fechaFin || nuevaFechaInicio);
+                if (dias >= 3) {
+                  setHorario({});
+                  let nPdf = nombrePdf;
+                  if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
+                  if (nPdf) cargarGruposUnicos(nPdf);
+                } else {
+                  setGruposUnicos([]);
+                  setHorario({});
+                  cargarHorarioDelDia(nuevaFechaInicio);
+                }
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin *</label>
-                <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                <input type="date" value={fechaFin} min={fechaInicio} onChange={async e => {
+                const nuevaFechaFin = e.target.value;
+                setFechaFin(nuevaFechaFin);
+                const dias = calcularDiasAusencia(fechaInicio, nuevaFechaFin);
+                if (dias >= 3) {
+                  setHorario({});
+                  let nPdf = nombrePdf;
+                  if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
+                  if (nPdf) cargarGruposUnicos(nPdf);
+                } else {
+                  setGruposUnicos([]);
+                  setHorario({});
+                  if (fechaInicio) cargarHorarioDelDia(fechaInicio);
+                }
+              }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
             </div>
 
@@ -353,15 +455,63 @@ export default function Ausencias() {
               <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Describe brevemente el motivo de tu ausencia..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
 
-            {/* HORARIO */}
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 4 }}>🕐 Horario afectado</label>
+            {/* HORARIO / GRUPOS EN BLOQUE */}
 
-              {cargandoHorario && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>
-                  ⏳ Cargando tu horario del día...
+              {/* ===== AUSENCIA LARGA: grupos en bloque ===== */}
+              {gruposUnicos.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400e' }}>
+                    📅 Ausencia de varios días — indica las tareas por módulo/grupo:
+                  </div>
+                  {gruposUnicos.map(u => {
+                    const key = `${u.grupo}|${u.materia}`;
+                    const tarea = tareasBloque[key] || {};
+                    return (
+                      <div key={key} style={{ backgroundColor: '#fffbeb', borderRadius: 10, border: '1.5px solid #fbbf24', padding: 14, marginBottom: 10 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: '#3730a3', backgroundColor: '#e0e7ff', padding: '4px 12px', borderRadius: 20 }}>{u.grupo}</span>
+                          {u.materia && <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', backgroundColor: '#fef3c7', padding: '3px 10px', borderRadius: 20 }}>{u.materia}</span>}
+                        </div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: rojo, marginBottom: 6 }}>📝 Tarea * (obligatoria)</div>
+                        <textarea
+                          value={tarea.instrucciones || ''}
+                          onChange={e => setTareasBloque(t => ({ ...t, [key]: { ...t[key], instrucciones: e.target.value } }))}
+                          placeholder="Ej: Unidad 5, páginas 80-85. Actividades 1, 2 y 3..."
+                          rows={3}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!tarea.instrucciones?.trim() && !tarea.archivoNombre ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }}
+                        />
+                        {!tarea.archivoNombre ? (
+                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                            <span style={{ fontSize: 18 }}>📎</span>
+                            <span>Adjuntar archivo (examen, ficha, PDF...)</span>
+                            <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => {
+                              const f = e.target.files[0];
+                              if (f) setTareasBloque(t => ({ ...t, [key]: { ...t[key], archivo: f, archivoNombre: f.name } }));
+                            }} style={{ display: 'none' }} />
+                          </label>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
+                            <span>✅</span>
+                            <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {tarea.archivoNombre}</span>
+                            <button onClick={() => setTareasBloque(t => ({ ...t, [key]: { ...t[key], archivo: null, archivoNombre: '' } }))} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
+
+              {/* ===== AUSENCIA CORTA: horario hora por hora ===== */}
+              {gruposUnicos.length === 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 4 }}>🕐 Horario afectado</label>
+
+                  {cargandoHorario && (
+                    <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>
+                      ⏳ Cargando tu horario del día...
+                    </div>
+                  )}
 
               {!cargandoHorario && Object.values(horario).some(h => h.precargado) && (
                 <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10 }}>
@@ -517,10 +667,18 @@ export default function Ausencias() {
                   </div>
                 );
               })}
-            </div>
+                </div>
+              )}
+
+              {/* ===== AUSENCIA CORTA: horario hora por hora ===== */}
+              {gruposUnicos.length === 0 && (
+                <div style={{ marginBottom: 20 }}>
+
+              </div>
+              )}
 
             {/* ENLACE MANUAL */}
-            {Object.values(horario).some(h => h.precargado) && (
+            {gruposUnicos.length === 0 && Object.values(horario).some(h => h.precargado) && (
               <div style={{ textAlign: 'center', marginBottom: 16 }}>
                 <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
                   ¿Tu horario no es correcto? Rellenar manualmente
