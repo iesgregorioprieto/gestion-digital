@@ -107,7 +107,7 @@ export default function Ausencias() {
 
     const { data: horas } = await getSupabase()
       .from('horarios_profesores')
-      .select('hora_id, hora_label, tipo, grupo')
+      .select('hora_id, hora_label, tipo, grupo, materia')
       .eq('profesor_nombre_pdf', nPdf)
       .eq('dia', diaSemana)
       .eq('curso_academico', '2025-2026');
@@ -120,11 +120,12 @@ export default function Ausencias() {
       nuevoHorario[h.hora_id] = {
         tipo: h.tipo,
         grupo: h.grupo || '',
+        materia: h.materia || '',
         instrucciones: '',
         archivo: null,
         archivoNombre: '',
         archivoUrl: null,
-        precargado: true, // marca para distinguir del manual
+        precargado: true,
       };
     });
     setHorario(nuevoHorario);
@@ -396,11 +397,11 @@ export default function Ausencias() {
                       <div style={{ padding: '10px 14px', backgroundColor: colorBg, display: 'flex', alignItems: 'center', gap: 10 }}>
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#1e3a5f', minWidth: 70 }}>{hora.label}</span>
                         <span style={{ fontSize: 12, fontWeight: 700, color: colorText, backgroundColor: 'white', padding: '3px 10px', borderRadius: 20, border: `1px solid ${colorBorder}` }}>{labelTipo}</span>
-                        {val.grupo && <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}</span>}
+                        {val.grupo && <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}{val.materia ? ` · ${val.materia}` : ''}</span>}
                       </div>
                       {val.tipo === 'clase' && (
                         <div style={{ padding: '10px 14px', borderTop: '1px solid #eee', backgroundColor: '#fffbeb' }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>📝 Tarea para el alumnado * (obligatoria)</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>📝 Tarea para {val.grupo}{val.materia ? ` (${val.materia})` : ''} * (obligatoria)</div>
                           <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
                           {!val.archivoNombre ? (
                             <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>

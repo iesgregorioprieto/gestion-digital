@@ -159,10 +159,10 @@ export default function DLD() {
       }
     }
     if (!nPdf) { setCargandoHorario(false); return; }
-    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', '2025-2026');
+    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', '2025-2026');
     if (horas?.length > 0) {
       const nuevoHorario = {};
-      horas.forEach(h => { nuevoHorario[h.hora_id] = { tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo, grupo: h.grupo || '', instrucciones: '', archivo: null, archivoNombre: '', precargado: true }; });
+      horas.forEach(h => { nuevoHorario[h.hora_id] = { tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo, grupo: h.grupo || '', materia: h.materia || '', instrucciones: '', archivo: null, archivoNombre: '', precargado: true }; });
       setHorario(nuevoHorario);
     }
     setCargandoHorario(false);
