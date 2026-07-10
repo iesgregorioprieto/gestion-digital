@@ -363,10 +363,9 @@ export default function Ausencias() {
                 </div>
               )}
 
-              {!cargandoHorario && Object.keys(horario).length > 0 && Object.values(horario).some(h => h.precargado) && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>✅ Horario cargado automáticamente. Revisa y añade las tareas.</span>
-                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Borrar y rellenar manualmente</button>
+              {!cargandoHorario && Object.values(horario).some(h => h.precargado) && (
+                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10 }}>
+                  ✅ Horario cargado automáticamente. Revisa y añade las tareas.
                 </div>
               )}
 
@@ -519,6 +518,15 @@ export default function Ausencias() {
                 );
               })}
             </div>
+
+            {/* ENLACE MANUAL */}
+            {Object.values(horario).some(h => h.precargado) && (
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                  ¿Tu horario no es correcto? Rellenar manualmente
+                </button>
+              </div>
+            )}
 
             {/* BOTÓN ENVIAR */}
             <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>

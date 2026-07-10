@@ -371,9 +371,8 @@ export default function DLD() {
                 <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af', marginBottom: 10 }}>⏳ Cargando tu horario del día...</div>
               )}
               {!cargandoHorario && Object.values(horario).some(h => h.precargado) && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span>✅ Horario cargado automáticamente. Añade las tareas para cada clase.</span>
-                  <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#065f46', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>Rellenar manualmente</button>
+                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10 }}>
+                  ✅ Horario cargado automáticamente. Añade las tareas para cada clase.
                 </div>
               )}
 
@@ -478,6 +477,15 @@ export default function DLD() {
                 );
               })}
             </div>
+
+            {/* ENLACE MANUAL */}
+            {Object.values(horario).some(h => h.precargado) && (
+              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <button onClick={() => setHorario({})} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }}>
+                  ¿Tu horario no es correcto? Rellenar manualmente
+                </button>
+              </div>
+            )}
 
             {/* CAUSA SOBREVENIDA */}
             <div style={{ marginBottom: 24, backgroundColor: '#fffbeb', borderRadius: 10, padding: 16, border: '1.5px solid #fcd34d' }}>
