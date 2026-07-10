@@ -279,6 +279,33 @@ export default function GestionAusencias() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                   <button onClick={() => { setFiltroEstado('todos'); setFiltroProfesor(''); setFiltroFechaDesde(''); setFiltroFechaHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
+                  <button onClick={() => {
+                    const filas = ausenciasFiltradas.map(a => {
+                      const horas = Array.isArray(a.horas) ? a.horas : [];
+                      const grupos = horas.filter(h => h.tipo === 'clase').map(h => `${h.hora}:${h.grupo || ''}`).join(' | ');
+                      return [
+                        new Date(a.created_at).toLocaleDateString('es-ES'),
+                        a.profesor_nombre || '',
+                        a.departamento || '',
+                        a.tipo || '',
+                        new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES'),
+                        new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES'),
+                        a.motivo || '',
+                        a.estado || '',
+                        grupos,
+                        a.justificacion_texto || '',
+                      ];
+                    });
+                    const cab = ['Fecha notif.','Profesor','Departamento','Tipo','Fecha inicio','Fecha fin','Motivo','Estado','Grupos/Horas','Justificación'];
+                    const csv = [cab, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `ausencias_${new Date().toLocaleDateString('es-ES').replace(/\//g,'-')}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>📊 Descargar informe</button>
                 </div>
               </div>
               <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}><strong style={{ color: azul }}>{ausenciasFiltradas.length}</strong> ausencias</div>
