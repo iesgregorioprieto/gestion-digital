@@ -54,6 +54,18 @@ export default function Ausencias() {
   const [mensaje, setMensaje] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [cargandoHorario, setCargandoHorario] = useState(false);
+  const [fechaInicio, setFechaInicio] = useState('');
+  const [fechaFin, setFechaFin] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [tipo, setTipo] = useState('');
+  const [horario, setHorario] = useState({});
+  const [horaEditando, setHoraEditando] = useState(null);
+  const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
+  const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
+  const [justTexto, setJustTexto] = useState('');
+  const [justArchivo, setJustArchivo] = useState(null);
+  const [justArchNombre, setJustArchNombre] = useState('');
+  const [enviandoJust, setEnviandoJust] = useState(false);
 
   // Días de la semana
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
@@ -118,22 +130,6 @@ export default function Ausencias() {
     setHorario(nuevoHorario);
     setCargandoHorario(false);
   }
-
-  // Formulario
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [motivo, setMotivo] = useState('');
-  const [tipo, setTipo] = useState('');
-  const [horario, setHorario] = useState({});
-  const [horaEditando, setHoraEditando] = useState(null);
-  const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
-
-  // Justificación
-  const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
-  const [justTexto, setJustTexto] = useState('');
-  const [justArchivo, setJustArchivo] = useState(null);
-  const [justArchNombre, setJustArchNombre] = useState('');
-  const [enviandoJust, setEnviandoJust] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
