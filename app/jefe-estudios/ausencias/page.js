@@ -340,8 +340,26 @@ export default function GestionAusencias() {
                   {a.estado === 'pendiente' && a.justificacion_texto && (
                     <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, border: '1px solid #93c5fd' }}>
                       <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>📄 Justificación presentada:</div>
-                      <div style={{ color: '#1e40af' }}>{a.justificacion_texto}</div>
-                      {a.justificacion_url && <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 600, fontSize: 12 }}>📎 Ver documento</a>}
+                      <div style={{ color: '#1e40af', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>
+                      {a.justificacion_url && (
+                        <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" download
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#1e40af', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                          📥 Descargar justificante
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {a.estado === 'justificada' && (a.justificacion_texto || a.justificacion_url) && (
+                    <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, border: '1px solid #6ee7b7' }}>
+                      <div style={{ fontWeight: 700, color: '#065f46', marginBottom: 4 }}>✅ Justificación aprobada:</div>
+                      {a.justificacion_texto && <div style={{ color: '#065f46', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>}
+                      {a.justificacion_url && (
+                        <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" download
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#065f46', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                          📥 Descargar justificante
+                        </a>
+                      )}
                     </div>
                   )}
 
@@ -357,9 +375,7 @@ export default function GestionAusencias() {
                     {a.estado === 'pendiente' && a.justificacion_texto && (
                       <button onClick={() => { setAusenciaGestion(a); setComentarioJust(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📋 Gestionar justificación</button>
                     )}
-                    {a.estado === 'justificada' && (
-                      <button onClick={() => eliminarAusencia(a.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: rojo, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
-                    )}
+                    <button onClick={() => eliminarAusencia(a.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: rojo, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
                   </div>
                 </div>
               );
