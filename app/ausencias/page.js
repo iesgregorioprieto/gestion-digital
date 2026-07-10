@@ -374,6 +374,51 @@ export default function Ausencias() {
                 const val = horario[hora.id];
                 const esRecreo = hora.id === 'recreo';
                 const esEditando = horaEditando === hora.id;
+                const hayPrecarga = Object.values(horario).some(h => h.precargado);
+
+                // ===== VISTA PRECARGADA =====
+                if (hayPrecarga) {
+                  if (!val) {
+                    return (
+                      <div key={hora.id} style={{ borderRadius: 10, border: '1.5px solid #e0e0e0', marginBottom: 8, padding: '10px 14px', backgroundColor: '#fafafa', display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#bbb', minWidth: 70 }}>{hora.label}</span>
+                        <span style={{ fontSize: 12, color: '#ccc' }}>— Libre</span>
+                      </div>
+                    );
+                  }
+                  const colorBg = val.tipo === 'clase' ? '#fffbeb' : val.tipo === 'guardia' ? '#eff6ff' : '#f5f0ff';
+                  const colorBorder = val.tipo === 'clase' ? '#fbbf24' : val.tipo === 'guardia' ? '#93c5fd' : '#a78bfa';
+                  const colorText = val.tipo === 'clase' ? '#92400e' : val.tipo === 'guardia' ? '#1e40af' : '#6d28d9';
+                  const labelTipo = val.tipo === 'clase' ? '📚 Clase' : val.tipo === 'guardia' ? '🛡️ Guardia' : '📋 Complementaria';
+                  return (
+                    <div key={hora.id} style={{ borderRadius: 10, border: `1.5px solid ${colorBorder}`, marginBottom: 8, overflow: 'hidden' }}>
+                      <div style={{ padding: '10px 14px', backgroundColor: colorBg, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e3a5f', minWidth: 70 }}>{hora.label}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: colorText, backgroundColor: 'white', padding: '3px 10px', borderRadius: 20, border: `1px solid ${colorBorder}` }}>{labelTipo}</span>
+                        {val.grupo && <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}</span>}
+                      </div>
+                      {val.tipo === 'clase' && (
+                        <div style={{ padding: '10px 14px', borderTop: '1px solid #eee', backgroundColor: '#fffbeb' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>📝 Tarea para el alumnado * (obligatoria)</div>
+                          <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
+                          {!val.archivoNombre ? (
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                              <span style={{ fontSize: 18 }}>📎</span><span>Adjuntar archivo (examen, ficha, PDF...)</span>
+                              <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { if (e.target.files[0]) setArchivoHora(hora.id, e.target.files[0]); }} style={{ display: 'none' }} />
+                            </label>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
+                              <span>✅</span><span style={{ fontSize: 12, color: '#1e6b2e', fontWeight: 600, flex: 1 }}>📎 {val.archivoNombre}</span>
+                              <button onClick={() => setArchivoHora(hora.id, null)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ===== VISTA MANUAL =====
                 return (
                   <div key={hora.id} style={{ borderRadius: 10, border: `1.5px solid ${val ? (val.tipo === 'clase' ? '#fbbf24' : '#93c5fd') : '#e0e0e0'}`, marginBottom: 8, overflow: 'hidden' }}>
                     {/* FILA PRINCIPAL */}
