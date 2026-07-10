@@ -151,7 +151,8 @@ export default function Ausencias() {
 
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje(null), 5000);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => setMensaje(null), tipo === 'error' ? 10000 : 5000);
   }
 
   // ===== HORARIO =====
@@ -237,7 +238,7 @@ export default function Ausencias() {
     }]);
 
     setEnviando(false);
-    if (error) { mostrarMensaje('Error al enviar: ' + error.message, 'error'); return; }
+    if (error) { mostrarMensaje(`Error: ${error.message} (${error.code || ''} ${error.details || ''})`, 'error'); return; }
 
     mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({});
