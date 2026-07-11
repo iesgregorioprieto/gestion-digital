@@ -47,7 +47,7 @@ export default function PanelJefeEstudios() {
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
-    if (!id || rol !== 'jefe_estudios') {
+    if (!id || (rol !== 'jefe_estudios' && rol !== 'secretario' && rol !== 'director')) {
       window.location.href = '/login';
       return;
     }

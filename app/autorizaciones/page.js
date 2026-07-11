@@ -190,11 +190,6 @@ export default function Autorizaciones() {
         <button onClick={() => setVista('consulta')} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === 'consulta' ? azul : '#ddd'}`, backgroundColor: vista === 'consulta' ? azul : 'white', color: vista === 'consulta' ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           🔍 Consultar alumno
         </button>
-        {esJefeEstudios && (
-          <button onClick={() => setVista('gestion')} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === 'gestion' ? azul : '#ddd'}`, backgroundColor: vista === 'gestion' ? azul : 'white', color: vista === 'gestion' ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            ⚙️ Gestión (Jefatura)
-          </button>
-        )}
       </div>
 
       <div style={{ padding: 16 }}>
@@ -310,79 +305,7 @@ export default function Autorizaciones() {
           </div>
         )}
 
-        {/* ===== VISTA GESTIÓN (JEFE ESTUDIOS) ===== */}
-        {vista === 'gestion' && esJefeEstudios && (
-          <div>
-            {/* SUBIR EXCEL */}
-            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>📤 Importar alumnos desde Excel</div>
-              <div style={{ fontSize: 13, color: '#666', marginBottom: 14, lineHeight: 1.5 }}>
-                El Excel debe tener columnas: <strong>nombre, apellidos, grupo</strong> y opcionalmente las columnas de restricciones
-                (<strong>imagen_menor14, imagen_mayor14, salida, actividad, informar</strong>) con valor <strong>SI/NO</strong>.
-              </div>
-
-              {!subiendoExcel ? (
-                <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '16px 20px', borderRadius: 10, border: '2.5px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                  <span style={{ fontSize: 28 }}>📊</span>
-                  <div>
-                    <div>Toca aquí para subir el Excel</div>
-                    <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>Formatos: .xlsx, .xls, .csv</div>
-                  </div>
-                  <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" onChange={procesarExcel} style={{ display: 'none' }} />
-                </label>
-              ) : (
-                <div style={{ textAlign: 'center', padding: 20, color: '#1e40af', fontWeight: 600 }}>⏳ Procesando Excel...</div>
-              )}
-            </div>
-
-            {/* GRUPOS CARGADOS */}
-            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 12 }}>📚 Grupos cargados ({grupos.length})</div>
-              {grupos.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 30, color: '#888' }}>No hay alumnos importados aún</div>
-              ) : grupos.map(g => (
-                <div key={g} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderRadius: 8, backgroundColor: '#f8fdf8', border: '1px solid #e0e0e0', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 700, color: azul }}>📚 {g}</div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { setFiltroGrupo(g); setVista('consulta'); buscarAlumnos(); }} style={{ padding: '6px 12px', borderRadius: 6, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>👁️ Ver</button>
-                    <button onClick={() => eliminarGrupo(g)} style={{ padding: '6px 12px', borderRadius: 6, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* MODAL PREVIEW EXCEL */}
-      {modalPreview && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 600, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>📊 Vista previa del Excel</div>
-            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>{previstaExcel.length} alumnos detectados. Revisa antes de importar.</div>
-
-            <div style={{ marginBottom: 16, maxHeight: 300, overflowY: 'auto' }}>
-              {previstaExcel.slice(0, 20).map((a, i) => {
-                const restricciones = RESTRICCIONES.filter(r => a[r.key] === false);
-                return (
-                  <div key={i} style={{ padding: '8px 12px', borderRadius: 7, backgroundColor: '#f8f8f8', marginBottom: 6, fontSize: 13 }}>
-                    <strong>{a.apellidos}, {a.nombre}</strong> — {a.grupo}
-                    {restricciones.length > 0 && <span style={{ marginLeft: 8, color: '#92400e', fontSize: 11 }}>⚠️ {restricciones.map(r => r.emoji + r.label).join(' · ')}</span>}
-                  </div>
-                );
-              })}
-              {previstaExcel.length > 20 && <div style={{ textAlign: 'center', color: '#888', fontSize: 12, padding: 8 }}>...y {previstaExcel.length - 20} más</div>}
-            </div>
-
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={confirmarImportacion} disabled={subiendoExcel} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                {subiendoExcel ? '⏳ Importando...' : `✅ Importar ${previstaExcel.length} alumnos`}
-              </button>
-              <button onClick={() => { setModalPreview(false); setPrevistaExcel([]); }} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

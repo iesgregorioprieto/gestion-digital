@@ -101,7 +101,8 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: prof } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id).single();
+    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id);
+    const prof = profRows?.[0];
     if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); }
     const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
     setMisSolicitudes(sols || []);

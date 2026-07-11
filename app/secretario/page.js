@@ -546,10 +546,6 @@ function SeccionMantenimiento() {
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
-  function getSupabase() {
-    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  }
-
   useEffect(() => { cargar(); }, []);
 
   async function cargar() {
@@ -740,10 +736,6 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
   const [modalRegistro, setModalRegistro] = useState(false);
   const [registro, setRegistro] = useState({ proveedor: '', articulos: [{ nombre: '', cantidad: 1, precio: '', iva: '21' }] });
   const [enviandoRegistro, setEnviandoRegistro] = useState(false);
-
-  function getSupabase() {
-    return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
-  }
 
   useEffect(() => { cargar(); }, []);
 
