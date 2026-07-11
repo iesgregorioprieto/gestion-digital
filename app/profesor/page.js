@@ -124,6 +124,12 @@ export default function PanelProfesor() {
 
   const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
 
+  // Tutores también tienen acceso a gestión de autorizaciones
+  const esTutor = roles.includes('tutor');
+  const panelTutor = esTutor && !panelDirectivo
+    ? { emoji: '📋', titulo: 'Mis Autorizaciones', href: '/autorizaciones/gestion' }
+    : null;
+
   const modulosVisibles = MODULOS.filter(m =>
     m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
   );
@@ -143,8 +149,8 @@ export default function PanelProfesor() {
           <div style={{ fontSize: 13, opacity: 0.8 }}>Hola, {nombre}</div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {panelDirectivo && (
-            <a href={panelDirectivo.href} style={{
+          {(panelDirectivo || panelTutor) && (
+            <a href={(panelDirectivo || panelTutor).href} style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '7px 14px', borderRadius: 8,
               border: '1.5px solid rgba(255,255,255,0.5)',
@@ -152,7 +158,7 @@ export default function PanelProfesor() {
               color: 'white', textDecoration: 'none',
               fontSize: 13, fontWeight: 600
             }}>
-              🔐 {panelDirectivo.titulo}
+              🔐 {(panelDirectivo || panelTutor).titulo}
             </a>
           )}
           <button onClick={cerrarSesion} style={{

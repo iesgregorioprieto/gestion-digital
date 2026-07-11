@@ -27,8 +27,8 @@ const MODULOS = [
     id: 'autorizaciones',
     emoji: '📋',
     titulo: 'Autorizaciones',
-    descripcion: 'Importa y gestiona las autorizaciones de alumnos',
-    href: '/autorizaciones',
+    descripcion: 'Gestiona las autorizaciones del alumnado por grupos',
+    href: '/autorizaciones/gestion',
     disponible: true,
   },
   {
