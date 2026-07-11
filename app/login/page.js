@@ -1,7 +1,7 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 function getSupabase() {
@@ -16,6 +16,31 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [cargando, setCargando] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [mostrarInstalar, setMostrarInstalar] = useState(false);
+
+  useEffect(() => {
+    // Capturar el evento de instalación PWA
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setMostrarInstalar(true);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    // Si ya está instalada, no mostrar
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setMostrarInstalar(false);
+    }
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  async function instalarApp() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') setMostrarInstalar(false);
+    setDeferredPrompt(null);
+  }
 
   const verde = '#1e6b2e';
 
@@ -67,6 +92,22 @@ export default function Login() {
       alignItems: 'center', justifyContent: 'center',
       fontFamily: 'system-ui, sans-serif', padding: 16
     }}>
+
+      {/* BANNER INSTALAR APP */}
+      {mostrarInstalar && (
+        <div style={{ width: '100%', maxWidth: 400, marginBottom: 16, backgroundColor: '#1e3a5f', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}>
+          <img src="/icon-72x72.png" alt="IES" style={{ width: 44, height: 44, borderRadius: 10 }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ color: 'white', fontWeight: 700, fontSize: 14 }}>Instalar app del IES</div>
+            <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>Accede más rápido desde tu móvil</div>
+          </div>
+          <button onClick={instalarApp} style={{ backgroundColor: '#1e6b2e', color: 'white', border: 'none', borderRadius: 8, padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+            Instalar
+          </button>
+          <button onClick={() => setMostrarInstalar(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 20, cursor: 'pointer', padding: 4 }}>✕</button>
+        </div>
+      )}
+
       <div style={{ textAlign: 'center', marginBottom: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 8 }}>🏫</div>
         <div style={{ fontSize: 22, fontWeight: 800, color: verde }}>IES Gregorio Prieto</div>
