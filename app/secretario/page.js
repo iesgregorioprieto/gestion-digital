@@ -108,6 +108,14 @@ export default function PanelSecretario() {
     cargarProfesores();
   }
 
+  async function eliminarProfesor(id, nombre) {
+    if (!confirm(`¿Eliminar a ${nombre}? Esta acción no se puede deshacer.`)) return;
+    const { error } = await getSupabase().from('profesores').delete().eq('id', id);
+    if (error) { mostrarMensaje('⚠️ Error al eliminar: ' + error.message, 'error'); return; }
+    mostrarMensaje('🗑️ Profesor eliminado', 'ok');
+    cargarProfesores();
+  }
+
   async function guardarEdicion() {
     setGuardando(true);
     let rolesFinales = Array.isArray(formEdicion.rol) ? formEdicion.rol : [formEdicion.rol];
@@ -358,9 +366,7 @@ export default function PanelSecretario() {
                           {p.estado === 'inactivo' && (
                             <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
                           )}
-                          <button onClick={() => {
-                            if (confirm(`¿Eliminar a ${p.nombre} ${p.apellidos}? Esta acción no se puede deshacer.`)) eliminar(p.id);
-                          }} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
+                          <button onClick={() => eliminarProfesor(p.id, `${p.nombre} ${p.apellidos}`)} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
                         </div>
                       </div>
                     </div>
