@@ -16,11 +16,11 @@ const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
 
 const RESTRICCIONES = [
-  { key: 'no_imagen_menor14',    emoji: '📸', label: 'Imágenes',              detalle: 'NO autorizado a grabación/difusión de imágenes (menor 14 años)' },
-  { key: 'no_imagen_mayor14',    emoji: '📸', label: 'Imágenes +14',           detalle: 'NO autoriza grabación/difusión de imágenes (mayor 14 años)' },
-  { key: 'no_salidas_1617',      emoji: '🚪', label: 'Salidas recreo',         detalle: 'NO autorizado a salir en recreo/última hora sin profesor (16-17 años)' },
-  { key: 'no_actividades_menor18', emoji: '🎒', label: 'Actividades extra',   detalle: 'NO autorizado para actividades extracurriculares en Valdepeñas (menor 18)' },
-  { key: 'no_informar_mayor18',  emoji: '📊', label: 'Informar progenitores', detalle: 'NO autoriza informar a progenitores de datos académicos (mayor 18)' },
+  { key: 'auth_imagenes',        emoji: '📸', label: 'Imágenes <14',           detalle: 'NO autorizado a grabación/difusión de imágenes (menor 14 años)' },
+  { key: 'auth_salidas',         emoji: '🚪', label: 'Salidas recreo',          detalle: 'NO autorizado a salir en recreo/última hora (16-17 años)' },
+  { key: 'auth_actividades',     emoji: '🎒', label: 'Actividades extra',        detalle: 'NO autorizado para actividades extracurriculares fuera del centro' },
+  { key: 'auth_informar_progeni',emoji: '📊', label: 'Informar progenitores',    detalle: 'NO autoriza informar a progenitores de datos académicos (mayor de edad)' },
+  { key: 'auth_imagenes_mayor',  emoji: '📸', label: 'Imágenes mayor edad',      detalle: 'NO autoriza grabación/difusión de imágenes (mayor de edad)' },
 ];
 
 export default function Autorizaciones() {
@@ -65,8 +65,8 @@ export default function Autorizaciones() {
     const { data } = await getSupabase().from('alumnos').select('*');
     if (data) {
       const conR = data.filter(a =>
-        a.no_imagen_menor14 || a.no_imagen_mayor14 || a.no_salidas_1617 ||
-        a.no_actividades_menor18 || a.no_informar_mayor18
+        a.auth_imagenes === false || a.auth_salidas === false || a.auth_actividades === false ||
+        a.auth_informar_progeni === false || a.auth_imagenes_mayor === false
       ).length;
       const gs = new Set(data.map(a => a.grupo)).size;
       setStats({ total: data.length, conRestricciones: conR, grupos: gs });
@@ -251,7 +251,7 @@ export default function Autorizaciones() {
               <div>
                 <div style={{ fontSize: 13, color: '#888', marginBottom: 10 }}>{alumnos.length} alumno{alumnos.length !== 1 ? 's' : ''} encontrado{alumnos.length !== 1 ? 's' : ''}</div>
                 {alumnos.map(a => {
-                  const restricciones = RESTRICCIONES.filter(r => a[r.key]);
+                  const restricciones = RESTRICCIONES.filter(r => a[r.key] === false);
                   return (
                     <div key={a.id} onClick={() => setAlumnoSeleccionado(alumnoSeleccionado?.id === a.id ? null : a)}
                       style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 8, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', cursor: 'pointer', borderLeft: `4px solid ${restricciones.length > 0 ? '#f59e0b' : verde}` }}>
@@ -274,11 +274,11 @@ export default function Autorizaciones() {
                         <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #f0f0f0' }}>
                           <div style={{ fontWeight: 700, fontSize: 13, color: azul, marginBottom: 10 }}>Detalle de autorizaciones:</div>
                           {RESTRICCIONES.map(r => (
-                            <div key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderRadius: 8, marginBottom: 6, backgroundColor: a[r.key] ? '#fef3c7' : '#f0fdf4', border: `1px solid ${a[r.key] ? '#fcd34d' : '#6ee7b7'}` }}>
-                              <span style={{ fontSize: 18, flexShrink: 0 }}>{a[r.key] ? '❌' : '✅'}</span>
+                            <div key={r.key} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 12px', borderRadius: 8, marginBottom: 6, backgroundColor: a[r.key] === false ? '#fef3c7' : '#f0fdf4', border: `1px solid ${a[r.key] === false ? '#fcd34d' : '#6ee7b7'}` }}>
+                              <span style={{ fontSize: 18, flexShrink: 0 }}>{a[r.key] === false ? '❌' : '✅'}</span>
                               <div>
-                                <div style={{ fontWeight: 700, fontSize: 13, color: a[r.key] ? '#92400e' : '#065f46' }}>
-                                  {a[r.key] ? 'NO autorizado' : 'Autorizado'} — {r.emoji} {r.label}
+                                <div style={{ fontWeight: 700, fontSize: 13, color: a[r.key] === false ? '#92400e' : '#065f46' }}>
+                                  {a[r.key] === false ? 'NO autorizado' : 'Autorizado'} — {r.emoji} {r.label}
                                 </div>
                                 <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{r.detalle}</div>
                               </div>
@@ -357,7 +357,7 @@ export default function Autorizaciones() {
 
             <div style={{ marginBottom: 16, maxHeight: 300, overflowY: 'auto' }}>
               {previstaExcel.slice(0, 20).map((a, i) => {
-                const restricciones = RESTRICCIONES.filter(r => a[r.key]);
+                const restricciones = RESTRICCIONES.filter(r => a[r.key] === false);
                 return (
                   <div key={i} style={{ padding: '8px 12px', borderRadius: 7, backgroundColor: '#f8f8f8', marginBottom: 6, fontSize: 13 }}>
                     <strong>{a.apellidos}, {a.nombre}</strong> — {a.grupo}
