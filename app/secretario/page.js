@@ -358,6 +358,9 @@ export default function PanelSecretario() {
                           {p.estado === 'inactivo' && (
                             <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
                           )}
+                          <button onClick={() => {
+                            if (confirm(`¿Eliminar a ${p.nombre} ${p.apellidos}? Esta acción no se puede deshacer.`)) eliminar(p.id);
+                          }} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
                         </div>
                       </div>
                     </div>
