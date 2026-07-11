@@ -120,8 +120,22 @@ export default function PanelSecretario() {
     setGuardando(true);
     let rolesFinales = Array.isArray(formEdicion.rol) ? formEdicion.rol : [formEdicion.rol];
     if (!rolesFinales.includes('profesor')) rolesFinales = ['profesor', ...rolesFinales];
-    const datosAGuardar = { ...formEdicion, rol: rolesFinales };
-    const { error } = await supabase
+    // Solo campos editables — excluir id, created_at, etc.
+    const datosAGuardar = {
+      nombre: formEdicion.nombre,
+      apellidos: formEdicion.apellidos,
+      email: formEdicion.email,
+      departamento: formEdicion.departamento,
+      especialidad: formEdicion.especialidad || '',
+      tipo_contrato: formEdicion.tipo_contrato,
+      antiguedad_centro: formEdicion.antiguedad_centro || 0,
+      antiguedad_cuerpo: formEdicion.antiguedad_cuerpo || 0,
+      rol: rolesFinales,
+      rol_gestion: formEdicion.rol_gestion || null,
+      grupo_tutoria: rolesFinales.includes('tutor') ? (formEdicion.grupo_tutoria || null) : null,
+      estado: formEdicion.estado,
+    };
+    const { error } = await getSupabase()
       .from('profesores')
       .update(datosAGuardar)
       .eq('id', profesorSeleccionado.id);
