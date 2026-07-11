@@ -76,19 +76,21 @@ export default function Ausencias() {
     const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
     if (!rows0?.[0]) return null;
     const { nombre, apellidos } = rows0[0];
-    // Buscar por nombre (menos probable que tenga tilde diferente)
+    // Normalizar sin acentos
+    const nomNorm = nombre.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const apNorm = apellidos.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    // Buscar por primer nombre (más limpio sin acentos)
     const { data: rows } = await getSupabase()
       .from('horarios_profesores')
       .select('profesor_nombre_pdf')
-      .ilike('profesor_nombre_pdf', `%${nombre}%`)
-      .limit(10);
+      .ilike('profesor_nombre_pdf', `%${nomNorm}%`)
+      .limit(20);
     if (!rows || rows.length === 0) return null;
-    // Si hay varios con ese nombre, filtrar por apellido (ignorando acentos)
-    const apNorm = apellidos.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const mejor = rows.find(r => {
-      const rNorm = r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      return rNorm.includes(apNorm.split(' ')[0]);
-    });
+    // Filtrar por apellido normalizado
+    const mejor = rows.find(r =>
+      r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .includes(apNorm.toLowerCase())
+    );
     return mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
   }
 
