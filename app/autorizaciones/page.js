@@ -258,7 +258,13 @@ export default function Autorizaciones() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div>
                           <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{a.apellidos}, {a.nombre}</div>
-                          <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>📚 {a.grupo}</div>
+                          <div style={{ fontSize: 12, color: '#888', marginTop: 2, display: 'flex', gap: 10 }}>
+                            <span>📚 {a.grupo}</span>
+                            {a.dni
+                              ? <span style={{ fontWeight: 700, color: azul }}>🪪 {a.dni}</span>
+                              : <span style={{ color: '#f59e0b', fontWeight: 600 }}>🪪 Sin DNI</span>
+                            }
+                          </div>
                         </div>
                         <div style={{ textAlign: 'right' }}>
                           {restricciones.length === 0 ? (
