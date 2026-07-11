@@ -149,11 +149,31 @@ export default function DLD() {
       const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
       if (rows0?.[0]) {
         const { nombre, apellidos } = rows0[0];
-        const { data: rows } = await getSupabase().from('horarios_profesores').select('profesor_nombre_pdf').ilike('profesor_nombre_pdf', `%${nombre}%`).limit(10);
-        if (rows?.length > 0) {
-          const apNorm = apellidos.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-          const mejor = rows.find(r => r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(apNorm.split(' ')[0]));
-          nPdf = mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
+        const primerApellido = apellidos.split(' ')[0];
+        const apNorm = primerApellido.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        // Buscar por apellido (más único que el nombre)
+        const { data: rows } = await getSupabase()
+          .from('horarios_profesores')
+          .select('profesor_nombre_pdf')
+          .ilike('profesor_nombre_pdf', `%${primerApellido}%`)
+          .limit(10);
+        // Si no encuentra con tilde, buscar sin tilde
+        let candidatos = rows || [];
+        if (candidatos.length === 0) {
+          const { data: rows2 } = await getSupabase()
+            .from('horarios_profesores')
+            .select('profesor_nombre_pdf')
+            .ilike('profesor_nombre_pdf', `%${apNorm}%`)
+            .limit(10);
+          candidatos = rows2 || [];
+        }
+        if (candidatos.length > 0) {
+          // Filtrar por nombre para mayor precisión
+          const nombreNorm = nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const mejor = candidatos.find(r =>
+            r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes(nombreNorm.split(' ')[0])
+          );
+          nPdf = mejor ? mejor.profesor_nombre_pdf : candidatos[0].profesor_nombre_pdf;
           setNombrePdf(nPdf);
         }
       }
@@ -356,10 +376,12 @@ export default function DLD() {
             {/* FECHA */}
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>📅 Día solicitado *</label>
-              <input type="date" value={form.fecha_solicitada} onChange={e => {
-                setForm(f => ({ ...f, fecha_solicitada: e.target.value }));
+              <input type="date" value={form.fecha_solicitada} onChange={async e => {
+                const fecha = e.target.value;
+                setForm(f => ({ ...f, fecha_solicitada: fecha }));
                 setHorario({});
-                cargarHorarioDelDia(e.target.value);
+                await new Promise(r => setTimeout(r, 50));
+                cargarHorarioDelDia(fecha);
               }} style={{ ...inputEstilo, marginTop: 8 }} />
             </div>
 
