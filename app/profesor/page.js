@@ -130,11 +130,14 @@ export default function PanelProfesor() {
     ? { emoji: '📋', titulo: 'Mis Autorizaciones', href: '/autorizaciones/gestion' }
     : null;
 
+  const esDirector = rolGestion === 'director';
+
   const modulosVisibles = MODULOS.filter(m =>
-    m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
+    esDirector || m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
   );
 
   function tieneAcceso(m) {
+    if (esDirector) return true; // director accede a todo
     if (!m.restringido) return true;
     return m.restringido.some(r => roles.includes(r) || r === rolGestion);
   }
