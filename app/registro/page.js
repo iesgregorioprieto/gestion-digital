@@ -70,6 +70,10 @@ export default function Registro() {
         setError('El email no es válido.');
         return;
       }
+      if (!form.email.toLowerCase().endsWith('@educastillalamancha.es')) {
+        setError('Solo se permite el registro con email institucional (@educastillalamancha.es).');
+        return;
+      }
     }
     if (paso === 2) {
       if (!form.departamento) {
@@ -178,7 +182,7 @@ export default function Registro() {
               <h2 style={{ color: verde, marginTop: 0, marginBottom: 20, fontSize: 20 }}>👤 Datos personales</h2>
               <Campo label="Nombre *" value={form.nombre} onChange={v => set('nombre', v)} placeholder="Tu nombre" />
               <Campo label="Apellidos *" value={form.apellidos} onChange={v => set('apellidos', v)} placeholder="Tus apellidos" />
-              <Campo label="Email institucional *" value={form.email} onChange={v => set('email', v)} placeholder="llcc12@educastillalamancha.es" tipo="email" />
+              <Campo label="Email institucional * (@educastillalamancha.es)" value={form.email} onChange={v => set('email', v)} placeholder="llcc12@educastillalamancha.es" tipo="email" />
             </div>
           )}
 
