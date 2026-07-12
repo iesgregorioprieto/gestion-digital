@@ -352,6 +352,25 @@ export default function PanelDirector() {
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
 
+        {/* ACCESOS DIRECTOS A MÓDULOS */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 20 }}>
+          {[
+            { emoji: '🏥', label: 'Ausencias', href: '/jefe-estudios/ausencias' },
+            { emoji: '📋', label: 'Autorizaciones', href: '/autorizaciones/gestion' },
+            { emoji: '📊', label: 'Datos Centro', href: '/jefe-estudios/datos' },
+            { emoji: '🔧', label: 'Mantenimiento', href: '/secretario' },
+            { emoji: '🛒', label: 'Compras', href: '/secretario' },
+          ].map(m => (
+            <a key={m.label} href={m.href} style={{ backgroundColor: 'white', borderRadius: 10, padding: '12px 10px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: '1.5px solid #e0e0e0', cursor: 'pointer' }}>
+              <span style={{ fontSize: 24 }}>{m.emoji}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: azul }}>{m.label}</span>
+            </a>
+          ))}
+        </div>
+
+        {/* SECCIÓN DLD */}
+        <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 12 }}>📄 Gestión de DLD</div>
+
         {/* CONTADORES */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
           {[
