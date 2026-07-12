@@ -68,6 +68,12 @@ export default function GestionDatos() {
   const [modalAlumnos, setModalAlumnos] = useState(false);
   const fileRefAlumnos = useRef(null);
 
+  // Horarios
+  const [previewHorarios, setPreviewHorarios] = useState(null);
+  const [modalHorarios, setModalHorarios] = useState(false);
+  const [progresoHorarios, setProgresoHorarios] = useState({ actual: 0, total: 0, mensaje: '' });
+  const fileRefHorarios = useRef(null);
+
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
@@ -176,6 +182,241 @@ export default function GestionDatos() {
     acc[g.familia].push(g.codigo);
     return acc;
   }, {});
+
+  // ═══════════════════════════════════════════════════════════════
+  // PARSER HTML DE DELPHOS — Extrae horario de un profesor
+  // ═══════════════════════════════════════════════════════════════
+  
+  // Mapeo hora inicio → hora_id de nuestra BD
+  const MAPA_HORAS = {
+    '8:30': '1a', '9:25': '2a', '10:20': '3a',
+    '11:45': '4a', '12:40': '5a', '13:35': '6a',
+    '14:30': '7a', // extraordinaria (poca gente)
+    '16:00': 'tarde1', '16:55': 'tarde2', '17:50': 'tarde3',
+    '19:00': 'noche1', '19:55': 'noche2', '20:50': 'noche3',
+  };
+  
+  const DIAS_HTML = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+
+  function limpiarTexto(txt) {
+    return (txt || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  function detectarTipoHora(textoCelda) {
+    if (!textoCelda || textoCelda.length === 0) return 'libre';
+    const t = textoCelda.toUpperCase();
+    if (t.startsWith('GUARDIA')) return 'guardia';
+    if (t.includes('RECREO') || t.includes('MEDIOD')) return 'libre';
+    if (t.startsWith('REUNI')) return 'complementaria';
+    // Si tiene formato MATERIA-CODIGO<br>GRUPO<br>(aula) → clase
+    if (t.match(/^[A-Z]+-?\d+/) || t.match(/[A-Z]{2,}/)) return 'clase';
+    return 'complementaria';
+  }
+
+  function extraerGrupoYMateria(textoCelda) {
+    // Formato típico: "DASP-3087251\nGM-1IEA\n(1 A032 ELE)"
+    const partes = textoCelda.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
+    let materia = '', grupo = '';
+    if (partes.length >= 2) {
+      materia = partes[0].split('-')[0]; // "DASP-3087251" → "DASP"
+      grupo = partes[1]; // "GM-1IEA"
+    } else if (partes.length === 1) {
+      grupo = partes[0];
+    }
+    return { grupo, materia };
+  }
+
+  async function procesarCarpetaHorarios(e) {
+    const archivos = Array.from(e.target.files || []).filter(f => 
+      f.name.toLowerCase().endsWith('.html') && 
+      !f.name.toLowerCase().startsWith('index')
+    );
+    if (archivos.length === 0) {
+      setMensaje({ tipo: 'error', texto: '❌ No se encontraron archivos HTML válidos en la carpeta' });
+      return;
+    }
+    
+    setProcesando(true);
+    setProgresoHorarios({ actual: 0, total: archivos.length, mensaje: 'Iniciando análisis...' });
+    
+    const profesoresParseados = [];
+    const errores = [];
+    
+    for (let i = 0; i < archivos.length; i++) {
+      const archivo = archivos[i];
+      setProgresoHorarios({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
+      
+      try {
+        // Leer como Latin-1 (Delphos usa ese encoding)
+        const buffer = await archivo.arrayBuffer();
+        const decoder = new TextDecoder('windows-1252');
+        const html = decoder.decode(buffer);
+        
+        const resultado = parsearHTMLProfesor(html);
+        if (resultado && resultado.nombre) {
+          profesoresParseados.push(resultado);
+        } else {
+          errores.push(`${archivo.name}: no se pudo extraer datos`);
+        }
+      } catch (err) {
+        errores.push(`${archivo.name}: ${err.message}`);
+      }
+    }
+    
+    // Contar totales
+    const totalRegistros = profesoresParseados.reduce((sum, p) => sum + p.horas.length, 0);
+    
+    setPreviewHorarios({
+      profesores: profesoresParseados,
+      totalProfesores: profesoresParseados.length,
+      totalRegistros,
+      errores,
+    });
+    setModalHorarios(true);
+    setProcesando(false);
+    if (fileRefHorarios.current) fileRefHorarios.current.value = '';
+  }
+
+  function parsearHTMLProfesor(html) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // 1. Extraer nombre del profesor (th colspan=6)
+    const thNombre = doc.querySelector('th[colspan="6"]');
+    if (!thNombre) return null;
+    let nombreCompleto = limpiarTexto(thNombre.textContent);
+    // Quitar abreviación entre paréntesis: "Castelo Cordoba, Enrique (Cas. C, E)" → "Castelo Cordoba, Enrique"
+    nombreCompleto = nombreCompleto.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    if (!nombreCompleto) return null;
+    
+    // 2. Extraer filas de horas (tr)
+    const filas = Array.from(doc.querySelectorAll('tr'));
+    const horas = [];
+    
+    // Matriz para tracking de rowspans: si celda[fila][col] está ocupada
+    const ocupadas = {}; // key: "fila,col"
+    
+    filas.forEach((fila, filaIdx) => {
+      // Buscar la hora en el th de esa fila
+      const th = fila.querySelector('th');
+      if (!th) return;
+      const textoTh = limpiarTexto(th.textContent);
+      // Formato hora: "8:309:25" o "8:30 9:25" (los <br> se juntan)
+      const matchHora = textoTh.match(/(\d{1,2}:\d{2})/);
+      if (!matchHora) return;
+      const horaInicio = matchHora[1];
+      const horaId = MAPA_HORAS[horaInicio];
+      if (!horaId) return; // ignorar horas no reconocidas
+      
+      // Iterar celdas <td> de esa fila
+      const celdas = Array.from(fila.querySelectorAll('td'));
+      let colDia = 0; // índice de día (0=lunes, 4=viernes)
+      let celdaIdx = 0;
+      
+      while (colDia < 5) {
+        // Si esta columna está ocupada por un rowspan anterior, avanzar
+        while (ocupadas[`${filaIdx},${colDia}`]) {
+          const info = ocupadas[`${filaIdx},${colDia}`];
+          // Añadir la hora del rowspan
+          horas.push({
+            hora_id: horaId,
+            dia: DIAS_HTML[colDia],
+            tipo: info.tipo,
+            grupo: info.grupo,
+            materia: info.materia,
+          });
+          colDia++;
+          if (colDia >= 5) break;
+        }
+        if (colDia >= 5) break;
+        
+        const celda = celdas[celdaIdx];
+        if (!celda) break;
+        
+        const colspan = parseInt(celda.getAttribute('colspan') || '1', 10);
+        const rowspan = parseInt(celda.getAttribute('rowspan') || '1', 10);
+        const textoCelda = limpiarTexto(celda.textContent);
+        
+        // Detectar tipo
+        const tipo = detectarTipoHora(textoCelda);
+        const { grupo, materia } = tipo === 'clase' ? extraerGrupoYMateria(textoCelda) : { grupo: '', materia: '' };
+        
+        // Añadir a las columnas que ocupa (colspan)
+        for (let c = 0; c < colspan && colDia < 5; c++) {
+          horas.push({
+            hora_id: horaId,
+            dia: DIAS_HTML[colDia],
+            tipo,
+            grupo,
+            materia,
+          });
+          
+          // Marcar ocupadas las filas siguientes por rowspan
+          for (let r = 1; r < rowspan; r++) {
+            ocupadas[`${filaIdx + r},${colDia}`] = { tipo, grupo, materia };
+          }
+          colDia++;
+        }
+        celdaIdx++;
+      }
+    });
+    
+    // Filtrar horas "libre" para no cargar la BD (solo guardamos ocupadas)
+    const horasOcupadas = horas.filter(h => h.tipo !== 'libre' && (h.grupo || h.tipo === 'guardia' || h.tipo === 'complementaria'));
+    
+    return {
+      nombre: nombreCompleto,
+      horas: horasOcupadas,
+    };
+  }
+
+  async function confirmarHorarios() {
+    if (!previewHorarios) return;
+    setProcesando(true);
+    setProgresoHorarios({ actual: 0, total: previewHorarios.profesores.length, mensaje: 'Guardando...' });
+    
+    try {
+      // 1. Borrar horarios del curso actual (para reemplazar)
+      setProgresoHorarios(p => ({ ...p, mensaje: 'Borrando horarios anteriores...' }));
+      await getSupabase().from('horarios_profesores').delete().eq('curso_academico', cursoNuevo);
+      
+      // 2. Insertar los nuevos en lotes de 500
+      const registros = [];
+      previewHorarios.profesores.forEach(prof => {
+        prof.horas.forEach(h => {
+          registros.push({
+            profesor_nombre_pdf: prof.nombre,
+            hora_id: h.hora_id,
+            dia: h.dia,
+            tipo: h.tipo,
+            grupo: h.grupo || '',
+            materia: h.materia || '',
+            curso_academico: cursoNuevo,
+          });
+        });
+      });
+      
+      const TAMANO_LOTE = 500;
+      for (let i = 0; i < registros.length; i += TAMANO_LOTE) {
+        const lote = registros.slice(i, i + TAMANO_LOTE);
+        setProgresoHorarios({ 
+          actual: Math.min(i + TAMANO_LOTE, registros.length), 
+          total: registros.length, 
+          mensaje: `Guardando registro ${i + 1}-${Math.min(i + TAMANO_LOTE, registros.length)} de ${registros.length}...` 
+        });
+        const { error } = await getSupabase().from('horarios_profesores').insert(lote);
+        if (error) throw new Error(`Error en lote ${i}: ${error.message}`);
+      }
+      
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente` });
+      setModalHorarios(false);
+      setPreviewHorarios(null);
+      cargarStats();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: `❌ Error al guardar: ${err.message}` });
+    }
+    setProcesando(false);
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -319,17 +560,14 @@ export default function GestionDatos() {
             <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
               <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🗂️ Horarios del profesorado (HTML de Delphos)</div>
               <div style={{ fontSize: 13, color: '#666', marginBottom: 6, lineHeight: 1.5 }}>
-                Delphos genera un archivo RAR/ZIP con los horarios de todos los profesores en formato HTML. Este archivo permite que DLD y Ausencias carguen el horario automáticamente.
+                Delphos genera una carpeta llamada <strong>Profesores/</strong> con un archivo HTML por cada profesor. Selecciona esa carpeta completa y el sistema procesará todos los horarios automáticamente.
               </div>
               <div style={{ fontSize: 12, backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: 7, color: '#065f46', marginBottom: 16 }}>
-                🖥️ <strong>Delphos:</strong> Horarios → Imprimir/Exportar → HTML indexado → Se generará un RAR con carpeta <strong>Profesores/</strong>
+                🖥️ <strong>Delphos:</strong> Horarios → Imprimir/Exportar → HTML indexado → Se generará un RAR con carpeta <strong>Profesores/</strong>. Descomprime el RAR y selecciona la carpeta <strong>Profesores/</strong>.
               </div>
 
-              <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 10, padding: 14, marginBottom: 16, fontSize: 13, color: '#92400e' }}>
-                ⚠️ <strong>Este archivo solo puede procesarlo el equipo técnico.</strong> Entrega el RAR al responsable TIC o contacta con el administrador del portal para actualizar los horarios al inicio de curso.
-              </div>
-
-              <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14 }}>
+              {/* ESTADO ACTUAL */}
+              <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 14 }}>📋 Estado actual de horarios</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <span style={{ fontSize: 28 }}>{stats.horarios === '✅' ? '✅' : '❌'}</span>
@@ -343,10 +581,127 @@ export default function GestionDatos() {
                   </div>
                 </div>
               </div>
+
+              {/* CURSO ACADÉMICO */}
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Curso académico</label>
+                <input 
+                  type="text" 
+                  value={cursoNuevo} 
+                  onChange={e => setCursoNuevo(e.target.value)} 
+                  placeholder="2025-2026" 
+                  disabled={procesando}
+                  style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} 
+                />
+              </div>
+
+              {/* BOTÓN SUBIR CARPETA */}
+              <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                <input 
+                  ref={fileRefHorarios} 
+                  type="file" 
+                  webkitdirectory=""
+                  directory=""
+                  multiple 
+                  onChange={procesarCarpetaHorarios} 
+                  style={{ display: 'none' }} 
+                  disabled={procesando}
+                />
+                <div style={{ 
+                  padding: '16px', 
+                  borderRadius: 10, 
+                  backgroundColor: procesando ? '#f5f5f5' : verde, 
+                  color: procesando ? '#999' : 'white', 
+                  fontWeight: 700, 
+                  fontSize: 14, 
+                  textAlign: 'center',
+                  cursor: procesando ? 'not-allowed' : 'pointer',
+                }}>
+                  {procesando ? '⏳ Procesando...' : '📁 Seleccionar carpeta Profesores/'}
+                </div>
+              </label>
+
+              {/* PROGRESO */}
+              {procesando && progresoHorarios.total > 0 && (
+                <div style={{ marginTop: 16, padding: '12px 16px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13 }}>
+                  <div style={{ fontWeight: 600, color: '#1e3a5f', marginBottom: 6 }}>
+                    {progresoHorarios.mensaje}
+                  </div>
+                  <div style={{ backgroundColor: '#dbeafe', borderRadius: 6, height: 8, overflow: 'hidden' }}>
+                    <div style={{ 
+                      backgroundColor: '#2563eb', 
+                      height: '100%', 
+                      width: `${(progresoHorarios.actual / progresoHorarios.total) * 100}%`,
+                      transition: 'width 0.3s',
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 4, textAlign: 'right' }}>
+                    {progresoHorarios.actual} / {progresoHorarios.total}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
       </div>
+
+      {/* MODAL PREVIEW HORARIOS */}
+      {modalHorarios && previewHorarios && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 600, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>🗂️ Vista previa de horarios</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+              <strong>{previewHorarios.totalProfesores}</strong> profesores y <strong>{previewHorarios.totalRegistros}</strong> horas de clase detectadas para el curso <strong>{cursoNuevo}</strong>.
+            </div>
+            
+            {previewHorarios.errores.length > 0 && (
+              <div style={{ marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8, fontSize: 12, color: '#92400e' }}>
+                ⚠️ {previewHorarios.errores.length} archivos con problemas:
+                <div style={{ maxHeight: 100, overflowY: 'auto', marginTop: 6 }}>
+                  {previewHorarios.errores.slice(0, 5).map((e, i) => (
+                    <div key={i} style={{ fontSize: 11, marginTop: 2 }}>• {e}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 16, border: '1px solid #eee', borderRadius: 8 }}>
+              {previewHorarios.profesores.slice(0, 20).map((p, i) => (
+                <div key={i} style={{ padding: '10px 14px', borderBottom: '1px solid #eee', fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, color: azul }}>{p.nombre}</div>
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{p.horas.length} horas</div>
+                </div>
+              ))}
+              {previewHorarios.profesores.length > 20 && (
+                <div style={{ padding: 12, fontSize: 12, color: '#666', textAlign: 'center' }}>
+                  ... y {previewHorarios.profesores.length - 20} profesores más
+                </div>
+              )}
+            </div>
+            
+            <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fee2e2', borderRadius: 8 }}>
+              ⚠️ <strong>Atención:</strong> Al confirmar, se BORRARÁN todos los horarios existentes del curso {cursoNuevo} y se sustituirán por estos.
+            </div>
+            
+            {/* PROGRESO DE GUARDADO */}
+            {procesando && (
+              <div style={{ marginBottom: 12, padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{progresoHorarios.mensaje}</div>
+                <div style={{ backgroundColor: '#dbeafe', borderRadius: 4, height: 6 }}>
+                  <div style={{ backgroundColor: '#2563eb', height: '100%', width: `${(progresoHorarios.actual / (progresoHorarios.total || 1)) * 100}%`, borderRadius: 4 }} />
+                </div>
+              </div>
+            )}
+            
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={confirmarHorarios} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                {procesando ? '⏳ Guardando...' : '✅ Confirmar y guardar'}
+              </button>
+              <button onClick={() => { setModalHorarios(false); setPreviewHorarios(null); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL PREVIEW ALUMNOS */}
       {modalAlumnos && (
