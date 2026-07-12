@@ -45,7 +45,7 @@ export default function Compras() {
     if (!id) { window.location.href = '/login'; return; }
     const roles = JSON.parse(sessionStorage.getItem('profesor_roles') || '[]');
     const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
-    if (!roles.includes('jefe_departamento') && rolGestion !== 'secretario' && rolGestion !== 'director') {
+    if (!roles.includes('jefe_departamento') && rolGestion !== 'secretario' && rolGestion !== 'director' && rolGestion !== 'jefe_estudios') {
       window.location.href = '/profesor';
       return;
     }
@@ -173,7 +173,7 @@ export default function Compras() {
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => window.location.href = '/profesor'} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+        <button onClick={() => { const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = r === 'director' ? '/director' : r === 'jefe_estudios' ? '/jefe-estudios' : '/profesor'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 22 }}>🛒</span>
         <div>
           <div style={{ fontWeight: 800, fontSize: 17 }}>Solicitud de Compras</div>

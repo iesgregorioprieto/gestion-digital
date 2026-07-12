@@ -65,7 +65,7 @@ export default function PanelSecretario() {
       window.location.href = '/login';
       return;
     }
-    if (rol !== 'secretario') {
+    if (rol !== 'secretario' && rol !== 'director' && rol !== 'jefe_estudios') {
       window.location.href = '/profesor';
       return;
     }
@@ -237,7 +237,7 @@ export default function PanelSecretario() {
           <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto · {nombreUsuario}</div>
         </div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = r === 'director' ? '/director' : r === 'jefe_estudios' ? '/jefe-estudios' : '/profesor'; }} style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
           <button onClick={cerrarSesion} style={{
             padding: '7px 14px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.4)',
             backgroundColor: 'transparent', color: 'white', cursor: 'pointer', fontSize: 13
