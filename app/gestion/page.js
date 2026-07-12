@@ -52,6 +52,16 @@ export default function PanelGestion() {
       color: '#1e40af',
     },
     {
+      id: 'personal',
+      emoji: '👥',
+      titulo: 'Personal (Profesorado)',
+      descripcion: 'Gestiona profesores: registros, roles y datos',
+      href: '/gestion/personal',
+      bg: '#faf5ff',
+      border: '#d8b4fe',
+      color: '#7e22ce',
+    },
+    {
       id: 'dld',
       emoji: '📄',
       titulo: 'Días Libre Disposición',

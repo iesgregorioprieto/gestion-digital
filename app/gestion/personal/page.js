@@ -33,7 +33,7 @@ const ROLES_DOCENTES = [
 ];
 
 export default function PanelSecretario() {
-  const [pestana, setPestana] = useState('mantenimiento');
+  const [pestana, setPestana] = useState('profesores');
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
   const [busqueda, setBusqueda] = useState('');
   const [filtroDpto, setFiltroDpto] = useState('');
