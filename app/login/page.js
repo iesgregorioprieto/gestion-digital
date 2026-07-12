@@ -77,9 +77,27 @@ export default function Login() {
       return;
     }
 
+    // 🔒 NORMALIZAR rol_gestion: minúsculas + trim para evitar bugs
+    // (por si en BD queda "Director", "Secretary", " secretario ", etc.)
+    const rolGestionNormalizado = (data.rol_gestion || '').toString().trim().toLowerCase();
+
+    // Mapeo de sinónimos por si viene en inglés o mal escrito
+    const MAPA_ROLES = {
+      'director': 'director',
+      'directora': 'director',
+      'secretario': 'secretario',
+      'secretaria': 'secretario',
+      'secretary': 'secretario',
+      'jefe_estudios': 'jefe_estudios',
+      'jefe estudios': 'jefe_estudios',
+      'jefa_estudios': 'jefe_estudios',
+      'head of studies': 'jefe_estudios',
+    };
+    const rolFinal = MAPA_ROLES[rolGestionNormalizado] || rolGestionNormalizado;
+
     sessionStorage.setItem('profesor_id', data.id);
     sessionStorage.setItem('profesor_nombre', `${data.nombre} ${data.apellidos}`);
-    sessionStorage.setItem('profesor_rol_gestion', data.rol_gestion || '');
+    sessionStorage.setItem('profesor_rol_gestion', rolFinal);
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
     window.location.href = '/profesor';

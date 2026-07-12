@@ -72,6 +72,7 @@ export default function DLD() {
   const [antiguedadCuerpo, setAntiguedadCuerpo] = useState(0);
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [esDirectivo, setEsDirectivo] = useState(false); // 🔑 aviso panel dirección
 
   // horario[horaId] = { tipo: 'clase'|'guardia'|'libre', grupo: '' }
   const [horario, setHorario] = useState({});
@@ -94,6 +95,8 @@ export default function DLD() {
     const id = sessionStorage.getItem('profesor_id');
     const nombre = sessionStorage.getItem('profesor_nombre');
     if (!id) { window.location.href = '/login'; return; }
+    const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
+    setEsDirectivo(['secretario', 'director', 'jefe_estudios'].includes(rolGestion));
     setProfesorId(id);
     setProfesorNombre(nombre || '');
     cargarDatos(id);
@@ -263,6 +266,16 @@ export default function DLD() {
       </div>
 
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '24px 16px' }}>
+
+        {/* AVISO DIRECTIVO */}
+        {esDirectivo && (
+          <div style={{ padding: '10px 14px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1e3a5f', fontSize: 13, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+            <span>ℹ️ Aquí solicitas <strong>tus propios</strong> DLD. Para gestionar los del centro entra en el panel de dirección.</span>
+            <button onClick={() => window.location.href = '/director'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              👔 Ir a Gestión
+            </button>
+          </div>
+        )}
 
         {/* RESUMEN DÍAS */}
         <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, marginBottom: 20, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', borderLeft: `5px solid ${verde}` }}>

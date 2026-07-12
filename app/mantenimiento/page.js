@@ -33,6 +33,10 @@ export default function Mantenimiento() {
   const [error, setError] = useState('');
   const [profesorNombre, setProfesorNombre] = useState('');
   const [profesorId, setProfesorId] = useState('');
+  const [esDirectivo, setEsDirectivo] = useState(false);
+  const [historial, setHistorial] = useState([]);
+  const [mostrarHistorial, setMostrarHistorial] = useState(false);
+  const [cargandoHistorial, setCargandoHistorial] = useState(false);
 
   const [form, setForm] = useState({
     estancia: '',
@@ -49,9 +53,28 @@ export default function Mantenimiento() {
       window.location.href = '/login';
       return;
     }
+    const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
+    setEsDirectivo(['secretario', 'director', 'jefe_estudios'].includes(rolGestion));
     setProfesorId(id);
     setProfesorNombre(nombre || '');
   }, []);
+
+  async function cargarHistorial() {
+    if (!profesorId) return;
+    setCargandoHistorial(true);
+    let query = getSupabase().from('mantenimiento').select('*');
+    // Directivo ve todas las incidencias; profesor solo las suyas
+    if (!esDirectivo) query = query.eq('profesor_id', profesorId);
+    const { data } = await query.order('created_at', { ascending: false }).limit(20);
+    setHistorial(data || []);
+    setCargandoHistorial(false);
+  }
+
+  function toggleHistorial() {
+    const nuevoEstado = !mostrarHistorial;
+    setMostrarHistorial(nuevoEstado);
+    if (nuevoEstado && historial.length === 0) cargarHistorial();
+  }
 
   function seleccionarEstancia(valor) {
     setForm(f => ({ ...f, estancia: valor }));
@@ -155,6 +178,52 @@ export default function Mantenimiento() {
       </div>
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
+
+        {/* BOTÓN VER HISTORIAL */}
+        <div style={{ marginBottom: 16, textAlign: 'right' }}>
+          <button onClick={toggleHistorial} style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: mostrarHistorial ? verde : 'white', color: mostrarHistorial ? 'white' : '#555', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+            📋 {mostrarHistorial ? 'Ocultar historial' : (esDirectivo ? 'Ver todas las incidencias' : 'Ver mis incidencias')}
+          </button>
+        </div>
+
+        {/* PANEL HISTORIAL */}
+        {mostrarHistorial && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 16, marginBottom: 20, boxShadow: '0 2px 10px rgba(0,0,0,0.08)' }}>
+            {cargandoHistorial ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#888' }}>Cargando...</div>
+            ) : historial.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: '#888', fontSize: 14 }}>
+                🔧 {esDirectivo ? 'No hay incidencias registradas' : 'Aún no has notificado incidencias'}
+              </div>
+            ) : (
+              historial.map(inc => {
+                const est = inc.estado || 'pendiente';
+                const estilos = { pendiente: { bg: '#fef3c7', color: '#92400e', emoji: '⏳', label: 'Pendiente' }, en_proceso: { bg: '#dbeafe', color: '#1e40af', emoji: '🔧', label: 'En proceso' }, resuelta: { bg: '#d1fae5', color: '#065f46', emoji: '✅', label: 'Resuelta' } };
+                const e = estilos[est] || estilos.pendiente;
+                return (
+                  <div key={inc.id} style={{ padding: '10px 12px', borderRadius: 8, marginBottom: 8, backgroundColor: '#f9fafb', borderLeft: `4px solid ${e.color}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontSize: 12, color: '#666' }}>
+                        {new Date(inc.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        {esDirectivo && inc.profesor_nombre && <span style={{ marginLeft: 8, fontWeight: 700, color: '#1e3a5f' }}>👤 {inc.profesor_nombre}</span>}
+                      </div>
+                      <span style={{ padding: '2px 8px', borderRadius: 12, backgroundColor: e.bg, color: e.color, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap' }}>{e.emoji} {e.label}</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: '#333' }}>
+                      <strong>{inc.estancia}</strong>{inc.ubicacion_exacta ? ` · ${inc.ubicacion_exacta}` : ''}
+                    </div>
+                    <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{inc.descripcion}</div>
+                    {inc.comentario_secretario && (
+                      <div style={{ marginTop: 6, padding: '6px 10px', backgroundColor: '#eff6ff', borderRadius: 6, fontSize: 12, color: '#1e3a5f' }}>
+                        💬 <strong>Secretaría:</strong> {inc.comentario_secretario}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
         {/* PASOS */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 24, alignItems: 'center' }}>

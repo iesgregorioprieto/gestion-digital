@@ -48,6 +48,7 @@ export default function Ausencias() {
   const [profesorNombre, setProfesorNombre] = useState('');
   const [departamento, setDepartamento] = useState('');
   const [nombrePdf, setNombrePdf] = useState(''); // nombre en horarios_profesores
+  const [esDirectivo, setEsDirectivo] = useState(false); // 🔑 aviso de acceso a panel completo
   const [vista, setVista] = useState('formulario');
   const [historial, setHistorial] = useState([]);
   const [cargando, setCargando] = useState(false);
@@ -173,6 +174,8 @@ export default function Ausencias() {
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     if (!id) { window.location.href = '/login'; return; }
+    const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
+    setEsDirectivo(['secretario', 'director', 'jefe_estudios'].includes(rolGestion));
     setProfesorId(id);
     setProfesorNombre(sessionStorage.getItem('profesor_nombre') || '');
     getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
@@ -373,6 +376,16 @@ export default function Ausencias() {
       {mensaje && (
         <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : rojo, fontWeight: 600, fontSize: 14 }}>
           {mensaje.texto}
+        </div>
+      )}
+
+      {/* AVISO DIRECTIVO */}
+      {esDirectivo && (
+        <div style={{ margin: '12px 16px 0', padding: '10px 14px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1e3a5f', fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <span>ℹ️ Aquí registras <strong>tus propias</strong> ausencias. Para gestionar las del centro entra en el panel de jefatura.</span>
+          <button onClick={() => window.location.href = '/jefe-estudios/ausencias'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            🏥 Ir a Gestión
+          </button>
         </div>
       )}
 

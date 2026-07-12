@@ -31,6 +31,7 @@ export default function Compras() {
   const [vista, setVista] = useState('formulario'); // 'formulario' | 'historial'
   const [mensaje, setMensaje] = useState(null);
   const [enviando, setEnviando] = useState(false);
+  const [esDirectivo, setEsDirectivo] = useState(false); // 🔑 directivo ve TODAS las compras
 
   // Formulario
   const [tipo, setTipo] = useState(''); // 'ya_comprado' | 'pedir'
@@ -45,25 +46,28 @@ export default function Compras() {
     if (!id) { window.location.href = '/login'; return; }
     const roles = JSON.parse(sessionStorage.getItem('profesor_roles') || '[]');
     const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
-    if (!roles.includes('jefe_departamento') && rolGestion !== 'secretario' && rolGestion !== 'director' && rolGestion !== 'jefe_estudios') {
+    const directivo = ['secretario', 'director', 'jefe_estudios'].includes(rolGestion);
+    if (!roles.includes('jefe_departamento') && !directivo) {
       window.location.href = '/profesor';
       return;
     }
+    setEsDirectivo(directivo);
     setProfesorId(id);
     setProfesorNombre(nombre || '');
     getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
       if (data && data[0]) setDepartamento(data[0].departamento || '');
     });
-    cargarHistorial(id);
+    cargarHistorial(id, directivo);
   }, []);
 
-  async function cargarHistorial(id) {
+  async function cargarHistorial(id, verTodo) {
     setCargando(true);
-    const { data } = await getSupabase()
-      .from('compras')
-      .select('*')
-      .eq('profesor_id', id)
-      .order('created_at', { ascending: false });
+    // 🔑 Directivo ve TODAS las compras del centro; el profesor solo las suyas
+    let query = getSupabase().from('compras').select('*');
+    if (!verTodo) {
+      query = query.eq('profesor_id', id);
+    }
+    const { data } = await query.order('created_at', { ascending: false });
     setHistorial(data || []);
     setCargando(false);
   }
@@ -150,7 +154,7 @@ export default function Compras() {
     setAlbaran(null);
     setAlbaranNombre('');
     setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
-    cargarHistorial(profesorId);
+    cargarHistorial(profesorId, esDirectivo);
     setTimeout(() => setVista('historial'), 1500);
   }
 
@@ -190,7 +194,7 @@ export default function Compras() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, padding: '16px 16px 0' }}>
-        {[{ id: 'formulario', label: '📝 Nueva solicitud' }, { id: 'historial', label: `📋 Mis solicitudes (${historial.length})` }].map(t => (
+        {[{ id: 'formulario', label: '📝 Nueva solicitud' }, { id: 'historial', label: `📋 ${esDirectivo ? 'Todas las solicitudes' : 'Mis solicitudes'} (${historial.length})` }].map(t => (
           <button key={t.id} onClick={() => setVista(t.id)} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === t.id ? verde : '#ddd'}`, backgroundColor: vista === t.id ? verde : 'white', color: vista === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {t.label}
           </button>
@@ -403,6 +407,11 @@ export default function Compras() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div>
                       <span style={{ fontSize: 12, color: '#888' }}>{new Date(s.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                      {esDirectivo && s.profesor_nombre && (
+                        <div style={{ fontSize: 12, color: '#1e3a5f', fontWeight: 700, marginTop: 2 }}>
+                          👤 {s.profesor_nombre}{s.departamento ? ` · ${s.departamento}` : ''}
+                        </div>
+                      )}
                       <div style={{ fontWeight: 700, fontSize: 14, color: azul, marginTop: 2 }}>
                         {s.tipo === 'ya_comprado' ? '🧾 Ya comprado' : '🛍️ Solicitud de pedido'}
                         {s.proveedor ? ` · ${s.proveedor}` : ''}
