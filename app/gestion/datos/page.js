@@ -510,7 +510,6 @@ export default function GestionDatos() {
           email: prof.email,
           email_corporativo: prof.email_corporativo,
           departamento: prof.departamento,
-          dni: prof.dni,
           autorizado: true,
           estado: 'pendiente',
           rol: ['profesor'],
