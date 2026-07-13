@@ -428,6 +428,28 @@ export default function GestionDatos() {
   // ═══════════════════════════════════════════════════════════════
   // PARSER CSV DE PROFESORES DE DELPHOS
   // ═══════════════════════════════════════════════════════════════
+  
+  function parsearLineaCSV(linea) {
+    // Parser robusto que respeta comillas dobles
+    const resultado = [];
+    let campo = '';
+    let dentroCom = false;
+    for (let i = 0; i < linea.length; i++) {
+      const c = linea[i];
+      if (c === '"') {
+        if (dentroCom && linea[i+1] === '"') { campo += '"'; i++; }
+        else { dentroCom = !dentroCom; }
+      } else if (c === ',' && !dentroCom) {
+        resultado.push(campo.trim());
+        campo = '';
+      } else {
+        campo += c;
+      }
+    }
+    resultado.push(campo.trim());
+    return resultado;
+  }
+
   async function procesarCSVProfesores(e) {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
@@ -438,14 +460,16 @@ export default function GestionDatos() {
     const lineas = texto.split('\n').filter(l => l.trim());
     const datos = [];
     for (let i = 1; i < lineas.length; i++) {
-      const linea = lineas[i].replace(/^"|"$/g, '').replace(/""/g, '"');
-      const partes = linea.split(',');
+      // Limpiar ;; al final y comillas externas
+      const lineaLimpia = lineas[i].replace(/;;$/, '').replace(/;$/, '').trim();
+      if (!lineaLimpia) continue;
+      const partes = parsearLineaCSV(lineaLimpia);
       if (partes.length < 20) continue;
-      const emailCorp = (partes[20] || '').trim().replace(/"/g, '').replace(/;+$/, '');
-      const apellidos = (partes[1] || '').trim().replace(/"/g, '');
-      const nombre = (partes[2] || '').trim().replace(/"/g, '');
-      const dni = (partes[4] || '').trim().replace(/"/g, '');
-      const departamento = (partes[16] || '').trim().replace(/"/g, '');
+      const emailCorp = partes[20]?.replace(/"/g, '').replace(/;+$/, '').trim() || '';
+      const apellidos = partes[1]?.replace(/"/g, '').trim() || '';
+      const nombre = partes[2]?.replace(/"/g, '').trim() || '';
+      const dni = partes[4]?.replace(/"/g, '').trim() || '';
+      const departamento = partes[16]?.replace(/"/g, '').replace(/DEPARTAMENTO DE /g, '').trim() || '';
       if (!emailCorp || !apellidos || !nombre) continue;
       datos.push({ nombre, apellidos, email: emailCorp, email_corporativo: emailCorp, departamento, dni, autorizado: true });
     }
@@ -463,13 +487,36 @@ export default function GestionDatos() {
     for (let i = 0; i < previewProfesores.length; i++) {
       const prof = previewProfesores[i];
       setProgresoProfesores({ actual: i + 1, total: previewProfesores.length, mensaje: `Procesando ${prof.nombre} ${prof.apellidos}...` });
-      const { data: existentes } = await getSupabase().from('profesores').select('id').eq('email_corporativo', prof.email_corporativo);
+      
+      // Buscar por email_corporativo O por email (para los que ya existen)
+      const { data: existentes } = await getSupabase()
+        .from('profesores')
+        .select('id')
+        .or(`email_corporativo.eq.${prof.email_corporativo},email.eq.${prof.email_corporativo}`);
+      
       if (existentes && existentes.length > 0) {
-        await getSupabase().from('profesores').update({ nombre: prof.nombre, apellidos: prof.apellidos, departamento: prof.departamento, autorizado: true, email_corporativo: prof.email_corporativo }).eq('id', existentes[0].id);
+        await getSupabase().from('profesores').update({
+          nombre: prof.nombre,
+          apellidos: prof.apellidos,
+          departamento: prof.departamento,
+          autorizado: true,
+          email_corporativo: prof.email_corporativo,
+        }).eq('id', existentes[0].id);
         actualizados++;
       } else {
-        await getSupabase().from('profesores').insert({ nombre: prof.nombre, apellidos: prof.apellidos, email: prof.email, email_corporativo: prof.email_corporativo, departamento: prof.departamento, dni: prof.dni, autorizado: true, estado: 'pendiente', rol: ['profesor'], password_hash: '' });
-        nuevos++;
+        const { error } = await getSupabase().from('profesores').insert({
+          nombre: prof.nombre,
+          apellidos: prof.apellidos,
+          email: prof.email,
+          email_corporativo: prof.email_corporativo,
+          departamento: prof.departamento,
+          dni: prof.dni,
+          autorizado: true,
+          estado: 'pendiente',
+          rol: ['profesor'],
+          password_hash: '',
+        });
+        if (!error) nuevos++;
       }
     }
     setMensaje({ tipo: 'ok', texto: `✅ ${nuevos} profesores nuevos, ${actualizados} actualizados` });
