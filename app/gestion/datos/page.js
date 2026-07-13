@@ -74,6 +74,13 @@ export default function GestionDatos() {
   const [progresoHorarios, setProgresoHorarios] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefHorarios = useRef(null);
 
+  // Profesorado
+  const [previewProfesores, setPreviewProfesores] = useState([]);
+  const [modalProfesores, setModalProfesores] = useState(false);
+  const [progresoProfesores, setProgresoProfesores] = useState({ actual: 0, total: 0, mensaje: '' });
+  const fileRefProfesores = useRef(null);
+  const [statsProfesores, setStatsProfesores] = useState({ total: 0, nuevos: 0, actualizados: 0 });
+
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
@@ -418,6 +425,59 @@ export default function GestionDatos() {
     setProcesando(false);
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARSER CSV DE PROFESORES DE DELPHOS
+  // ═══════════════════════════════════════════════════════════════
+  async function procesarCSVProfesores(e) {
+    const archivo = e.target.files?.[0];
+    if (!archivo) return;
+    setProcesando(true);
+    const buffer = await archivo.arrayBuffer();
+    const decoder = new TextDecoder('windows-1252');
+    const texto = decoder.decode(buffer);
+    const lineas = texto.split('\n').filter(l => l.trim());
+    const datos = [];
+    for (let i = 1; i < lineas.length; i++) {
+      const linea = lineas[i].replace(/^"|"$/g, '').replace(/""/g, '"');
+      const partes = linea.split(',');
+      if (partes.length < 20) continue;
+      const emailCorp = (partes[20] || '').trim().replace(/"/g, '').replace(/;+$/, '');
+      const apellidos = (partes[1] || '').trim().replace(/"/g, '');
+      const nombre = (partes[2] || '').trim().replace(/"/g, '');
+      const dni = (partes[4] || '').trim().replace(/"/g, '');
+      const departamento = (partes[16] || '').trim().replace(/"/g, '');
+      if (!emailCorp || !apellidos || !nombre) continue;
+      datos.push({ nombre, apellidos, email: emailCorp, email_corporativo: emailCorp, departamento, dni, autorizado: true });
+    }
+    setPreviewProfesores(datos);
+    setModalProfesores(true);
+    setProcesando(false);
+    if (fileRefProfesores.current) fileRefProfesores.current.value = '';
+  }
+
+  async function confirmarProfesores() {
+    if (!previewProfesores.length) return;
+    setProcesando(true);
+    let nuevos = 0, actualizados = 0;
+    setProgresoProfesores({ actual: 0, total: previewProfesores.length, mensaje: 'Iniciando...' });
+    for (let i = 0; i < previewProfesores.length; i++) {
+      const prof = previewProfesores[i];
+      setProgresoProfesores({ actual: i + 1, total: previewProfesores.length, mensaje: `Procesando ${prof.nombre} ${prof.apellidos}...` });
+      const { data: existentes } = await getSupabase().from('profesores').select('id').eq('email_corporativo', prof.email_corporativo);
+      if (existentes && existentes.length > 0) {
+        await getSupabase().from('profesores').update({ nombre: prof.nombre, apellidos: prof.apellidos, departamento: prof.departamento, autorizado: true, email_corporativo: prof.email_corporativo }).eq('id', existentes[0].id);
+        actualizados++;
+      } else {
+        await getSupabase().from('profesores').insert({ nombre: prof.nombre, apellidos: prof.apellidos, email: prof.email, email_corporativo: prof.email_corporativo, departamento: prof.departamento, dni: prof.dni, autorizado: true, estado: 'pendiente', rol: ['profesor'], password_hash: '' });
+        nuevos++;
+      }
+    }
+    setMensaje({ tipo: 'ok', texto: `✅ ${nuevos} profesores nuevos, ${actualizados} actualizados` });
+    setModalProfesores(false);
+    setPreviewProfesores([]);
+    setProcesando(false);
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
@@ -468,6 +528,7 @@ export default function GestionDatos() {
             { id: 'guia', label: '📋 Guía inicio de curso' },
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
+            { id: 'profesorado', label: '👨‍🏫 Profesorado' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               {t.label}
@@ -643,9 +704,77 @@ export default function GestionDatos() {
             </div>
           </div>
         )}
+
+        {/* ===== PROFESORADO ===== */}
+        {vistaTab === 'profesorado' && (
+          <div>
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>👨‍🏫 Carga de profesorado desde Delphos</div>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
+                Exporta el listado de profesores desde Delphos en formato CSV y súbelo aquí. El sistema creará las cuentas autorizadas para que cada profesor pueda registrarse con su email corporativo.
+              </div>
+              <div style={{ fontSize: 12, backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: 7, color: '#065f46', marginBottom: 20 }}>
+                🖥️ <strong>Delphos:</strong> Personal → Profesores → Exportar CSV
+              </div>
+
+              <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                <input ref={fileRefProfesores} type="file" accept=".csv,.txt" onChange={procesarCSVProfesores} style={{ display: 'none' }} disabled={procesando} />
+                <div style={{ padding: '16px', borderRadius: 10, backgroundColor: procesando ? '#f5f5f5' : azul, color: 'white', fontWeight: 700, fontSize: 14, textAlign: 'center', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                  {procesando ? '⏳ Procesando...' : '📤 Seleccionar CSV de profesores'}
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* MODAL PREVIEW HORARIOS */}
+      {/* MODAL PREVIEW PROFESORES */}
+      {modalProfesores && previewProfesores.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 600, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>👨‍🏫 Vista previa de profesores</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+              Se han detectado <strong>{previewProfesores.length}</strong> profesores en el CSV. Se crearán como autorizados para registrarse.
+            </div>
+            
+            <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 16, border: '1px solid #eee', borderRadius: 8 }}>
+              {previewProfesores.slice(0, 30).map((p, i) => (
+                <div key={i} style={{ padding: '10px 14px', borderBottom: '1px solid #eee', fontSize: 13 }}>
+                  <div style={{ fontWeight: 700, color: azul }}>{p.apellidos}, {p.nombre}</div>
+                  <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>📧 {p.email_corporativo} {p.departamento && `· ${p.departamento}`}</div>
+                </div>
+              ))}
+              {previewProfesores.length > 30 && (
+                <div style={{ padding: 12, fontSize: 12, color: '#666', textAlign: 'center' }}>
+                  ... y {previewProfesores.length - 30} profesores más
+                </div>
+              )}
+            </div>
+
+            {/* PROGRESO */}
+            {procesando && (
+              <div style={{ marginBottom: 12, padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 12 }}>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>{progresoProfesores.mensaje}</div>
+                <div style={{ backgroundColor: '#dbeafe', borderRadius: 4, height: 6 }}>
+                  <div style={{ backgroundColor: '#2563eb', height: '100%', borderRadius: 4, width: `${(progresoProfesores.actual / (progresoProfesores.total || 1)) * 100}%`, transition: 'width 0.3s' }} />
+                </div>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 4, textAlign: 'right' }}>{progresoProfesores.actual} / {progresoProfesores.total}</div>
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, color: '#065f46', marginBottom: 12, padding: '10px 12px', backgroundColor: '#d1fae5', borderRadius: 8 }}>
+              ✅ Los profesores que ya existan se <strong>actualizarán</strong>. Los nuevos quedarán como <strong>pendientes de registro</strong> — ellos elegirán su contraseña al entrar por primera vez.
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={confirmarProfesores} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                {procesando ? '⏳ Procesando...' : `✅ Confirmar (${previewProfesores.length} profesores)`}
+              </button>
+              <button onClick={() => { setModalProfesores(false); setPreviewProfesores([]); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
       {modalHorarios && previewHorarios && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 600, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
