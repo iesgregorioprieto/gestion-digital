@@ -160,17 +160,16 @@ export default function DLD() {
         // Normalizar sin acentos para la búsqueda
         const apNorm = apellidos.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const nomNorm = nombre.split(' ')[0].normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        // Buscar por nombre (Luis, Javier...) que suele no tener tilde
+        // Buscar por APELLIDO primero (más único que el nombre)
         const { data: rows } = await getSupabase()
           .from('horarios_profesores')
           .select('profesor_nombre_pdf')
-          .ilike('profesor_nombre_pdf', `%${nomNorm}%`)
-          .limit(20);
+          .ilike('profesor_nombre_pdf', `%${apNorm}%`)
+          .limit(10);
         if (rows?.length > 0) {
-          // Filtrar por apellido normalizado
           const mejor = rows.find(r =>
-            r.profesor_nombre_pdf.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
-              .includes(apNorm.toLowerCase())
+            r.profesor_nombre_pdf.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+              .includes(nomNorm.toLowerCase())
           );
           nPdf = mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
           setNombrePdf(nPdf);
