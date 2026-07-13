@@ -21,13 +21,13 @@ const azul = '#1e3a5f';
 const rojo = '#991b1b';
 
 const HORAS = [
-  { id: 'h1', label: '1ª hora' },
-  { id: 'h2', label: '2ª hora' },
-  { id: 'h3', label: '3ª hora' },
+  { id: '1', label: '1ª hora' },
+  { id: '2', label: '2ª hora' },
+  { id: '3', label: '3ª hora' },
   { id: 'recreo', label: 'Recreo', soloGuardia: true },
-  { id: 'h4', label: '4ª hora' },
-  { id: 'h5', label: '5ª hora' },
-  { id: 'h6', label: '6ª hora' },
+  { id: '4', label: '4ª hora' },
+  { id: '5', label: '5ª hora' },
+  { id: '6', label: '6ª hora' },
 ];
 
 const ETAPAS = {
