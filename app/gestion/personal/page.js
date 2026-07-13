@@ -82,7 +82,7 @@ export default function PanelSecretario() {
       .from('profesores')
       .select('*')
       .eq('estado', filtroEstado)
-      .order('created_at', { ascending: false });
+      .order('apellidos', { ascending: true });
     if (!error) setProfesores(data || []);
     setCargando(false);
   }
@@ -550,7 +550,7 @@ function SeccionMantenimiento() {
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase().from('mantenimiento').select('*').order('created_at', { ascending: false });
+    const { data } = await getSupabase().from('mantenimiento').select('*').order('apellidos', { ascending: true });
     setIncidencias(data || []);
     setCargando(false);
   }
@@ -741,7 +741,7 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase().from('compras').select('*').order('created_at', { ascending: false });
+    const { data } = await getSupabase().from('compras').select('*').order('apellidos', { ascending: true });
     setCompras(data || []);
     setCargando(false);
   }
