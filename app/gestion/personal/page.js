@@ -280,7 +280,7 @@ export default function PanelSecretario() {
       {/* HEADER */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700 }}>⚙️ Panel de Gestión</div>
+          <div style={{ fontSize: 20, fontWeight: 700 }}>👥 Gestión de Personal</div>
           <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto · {nombreUsuario}</div>
         </div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
@@ -305,30 +305,6 @@ export default function PanelSecretario() {
       )}
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
-
-        {/* PESTAÑAS */}
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
-          {[
-            { id: 'profesores', label: '👥 Profesores', activo: true },
-            { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: true },
-            { id: 'compras', label: '🛒 Compras', activo: true },
-            { id: 'guardias', label: '📅 Guardias', activo: false },
-            { id: 'dld', label: '📄 DLD', activo: false },
-            { id: 'noticias', label: '📢 Noticias', activo: false },
-          ].map(t => (
-            <button key={t.id} onClick={() => t.activo && setPestana(t.id)} style={{
-              padding: '10px 18px', borderRadius: 10, border: '1.5px solid',
-              borderColor: pestana === t.id ? verde : '#ccc',
-              backgroundColor: pestana === t.id ? verde : 'white',
-              color: pestana === t.id ? 'white' : t.activo ? '#333' : '#aaa',
-              cursor: t.activo ? 'pointer' : 'default',
-              fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6
-            }}>
-              {t.label}
-              {!t.activo && <span style={{ fontSize: 11, opacity: 0.6 }}>Próximo</span>}
-            </button>
-          ))}
-        </div>
 
         {pestana === 'profesores' && (
           <>
