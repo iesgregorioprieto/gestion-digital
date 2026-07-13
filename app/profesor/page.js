@@ -117,9 +117,9 @@ export default function PanelProfesor() {
   ];
 
   const PANELES_DIRECTIVOS = [
-    { rol: 'secretario', emoji: '📁', titulo: 'Panel Secretaría', href: '/secretario' },
-    { rol: 'director', emoji: '👔', titulo: 'Panel Dirección', href: '/director' },
-    { rol: 'jefe_estudios', emoji: '📋', titulo: 'Panel Jefatura', href: '/jefe-estudios' },
+    { rol: 'secretario', emoji: '⚙️', titulo: 'Panel de Gestión', href: '/gestion' },
+    { rol: 'director', emoji: '⚙️', titulo: 'Panel de Gestión', href: '/gestion' },
+    { rol: 'jefe_estudios', emoji: '⚙️', titulo: 'Panel de Gestión', href: '/gestion' },
   ];
 
   const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
