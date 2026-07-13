@@ -259,15 +259,10 @@ export default function PanelSecretario() {
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* PESTAÑAS */}
+        {/* PESTAÑAS — solo Compras en este módulo de /gestion */}
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
           {[
-            { id: 'profesores', label: '👥 Profesores', activo: true },
-            { id: 'mantenimiento', label: '🔧 Mantenimiento', activo: true },
             { id: 'compras', label: '🛒 Compras', activo: true },
-            { id: 'guardias', label: '📅 Guardias', activo: false },
-            { id: 'dld', label: '📄 DLD', activo: false },
-            { id: 'noticias', label: '📢 Noticias', activo: false },
           ].map(t => (
             <button key={t.id} onClick={() => t.activo && setPestana(t.id)} style={{
               padding: '10px 18px', borderRadius: 10, border: '1.5px solid',
@@ -278,7 +273,6 @@ export default function PanelSecretario() {
               fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 6
             }}>
               {t.label}
-              {!t.activo && <span style={{ fontSize: 11, opacity: 0.6 }}>Próximo</span>}
             </button>
           ))}
         </div>
