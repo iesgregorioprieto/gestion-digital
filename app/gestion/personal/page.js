@@ -53,6 +53,7 @@ export default function PanelSecretario() {
   const [compraAbierta, setCompraAbierta] = useState(null);
   const [comentarioSecretario, setComentarioSecretario] = useState('');
   const [procesandoCompra, setProcesandoCompra] = useState(false);
+  const [mostrarPreAutorizados, setMostrarPreAutorizados] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
 
@@ -227,6 +228,52 @@ export default function PanelSecretario() {
 
   const verde = '#1e6b2e';
 
+  function renderProfesor(p) {
+    const badge = badgeEstado(p.estado);
+    return (
+      <div key={p.id} style={{
+        backgroundColor: 'white', borderRadius: 12, padding: 18,
+        marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
+        borderLeft: `4px solid ${p.solicitud_acceso && p.estado === 'pendiente' ? '#f59e0b' : verde}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: verde }}>{p.apellidos}, {p.nombre}</div>
+            <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>📧 {p.email}</div>
+            <div style={{ fontSize: 13, color: '#555' }}>🏫 {p.departamento || '—'}{p.especialidad ? ` · ${p.especialidad}` : ''}</div>
+            <div style={{ fontSize: 13, color: '#555' }}>💼 {p.tipo_contrato || '—'}</div>
+            <div style={{ fontSize: 13, color: '#555' }}>🎭 {etiquetaRoles(p)}</div>
+            <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
+              {p.solicitud_acceso && p.estado === 'pendiente'
+                ? '📨 Solicitó acceso'
+                : `Registrado: ${new Date(p.created_at).toLocaleDateString('es-ES')}`}
+            </div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            <span style={{ fontSize: 12, backgroundColor: badge.bg, color: badge.color, padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>
+              {badge.texto}
+            </span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+              <button onClick={() => abrirFicha(p)} style={btnEstilo('#e8f5e9', verde, verde)}>👁️ Ficha</button>
+              <button onClick={() => abrirEdicion(p)} style={btnEstilo('#e8f0fe', '#1a56db', '#1a56db')}>✏️ Editar</button>
+              {p.estado === 'pendiente' && <>
+                <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>✅ Aprobar</button>
+                <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>❌ Rechazar</button>
+              </>}
+              {p.estado === 'activo' && (
+                <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>🚫 Desactivar</button>
+              )}
+              {p.estado === 'inactivo' && (
+                <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
+              )}
+              <button onClick={() => eliminarProfesor(p.id, `${p.nombre} ${p.apellidos}`)} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
@@ -343,50 +390,61 @@ export default function PanelSecretario() {
               <div style={{ textAlign: 'center', padding: 40, color: '#aaa', backgroundColor: 'white', borderRadius: 12 }}>
                 No hay profesores en este estado
               </div>
-            ) : (
-              profesoresFiltrados.map(p => {
-                const badge = badgeEstado(p.estado);
+            ) : filtroEstado === 'pendiente' ? (
+              (() => {
+                const solicitantes = profesoresFiltrados.filter(p => p.solicitud_acceso === true);
+                const preAutorizados = profesoresFiltrados.filter(p => !p.solicitud_acceso);
+
                 return (
-                  <div key={p.id} style={{
-                    backgroundColor: 'white', borderRadius: 12, padding: 18,
-                    marginBottom: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-                    borderLeft: `4px solid ${verde}`
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+                  <>
+                    {/* ═════════ SOLICITUDES DE ACCESO ═════════ */}
+                    {solicitantes.length > 0 && (
+                      <div style={{ marginBottom: 24 }}>
+                        <div style={{
+                          backgroundColor: '#fef3c7', border: '2px solid #f59e0b', borderRadius: 10,
+                          padding: '12px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 10
+                        }}>
+                          <span style={{ fontSize: 24 }}>📨</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 800, color: '#78350f', fontSize: 15 }}>
+                              Solicitudes de acceso ({solicitantes.length})
+                            </div>
+                            <div style={{ fontSize: 12, color: '#92400e' }}>
+                              Estos profesores ya han solicitado activar su cuenta. Aprobar para que puedan crear su contraseña.
+                            </div>
+                          </div>
+                        </div>
+                        {solicitantes.map(p => renderProfesor(p))}
+                      </div>
+                    )}
+
+                    {/* ═════════ PRE-AUTORIZADOS DEL CSV ═════════ */}
+                    {preAutorizados.length > 0 && (
                       <div>
-                        <div style={{ fontWeight: 700, fontSize: 16, color: verde }}>{p.nombre} {p.apellidos}</div>
-                        <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>📧 {p.email}</div>
-                        <div style={{ fontSize: 13, color: '#555' }}>🏫 {p.departamento}{p.especialidad ? ` · ${p.especialidad}` : ''}</div>
-                        <div style={{ fontSize: 13, color: '#555' }}>💼 {p.tipo_contrato}</div>
-                        <div style={{ fontSize: 13, color: '#555' }}>🎭 {etiquetaRoles(p)}</div>
-                        <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
-                          Registrado: {new Date(p.created_at).toLocaleDateString('es-ES')}
-                        </div>
+                        <button onClick={() => setMostrarPreAutorizados(v => !v)} style={{
+                          width: '100%', padding: '12px 16px', backgroundColor: '#f5f5f5',
+                          border: '1.5px solid #ddd', borderRadius: 10, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', marginBottom: 12
+                        }}>
+                          <span style={{ fontSize: 20 }}>{mostrarPreAutorizados ? '▼' : '▶'}</span>
+                          <span style={{ fontSize: 22 }}>📋</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: '#555', fontSize: 14 }}>
+                              Pre-autorizados del CSV ({preAutorizados.length})
+                            </div>
+                            <div style={{ fontSize: 12, color: '#888' }}>
+                              Profesores del listado Delphos que aún no han solicitado acceso.
+                            </div>
+                          </div>
+                        </button>
+                        {mostrarPreAutorizados && preAutorizados.map(p => renderProfesor(p))}
                       </div>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
-                        <span style={{ fontSize: 12, backgroundColor: badge.bg, color: badge.color, padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>
-                          {badge.texto}
-                        </span>
-                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                          <button onClick={() => abrirFicha(p)} style={btnEstilo('#e8f5e9', verde, verde)}>👁️ Ficha</button>
-                          <button onClick={() => abrirEdicion(p)} style={btnEstilo('#e8f0fe', '#1a56db', '#1a56db')}>✏️ Editar</button>
-                          {p.estado === 'pendiente' && <>
-                            <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>✅ Aprobar</button>
-                            <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>❌ Rechazar</button>
-                          </>}
-                          {p.estado === 'activo' && (
-                            <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>🚫 Desactivar</button>
-                          )}
-                          {p.estado === 'inactivo' && (
-                            <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
-                          )}
-                          <button onClick={() => eliminarProfesor(p.id, `${p.nombre} ${p.apellidos}`)} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                    )}
+                  </>
                 );
-              })
+              })()
+            ) : (
+              profesoresFiltrados.map(p => renderProfesor(p))
             )}
           </>
         )}
