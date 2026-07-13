@@ -123,13 +123,12 @@ export default function Ausencias() {
     if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
 
     setCargandoHorario(true);
-    // Buscar nombre en PDF si no lo tenemos
-    let nPdf = nombrePdf;
+    // Usar el parámetro si se pasa, si no buscar
+    let nPdf = nPdfParam || nombrePdf;
     if (!nPdf) {
       nPdf = await buscarNombrePdf(profesorId);
       if (nPdf) setNombrePdf(nPdf);
     }
-
     if (!nPdf) { setCargandoHorario(false); return; }
 
     const { data: horas } = await getSupabase()
