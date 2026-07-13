@@ -81,10 +81,30 @@ export default function Ausencias() {
     const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
     if (!rows0?.[0]) return null;
     const { nombre, apellidos } = rows0[0];
-    // Usar función SQL unaccent para ignorar acentos en la búsqueda
+    const primerNombre = nombre.split(' ')[0];
+    const primerApellido = apellidos.split(' ')[0];
+    
+    // Intentar con función SQL unaccent
     const { data: fnResult } = await getSupabase()
-      .rpc('buscar_profesor_horario', { p_nombre: nombre.split(' ')[0], p_apellido: apellidos.split(' ')[0] });
-    return fnResult || null;
+      .rpc('buscar_profesor_horario', { p_nombre: primerNombre, p_apellido: primerApellido });
+    if (fnResult) return fnResult;
+    
+    // Fallback: buscar con nombre de sesión (que tiene acento correcto)
+    const nombreSesion = sessionStorage.getItem('profesor_nombre') || '';
+    const partes = nombreSesion.split(' ');
+    const apellidoConAcento = partes.length > 2 ? partes[2] : primerApellido;
+    
+    const { data: rows2 } = await getSupabase()
+      .from('horarios_profesores')
+      .select('profesor_nombre_pdf')
+      .ilike('profesor_nombre_pdf', '%' + apellidoConAcento + '%')
+      .limit(5);
+    
+    if (rows2?.length > 0) {
+      const mejor = rows2.find(r => r.profesor_nombre_pdf.toLowerCase().includes(partes[0].toLowerCase()));
+      return mejor ? mejor.profesor_nombre_pdf : rows2[0].profesor_nombre_pdf;
+    }
+    return null;
   }
 
   function calcularDiasAusencia(inicio, fin) {
