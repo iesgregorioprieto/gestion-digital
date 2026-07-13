@@ -471,56 +471,76 @@ export default function GestionDatos() {
       const dni = partes[4]?.replace(/"/g, '').trim() || '';
       const departamento = partes[16]?.replace(/"/g, '').replace(/DEPARTAMENTO DE /g, '').trim() || '';
       if (!emailCorp || !apellidos || !nombre) continue;
-      datos.push({ nombre, apellidos, email: emailCorp, email_corporativo: emailCorp, departamento, dni, autorizado: true });
+      datos.push({ nombre, apellidos, email: emailCorp.toLowerCase(), email_corporativo: emailCorp.toLowerCase(), departamento, dni, autorizado: true });
     }
-    setPreviewProfesores(datos);
+
+    // ═══ Comparar con BD actual ═══
+    const { data: existentesBD } = await getSupabase()
+      .from('profesores')
+      .select('id, email, nombre, apellidos, autorizado, estado')
+      .eq('autorizado', true);
+
+    const emailsCSV = new Set(datos.map(d => d.email));
+    const emailsBD = new Set((existentesBD || []).map(p => (p.email || '').toLowerCase()));
+
+    const nuevos = datos.filter(d => !emailsBD.has(d.email));
+    const seMantienen = datos.filter(d => emailsBD.has(d.email));
+    const bajas = (existentesBD || []).filter(p => !emailsCSV.has((p.email || '').toLowerCase()));
+
+    setPreviewProfesores({ nuevos, seMantienen, bajas, todos: datos });
     setModalProfesores(true);
     setProcesando(false);
     if (fileRefProfesores.current) fileRefProfesores.current.value = '';
   }
 
   async function confirmarProfesores() {
-    if (!previewProfesores.length) return;
-    setProcesando(true);
-    let nuevos = 0, actualizados = 0;
-    setProgresoProfesores({ actual: 0, total: previewProfesores.length, mensaje: 'Iniciando...' });
-    for (let i = 0; i < previewProfesores.length; i++) {
-      const prof = previewProfesores[i];
-      setProgresoProfesores({ actual: i + 1, total: previewProfesores.length, mensaje: `Procesando ${prof.nombre} ${prof.apellidos}...` });
-      
-      // Buscar por email_corporativo O por email (para los que ya existen)
-      const { data: existentes } = await getSupabase()
-        .from('profesores')
-        .select('id')
-        .or(`email_corporativo.eq.${prof.email_corporativo},email.eq.${prof.email_corporativo}`);
-      
-      if (existentes && existentes.length > 0) {
-        await getSupabase().from('profesores').update({
-          nombre: prof.nombre,
-          apellidos: prof.apellidos,
-          departamento: prof.departamento,
-          autorizado: true,
-          email_corporativo: prof.email_corporativo,
-        }).eq('id', existentes[0].id);
-        actualizados++;
-      } else {
-        const { error } = await getSupabase().from('profesores').insert({
-          nombre: prof.nombre,
-          apellidos: prof.apellidos,
-          email: prof.email,
-          email_corporativo: prof.email_corporativo,
-          departamento: prof.departamento,
-          autorizado: true,
-          estado: 'pendiente',
-          rol: ['profesor'],
-          password_hash: '',
-        });
-        if (error) {
-          console.error('Error insertando', prof.email, error.message, error.details);
-        } else { nuevos++; }
-      }
+    if (!previewProfesores || !previewProfesores.todos) return;
+    const { nuevos, bajas } = previewProfesores;
+    const total = nuevos.length + bajas.length;
+    if (total === 0) {
+      setMensaje({ tipo: 'ok', texto: '✅ Sin cambios: el listado ya está sincronizado' });
+      setModalProfesores(false);
+      setPreviewProfesores([]);
+      return;
     }
-    setMensaje({ tipo: 'ok', texto: `✅ ${nuevos} profesores nuevos, ${actualizados} actualizados` });
+    setProcesando(true);
+    setProgresoProfesores({ actual: 0, total, mensaje: 'Iniciando...' });
+    let contadorNuevos = 0, contadorBajas = 0, procesados = 0;
+
+    // ═══ Añadir nuevos ═══
+    for (const prof of nuevos) {
+      procesados++;
+      setProgresoProfesores({ actual: procesados, total, mensaje: `Añadiendo ${prof.nombre} ${prof.apellidos}...` });
+      const { error } = await getSupabase().from('profesores').insert({
+        nombre: prof.nombre,
+        apellidos: prof.apellidos,
+        email: prof.email,
+        email_corporativo: prof.email_corporativo,
+        departamento: prof.departamento,
+        autorizado: true,
+        estado: 'pendiente',
+        rol: ['profesor'],
+        password_hash: '',
+      });
+      if (error) {
+        console.error('Error insertando', prof.email, error.message);
+      } else { contadorNuevos++; }
+    }
+
+    // ═══ Marcar bajas como inactivos ═══
+    for (const prof of bajas) {
+      procesados++;
+      setProgresoProfesores({ actual: procesados, total, mensaje: `Dando de baja ${prof.nombre} ${prof.apellidos}...` });
+      const { error } = await getSupabase().from('profesores').update({
+        autorizado: false,
+        estado: 'inactivo',
+      }).eq('id', prof.id);
+      if (error) {
+        console.error('Error bajando', prof.email, error.message);
+      } else { contadorBajas++; }
+    }
+
+    setMensaje({ tipo: 'ok', texto: `✅ ${contadorNuevos} nuevos añadidos · ${contadorBajas} bajas · datos preservados` });
     setModalProfesores(false);
     setPreviewProfesores([]);
     setProcesando(false);
@@ -777,27 +797,64 @@ export default function GestionDatos() {
       </div>
 
       {/* MODAL PREVIEW PROFESORES */}
-      {modalProfesores && previewProfesores.length > 0 && (
+      {modalProfesores && previewProfesores && previewProfesores.todos && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 600, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>👨‍🏫 Vista previa de profesores</div>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 640, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>👨‍🏫 Sincronizar con CSV</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
-              Se han detectado <strong>{previewProfesores.length}</strong> profesores en el CSV. Se crearán como autorizados para registrarse.
+              Se han detectado <strong>{previewProfesores.todos.length}</strong> profesores en el CSV. Comparando con la BD:
             </div>
-            
-            <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 16, border: '1px solid #eee', borderRadius: 8 }}>
-              {previewProfesores.slice(0, 30).map((p, i) => (
-                <div key={i} style={{ padding: '10px 14px', borderBottom: '1px solid #eee', fontSize: 13 }}>
-                  <div style={{ fontWeight: 700, color: azul }}>{p.apellidos}, {p.nombre}</div>
-                  <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>📧 {p.email_corporativo} {p.departamento && `· ${p.departamento}`}</div>
-                </div>
-              ))}
-              {previewProfesores.length > 30 && (
-                <div style={{ padding: 12, fontSize: 12, color: '#666', textAlign: 'center' }}>
-                  ... y {previewProfesores.length - 30} profesores más
-                </div>
-              )}
+
+            {/* RESUMEN */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <div style={{ backgroundColor: '#d1fae5', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#065f46' }}>{previewProfesores.nuevos.length}</div>
+                <div style={{ fontSize: 11, color: '#065f46', fontWeight: 600 }}>➕ Nuevos</div>
+              </div>
+              <div style={{ backgroundColor: '#e0e7ff', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#3730a3' }}>{previewProfesores.seMantienen.length}</div>
+                <div style={{ fontSize: 11, color: '#3730a3', fontWeight: 600 }}>🔒 Sin cambios</div>
+              </div>
+              <div style={{ backgroundColor: '#fee2e2', padding: 12, borderRadius: 8, textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#991b1b' }}>{previewProfesores.bajas.length}</div>
+                <div style={{ fontSize: 11, color: '#991b1b', fontWeight: 600 }}>➖ Bajas</div>
+              </div>
             </div>
+
+            {/* NUEVOS */}
+            {previewProfesores.nuevos.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#065f46', marginBottom: 6 }}>➕ Nuevos ({previewProfesores.nuevos.length})</div>
+                <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #d1fae5', borderRadius: 8, backgroundColor: '#f0fdf4' }}>
+                  {previewProfesores.nuevos.slice(0, 20).map((p, i) => (
+                    <div key={i} style={{ padding: '8px 12px', borderBottom: '1px solid #d1fae5', fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: '#065f46' }}>{p.apellidos}, {p.nombre}</span>
+                      <span style={{ color: '#666', marginLeft: 6 }}>· {p.email}</span>
+                    </div>
+                  ))}
+                  {previewProfesores.nuevos.length > 20 && <div style={{ padding: 8, fontSize: 11, color: '#065f46', textAlign: 'center' }}>... y {previewProfesores.nuevos.length - 20} más</div>}
+                </div>
+              </div>
+            )}
+
+            {/* BAJAS */}
+            {previewProfesores.bajas.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>➖ Bajas — no vienen en el nuevo CSV ({previewProfesores.bajas.length})</div>
+                <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #fecaca', borderRadius: 8, backgroundColor: '#fef2f2' }}>
+                  {previewProfesores.bajas.slice(0, 20).map((p, i) => (
+                    <div key={i} style={{ padding: '8px 12px', borderBottom: '1px solid #fecaca', fontSize: 12 }}>
+                      <span style={{ fontWeight: 600, color: '#991b1b' }}>{p.apellidos}, {p.nombre}</span>
+                      <span style={{ color: '#666', marginLeft: 6 }}>· {p.email}</span>
+                    </div>
+                  ))}
+                  {previewProfesores.bajas.length > 20 && <div style={{ padding: 8, fontSize: 11, color: '#991b1b', textAlign: 'center' }}>... y {previewProfesores.bajas.length - 20} más</div>}
+                </div>
+                <div style={{ fontSize: 11, color: '#991b1b', marginTop: 6 }}>
+                  Se marcarán como <strong>inactivos</strong> (no se borran, se conservan sus registros históricos).
+                </div>
+              </div>
+            )}
 
             {/* PROGRESO */}
             {procesando && (
@@ -810,13 +867,13 @@ export default function GestionDatos() {
               </div>
             )}
 
-            <div style={{ fontSize: 12, color: '#065f46', marginBottom: 12, padding: '10px 12px', backgroundColor: '#d1fae5', borderRadius: 8 }}>
-              ✅ Los profesores que ya existan se <strong>actualizarán</strong>. Los nuevos quedarán como <strong>pendientes de registro</strong> — ellos elegirán su contraseña al entrar por primera vez.
+            <div style={{ fontSize: 12, color: '#3730a3', marginBottom: 12, padding: '10px 12px', backgroundColor: '#e0e7ff', borderRadius: 8 }}>
+              🔒 Los profesores que ya existen <strong>NO se modifican</strong> — se conservan todos sus datos personales, contraseñas, roles y tutorías.
             </div>
 
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={confirmarProfesores} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
-                {procesando ? '⏳ Procesando...' : `✅ Confirmar (${previewProfesores.length} profesores)`}
+                {procesando ? '⏳ Procesando...' : `✅ Aplicar cambios (${previewProfesores.nuevos.length + previewProfesores.bajas.length})`}
               </button>
               <button onClick={() => { setModalProfesores(false); setPreviewProfesores([]); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
             </div>
