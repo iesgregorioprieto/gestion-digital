@@ -117,7 +117,7 @@ export default function Ausencias() {
     setTareasBloque(bloque);
   }
 
-  async function cargarHorarioDelDia(fecha) {
+  async function cargarHorarioDelDia(fecha, nPdfParam) {
     if (!fecha || !profesorId) return;
     const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
     if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
@@ -416,7 +416,7 @@ export default function Ausencias() {
                 } else {
                   setGruposUnicos([]);
                   setHorario({});
-                  cargarHorarioDelDia(nuevaFechaInicio);
+                  let nPdf1 = nombrePdf; if (!nPdf1) nPdf1 = await buscarNombrePdf(profesorId); if (nPdf1) cargarHorarioDelDia(nuevaFechaInicio, nPdf1);
                 }
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
@@ -434,7 +434,7 @@ export default function Ausencias() {
                 } else {
                   setGruposUnicos([]);
                   setHorario({});
-                  if (fechaInicio) cargarHorarioDelDia(fechaInicio);
+                  let nPdf2 = nombrePdf; if (!nPdf2) nPdf2 = await buscarNombrePdf(profesorId); if (fechaInicio && nPdf2) cargarHorarioDelDia(fechaInicio, nPdf2);
                 }
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
