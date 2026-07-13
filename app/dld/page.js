@@ -145,8 +145,12 @@ export default function DLD() {
   async function cargarHorarioDelDia(fecha) {
     if (!fecha) return;
     const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
-    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
+    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') {
+      setError('⚠️ La fecha seleccionada es fin de semana. Elige un día lectivo.');
+      return;
+    }
     setCargandoHorario(true);
+    setError('');
     let nPdf = nombrePdf;
     if (!nPdf) {
       const id = sessionStorage.getItem('profesor_id');
@@ -173,31 +177,44 @@ export default function DLD() {
         }
       }
     }
-    if (!nPdf) { setCargandoHorario(false); return; }
+    if (!nPdf) {
+      setError('ℹ️ No se encontró tu horario en la base de datos. Rellena el horario manualmente abajo.');
+      setCargandoHorario(false);
+      return;
+    }
     const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', '2025-2026');
     if (horas?.length > 0) {
       const nuevoHorario = {};
-      horas.forEach(h => { nuevoHorario[h.hora_id] = { tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo, grupo: h.grupo || '', materia: h.materia || '', instrucciones: '', archivo: null, archivoNombre: '', precargado: true }; });
+      horas.forEach(h => { 
+        // Normalizar hora_id: "1a" → "1", "2a" → "2", etc.
+        const horaIdNorm = h.hora_id.replace(/a$/, '').replace(/ª$/, '');
+        nuevoHorario[horaIdNorm] = { tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo, grupo: h.grupo || '', materia: h.materia || '', instrucciones: '', archivo: null, archivoNombre: '', precargado: true }; 
+      });
       setHorario(nuevoHorario);
+      setError('');
+    } else {
+      setError(`ℹ️ No se encontró horario para el ${diaSemana}. Rellena manualmente abajo.`);
     }
     setCargandoHorario(false);
   }
 
-  function construirGruposAfectados() {
+  function construirGruposAfectados(horarioParam) {
+    const h = horarioParam || horario;
     const grupos = {};
-    Object.entries(horario).forEach(([horaId, val]) => {
+    Object.entries(h).forEach(([horaId, val]) => {
       if (val.tipo === 'clase' && val.grupo) {
         if (!grupos[val.grupo]) grupos[val.grupo] = [];
-        const hora = HORAS.find(h => h.id === horaId);
-        if (hora) grupos[val.grupo].push(hora.label);
+        const hora = HORAS.find(hr => hr.id === horaId);
+        if (hora) grupos[val.grupo].push({ hora: hora.label, instrucciones: val.instrucciones || '', archivoUrl: val.archivoUrl || '', archivoNombre: val.archivoNombre || '' });
       }
     });
     return Object.entries(grupos).map(([grupo, horas]) => ({ grupo, horas }));
   }
 
-  function construirGuardiasHorario() {
+  function construirGuardiasHorario(horarioParam) {
+    const h = horarioParam || horario;
     const guardias = [];
-    Object.entries(horario).forEach(([horaId, val]) => {
+    Object.entries(h).forEach(([horaId, val]) => {
       if (val.tipo === 'guardia') {
         const hora = HORAS.find(h => h.id === horaId);
         if (hora) guardias.push({ hora: hora.label, tipo_guardia: val.grupo || 'Sin especificar' });
@@ -222,8 +239,31 @@ export default function DLD() {
 
     setEnviando(true);
     try {
-      const gruposAfectados = construirGruposAfectados();
-      const guardiasHorario = construirGuardiasHorario();
+      // 📎 SUBIR ARCHIVOS ADJUNTOS al Storage
+      const horarioConUrls = { ...horario };
+      for (const [horaId, val] of Object.entries(horarioConUrls)) {
+        if (val.archivo instanceof File) {
+          const ext = val.archivo.name.split('.').pop();
+          const nombreArchivo = `dld_${profesorId}_${Date.now()}_${horaId}.${ext}`;
+          const { data: uploadData, error: uploadError } = await getSupabase().storage
+            .from('dld-archivos')
+            .upload(nombreArchivo, val.archivo);
+          if (uploadError) {
+            setError(`⚠️ Error al subir el archivo de ${horaId}: ${uploadError.message}`);
+            setEnviando(false);
+            return;
+          }
+          const { data: urlData } = getSupabase().storage.from('dld-archivos').getPublicUrl(nombreArchivo);
+          horarioConUrls[horaId] = {
+            ...val,
+            archivo: null, // no guardar el File en la BD
+            archivoUrl: urlData.publicUrl,
+            archivoNombre: val.archivoNombre,
+          };
+        }
+      }
+      const gruposAfectados = construirGruposAfectados(horarioConUrls);
+      const guardiasHorario = construirGuardiasHorario(horarioConUrls);
       const { error: err } = await getSupabase().from('dld').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,

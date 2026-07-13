@@ -156,7 +156,9 @@ export default function Ausencias() {
     // Precargar el horario
     const nuevoHorario = {};
     horas.forEach(h => {
-      nuevoHorario[h.hora_id] = {
+      // Normalizar hora_id: "1a" → "1", "2a" → "2", etc.
+      const horaIdNorm = h.hora_id.replace(/a$/, '').replace(/ª$/, '');
+      nuevoHorario[horaIdNorm] = {
         tipo: h.tipo,
         grupo: h.grupo || '',
         materia: h.materia || '',
