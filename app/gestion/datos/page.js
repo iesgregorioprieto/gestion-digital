@@ -516,7 +516,9 @@ export default function GestionDatos() {
           rol: ['profesor'],
           password_hash: '',
         });
-        if (!error) nuevos++;
+        if (error) {
+          console.error('Error insertando', prof.email, error.message, error.details);
+        } else { nuevos++; }
       }
     }
     setMensaje({ tipo: 'ok', texto: `✅ ${nuevos} profesores nuevos, ${actualizados} actualizados` });
