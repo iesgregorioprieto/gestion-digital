@@ -75,7 +75,8 @@ export default function PanelProfesor() {
       descripcion: 'Solicita material o registra compras para tu departamento',
       href: '/compras',
       disponible: true,
-      roles: ['jefe_departamento'],
+      roles: ['todos'],
+      soloJefeDepartamento: true,
     },
     {
       id: 'guardias',
@@ -136,7 +137,10 @@ export default function PanelProfesor() {
   );
 
   function tieneAcceso(m) {
-    if (esDirector) return true; // director accede a todo
+    if (esDirector) return true;
+    if (m.soloJefeDepartamento) {
+      return roles.includes('jefe_departamento') || ['secretario', 'director', 'jefe_estudios'].includes(rolGestion);
+    }
     if (!m.restringido) return true;
     return m.restringido.some(r => roles.includes(r) || r === rolGestion);
   }
@@ -226,10 +230,12 @@ export default function PanelProfesor() {
                 }}>Próximo</div>
               )}
               {m.disponible && !tieneAcceso(m) && (
-                <div style={{
-                  position: 'absolute', top: 12, right: 12,
-                  fontSize: 16
-                }}>🔒</div>
+                <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                  <span style={{ fontSize: 16 }}>🔒</span>
+                  <span style={{ fontSize: 10, backgroundColor: '#f3f4f6', color: '#999', padding: '2px 7px', borderRadius: 8, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {m.soloJefeDepartamento ? 'Solo Jefes Dpto.' : 'Sin acceso'}
+                  </span>
+                </div>
               )}
               {m.disponible && tieneAcceso(m) && (
                 <div style={{ marginTop: 12, fontSize: 13, color: verde, fontWeight: 600 }}>
