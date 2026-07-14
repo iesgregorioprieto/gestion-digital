@@ -63,8 +63,9 @@ export default function PanelProfesor() {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones',
-      descripcion: 'Consulta las autorizaciones y restricciones de los alumnos',
+      descripcion: 'Consulta autorizaciones y restricciones del alumnado',
       href: '/autorizaciones',
+      hrefTutor: '/autorizaciones/gestion',
       disponible: true,
       roles: ['todos'],
     },
@@ -204,7 +205,7 @@ export default function PanelProfesor() {
           {modulosVisibles.map(m => (
             <div
               key={m.id}
-              onClick={() => m.disponible && tieneAcceso(m) && (window.location.href = m.href)}
+              onClick={() => m.disponible && tieneAcceso(m) && (window.location.href = (m.hrefTutor && esTutor) ? m.hrefTutor : m.href)}
               style={{
                 backgroundColor: 'white', borderRadius: 14, padding: 20,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
@@ -220,7 +221,7 @@ export default function PanelProfesor() {
                 {m.titulo}
               </div>
               <div style={{ fontSize: 13, color: '#888', lineHeight: 1.4 }}>
-                {m.descripcion}
+                {m.hrefTutor && esTutor ? 'Gestiona las autorizaciones y restricciones de tu grupo' : m.descripcion}
               </div>
               {!m.disponible && (
                 <div style={{
@@ -238,8 +239,11 @@ export default function PanelProfesor() {
                 </div>
               )}
               {m.disponible && tieneAcceso(m) && (
-                <div style={{ marginTop: 12, fontSize: 13, color: verde, fontWeight: 600 }}>
+                <div style={{ marginTop: 12, fontSize: 13, color: verde, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                   Acceder →
+                  {m.hrefTutor && esTutor && (
+                    <span style={{ fontSize: 11, backgroundColor: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>Tutor</span>
+                  )}
                 </div>
               )}
             </div>
