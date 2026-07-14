@@ -81,11 +81,11 @@ export default function PanelProfesor() {
     },
     {
       id: 'guardias',
-      emoji: '📅',
+      emoji: '🛡️',
       titulo: 'Guardias',
-      descripcion: 'Consulta tus guardias asignadas',
+      descripcion: 'Consulta los cuadrantes de guardia',
       href: '/guardias',
-      disponible: false,
+      disponible: true,
       roles: ['todos'],
     },
     {
