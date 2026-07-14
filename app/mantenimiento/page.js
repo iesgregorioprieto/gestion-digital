@@ -337,33 +337,51 @@ export default function Mantenimiento() {
               {/* FOTO */}
               <div style={{ marginBottom: 20 }}>
                 <label style={labelEstilo}>📷 Foto (opcional)</label>
-                <div style={{
-                  border: '2px dashed #ddd', borderRadius: 10, padding: 16,
-                  textAlign: 'center', cursor: 'pointer', backgroundColor: '#fafafa'
-                }}
-                  onClick={() => document.getElementById('inputFoto').click()}
-                >
-                  {form.fotoPreview ? (
-                    <div>
-                      <img src={form.fotoPreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 8 }} />
-                      <div style={{ fontSize: 13, color: '#888' }}>Toca para cambiar la foto</div>
+                {/* PREVIEW */}
+                {form.fotoPreview && (
+                  <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                    <img src={form.fotoPreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 6 }} />
+                    <div style={{ fontSize: 12, color: '#888' }}>{form.foto?.name || 'Archivo adjunto'}</div>
+                    <button onClick={() => setForm(f => ({ ...f, foto: null, fotoPreview: null }))}
+                      style={{ marginTop: 6, fontSize: 12, color: '#991b1b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                      ✕ Quitar archivo
+                    </button>
+                  </div>
+                )}
+
+                {/* BOTONES */}
+                {!form.fotoPreview && (
+                  <div style={{ border: '2px dashed #ddd', borderRadius: 10, padding: 16, textAlign: 'center', backgroundColor: '#fafafa' }}>
+                    <div style={{ fontSize: 13, color: '#aaa', marginBottom: 12 }}>📎 Adjunta una foto o documento del problema</div>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <button onClick={() => document.getElementById('inputCamara').click()}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                        📷 Hacer foto
+                      </button>
+                      <button onClick={() => document.getElementById('inputArchivo').click()}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                        📁 Subir archivo
+                      </button>
                     </div>
-                  ) : (
-                    <div>
-                      <div style={{ fontSize: 40, marginBottom: 8 }}>📷</div>
-                      <div style={{ fontSize: 14, color: '#888' }}>Toca para añadir una foto</div>
-                      <div style={{ fontSize: 12, color: '#bbb', marginTop: 4 }}>Ayuda a identificar mejor el problema</div>
-                    </div>
-                  )}
-                </div>
-                <input
-                  id="inputFoto"
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={manejarFoto}
-                  style={{ display: 'none' }}
-                />
+                  </div>
+                )}
+
+                {form.fotoPreview && (
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                    <button onClick={() => document.getElementById('inputCamara').click()}
+                      style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontWeight: 600, cursor: 'pointer' }}>
+                      📷 Cambiar foto
+                    </button>
+                    <button onClick={() => document.getElementById('inputArchivo').click()}
+                      style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 600, cursor: 'pointer' }}>
+                      📁 Cambiar archivo
+                    </button>
+                  </div>
+                )}
+
+                {/* INPUTS OCULTOS */}
+                <input id="inputCamara" type="file" accept="image/*" capture="environment" onChange={manejarFoto} style={{ display: 'none' }} />
+                <input id="inputArchivo" type="file" accept="image/*,.pdf,.doc,.docx" onChange={manejarFoto} style={{ display: 'none' }} />
               </div>
 
               {error && (
