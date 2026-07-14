@@ -229,9 +229,18 @@ export default function Guardias() {
       const cuadranteAusente = cuadranteDeProfesor(nombrePdf);
       const esAusenteFP = cuadranteAusente && !esCuadranteGeneral(cuadranteAusente);
 
-      const horasAnalisis = clasesDelDia.map(clase =>
-        analizarHora(diaSem, normHora(clase.hora_id), cuadranteAusente, esAusenteFP, nombrePdf, clase)
-      );
+      const horasAnalisis = clasesDelDia.map(clase => {
+        const horaNorm = normHora(clase.hora_id);
+        // Buscar la tarea que dejó el profesor para esa hora en su ausencia/DLD
+        const horasFalta = Array.isArray(falta.horas) ? falta.horas : [];
+        const tarea = horasFalta.find(h => {
+          if (!h) return false;
+          const hn = normHora(h.hora_id) || normHora(h.hora) || '';
+          const label = (h.hora || '').toLowerCase();
+          return hn === horaNorm || label.includes(`${horaNorm}ª`) || label.includes(`${horaNorm}a`);
+        });
+        return analizarHora(diaSem, horaNorm, cuadranteAusente, esAusenteFP, nombrePdf, clase, tarea);
+      });
 
       resultado.push({
         profesor: falta.profesor_nombre,
@@ -247,7 +256,7 @@ export default function Guardias() {
     setCargandoAnalisis(false);
   }
 
-  function analizarHora(dia, hora, cuadranteAusente, esAusenteFP, nombreAusente, clase) {
+  function analizarHora(dia, hora, cuadranteAusente, esAusenteFP, nombreAusente, clase, tarea) {
     let cuadranteBusqueda;
     if (esAusenteFP) cuadranteBusqueda = cuadranteAusente;
     else cuadranteBusqueda = cuadrantes.find(c => (c || '').toUpperCase().includes('GENERAL'));
@@ -276,6 +285,9 @@ export default function Guardias() {
       cubridores: cubridoresNativos, cuadranteBusqueda,
       apoyo, motivoApoyo,
       esApoyoRotatorio: !esAusenteFP && apoyo !== null,
+      instrucciones: tarea?.instrucciones || null,
+      archivo_url: tarea?.archivo_url || null,
+      archivo_nombre: tarea?.archivo_nombre || null,
     };
   }
 
@@ -521,6 +533,30 @@ export default function Guardias() {
                               <div style={{ color: rojo, fontWeight: 700 }}>⚠️ SIN CUBRIDORES DISPONIBLES</div>
                             )}
                           </div>
+
+                          {/* TAREA DEJADA POR EL PROFESOR AUSENTE */}
+                          {(h.instrucciones || h.archivo_url) && (
+                            <div style={{ marginTop: 8, padding: '10px 12px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#78350f', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                📝 Tarea para los alumnos
+                              </div>
+                              {h.instrucciones && (
+                                <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: h.archivo_url ? 6 : 0 }}>
+                                  {h.instrucciones}
+                                </div>
+                              )}
+                              {h.archivo_url && (
+                                <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '5px 10px', backgroundColor: 'white', color: '#78350f', border: '1px solid #fcd34d', borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>
+                                  📎 {h.archivo_nombre || 'Descargar archivo'}
+                                </a>
+                              )}
+                            </div>
+                          )}
+                          {!h.instrucciones && !h.archivo_url && (
+                            <div style={{ marginTop: 6, fontSize: 11, color: '#aaa', fontStyle: 'italic', paddingLeft: 8 }}>
+                              ⚠️ Sin tarea asignada por el profesor
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
