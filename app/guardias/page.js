@@ -63,6 +63,11 @@ export default function Guardias() {
   const [cargandoAnalisis, setCargandoAnalisis] = useState(false);
   const [mensaje, setMensaje] = useState(null);
 
+  // Mi guardia hoy
+  const [misGuardias, setMisGuardias] = useState([]);
+  const [cargandoMisGuardias, setCargandoMisGuardias] = useState(false);
+  const [fechaMiGuardia, setFechaMiGuardia] = useState(new Date().toISOString().split('T')[0]);
+
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     if (!id) { window.location.href = '/login'; return; }
@@ -355,6 +360,146 @@ export default function Guardias() {
     cargarDatos();
   }
 
+  // ═══════════════════════════════════════════════════
+  // MI GUARDIA HOY (vista para cada profesor)
+  // ═══════════════════════════════════════════════════
+  async function analizarMisGuardias(fecha) {
+    setCargandoMisGuardias(true);
+    setMisGuardias([]);
+    setMensaje(null);
+
+    const diaSem = diaSemanaEs(fecha);
+    if (diaSem === 'sábado' || diaSem === 'domingo') {
+      setMensaje({ tipo: 'error', texto: '⚠️ La fecha es fin de semana.' });
+      setCargandoMisGuardias(false);
+      return;
+    }
+
+    // 1. Buscar el nombre_pdf del profesor actual
+    const { data: prof } = await getSupabase()
+      .from('profesores').select('nombre, apellidos').eq('id', profesorId);
+    if (!prof || prof.length === 0) { setCargandoMisGuardias(false); return; }
+    const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
+    const nombrePdfLc = nombrePdf.toLowerCase();
+
+    // 2. Encontrar en qué horas del día tengo guardia (y en qué cuadrante)
+    const misHoras = [];  // [{hora, cuadrante}]
+    cuadrantes.forEach(c => {
+      const datos = horarioGuardias[c] || {};
+      const enDia = datos[diaSem] || {};
+      HORAS.forEach(h => {
+        const profs = enDia[h.id] || [];
+        if (profs.some(n => (n || '').toLowerCase() === nombrePdfLc)) {
+          misHoras.push({ hora: h.id, cuadrante: c });
+        }
+      });
+    });
+
+    // 3. También apoyos_guardia donde yo sea el asignado
+    const { data: apoyos } = await getSupabase()
+      .from('apoyos_guardia')
+      .select('*')
+      .eq('profesor_id', profesorId)
+      .eq('fecha', fecha)
+      .neq('estado', 'descartado');
+
+    // 4. Cargar ausencias y DLDs del día
+    const { data: ausencias } = await getSupabase()
+      .from('ausencias')
+      .select('profesor_id, profesor_nombre, motivo, horas')
+      .lte('fecha_inicio', fecha)
+      .gte('fecha_fin', fecha);
+    const { data: dlds } = await getSupabase()
+      .from('dld')
+      .select('profesor_id, profesor_nombre, motivo, horas')
+      .eq('fecha_solicitada', fecha).eq('estado', 'aprobada');
+
+    const todasFaltas = [
+      ...(ausencias || []).map(a => ({ ...a, tipo_falta: 'ausencia' })),
+      ...(dlds || []).map(d => ({ ...d, tipo_falta: 'dld' })),
+    ];
+
+    // 5. Para cada hora que tengo guardia, ver si hay clases huérfanas del cuadrante
+    const guardiasConTareas = [];
+
+    for (const miH of misHoras) {
+      const { hora, cuadrante } = miH;
+      // Buscar profesores ausentes que darían clase esa hora ese día
+      const clasesHuerfanas = [];
+
+      for (const falta of todasFaltas) {
+        const { data: profAus } = await getSupabase()
+          .from('profesores').select('nombre, apellidos').eq('id', falta.profesor_id);
+        if (!profAus || profAus.length === 0) continue;
+        const nombrePdfAus = `${profAus[0].apellidos}, ${profAus[0].nombre}`;
+        const cuadranteAus = cuadranteDeProfesor(nombrePdfAus);
+        const esFP = cuadranteAus && !esCuadranteGeneral(cuadranteAus);
+
+        // Determinar si mi cuadrante coincide con el que debería cubrir este ausente
+        const cuadranteDebo = esFP ? cuadranteAus : cuadrantes.find(c => (c || '').toUpperCase().includes('GENERAL'));
+        if (cuadranteDebo !== cuadrante) continue;
+
+        // Buscar la clase del ausente esa hora ese día
+        const claseHuerfana = horariosClase.find(h =>
+          h.tipo === 'clase' &&
+          (h.dia || '').toLowerCase() === diaSem &&
+          normHora(h.hora_id) === hora &&
+          (h.profesor_nombre_pdf || '').toLowerCase() === nombrePdfAus.toLowerCase()
+        );
+        if (!claseHuerfana) continue;
+
+        // Buscar la tarea que dejó el profesor
+        const horasFalta = Array.isArray(falta.horas) ? falta.horas : [];
+        const tarea = horasFalta.find(h => {
+          if (!h) return false;
+          const hn = normHora(h.hora_id) || normHora(h.hora) || '';
+          const label = (h.hora || '').toLowerCase();
+          return hn === hora || label.includes(`${hora}ª`) || label.includes(`${hora}a`);
+        });
+
+        clasesHuerfanas.push({
+          profesorAusente: falta.profesor_nombre,
+          tipoFalta: falta.tipo_falta,
+          motivo: falta.motivo,
+          grupo: claseHuerfana.grupo,
+          materia: claseHuerfana.materia,
+          instrucciones: tarea?.instrucciones || null,
+          archivo_url: tarea?.archivo_url || null,
+          archivo_nombre: tarea?.archivo_nombre || null,
+        });
+      }
+
+      guardiasConTareas.push({
+        hora,
+        cuadrante,
+        esApoyoRotatorio: false,
+        clasesHuerfanas,
+      });
+    }
+
+    // 6. Añadir apoyos rotatorios recibidos
+    (apoyos || []).forEach(ap => {
+      guardiasConTareas.push({
+        hora: ap.hora_id,
+        cuadrante: '(Apoyo asignado)',
+        esApoyoRotatorio: true,
+        tipoApoyo: ap.tipo,
+        motivo: ap.motivo,
+        clasesHuerfanas: [],
+      });
+    });
+
+    // Ordenar por orden de horas
+    guardiasConTareas.sort((a, b) => {
+      const orden = ['1', '2', '3', 'recreo', '4', '5', '6'];
+      return orden.indexOf(a.hora) - orden.indexOf(b.hora);
+    });
+
+    setMisGuardias(guardiasConTareas);
+    setCargandoMisGuardias(false);
+  }
+
+
   const datos = horarioGuardias[cuadranteActivo] || {};
   const cuadrantesFiltrados = busqueda.trim()
     ? cuadrantes.filter(c => c.toLowerCase().includes(busqueda.toLowerCase()))
@@ -372,6 +517,7 @@ export default function Guardias() {
 
       <div style={{ display: 'flex', gap: 8, padding: '14px 16px 0', flexWrap: 'wrap' }}>
         <button onClick={() => setVista('cuadrantes')} style={tab(vista === 'cuadrantes')}>📋 Cuadrantes</button>
+        <button onClick={() => setVista('mia')} style={tab(vista === 'mia')}>🛡️ Mi guardia hoy</button>
         {esDirectivo && <button onClick={() => setVista('hoy')} style={tab(vista === 'hoy')}>🚨 Faltas del día</button>}
       </div>
 
@@ -463,6 +609,95 @@ export default function Guardias() {
                   )}
                 </>
               )}
+            </>
+          )}
+
+          {vista === 'mia' && (
+            <>
+              <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <label style={{ fontWeight: 700, color: azul, fontSize: 14 }}>📅 Fecha:</label>
+                  <input type="date" value={fechaMiGuardia} onChange={e => setFechaMiGuardia(e.target.value)}
+                    style={{ padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e0e0e0', fontSize: 14 }} />
+                  <button onClick={() => analizarMisGuardias(fechaMiGuardia)} disabled={cargandoMisGuardias}
+                    style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: '#7c2d12', color: 'white', fontWeight: 700, fontSize: 13, cursor: cargandoMisGuardias ? 'not-allowed' : 'pointer' }}>
+                    {cargandoMisGuardias ? '⏳ Cargando...' : '🔍 Ver mis guardias'}
+                  </button>
+                </div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+                  {diaSemanaEs(fechaMiGuardia).charAt(0).toUpperCase() + diaSemanaEs(fechaMiGuardia).slice(1)} · Consulta tus guardias del día con las tareas dejadas por los profesores ausentes.
+                </div>
+              </div>
+
+              {!cargandoMisGuardias && misGuardias.length === 0 && (
+                <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 40, textAlign: 'center', color: '#888' }}>
+                  <div style={{ fontSize: 40, marginBottom: 12 }}>🛡️</div>
+                  <div>Pulsa <strong>Ver mis guardias</strong> para consultar tus guardias del día.</div>
+                </div>
+              )}
+
+              {misGuardias.map((g, i) => {
+                const horaLabel = HORAS.find(h => h.id === g.hora);
+                const conClases = g.clasesHuerfanas.length > 0;
+                return (
+                  <div key={i} style={{ backgroundColor: 'white', borderRadius: 12, padding: 18, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${g.esApoyoRotatorio ? '#f59e0b' : conClases ? '#7c2d12' : '#10b981'}` }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ padding: '6px 12px', backgroundColor: azul, color: 'white', borderRadius: 8, fontWeight: 700, fontSize: 14, minWidth: 45, textAlign: 'center' }}>
+                          {g.hora === 'recreo' ? 'R' : g.hora + 'ª'}
+                        </span>
+                        <div>
+                          <div style={{ fontWeight: 800, fontSize: 15, color: azul }}>{horaLabel?.horario || g.hora}</div>
+                          <div style={{ fontSize: 12, color: '#888' }}>
+                            {g.esApoyoRotatorio ? '🔄 Apoyo rotatorio' : `${emojiCuadrante(g.cuadrante)} ${g.cuadrante}`}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ padding: '4px 12px', borderRadius: 20, backgroundColor: conClases ? '#fef3c7' : '#d1fae5', color: conClases ? '#78350f' : '#065f46', fontSize: 11, fontWeight: 700 }}>
+                        {conClases ? `${g.clasesHuerfanas.length} clase${g.clasesHuerfanas.length !== 1 ? 's' : ''} por cubrir` : '✅ Sin faltas'}
+                      </span>
+                    </div>
+
+                    {conClases ? (
+                      g.clasesHuerfanas.map((c, j) => (
+                        <div key={j} style={{ padding: '12px 14px', backgroundColor: '#fafafa', borderRadius: 10, marginBottom: 8 }}>
+                          <div style={{ fontSize: 13, marginBottom: 6 }}>
+                            <span style={{ fontWeight: 700, color: '#333' }}>👥 {c.grupo}</span>
+                            {c.materia && <span style={{ color: '#666' }}> · {c.materia}</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                            {c.tipoFalta === 'dld' ? '📄 DLD' : '🏥 Ausencia'} de <strong>{c.profesorAusente}</strong>
+                          </div>
+
+                          {(c.instrucciones || c.archivo_url) ? (
+                            <div style={{ padding: '10px 12px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: '#78350f', marginBottom: 6 }}>📝 Tarea para los alumnos</div>
+                              {c.instrucciones && (
+                                <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: c.archivo_url ? 8 : 0 }}>
+                                  {c.instrucciones}
+                                </div>
+                              )}
+                              {c.archivo_url && (
+                                <a href={c.archivo_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, padding: '6px 12px', backgroundColor: 'white', color: '#78350f', border: '1px solid #fcd34d', borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>
+                                  📎 {c.archivo_nombre || 'Descargar archivo'}
+                                </a>
+                              )}
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 12, color: '#aaa', fontStyle: 'italic', padding: '8px 12px', backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+                              ⚠️ El profesor no dejó tarea asignada
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, color: '#065f46', fontSize: 13 }}>
+                        Tienes guardia esta hora, pero no hay ningún profesor ausente. Puedes atender otras necesidades.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </>
           )}
 
