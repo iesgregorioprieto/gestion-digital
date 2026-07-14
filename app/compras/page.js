@@ -38,6 +38,7 @@ export default function Compras() {
   const [proveedor, setProveedor] = useState('');
   const [albaran, setAlbaran] = useState(null);
   const [albaranNombre, setAlbaranNombre] = useState('');
+  const [sinAcceso, setSinAcceso] = useState(false);
   const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
 
   useEffect(() => {
@@ -48,7 +49,7 @@ export default function Compras() {
     const rolGestion = sessionStorage.getItem('profesor_rol_gestion') || '';
     const directivo = ['secretario', 'director', 'jefe_estudios'].includes(rolGestion);
     if (!roles.includes('jefe_departamento') && !directivo) {
-      window.location.href = '/profesor';
+      setSinAcceso(true);
       return;
     }
     setEsDirectivo(directivo);
@@ -172,6 +173,25 @@ export default function Compras() {
   }, 0);
 
   const totalIva = totalEstimado - baseImponible;
+
+  if (sinAcceso) {
+    return (
+      <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', padding: 24 }}>
+        <div style={{ backgroundColor: 'white', borderRadius: 16, padding: 40, maxWidth: 420, width: '100%', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
+          <div style={{ fontSize: 56, marginBottom: 16 }}>🔒</div>
+          <h2 style={{ color: '#991b1b', marginBottom: 12 }}>Acceso restringido</h2>
+          <p style={{ color: '#555', fontSize: 14, lineHeight: 1.6, marginBottom: 24 }}>
+            El módulo de <strong>Solicitud de Compras</strong> solo está disponible para <strong>Jefes de Departamento</strong>.<br/><br/>
+            Si crees que deberías tener acceso, contacta con secretaría para que actualicen tu rol.
+          </p>
+          <button onClick={() => window.location.href = '/profesor'}
+            style={{ padding: '12px 28px', backgroundColor: '#1e6b2e', color: 'white', border: 'none', borderRadius: 10, fontWeight: 700, fontSize: 15, cursor: 'pointer' }}>
+            ← Volver al panel
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
