@@ -63,6 +63,7 @@ export default function Ausencias() {
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState('');
+  const [subtipo, setSubtipo] = useState('');
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
@@ -253,6 +254,7 @@ export default function Ausencias() {
     if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
     if (!motivo.trim()) { mostrarMensaje('Explica el motivo de la ausencia.', 'error'); return; }
     if (!tipo) { mostrarMensaje('Indica si es prevista o imprevista.', 'error'); return; }
+    if (tipo === 'prevista' && !subtipo) { mostrarMensaje('Indica el motivo de la ausencia prevista.', 'error'); return; }
 
     const diasAusencia = calcularDiasAusencia(fechaInicio, fechaFin);
     const esAusenciaLarga = diasAusencia >= 3;
@@ -330,6 +332,7 @@ export default function Ausencias() {
       fecha_fin: fechaFin,
       motivo: motivo.trim(),
       tipo,
+      subtipo: tipo === 'prevista' ? subtipo : null,
       horas: horasConUrl,
     }]);
 
@@ -337,7 +340,7 @@ export default function Ausencias() {
     if (error) { mostrarMensaje(`Error: ${error.message} (${error.code || ''} ${error.details || ''})`, 'error'); return; }
 
     mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setHorario({});
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setHorario({});
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -468,7 +471,7 @@ export default function Ausencias() {
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>⚠️ Tipo de ausencia *</label>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 {[{ valor: 'prevista', emoji: '📆', label: 'Prevista', desc: 'Conocida con antelación' }, { valor: 'imprevista', emoji: '🚨', label: 'Imprevista', desc: 'Enfermedad u otras causas' }].map(t => (
-                  <div key={t.valor} onClick={() => setTipo(t.valor)} style={{ padding: 12, borderRadius: 10, border: `2px solid ${tipo === t.valor ? '#7c2d12' : '#e0e0e0'}`, backgroundColor: tipo === t.valor ? '#fff7ed' : 'white', cursor: 'pointer' }}>
+                  <div key={t.valor} onClick={() => { setTipo(t.valor); setSubtipo(''); }} style={{ padding: 12, borderRadius: 10, border: `2px solid ${tipo === t.valor ? '#7c2d12' : '#e0e0e0'}`, backgroundColor: tipo === t.valor ? '#fff7ed' : 'white', cursor: 'pointer' }}>
                     <div style={{ fontSize: 20, marginBottom: 4 }}>{t.emoji}</div>
                     <div style={{ fontWeight: 700, fontSize: 13, color: tipo === t.valor ? '#7c2d12' : '#333' }}>{t.label}</div>
                     <div style={{ fontSize: 11, color: '#888' }}>{t.desc}</div>
@@ -477,10 +480,41 @@ export default function Ausencias() {
               </div>
             </div>
 
+            {/* SUBTIPO (solo si prevista) */}
+            {tipo === 'prevista' && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📋 Motivo de la ausencia prevista *</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[
+                    { valor: 'erasmus', emoji: '✈️', label: 'Erasmus / Movilidad', desc: 'Programa europeo o movilidad' },
+                    { valor: 'extraescolar', emoji: '🏫', label: 'Act. Extraescolar', desc: 'Actividad con alumnos fuera del centro' },
+                    { valor: 'formacion', emoji: '📚', label: 'Curso de Formación', desc: 'Formación docente u oficial' },
+                    { valor: 'visita_medica', emoji: '🩺', label: 'Visita Médica', desc: 'Cita médica propia o familiar' },
+                    { valor: 'otro', emoji: '📝', label: 'Otro motivo', desc: 'Especifica en el campo de motivo' },
+                  ].map(s => (
+                    <div key={s.valor} onClick={() => setSubtipo(s.valor)} style={{ padding: 10, borderRadius: 10, border: `2px solid ${subtipo === s.valor ? '#1e6b2e' : '#e0e0e0'}`, backgroundColor: subtipo === s.valor ? '#f0fdf4' : 'white', cursor: 'pointer' }}>
+                      <div style={{ fontSize: 18, marginBottom: 3 }}>{s.emoji}</div>
+                      <div style={{ fontWeight: 700, fontSize: 12, color: subtipo === s.valor ? '#1e6b2e' : '#333' }}>{s.label}</div>
+                      <div style={{ fontSize: 10, color: '#888' }}>{s.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* MOTIVO */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📝 Motivo de la ausencia *</label>
-              <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Describe brevemente el motivo de tu ausencia..." rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>
+                📝 {tipo === 'imprevista' ? 'Motivo de la ausencia *' : subtipo === 'otro' ? 'Especifica el motivo *' : 'Observaciones (opcional)'}
+              </label>
+              <textarea value={motivo} onChange={e => setMotivo(e.target.value)}
+                placeholder={tipo === 'imprevista' ? 'Describe brevemente el motivo...' : subtipo === 'otro' ? 'Especifica el motivo de la ausencia...' : 'Añade cualquier detalle adicional si lo necesitas...'}
+                rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+              {tipo === 'imprevista' && (
+                <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                  ℹ️ Recuerda aportar justificación en un plazo de 3 días hábiles.
+                </div>
+              )}
             </div>
 
             {/* HORARIO / GRUPOS EN BLOQUE */}
@@ -746,7 +780,9 @@ export default function Ausencias() {
                           : `${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                       </div>
                       <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                        {a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista'} · {horas.length} hora{horas.length !== 1 ? 's' : ''} afectada{horas.length !== 1 ? 's' : ''}
+{a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista'}
+                        {a.subtipo && ` · ${{'erasmus':'✈️ Erasmus','extraescolar':'🏫 Extraescolar','formacion':'📚 Formación','visita_medica':'🩺 Visita médica','otro':'📝 Otro'}[a.subtipo] || a.subtipo}`}
+                        {` · ${horas.length} hora${horas.length !== 1 ? 's' : ''} afectada${horas.length !== 1 ? 's' : ''}`}
                       </div>
                       <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{a.motivo}</div>
                     </div>
