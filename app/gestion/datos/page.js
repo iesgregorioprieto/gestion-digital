@@ -59,7 +59,8 @@ export default function GestionDatos() {
   const [grupos, setGrupos] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
-  const [vistaTab, setVistaTab] = useState('guia');
+  const [vistaTab, setVistaTab] = useState('alumnos');
+  const [mostrarGuia, setMostrarGuia] = useState(true);
   const [cursoNuevo, setCursoNuevo] = useState('2025-2026');
   const [procesando, setProcesando] = useState(false);
 
@@ -609,10 +610,28 @@ export default function GestionDatos() {
           <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Asocia los datos importados a este curso. Al reimportar se borran los anteriores del mismo curso.</div>
         </div>
 
+        {/* BANNER INICIO DE CURSO COLAPSABLE */}
+        {mostrarGuia && (
+          <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 12, padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: '#92400e', marginBottom: 4 }}>
+                ⚠️ Al inicio de cada curso sube estos archivos en orden:
+              </div>
+              <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.6 }}>
+                <strong>1.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('alumnos')}>👥 CSV de matrículas</span> (Delphos → Alumnado → Matrículas → Exportar CSV)
+                <br />
+                <strong>2.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('horarios')}>🕐 RAR de horarios HTML</span> (Delphos → Horarios → Exportar → HTML indexado)
+                <br />
+                <strong>3.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('profesorado')}>👨‍🏫 CSV de profesorado</span> (Delphos → Personal → Profesores → Exportar CSV)
+              </div>
+            </div>
+            <button onClick={() => setMostrarGuia(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#aaa', padding: 0, lineHeight: 1 }} title="Ocultar">✕</button>
+          </div>
+        )}
+
         {/* TABS */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           {[
-            { id: 'guia', label: '📋 Guía inicio de curso' },
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'profesorado', label: '👨‍🏫 Profesorado' },
@@ -622,43 +641,6 @@ export default function GestionDatos() {
             </button>
           ))}
         </div>
-
-        {/* ===== GUÍA INICIO DE CURSO ===== */}
-        {vistaTab === 'guia' && (
-          <div>
-            <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: '#92400e', marginBottom: 8 }}>⚠️ Al inicio de cada curso debes subir estos 2 archivos</div>
-              <div style={{ fontSize: 13, color: '#92400e' }}>Hazlo en el orden indicado. Sin estos datos el portal no funcionará correctamente.</div>
-            </div>
-
-            {PASOS_INICIO_CURSO.map(paso => (
-              <div key={paso.num} style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, marginBottom: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.07)', border: `2px solid ${paso.bg}` }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                  <div style={{ minWidth: 44, height: 44, borderRadius: 22, backgroundColor: paso.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-                    {paso.emoji}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: 'white', backgroundColor: paso.color, padding: '2px 10px', borderRadius: 20 }}>PASO {paso.num}</span>
-                      <span style={{ fontWeight: 800, fontSize: 15, color: azul }}>{paso.titulo}</span>
-                    </div>
-                    <div style={{ fontSize: 13, color: '#555', marginBottom: 8, lineHeight: 1.5 }}>{paso.desc}</div>
-                    <div style={{ fontSize: 12, backgroundColor: '#f8f8f8', padding: '6px 12px', borderRadius: 7, color: '#666', marginBottom: 12 }}>
-                      🖥️ <strong>Cómo obtenerlo:</strong> {paso.como}
-                    </div>
-                    <button onClick={() => setVistaTab(paso.tab)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: paso.color, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                      📤 Ir a subir este archivo →
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #6ee7b7', borderRadius: 12, padding: 14, fontSize: 13, color: '#065f46' }}>
-              ✅ <strong>Una vez subidos ambos archivos:</strong> los tutores podrán rellenar las autorizaciones, y todos los módulos (DLD, Ausencias) cargarán los horarios automáticamente.
-            </div>
-          </div>
-        )}
 
         {/* ===== ALUMNOS Y GRUPOS ===== */}
         {vistaTab === 'alumnos' && (
