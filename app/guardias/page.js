@@ -231,58 +231,55 @@ export default function Guardias() {
   }
 
   // Popup con las tareas del ausente para esa hora
-  function TareaPopup({ prof, hora, onClose }) {
-    const claseDeHora = prof.horas.find(h=>h.hora===hora);
+  function TareaPopup({ prof, hora, clase, onClose }) {
+    const claseDeHora = clase || prof.horas.find(h=>h.hora===hora);
     if (!claseDeHora) return null;
     return (
       <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
         onClick={onClose}>
-        <div style={{ backgroundColor:'white', borderRadius:14, padding:22, maxWidth:480, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }}
+        <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:460, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}
           onClick={e=>e.stopPropagation()}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
-            <div>
-              <div style={{ fontWeight:800, fontSize:15, color:azul }}>{prof.profesor}</div>
-              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
-                {prof.tipo==='dld'?'📄 DLD':'🏥 Ausencia'}
-                {prof.cuadranteAusente && ` · ${emojiSector(prof.cuadranteAusente)} ${prof.cuadranteAusente}`}
+
+          {/* CABECERA */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <div style={{ width:42, height:42, borderRadius:12, backgroundColor:'#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>
+                👥
+              </div>
+              <div>
+                <div style={{ fontWeight:800, fontSize:15, color:azul }}>{claseDeHora.grupo || '—'}</div>
+                <div style={{ fontSize:12, color:'#888' }}>
+                  {claseDeHora.materia && <span>{claseDeHora.materia}</span>}
+                  {claseDeHora.aula && <span style={{ marginLeft:8, padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>📍 {claseDeHora.aula}</span>}
+                </div>
               </div>
             </div>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#aaa' }}>✕</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#aaa' }}>✕</button>
           </div>
 
-          <div style={{ padding:'12px 14px', backgroundColor:'#fafafa', borderRadius:10, marginBottom:claseDeHora.instrucciones||claseDeHora.archivo_url?12:0 }}>
-            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-              <span style={{ padding:'3px 8px', backgroundColor:azul, color:'white', borderRadius:5, fontWeight:700, fontSize:12 }}>
-                {claseDeHora.hora==='recreo'?'R':claseDeHora.hora+'ª'}
-              </span>
-              <span style={{ fontWeight:700, fontSize:13 }}>{claseDeHora.grupo}</span>
-              {claseDeHora.materia && <span style={{ color:'#888', fontSize:12 }}>· {claseDeHora.materia}</span>}
-              {claseDeHora.aula && (
-                <span style={{ padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>
-                  📍 {claseDeHora.aula}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {(claseDeHora.instrucciones||claseDeHora.archivo_url) ? (
-            <div style={{ padding:'12px 14px', backgroundColor:'#fffbeb', border:'1px solid #fcd34d', borderRadius:10 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'#78350f', marginBottom:8 }}>📝 Tarea para los alumnos</div>
+          {/* TAREA */}
+          {(claseDeHora.instrucciones || claseDeHora.archivo_url) ? (
+            <div style={{ backgroundColor:'#fffbeb', border:'1.5px solid #fcd34d', borderRadius:12, padding:'14px 16px' }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#78350f', marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
+                📝 Tarea para los alumnos
+              </div>
               {claseDeHora.instrucciones && (
-                <div style={{ fontSize:13, color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap', marginBottom:claseDeHora.archivo_url?10:0 }}>
+                <div style={{ fontSize:14, color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap', marginBottom: claseDeHora.archivo_url ? 12 : 0 }}>
                   {claseDeHora.instrucciones}
                 </div>
               )}
               {claseDeHora.archivo_url && (
                 <a href={claseDeHora.archivo_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, padding:'7px 14px', backgroundColor:'white', color:'#78350f', border:'1px solid #fcd34d', borderRadius:8, textDecoration:'none', fontWeight:700 }}>
-                  📎 {claseDeHora.archivo_nombre||'Descargar archivo'}
+                  style={{ display:'inline-flex', alignItems:'center', gap:8, fontSize:13, padding:'9px 16px', backgroundColor:'white', color:'#78350f', border:'1.5px solid #fcd34d', borderRadius:10, textDecoration:'none', fontWeight:700 }}>
+                  📎 {claseDeHora.archivo_nombre || 'Descargar archivo'}
                 </a>
               )}
             </div>
           ) : (
-            <div style={{ padding:'10px 14px', backgroundColor:'#f5f5f5', borderRadius:8, fontSize:12, color:'#aaa', fontStyle:'italic' }}>
-              ⚠️ El profesor no dejó tarea asignada para esta hora
+            <div style={{ backgroundColor:'#f5f5f5', borderRadius:12, padding:'20px 16px', textAlign:'center' }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
+              <div style={{ fontSize:13, color:'#aaa', fontWeight:600 }}>El profesor no dejó tarea asignada</div>
+              <div style={{ fontSize:12, color:'#bbb', marginTop:4 }}>Mantén el orden en el aula</div>
             </div>
           )}
         </div>
@@ -298,6 +295,7 @@ export default function Guardias() {
         <TareaPopup
           prof={profAbierto.prof}
           hora={profAbierto.hora}
+          clase={profAbierto.clase}
           onClose={()=>setProfAbierto(null)}
         />
       )}
@@ -378,52 +376,60 @@ export default function Guardias() {
                         const hayAlgo   = guardias.length>0 || ausentes.length>0;
 
                         return (
-                          <td key={s} style={{ ...tdBase, backgroundColor: ausentes.length>0 ? '#fffbeb' : 'white' }}>
+                          <td key={s} style={{ ...tdBase, backgroundColor: ausentes.length>0 ? '#fffbeb' : 'white', padding:0 }}>
                             {!hayAlgo ? (
-                              <span style={{ color:'#e0e0e0', fontSize:10 }}>—</span>
+                              <div style={{ padding:'8px 6px', textAlign:'center' }}>
+                                <span style={{ color:'#e0e0e0', fontSize:10 }}>—</span>
+                              </div>
                             ) : (
-                              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                              <div style={{ display:'flex', flexDirection:'column' }}>
 
                                 {/* FILA 1: Profesores de guardia */}
                                 {guardias.length>0 && (
-                                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                                  <div style={{ padding:'4px 5px', borderBottom: ausentes.length>0 ? '2px solid #fcd34d' : 'none', backgroundColor:'#f0fdf4' }}>
                                     {guardias.map((p,i) => {
                                       const esYo = p && profesorNombre && p.toLowerCase().includes((profesorNombre||'').toLowerCase().split(' ')[0]);
                                       return (
-                                        <span key={i} style={{
-                                          display:'block', padding:'2px 6px', borderRadius:5, fontSize:10, fontWeight:600, lineHeight:1.3,
-                                          backgroundColor: esYo?'#fef3c7':'#f0fdf4',
+                                        <div key={i} style={{
+                                          padding:'3px 6px', borderRadius:5, fontSize:10, fontWeight:700, lineHeight:1.4, marginBottom:2,
+                                          backgroundColor: esYo?'#fef3c7':'white',
                                           color: esYo?'#78350f':'#065f46',
-                                          border: `1px solid ${esYo?'#fbbf24':'#d1fae5'}`,
-                                        }}>{nombreCorto(p)}</span>
+                                          border: `1px solid ${esYo?'#fbbf24':'#bbf7d0'}`,
+                                          display:'flex', alignItems:'center', gap:3,
+                                        }}>
+                                          <span style={{ fontSize:8 }}>🛡️</span>
+                                          {nombreCorto(p)}
+                                        </div>
                                       );
                                     })}
                                   </div>
                                 )}
 
-                                {/* SEPARADOR si hay ambos */}
-                                {guardias.length>0 && ausentes.length>0 && (
-                                  <div style={{ height:1, backgroundColor:'#fcd34d', margin:'2px 0' }} />
-                                )}
-
-                                {/* FILA 2: Profesores ausentes — clickables */}
+                                {/* FILA 2: Grupos sin profesor — clickables */}
                                 {ausentes.length>0 && (
-                                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                                    {ausentes.map((a,i) => (
-                                      <button key={i}
-                                        onClick={()=>setProfAbierto({ prof:a, hora:h.id })}
-                                        title={`${a.tipo==='dld'?'DLD':'Ausencia'}: ${a.profesor} · Pulsa para ver tareas`}
-                                        style={{
-                                          display:'block', width:'100%', padding:'2px 6px', borderRadius:5, fontSize:10, fontWeight:700,
-                                          lineHeight:1.3, textAlign:'left', cursor:'pointer',
-                                          backgroundColor: a.tipo==='dld'?'#dbeafe':'#fee2e2',
-                                          color: a.tipo==='dld'?'#1e40af':'#991b1b',
-                                          border:`1px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
-                                        }}>
-                                        {a.tipo==='dld'?'📄':'🏥'} {nombreCorto(a.nombrePdf)}
-                                        <span style={{ marginLeft:4, fontSize:9, opacity:0.7 }}>▼</span>
-                                      </button>
-                                    ))}
+                                  <div style={{ padding:'4px 5px', backgroundColor:'#fffbeb' }}>
+                                    {ausentes.map((a,i) => {
+                                      const clasesHora = a.horas.filter(hh=>hh.hora===h.id);
+                                      return clasesHora.map((c,j) => (
+                                        <button key={`${i}-${j}`}
+                                          onClick={()=>setProfAbierto({ prof:a, hora:h.id, clase:c })}
+                                          style={{
+                                            display:'block', width:'100%', padding:'4px 6px', borderRadius:6,
+                                            fontSize:10, fontWeight:700, lineHeight:1.4, textAlign:'left',
+                                            cursor:'pointer', marginBottom:2,
+                                            backgroundColor: a.tipo==='dld'?'#dbeafe':'#fee2e2',
+                                            color: a.tipo==='dld'?'#1e40af':'#991b1b',
+                                            border:`1.5px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
+                                          }}>
+                                          <div style={{ display:'flex', alignItems:'center', gap:3 }}>
+                                            <span>👥</span>
+                                            <span>{c.grupo||nombreCorto(a.nombrePdf)}</span>
+                                            <span style={{ fontSize:9, opacity:0.6, marginLeft:'auto' }}>▼</span>
+                                          </div>
+                                          {c.aula && <div style={{ fontSize:9, opacity:0.7, marginTop:1 }}>📍 {c.aula}</div>}
+                                        </button>
+                                      ));
+                                    })}
                                   </div>
                                 )}
                               </div>
@@ -440,10 +446,10 @@ export default function Guardias() {
 
           {/* LEYENDA */}
           <div style={{ marginTop:10, padding:'8px 14px', backgroundColor:'white', borderRadius:10, fontSize:11, color:'#666', display:'flex', gap:14, flexWrap:'wrap' }}>
-            <span><span style={pill('#f0fdf4','#065f46','#d1fae5')}>Verde</span> De guardia</span>
-            <span><span style={pill('#fef3c7','#78350f','#fbbf24')}>Amarillo</span> Tú</span>
-            <span><span style={pill('#fee2e2','#991b1b','#fca5a5')}>Rojo ▼</span> Ausente (pulsa para ver tarea)</span>
-            <span><span style={pill('#dbeafe','#1e40af','#93c5fd')}>Azul ▼</span> DLD (pulsa para ver tarea)</span>
+            <span><span style={pill('#f0fdf4','#065f46','#bbf7d0')}>🛡️ Verde</span> Profesor de guardia</span>
+            <span><span style={pill('#fef3c7','#78350f','#fbbf24')}>🛡️ Amarillo</span> Tú de guardia</span>
+            <span><span style={pill('#fee2e2','#991b1b','#fca5a5')}>👥 Rojo ▼</span> Grupo sin profesor (pulsa para ver tarea)</span>
+            <span><span style={pill('#dbeafe','#1e40af','#93c5fd')}>👥 Azul ▼</span> Grupo con DLD (pulsa para ver tarea)</span>
           </div>
         </div>
       )}
