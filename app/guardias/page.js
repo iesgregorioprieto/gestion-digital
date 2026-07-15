@@ -15,231 +15,178 @@ function getSupabase() {
   return _supabase;
 }
 
-const verde = '#1e6b2e';
 const azul = '#1e3a5f';
-const rojo = '#991b1b';
 const marron = '#7c2d12';
+const verde = '#1e6b2e';
 
 const HORAS = [
-  { id: '1', label: '1ª', horario: '8:30 – 9:25' },
-  { id: '2', label: '2ª', horario: '9:25 – 10:20' },
-  { id: '3', label: '3ª', horario: '10:20 – 11:15' },
-  { id: 'recreo', label: 'Recreo', horario: '11:15 – 11:45' },
-  { id: '4', label: '4ª', horario: '11:45 – 12:40' },
-  { id: '5', label: '5ª', horario: '12:40 – 13:35' },
-  { id: '6', label: '6ª', horario: '13:35 – 14:30' },
+  { id: '1',      label: '1ª',     horario: '8:30–9:25'   },
+  { id: '2',      label: '2ª',     horario: '9:25–10:20'  },
+  { id: '3',      label: '3ª',     horario: '10:20–11:15' },
+  { id: 'recreo', label: 'Recreo', horario: '11:15–11:45' },
+  { id: '4',      label: '4ª',     horario: '11:45–12:40' },
+  { id: '5',      label: '5ª',     horario: '12:40–13:35' },
+  { id: '6',      label: '6ª',     horario: '13:35–14:30' },
 ];
 
-function normHora(h) { return (h || '').toString().replace(/[aª]$/, '').toLowerCase(); }
+function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
 function diaSemanaEs(fecha) {
-  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
-  return dias[new Date(fecha + 'T12:00:00').getDay()];
+  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  return dias[new Date(fecha+'T12:00:00').getDay()];
 }
 
-function esCuadranteGeneral(cuadrante) {
-  const n = (cuadrante || '').toUpperCase();
-  return n.includes('GENERAL') || n.includes('ESO') || n.includes('BACHIL') || n.includes('BTO');
+function sumarDias(fecha, n) {
+  const d = new Date(fecha+'T12:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().split('T')[0];
 }
 
-function pesoSector(nombre) {
-  const n = nombre.toUpperCase();
-  if (n.includes('GENERAL')) return 9;
-  if (n.includes('JEFATURA')) return 8;
-  if (n.includes('ADMINIST')) return 7;
-  if (n.includes('RECREO')) return 6;
+function fechaLegible(fecha) {
+  const d = new Date(fecha+'T12:00:00');
+  return d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+
+function pesoSector(n) {
+  const u = n.toUpperCase();
+  if (u.includes('GENERAL')) return 9;
+  if (u.includes('JEFATURA')) return 8;
+  if (u.includes('ADMINIST')) return 7;
+  if (u.includes('RECREO')) return 6;
   return 1;
 }
 
-function emojiSector(nombre) {
-  const n = nombre.toUpperCase();
-  if (n.includes('GENERAL')) return '🌐';
-  if (n.includes('JEFATURA')) return '📋';
-  if (n.includes('ADMINIST')) return '🏢';
-  if (n.includes('RECREO')) return '☕';
-  if (n.includes('CARROC')) return '🚗';
-  if (n.includes('COCIN') || n.includes('HOSTEL')) return '🍽️';
-  if (n.includes('ELECTR')) return '⚡';
-  if (n.includes('INFORM')) return '💻';
-  if (n.includes('COMERC')) return '🛍️';
-  if (n.includes('AUTOM')) return '🔧';
-  if (n.includes('ALIMENT')) return '🥖';
-  if (n.includes('JARDIN')) return '🌳';
+function emojiSector(n) {
+  const u = n.toUpperCase();
+  if (u.includes('GENERAL')) return '🌐';
+  if (u.includes('JEFATURA')) return '📋';
+  if (u.includes('ADMINIST')) return '🏢';
+  if (u.includes('RECREO')) return '☕';
+  if (u.includes('CARROC')) return '🚗';
+  if (u.includes('COCIN')||u.includes('HOSTEL')) return '🍽️';
+  if (u.includes('ELECTR')) return '⚡';
+  if (u.includes('INFORM')) return '💻';
+  if (u.includes('COMERC')) return '🛍️';
+  if (u.includes('AUTOM')) return '🔧';
+  if (u.includes('ALIMENT')) return '🥖';
+  if (u.includes('JARDIN')) return '🌳';
   return '📚';
-}
-
-function abreviarSector(nombre) {
-  // Acorta nombres largos para las cabeceras de tabla
-  const n = nombre.trim();
-  if (n.length <= 14) return n;
-  return n.substring(0, 12) + '…';
 }
 
 function nombreCorto(nombreCompleto) {
   if (!nombreCompleto) return '';
-  const partes = nombreCompleto.split(',').map(p => p.trim());
+  const partes = nombreCompleto.split(',').map(p=>p.trim());
   if (partes.length < 2) return nombreCompleto;
-  const primerApellido = partes[0].split(' ')[0];
-  const primerNombre = partes[1].split(' ')[0];
-  return `${primerApellido}, ${primerNombre}`;
-}
-
-function fechaLegible(fecha) {
-  const d = new Date(fecha + 'T12:00:00');
-  return d.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-}
-
-function sumarDias(fecha, n) {
-  const d = new Date(fecha + 'T12:00:00');
-  d.setDate(d.getDate() + n);
-  return d.toISOString().split('T')[0];
+  return `${partes[0].split(' ')[0]}, ${partes[1].split(' ')[0]}`;
 }
 
 export default function Guardias() {
-  const [cargando, setCargando] = useState(true);
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-  const [sectores, setSectores] = useState([]);
-  const [horarioGuardias, setHorarioGuardias] = useState({}); // {sector: {dia: {hora: [prof]}}}
-  const [horariosClase, setHorariosClase] = useState([]);
-  const [profesorNombre, setProfesorNombre] = useState('');
-  const [profesorId, setProfesorId] = useState('');
-  const [rolGestion, setRolGestion] = useState('');
-  const [esDirectivo, setEsDirectivo] = useState(false);
-  const [ausenciasDia, setAusenciasDia] = useState([]); // [{profesor, tipo, motivo, cuadranteAusente, horas: [{hora, grupo, materia, aula, instrucciones, archivo_url, archivo_nombre}]}]
+  const [cargando, setCargando]       = useState(true);
+  const [fecha, setFecha]             = useState(new Date().toISOString().split('T')[0]);
+  const [sectores, setSectores]       = useState([]);
+  const [horarioGuardias, setHG]      = useState({});
+  const [horariosClase, setHC]        = useState([]);
+  const [ausenciasDia, setAusDia]     = useState([]);
   const [cargandoDia, setCargandoDia] = useState(false);
+  const [profAbierto, setProfAbierto] = useState(null); // {profesor, hora, sector}
+  const [profesorNombre, setPN]       = useState('');
+  const [esDirectivo, setEsDir]       = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
-    if (!id) { window.location.href = '/login'; return; }
-    setProfesorId(id);
-    setProfesorNombre(sessionStorage.getItem('profesor_nombre') || '');
-    const rol = sessionStorage.getItem('profesor_rol_gestion') || '';
-    setRolGestion(rol);
-    setEsDirectivo(['secretario', 'director', 'jefe_estudios'].includes(rol));
+    if (!id) { window.location.href='/login'; return; }
+    setPN(sessionStorage.getItem('profesor_nombre')||'');
+    const rol = sessionStorage.getItem('profesor_rol_gestion')||'';
+    setEsDir(['secretario','director','jefe_estudios'].includes(rol));
     cargarBase();
   }, []);
 
-  // Cuando cambia fecha, recalcular ausencias/DLDs
   useEffect(() => {
-    if (!cargando) cargarAusenciasYDld(fecha);
+    if (!cargando) cargarAusencias(fecha);
   }, [fecha, cargando]);
 
   async function cargarBase() {
     setCargando(true);
     const { data: horarios } = await getSupabase()
       .from('horarios_profesores')
-      .select('profesor_nombre_pdf, hora_id, dia, tipo, grupo, materia, aula')
-      .eq('curso_academico', '2025-2026');
+      .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
+      .eq('curso_academico','2025-2026');
 
     if (!horarios) { setCargando(false); return; }
-    setHorariosClase(horarios);
+    setHC(horarios);
 
-    const guardias = horarios.filter(h => h.tipo === 'guardia');
+    const guardias = horarios.filter(h=>h.tipo==='guardia');
     const porSector = {};
     guardias.forEach(g => {
-      const sector = g.grupo?.trim() || g.materia?.trim() || 'Sin clasificar';
-      const horaNorm = normHora(g.hora_id);
-      const dia = (g.dia || '').toLowerCase();
-      if (!porSector[sector]) porSector[sector] = {};
-      if (!porSector[sector][dia]) porSector[sector][dia] = {};
-      if (!porSector[sector][dia][horaNorm]) porSector[sector][dia][horaNorm] = [];
-      porSector[sector][dia][horaNorm].push(g.profesor_nombre_pdf);
+      const sector = g.grupo?.trim()||g.materia?.trim()||'Sin clasificar';
+      const hora   = normHora(g.hora_id);
+      const dia    = (g.dia||'').toLowerCase();
+      if (!porSector[sector]) porSector[sector]={};
+      if (!porSector[sector][dia]) porSector[sector][dia]={};
+      if (!porSector[sector][dia][hora]) porSector[sector][dia][hora]=[];
+      porSector[sector][dia][hora].push(g.profesor_nombre_pdf);
     });
 
-    const nombres = Object.keys(porSector).sort((a, b) => {
-      const pA = pesoSector(a), pB = pesoSector(b);
-      if (pA !== pB) return pA - pB;
-      return a.localeCompare(b);
+    const nombres = Object.keys(porSector).sort((a,b)=>{
+      const p = pesoSector(a)-pesoSector(b);
+      return p!==0 ? p : a.localeCompare(b);
     });
 
     setSectores(nombres);
-    setHorarioGuardias(porSector);
+    setHG(porSector);
     setCargando(false);
   }
 
-  function cuadranteDeProfesor(nombrePdf, listaSectores, horarios) {
-    if (!nombrePdf) return null;
-    const lcName = nombrePdf.toLowerCase();
-    for (const s of listaSectores) {
-      if (esCuadranteGeneral(s)) continue;
-      const datos = horarios[s] || {};
-      for (const d of Object.keys(datos)) {
-        for (const h of Object.keys(datos[d])) {
-          if ((datos[d][h] || []).some(p => (p || '').toLowerCase() === lcName)) return s;
-        }
-      }
-    }
-    // Si no está en FP, buscar en general
-    for (const s of listaSectores) {
-      if (!esCuadranteGeneral(s)) continue;
-      const datos = horarios[s] || {};
-      for (const d of Object.keys(datos)) {
-        for (const h of Object.keys(datos[d])) {
-          if ((datos[d][h] || []).some(p => (p || '').toLowerCase() === lcName)) return s;
-        }
-      }
-    }
-    return null;
-  }
-
-  async function cargarAusenciasYDld(f) {
+  async function cargarAusencias(f) {
     setCargandoDia(true);
-    setAusenciasDia([]);
+    setAusDia([]);
+    setProfAbierto(null);
 
     const diaSem = diaSemanaEs(f);
-    if (diaSem === 'sábado' || diaSem === 'domingo') {
-      setCargandoDia(false);
-      return;
-    }
+    if (diaSem==='sábado'||diaSem==='domingo') { setCargandoDia(false); return; }
 
-    const { data: ausencias } = await getSupabase()
-      .from('ausencias')
-      .select('profesor_id, profesor_nombre, motivo, horas')
-      .lte('fecha_inicio', f).gte('fecha_fin', f);
+    const { data: aus } = await getSupabase().from('ausencias')
+      .select('profesor_id,profesor_nombre,motivo,horas')
+      .lte('fecha_inicio',f).gte('fecha_fin',f);
 
-    const { data: dlds } = await getSupabase()
-      .from('dld')
-      .select('profesor_id, profesor_nombre, motivo, horas')
-      .eq('fecha_solicitada', f).eq('estado', 'aprobada');
+    const { data: dlds } = await getSupabase().from('dld')
+      .select('profesor_id,profesor_nombre,motivo,horas')
+      .eq('fecha_solicitada',f).eq('estado','aprobada');
 
     const todas = [
-      ...(ausencias || []).map(a => ({ ...a, tipo_falta: 'ausencia' })),
-      ...(dlds || []).map(d => ({ ...d, tipo_falta: 'dld' })),
+      ...(aus||[]).map(a=>({...a,tipo_falta:'ausencia'})),
+      ...(dlds||[]).map(d=>({...d,tipo_falta:'dld'})),
     ];
 
     const resultado = [];
     for (const falta of todas) {
-      const { data: prof } = await getSupabase()
-        .from('profesores').select('nombre, apellidos, departamento').eq('id', falta.profesor_id);
-      if (!prof || prof.length === 0) continue;
-      const p = prof[0];
-      const nombrePdf = `${p.apellidos}, ${p.nombre}`;
-      const cuadranteAus = cuadranteDeProfesor(nombrePdf, sectores, horarioGuardias);
+      const { data: prof } = await getSupabase().from('profesores')
+        .select('nombre,apellidos').eq('id',falta.profesor_id);
+      if (!prof||prof.length===0) continue;
 
-      // Sus clases ese día de la semana
-      const clases = horariosClase.filter(h =>
-        h.tipo === 'clase' &&
-        (h.dia || '').toLowerCase() === diaSem &&
-        (h.profesor_nombre_pdf || '').toLowerCase() === nombrePdf.toLowerCase()
+      const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
+      const cuadrante = cuadranteDeProfesor(nombrePdf, sectores, horarioGuardias);
+
+      const clases = horariosClase.filter(h=>
+        h.tipo==='clase' &&
+        (h.dia||'').toLowerCase()===diaSem &&
+        (h.profesor_nombre_pdf||'').toLowerCase()===nombrePdf.toLowerCase()
       );
 
-      const horasFalta = Array.isArray(falta.horas) ? falta.horas : [];
-      const horasEnriquecidas = clases.map(c => {
+      const horasFalta = Array.isArray(falta.horas)?falta.horas:[];
+      const horasEnriq = clases.map(c=>{
         const horaN = normHora(c.hora_id);
-        const tarea = horasFalta.find(h => {
+        const tarea = horasFalta.find(h=>{
           if (!h) return false;
-          const hn = normHora(h.hora_id) || normHora(h.hora) || '';
-          const label = (h.hora || '').toLowerCase();
-          return hn === horaN || label.includes(`${horaN}ª`) || label.includes(`${horaN}a`);
+          const hn = normHora(h.hora_id)||normHora(h.hora)||'';
+          const lb = (h.hora||'').toLowerCase();
+          return hn===horaN||lb.includes(`${horaN}ª`)||lb.includes(`${horaN}a`);
         });
         return {
-          hora: horaN,
-          grupo: c.grupo,
-          materia: c.materia,
-          aula: c.aula,
-          instrucciones: tarea?.instrucciones || null,
-          archivo_url: tarea?.archivo_url || null,
-          archivo_nombre: tarea?.archivo_nombre || null,
+          hora: horaN, grupo: c.grupo, materia: c.materia, aula: c.aula,
+          instrucciones: tarea?.instrucciones||null,
+          archivo_url: tarea?.archivo_url||null,
+          archivo_nombre: tarea?.archivo_nombre||null,
         };
       });
 
@@ -248,135 +195,237 @@ export default function Guardias() {
         nombrePdf,
         tipo: falta.tipo_falta,
         motivo: falta.motivo,
-        cuadranteAusente: cuadranteAus,
-        horas: horasEnriquecidas,
+        cuadranteAusente: cuadrante,
+        horas: horasEnriq,
       });
     }
 
-    setAusenciasDia(resultado);
+    setAusDia(resultado);
     setCargandoDia(false);
   }
 
-  const diaSem = diaSemanaEs(fecha);
-  const esFinde = diaSem === 'sábado' || diaSem === 'domingo';
-  const totalAusencias = ausenciasDia.filter(a => a.tipo === 'ausencia').length;
-  const totalDld = ausenciasDia.filter(a => a.tipo === 'dld').length;
+  function cuadranteDeProfesor(nombrePdf, listaSectores, horarios) {
+    const lc = nombrePdf.toLowerCase();
+    for (const s of listaSectores) {
+      const datos = horarios[s]||{};
+      for (const d of Object.keys(datos)) {
+        for (const h of Object.keys(datos[d])) {
+          if ((datos[d][h]||[]).some(p=>(p||'').toLowerCase()===lc)) return s;
+        }
+      }
+    }
+    return null;
+  }
 
-  // Contador de huecos por sector para esta fecha
-  function huecosPorSector(sector) {
-    return ausenciasDia.filter(a => a.cuadranteAusente === sector).length;
+  const diaSem    = diaSemanaEs(fecha);
+  const esFinde   = diaSem==='sábado'||diaSem==='domingo';
+  const totalAus  = ausenciasDia.filter(a=>a.tipo==='ausencia').length;
+  const totalDld  = ausenciasDia.filter(a=>a.tipo==='dld').length;
+
+  // Para una hora y sector, devuelve los ausentes que tenían clase en ese sector esa hora
+  function ausentesEnCelda(sector, hora) {
+    return ausenciasDia.filter(a =>
+      a.cuadranteAusente===sector &&
+      a.horas.some(h=>h.hora===hora)
+    );
+  }
+
+  // Popup con las tareas del ausente para esa hora
+  function TareaPopup({ prof, hora, onClose }) {
+    const claseDeHora = prof.horas.find(h=>h.hora===hora);
+    if (!claseDeHora) return null;
+    return (
+      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+        onClick={onClose}>
+        <div style={{ backgroundColor:'white', borderRadius:14, padding:22, maxWidth:480, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.2)' }}
+          onClick={e=>e.stopPropagation()}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
+            <div>
+              <div style={{ fontWeight:800, fontSize:15, color:azul }}>{prof.profesor}</div>
+              <div style={{ fontSize:12, color:'#888', marginTop:2 }}>
+                {prof.tipo==='dld'?'📄 DLD':'🏥 Ausencia'}
+                {prof.cuadranteAusente && ` · ${emojiSector(prof.cuadranteAusente)} ${prof.cuadranteAusente}`}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#aaa' }}>✕</button>
+          </div>
+
+          <div style={{ padding:'12px 14px', backgroundColor:'#fafafa', borderRadius:10, marginBottom:claseDeHora.instrucciones||claseDeHora.archivo_url?12:0 }}>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <span style={{ padding:'3px 8px', backgroundColor:azul, color:'white', borderRadius:5, fontWeight:700, fontSize:12 }}>
+                {claseDeHora.hora==='recreo'?'R':claseDeHora.hora+'ª'}
+              </span>
+              <span style={{ fontWeight:700, fontSize:13 }}>{claseDeHora.grupo}</span>
+              {claseDeHora.materia && <span style={{ color:'#888', fontSize:12 }}>· {claseDeHora.materia}</span>}
+              {claseDeHora.aula && (
+                <span style={{ padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                  📍 {claseDeHora.aula}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {(claseDeHora.instrucciones||claseDeHora.archivo_url) ? (
+            <div style={{ padding:'12px 14px', backgroundColor:'#fffbeb', border:'1px solid #fcd34d', borderRadius:10 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#78350f', marginBottom:8 }}>📝 Tarea para los alumnos</div>
+              {claseDeHora.instrucciones && (
+                <div style={{ fontSize:13, color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap', marginBottom:claseDeHora.archivo_url?10:0 }}>
+                  {claseDeHora.instrucciones}
+                </div>
+              )}
+              {claseDeHora.archivo_url && (
+                <a href={claseDeHora.archivo_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:12, padding:'7px 14px', backgroundColor:'white', color:'#78350f', border:'1px solid #fcd34d', borderRadius:8, textDecoration:'none', fontWeight:700 }}>
+                  📎 {claseDeHora.archivo_nombre||'Descargar archivo'}
+                </a>
+              )}
+            </div>
+          ) : (
+            <div style={{ padding:'10px 14px', backgroundColor:'#f5f5f5', borderRadius:8, fontSize:12, color:'#aaa', fontStyle:'italic' }}>
+              ⚠️ El profesor no dejó tarea asignada para esta hora
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight:'100vh', backgroundColor:'#f0f4f0', fontFamily:'system-ui, sans-serif' }}>
+
+      {/* POPUP */}
+      {profAbierto && (
+        <TareaPopup
+          prof={profAbierto.prof}
+          hora={profAbierto.hora}
+          onClose={()=>setProfAbierto(null)}
+        />
+      )}
+
       {/* HEADER */}
-      <div style={{ backgroundColor: marron, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => { window.location.href = esDirectivo ? '/gestion' : '/profesor'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 17 }}>🛡️ Guardias</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>Curso 2025-2026 · {sectores.length} sectores</div>
+      <div style={{ backgroundColor:marron, color:'white', padding:'16px 20px', display:'flex', alignItems:'center', gap:12 }}>
+        <button onClick={()=>{ window.location.href=esDirectivo?'/gestion':'/profesor'; }}
+          style={{ background:'none', border:'none', color:'white', fontSize:22, cursor:'pointer' }}>←</button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontWeight:800, fontSize:17 }}>🛡️ Guardias</div>
+          <div style={{ fontSize:12, opacity:0.85 }}>Curso 2025-2026 · {sectores.length} sectores</div>
         </div>
       </div>
 
-      {/* SELECTOR DE FECHA */}
-      <div style={{ padding: 16 }}>
-        <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>← Anterior</button>
-          <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
-            style={{ padding: '9px 12px', borderRadius: 8, border: '1.5px solid #e0e0e0', fontSize: 14, flex: 1, minWidth: 150 }} />
-          <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>Siguiente →</button>
-          <button onClick={() => setFecha(new Date().toISOString().split('T')[0])} style={{ ...btnNav, backgroundColor: marron, color: 'white', border: 'none' }}>📅 Hoy</button>
+      {/* SELECTOR FECHA */}
+      <div style={{ padding:16 }}>
+        <div style={{ backgroundColor:'white', borderRadius:12, padding:12, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <button onClick={()=>setFecha(sumarDias(fecha,-1))} style={btnNav}>← Anterior</button>
+          <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)}
+            style={{ padding:'8px 12px', borderRadius:8, border:'1.5px solid #e0e0e0', fontSize:14, flex:1, minWidth:140 }} />
+          <button onClick={()=>setFecha(sumarDias(fecha,1))} style={btnNav}>Siguiente →</button>
+          <button onClick={()=>setFecha(new Date().toISOString().split('T')[0])}
+            style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none' }}>📅 Hoy</button>
         </div>
 
-        <div style={{ marginTop: 10, padding: '10px 14px', backgroundColor: 'white', borderRadius: 10, fontSize: 13, color: azul, fontWeight: 600, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <span style={{ fontSize: 15 }}>📆 {fechaLegible(fecha)}</span>
-          {esFinde ? (
-            <span style={{ color: '#888', fontWeight: 500 }}>· Fin de semana, no hay guardias</span>
-          ) : (
+        <div style={{ marginTop:10, padding:'10px 14px', backgroundColor:'white', borderRadius:10, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+          <span style={{ fontWeight:700, color:azul, fontSize:14 }}>📆 {fechaLegible(fecha)}</span>
+          {!esFinde && (
             <>
-              <span style={{ padding: '3px 10px', backgroundColor: '#fef3c7', color: '#78350f', borderRadius: 20, fontSize: 12 }}>🏥 {totalAusencias} ausencia{totalAusencias !== 1 ? 's' : ''}</span>
-              <span style={{ padding: '3px 10px', backgroundColor: '#dbeafe', color: '#1e40af', borderRadius: 20, fontSize: 12 }}>📄 {totalDld} DLD</span>
+              <span style={{ padding:'3px 10px', backgroundColor:'#fef3c7', color:'#78350f', borderRadius:20, fontSize:12, fontWeight:600 }}>🏥 {totalAus} ausencia{totalAus!==1?'s':''}</span>
+              <span style={{ padding:'3px 10px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:20, fontSize:12, fontWeight:600 }}>📄 {totalDld} DLD</span>
+              {cargandoDia && <span style={{ fontSize:12, color:'#888' }}>⏳ Cargando faltas...</span>}
             </>
           )}
         </div>
       </div>
 
       {cargando ? (
-        <div style={{ padding: 60, textAlign: 'center', color: '#888' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>⏳</div>Cargando datos...
+        <div style={{ padding:60, textAlign:'center', color:'#888' }}>
+          <div style={{ fontSize:40, marginBottom:12 }}>⏳</div>Cargando datos...
         </div>
       ) : esFinde ? (
-        <div style={{ padding: 16 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 40, textAlign: 'center', color: '#888' }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🏖️</div>
-            <div>Este día es fin de semana. Selecciona un día laborable.</div>
+        <div style={{ padding:'0 16px 16px' }}>
+          <div style={{ backgroundColor:'white', borderRadius:12, padding:40, textAlign:'center', color:'#888' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🏖️</div>
+            <div>Fin de semana — selecciona un día laborable</div>
           </div>
         </div>
       ) : (
-        <div style={{ padding: '0 16px 16px' }}>
-
-          {/* TABLA GRANDE: horas × sectores */}
-          <div style={{ backgroundColor: 'white', borderRadius: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', overflow: 'hidden', marginBottom: 14 }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ borderCollapse: 'collapse', fontSize: 12, width: '100%', minWidth: 900 }}>
+        <div style={{ padding:'0 16px 16px' }}>
+          <div style={{ backgroundColor:'white', borderRadius:12, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', overflow:'hidden' }}>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ borderCollapse:'collapse', fontSize:12, width:'100%', minWidth: Math.max(700, sectores.length*110+80) }}>
                 <thead>
                   <tr>
-                    <th style={cabeceraFija}>Hora</th>
-                    {sectores.map(s => {
-                      const huecos = huecosPorSector(s);
-                      return (
-                        <th key={s} style={{ ...cabeceraSector }}>
-                          <div style={{ fontSize: 16, marginBottom: 2 }}>{emojiSector(s)}</div>
-                          <div style={{ fontSize: 11, fontWeight: 700 }} title={s}>{abreviarSector(s)}</div>
-                          {huecos > 0 && (
-                            <div style={{ marginTop: 3, fontSize: 10, backgroundColor: '#fef3c7', color: '#78350f', padding: '1px 6px', borderRadius: 8, fontWeight: 700, display: 'inline-block' }}>
-                              {huecos} ausente{huecos !== 1 ? 's' : ''}
-                            </div>
-                          )}
-                        </th>
-                      );
-                    })}
+                    <th style={thFijo}>Hora</th>
+                    {sectores.map(s=>(
+                      <th key={s} style={thSector}>
+                        <div style={{ fontSize:18, marginBottom:2 }}>{emojiSector(s)}</div>
+                        <div style={{ fontSize:10, fontWeight:700, lineHeight:1.2 }} title={s}>{s.length>16?s.substring(0,14)+'…':s}</div>
+                      </th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
                   {HORAS.map(h => (
                     <tr key={h.id}>
-                      <td style={celdaHora}>
-                        <div style={{ fontWeight: 700, color: azul }}>{h.label}</div>
-                        <div style={{ fontSize: 10, color: '#888' }}>{h.horario}</div>
+                      {/* CELDA HORA */}
+                      <td style={tdHora}>
+                        <div style={{ fontWeight:700, color:azul }}>{h.label}</div>
+                        <div style={{ fontSize:10, color:'#888' }}>{h.horario}</div>
                       </td>
+
+                      {/* CELDAS POR SECTOR */}
                       {sectores.map(s => {
-                        const profs = horarioGuardias[s]?.[diaSem]?.[h.id] || [];
-                        const ausentesSector = ausenciasDia.filter(a =>
-                          a.cuadranteAusente === s && a.horas.some(hh => hh.hora === h.id)
-                        );
+                        const guardias  = horarioGuardias[s]?.[diaSem]?.[h.id] || [];
+                        const ausentes  = ausentesEnCelda(s, h.id);
+                        const hayAlgo   = guardias.length>0 || ausentes.length>0;
+
                         return (
-                          <td key={s} style={celda}>
-                            {profs.length === 0 && ausentesSector.length === 0 ? (
-                              <span style={{ color: '#ccc', fontSize: 10 }}>—</span>
+                          <td key={s} style={{ ...tdBase, backgroundColor: ausentes.length>0 ? '#fffbeb' : 'white' }}>
+                            {!hayAlgo ? (
+                              <span style={{ color:'#e0e0e0', fontSize:10 }}>—</span>
                             ) : (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                {profs.map((p, i) => {
-                                  const esYo = p && profesorNombre && p.toLowerCase().includes((profesorNombre || '').toLowerCase().split(' ')[0]);
-                                  return (
-                                    <span key={i} style={{
-                                      display: 'inline-block', backgroundColor: esYo ? '#fef3c7' : '#f0fdf4',
-                                      color: esYo ? '#78350f' : '#065f46', padding: '2px 6px', borderRadius: 5,
-                                      fontSize: 10, fontWeight: 600, border: esYo ? '1px solid #fbbf24' : '1px solid #d1fae5',
-                                      lineHeight: 1.3
-                                    }}>{nombreCorto(p)}</span>
-                                  );
-                                })}
-                                {ausentesSector.map((a, i) => (
-                                  <span key={`aus-${i}`} style={{
-                                    display: 'inline-block', backgroundColor: a.tipo === 'dld' ? '#dbeafe' : '#fee2e2',
-                                    color: a.tipo === 'dld' ? '#1e40af' : '#991b1b', padding: '2px 6px', borderRadius: 5,
-                                    fontSize: 10, fontWeight: 600, border: `1px solid ${a.tipo === 'dld' ? '#93c5fd' : '#fca5a5'}`,
-                                    lineHeight: 1.3
-                                  }} title={`Ausente: ${a.profesor}`}>
-                                    {a.tipo === 'dld' ? '📄' : '🏥'} {nombreCorto(a.nombrePdf)}
-                                  </span>
-                                ))}
+                              <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+
+                                {/* FILA 1: Profesores de guardia */}
+                                {guardias.length>0 && (
+                                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                                    {guardias.map((p,i) => {
+                                      const esYo = p && profesorNombre && p.toLowerCase().includes((profesorNombre||'').toLowerCase().split(' ')[0]);
+                                      return (
+                                        <span key={i} style={{
+                                          display:'block', padding:'2px 6px', borderRadius:5, fontSize:10, fontWeight:600, lineHeight:1.3,
+                                          backgroundColor: esYo?'#fef3c7':'#f0fdf4',
+                                          color: esYo?'#78350f':'#065f46',
+                                          border: `1px solid ${esYo?'#fbbf24':'#d1fae5'}`,
+                                        }}>{nombreCorto(p)}</span>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+
+                                {/* SEPARADOR si hay ambos */}
+                                {guardias.length>0 && ausentes.length>0 && (
+                                  <div style={{ height:1, backgroundColor:'#fcd34d', margin:'2px 0' }} />
+                                )}
+
+                                {/* FILA 2: Profesores ausentes — clickables */}
+                                {ausentes.length>0 && (
+                                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                                    {ausentes.map((a,i) => (
+                                      <button key={i}
+                                        onClick={()=>setProfAbierto({ prof:a, hora:h.id })}
+                                        title={`${a.tipo==='dld'?'DLD':'Ausencia'}: ${a.profesor} · Pulsa para ver tareas`}
+                                        style={{
+                                          display:'block', width:'100%', padding:'2px 6px', borderRadius:5, fontSize:10, fontWeight:700,
+                                          lineHeight:1.3, textAlign:'left', cursor:'pointer',
+                                          backgroundColor: a.tipo==='dld'?'#dbeafe':'#fee2e2',
+                                          color: a.tipo==='dld'?'#1e40af':'#991b1b',
+                                          border:`1px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
+                                        }}>
+                                        {a.tipo==='dld'?'📄':'🏥'} {nombreCorto(a.nombrePdf)}
+                                        <span style={{ marginLeft:4, fontSize:9, opacity:0.7 }}>▼</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </td>
@@ -390,91 +439,21 @@ export default function Guardias() {
           </div>
 
           {/* LEYENDA */}
-          <div style={{ marginBottom: 14, padding: '10px 14px', backgroundColor: 'white', borderRadius: 10, fontSize: 11, color: '#666', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <span><span style={pill('#f0fdf4', '#065f46', '#d1fae5')}>Verde</span> Guardia asignada</span>
-            <span><span style={pill('#fef3c7', '#78350f', '#fbbf24')}>Amarillo</span> Tú</span>
-            <span><span style={pill('#fee2e2', '#991b1b', '#fca5a5')}>Rojo</span> Ausencia</span>
-            <span><span style={pill('#dbeafe', '#1e40af', '#93c5fd')}>Azul</span> DLD</span>
+          <div style={{ marginTop:10, padding:'8px 14px', backgroundColor:'white', borderRadius:10, fontSize:11, color:'#666', display:'flex', gap:14, flexWrap:'wrap' }}>
+            <span><span style={pill('#f0fdf4','#065f46','#d1fae5')}>Verde</span> De guardia</span>
+            <span><span style={pill('#fef3c7','#78350f','#fbbf24')}>Amarillo</span> Tú</span>
+            <span><span style={pill('#fee2e2','#991b1b','#fca5a5')}>Rojo ▼</span> Ausente (pulsa para ver tarea)</span>
+            <span><span style={pill('#dbeafe','#1e40af','#93c5fd')}>Azul ▼</span> DLD (pulsa para ver tarea)</span>
           </div>
-
-          {/* AUSENCIAS DEL DÍA (detalle) */}
-          {cargandoDia ? (
-            <div style={{ padding: 20, textAlign: 'center', color: '#888', fontSize: 13 }}>⏳ Cargando ausencias...</div>
-          ) : ausenciasDia.length === 0 ? (
-            <div style={{ padding: 20, backgroundColor: '#d1fae5', borderRadius: 10, textAlign: 'center', color: '#065f46', fontWeight: 600 }}>
-              ✅ Sin ausencias ni DLDs para este día
-            </div>
-          ) : (
-            <>
-              <div style={{ fontWeight: 800, color: azul, marginBottom: 10, fontSize: 15 }}>
-                📋 Detalle de ausencias del día
-              </div>
-              {ausenciasDia.map((a, i) => (
-                <div key={i} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${a.tipo === 'dld' ? '#3b82f6' : '#f59e0b'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
-                    <div>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: azul }}>{a.profesor}</div>
-                      <div style={{ fontSize: 12, color: '#666' }}>
-                        {a.tipo === 'dld' ? '📄 DLD' : '🏥 Ausencia'}
-                        {a.cuadranteAusente && ` · ${emojiSector(a.cuadranteAusente)} ${a.cuadranteAusente}`}
-                        {a.motivo && ` · ${a.motivo}`}
-                      </div>
-                    </div>
-                    <span style={{ padding: '3px 10px', backgroundColor: '#f3f4f6', color: '#555', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                      {a.horas.length} clase{a.horas.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-
-                  {a.horas.map((h, j) => (
-                    <div key={j} style={{ padding: '10px 12px', backgroundColor: '#fafafa', borderRadius: 8, marginBottom: 6, fontSize: 12 }}>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: (h.instrucciones || h.archivo_url) ? 8 : 0 }}>
-                        <span style={{ padding: '3px 8px', backgroundColor: azul, color: 'white', borderRadius: 5, fontWeight: 700, minWidth: 34, textAlign: 'center' }}>
-                          {h.hora === 'recreo' ? 'R' : h.hora + 'ª'}
-                        </span>
-                        <span style={{ fontWeight: 700 }}>{h.grupo}</span>
-                        {h.materia && <span style={{ color: '#888' }}>· {h.materia}</span>}
-                        {h.aula && (
-                          <span style={{ padding: '2px 8px', backgroundColor: '#e0e7ff', color: '#3730a3', borderRadius: 20, fontSize: 11, fontWeight: 700 }}>
-                            📍 {h.aula}
-                          </span>
-                        )}
-                      </div>
-                      {(h.instrucciones || h.archivo_url) ? (
-                        <div style={{ padding: '8px 10px', backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 6 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#78350f', marginBottom: 4 }}>📝 Tarea para los alumnos</div>
-                          {h.instrucciones && (
-                            <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.5, whiteSpace: 'pre-wrap', marginBottom: h.archivo_url ? 6 : 0 }}>
-                              {h.instrucciones}
-                            </div>
-                          )}
-                          {h.archivo_url && (
-                            <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, padding: '4px 10px', backgroundColor: 'white', color: '#78350f', border: '1px solid #fcd34d', borderRadius: 6, textDecoration: 'none', fontWeight: 600 }}>
-                              📎 {h.archivo_nombre || 'Descargar archivo'}
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: 11, color: '#aaa', fontStyle: 'italic' }}>⚠️ Sin tarea asignada</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </>
-          )}
         </div>
       )}
     </div>
   );
 }
 
-const btnNav = { padding: '8px 14px', borderRadius: 8, border: '1.5px solid #e0e0e0', backgroundColor: 'white', color: '#555', fontSize: 12, fontWeight: 600, cursor: 'pointer' };
-const cabeceraFija = { padding: '8px 6px', backgroundColor: marron, color: 'white', fontSize: 11, fontWeight: 700, textAlign: 'center', border: '1px solid #6b2a10', position: 'sticky', left: 0, zIndex: 2, minWidth: 60 };
-const cabeceraSector = { padding: '8px 6px', backgroundColor: marron, color: 'white', fontSize: 11, fontWeight: 700, textAlign: 'center', border: '1px solid #6b2a10', minWidth: 100, maxWidth: 130 };
-const celdaHora = { padding: '6px 8px', backgroundColor: '#fafafa', border: '1px solid #eee', textAlign: 'center', minWidth: 60, whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 1 };
-const celda = { padding: '5px 6px', border: '1px solid #eee', verticalAlign: 'top', minWidth: 100, maxWidth: 130 };
-
-const pill = (bg, color, borderColor) => ({
-  display: 'inline-block', backgroundColor: bg, color, padding: '1px 6px',
-  borderRadius: 4, fontSize: 10, fontWeight: 700, border: `1px solid ${borderColor}`
-});
+const btnNav = { padding:'8px 12px', borderRadius:8, border:'1.5px solid #e0e0e0', backgroundColor:'white', color:'#555', fontSize:12, fontWeight:600, cursor:'pointer' };
+const thFijo    = { padding:'10px 8px', backgroundColor:marron, color:'white', fontSize:11, fontWeight:700, textAlign:'center', border:`1px solid #6b2a10`, position:'sticky', left:0, zIndex:2, minWidth:65 };
+const thSector  = { padding:'8px 6px', backgroundColor:marron, color:'white', fontSize:11, fontWeight:700, textAlign:'center', border:`1px solid #6b2a10`, minWidth:100, maxWidth:130 };
+const tdHora    = { padding:'8px', backgroundColor:'#fafafa', border:'1px solid #eee', textAlign:'center', minWidth:65, whiteSpace:'nowrap', position:'sticky', left:0, zIndex:1, fontSize:12 };
+const tdBase    = { padding:'5px', border:'1px solid #eee', verticalAlign:'top', minWidth:100 };
+const pill      = (bg,color,border) => ({ display:'inline-block', backgroundColor:bg, color, padding:'1px 6px', borderRadius:4, fontSize:10, fontWeight:700, border:`1px solid ${border}` });
