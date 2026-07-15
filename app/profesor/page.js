@@ -40,6 +40,7 @@ export default function PanelProfesor() {
       href: '/mantenimiento',
       disponible: true,
       roles: ['todos'],
+      color: '#b45309', bg: '#fffbeb', border: '#fcd34d',
     },
     {
       id: 'dld',
@@ -49,6 +50,7 @@ export default function PanelProfesor() {
       href: '/dld',
       disponible: true,
       roles: ['todos'],
+      color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd',
     },
     {
       id: 'ausencias',
@@ -58,6 +60,7 @@ export default function PanelProfesor() {
       href: '/ausencias',
       disponible: true,
       roles: ['todos'],
+      color: '#b91c1c', bg: '#fef2f2', border: '#fca5a5',
     },
     {
       id: 'autorizaciones',
@@ -68,6 +71,7 @@ export default function PanelProfesor() {
       hrefTutor: '/autorizaciones/gestion',
       disponible: true,
       roles: ['todos'],
+      color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd',
     },
     {
       id: 'compras',
@@ -78,6 +82,7 @@ export default function PanelProfesor() {
       disponible: true,
       roles: ['todos'],
       soloJefeDepartamento: true,
+      color: '#0f766e', bg: '#f0fdfa', border: '#5eead4',
     },
     {
       id: 'guardias',
@@ -87,6 +92,7 @@ export default function PanelProfesor() {
       href: '/guardias',
       disponible: true,
       roles: ['todos'],
+      color: '#7c2d12', bg: '#fff7ed', border: '#fdba74',
     },
     {
       id: 'noticias',
@@ -96,6 +102,7 @@ export default function PanelProfesor() {
       href: '/noticias',
       disponible: false,
       roles: ['todos'],
+      color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
     {
       id: 'departamento',
@@ -105,6 +112,7 @@ export default function PanelProfesor() {
       href: '/departamento',
       disponible: false,
       roles: ['jefe_departamento'],
+      color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
     {
       id: 'tutorias',
@@ -114,6 +122,7 @@ export default function PanelProfesor() {
       href: '/tutorias',
       disponible: false,
       roles: ['tutor'],
+      color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
   ];
 
@@ -202,25 +211,36 @@ export default function PanelProfesor() {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
-          {modulosVisibles.map(m => (
+          {modulosVisibles.map(m => {
+            const acceso = tieneAcceso(m);
+            const colorActivo = m.color || verde;
+            const bgActivo = m.bg || '#f0fdf4';
+            const borderActivo = m.border || '#a7f3d0';
+            return (
             <div
               key={m.id}
-              onClick={() => m.disponible && tieneAcceso(m) && (window.location.href = (m.hrefTutor && esTutor) ? m.hrefTutor : m.href)}
+              onClick={() => m.disponible && acceso && (window.location.href = (m.hrefTutor && esTutor) ? m.hrefTutor : m.href)}
               style={{
-                backgroundColor: 'white', borderRadius: 14, padding: 20,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
-                cursor: m.disponible && tieneAcceso(m) ? 'pointer' : 'default',
-                opacity: m.disponible ? 1 : 0.6,
-                border: `2px solid ${m.disponible ? 'transparent' : '#eee'}`,
+                backgroundColor: m.disponible && acceso ? bgActivo : '#fafafa',
+                borderRadius: 14, padding: 20,
+                boxShadow: m.disponible && acceso ? `0 3px 12px ${borderActivo}60` : '0 1px 4px rgba(0,0,0,0.06)',
+                cursor: m.disponible && acceso ? 'pointer' : 'default',
+                opacity: m.disponible ? 1 : 0.55,
+                border: `2px solid ${m.disponible && acceso ? borderActivo : '#e5e7eb'}`,
                 transition: 'all 0.15s',
                 position: 'relative',
               }}
             >
-              <div style={{ fontSize: 36, marginBottom: 10 }}>{m.emoji}</div>
-              <div style={{ fontWeight: 700, fontSize: 16, color: m.disponible ? (tieneAcceso(m) ? verde : '#aaa') : '#aaa', marginBottom: 4 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 14,
+                backgroundColor: m.disponible && acceso ? `${borderActivo}50` : '#f0f0f0',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 26, marginBottom: 12,
+              }}>{m.emoji}</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: m.disponible && acceso ? colorActivo : '#aaa', marginBottom: 4 }}>
                 {m.titulo}
               </div>
-              <div style={{ fontSize: 13, color: '#888', lineHeight: 1.4 }}>
+              <div style={{ fontSize: 12, color: m.disponible && acceso ? `${colorActivo}99` : '#ccc', lineHeight: 1.4 }}>
                 {m.hrefTutor && esTutor ? 'Gestiona las autorizaciones y restricciones de tu grupo' : m.descripcion}
               </div>
               {!m.disponible && (
@@ -238,16 +258,17 @@ export default function PanelProfesor() {
                   </span>
                 </div>
               )}
-              {m.disponible && tieneAcceso(m) && (
-                <div style={{ marginTop: 12, fontSize: 13, color: verde, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {m.disponible && acceso && (
+                <div style={{ marginTop: 12, fontSize: 12, color: colorActivo, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                   Acceder →
                   {m.hrefTutor && esTutor && (
-                    <span style={{ fontSize: 11, backgroundColor: '#d1fae5', color: '#065f46', padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>Tutor</span>
+                    <span style={{ fontSize: 10, backgroundColor: `${borderActivo}60`, color: colorActivo, padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>Tutor</span>
                   )}
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
