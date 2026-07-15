@@ -223,14 +223,24 @@ export default function GestionDatos() {
   function extraerGrupoYMateria(textoCelda) {
     // Formato típico: "DASP-3087251\nGM-1IEA\n(1 A032 ELE)"
     const partes = textoCelda.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean);
-    let materia = '', grupo = '';
-    if (partes.length >= 2) {
-      materia = partes[0].split('-')[0]; // "DASP-3087251" → "DASP"
-      grupo = partes[1]; // "GM-1IEA"
+    let materia = '', grupo = '', aula = '';
+    if (partes.length >= 3) {
+      materia = partes[0].split('-')[0];
+      grupo = partes[1];
+      // El aula viene entre paréntesis: "(1 A032 ELE)" → "A032"
+      const matchAula = partes[2].match(/\(([^)]+)\)/);
+      if (matchAula) {
+        // Extraer código de aula (segundo token si hay varios)
+        const tokens = matchAula[1].trim().split(/\s+/);
+        aula = tokens.length >= 2 ? tokens[1] : tokens[0];
+      }
+    } else if (partes.length === 2) {
+      materia = partes[0].split('-')[0];
+      grupo = partes[1];
     } else if (partes.length === 1) {
       grupo = partes[0];
     }
-    return { grupo, materia };
+    return { grupo, materia, aula };
   }
 
   async function procesarCarpetaHorarios(e) {
@@ -346,7 +356,7 @@ export default function GestionDatos() {
         
         // Detectar tipo
         const tipo = detectarTipoHora(textoCelda);
-        const { grupo, materia } = tipo === 'clase' ? extraerGrupoYMateria(textoCelda) : { grupo: '', materia: '' };
+        const { grupo, materia, aula } = tipo === 'clase' ? extraerGrupoYMateria(textoCelda) : { grupo: '', materia: '', aula: '' };
         
         // Añadir a las columnas que ocupa (colspan)
         for (let c = 0; c < colspan && colDia < 5; c++) {
@@ -356,11 +366,12 @@ export default function GestionDatos() {
             tipo,
             grupo,
             materia,
+            aula,
           });
           
           // Marcar ocupadas las filas siguientes por rowspan
           for (let r = 1; r < rowspan; r++) {
-            ocupadas[`${filaIdx + r},${colDia}`] = { tipo, grupo, materia };
+            ocupadas[`${filaIdx + r},${colDia}`] = { tipo, grupo, materia, aula };
           }
           colDia++;
         }
@@ -398,6 +409,7 @@ export default function GestionDatos() {
             tipo: h.tipo,
             grupo: h.grupo || '',
             materia: h.materia || '',
+            aula: h.aula || '',
             curso_academico: cursoNuevo,
           });
         });
