@@ -510,8 +510,8 @@ ${a.observaciones_directivo ? `
                   <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {a.estado === 'pendiente' && a.justificacion_texto && (
                       <button onClick={() => { setAusenciaGestion(a); setComentarioJust(''); setObsDirectivo(a.observaciones_directivo||''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📋 Gestionar</button>
-                      <button onClick={() => generarPDFAusencia(a)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📄 PDF</button>
                     )}
+                    <button onClick={() => generarPDFAusencia(a)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📄 PDF</button>
                     <button onClick={() => eliminarAusencia(a.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: rojo, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
                   </div>
                 </div>
