@@ -769,6 +769,29 @@ export default function GestionDatos() {
                 </div>
               </label>
 
+              {/* ALTERNATIVA: subir archivos HTML sueltos */}
+              <div style={{ textAlign: 'center', margin: '10px 0', fontSize: 12, color: '#aaa' }}>— o si no puedes seleccionar carpeta —</div>
+              <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                <input
+                  type="file"
+                  accept=".html,.htm"
+                  multiple
+                  onChange={procesarCarpetaHorarios}
+                  style={{ display: 'none' }}
+                  disabled={procesando}
+                />
+                <div style={{
+                  padding: '14px 16px', borderRadius: 10,
+                  backgroundColor: procesando ? '#f5f5f5' : '#f0fdf4',
+                  color: procesando ? '#999' : verde,
+                  fontWeight: 700, fontSize: 13, textAlign: 'center',
+                  cursor: procesando ? 'not-allowed' : 'pointer',
+                  border: `2px dashed ${procesando ? '#ddd' : verde}`,
+                }}>
+                  {procesando ? '⏳ Procesando...' : '📄 Seleccionar archivos HTML sueltos (selecciona todos a la vez)'}
+                </div>
+              </label>
+
               {/* PROGRESO */}
               {procesando && progresoHorarios.total > 0 && (
                 <div style={{ marginTop: 16, padding: '12px 16px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13 }}>
