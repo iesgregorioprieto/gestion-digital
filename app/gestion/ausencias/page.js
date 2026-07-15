@@ -60,6 +60,7 @@ export default function GestionAusencias() {
   // Modal justificación
   const [ausenciaGestion, setAusenciaGestion] = useState(null);
   const [comentarioJust, setComentarioJust] = useState('');
+  const [obsDirectivo, setObsDirectivo] = useState('');
   const [procesando, setProcesando] = useState(false);
 
   // Formulario manual
@@ -117,10 +118,11 @@ export default function GestionAusencias() {
   // ===== GESTIÓN JUSTIFICACIÓN =====
   async function aprobarJustificacion(id) {
     setProcesando(true);
-    await getSupabase().from('ausencias').update({ estado: 'justificada', comentario_secretario: comentarioJust || null }).eq('id', id);
+    await getSupabase().from('ausencias').update({ estado: 'justificada', comentario_secretario: comentarioJust || null, observaciones_directivo: obsDirectivo || null }).eq('id', id);
     setProcesando(false);
     setAusenciaGestion(null);
     setComentarioJust('');
+    setObsDirectivo('');
     mostrarMensaje('✅ Justificación aprobada', 'ok');
     cargarTodo();
   }
@@ -128,10 +130,11 @@ export default function GestionAusencias() {
   async function rechazarJustificacion(id) {
     if (!comentarioJust.trim()) { mostrarMensaje('Indica el motivo del rechazo.', 'error'); return; }
     setProcesando(true);
-    await getSupabase().from('ausencias').update({ estado: 'sin_justificar', comentario_secretario: comentarioJust }).eq('id', id);
+    await getSupabase().from('ausencias').update({ estado: 'sin_justificar', comentario_secretario: comentarioJust, observaciones_directivo: obsDirectivo || null }).eq('id', id);
     setProcesando(false);
     setAusenciaGestion(null);
     setComentarioJust('');
+    setObsDirectivo('');
     mostrarMensaje('❌ Justificación rechazada', 'ok');
     cargarTodo();
   }
@@ -202,6 +205,105 @@ export default function GestionAusencias() {
     const limite = new Date(createdAt);
     limite.setDate(limite.getDate() + 3);
     return Math.ceil((limite - new Date()) / (1000 * 60 * 60 * 24));
+  }
+
+  const SUBTIPOS = {
+    erasmus: { emoji: '✈️', label: 'Erasmus / Movilidad' },
+    extraescolar: { emoji: '🏫', label: 'Act. Extraescolar' },
+    formacion: { emoji: '📚', label: 'Curso de Formación' },
+    visita_medica: { emoji: '🩺', label: 'Visita Médica' },
+    otro: { emoji: '📝', label: 'Otro motivo' },
+  };
+
+  function generarPDFAusencia(a) {
+    const SUBT = SUBTIPOS[a.subtipo];
+    const horas = Array.isArray(a.horas) ? a.horas : [];
+    const horasClase = horas.filter(h => h.tipo === 'clase');
+    const fechaStr = a.fecha_inicio === a.fecha_fin
+      ? new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+      : `${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe Ausencia — ${a.profesor_nombre}</title>
+<style>
+  body { font-family: Arial, sans-serif; margin: 0; padding: 40px; color: #1a1a1a; font-size: 13px; }
+  .header { background: #7c2d12; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 24px; }
+  .header h1 { margin: 0 0 4px; font-size: 18px; }
+  .header p { margin: 0; opacity: 0.85; font-size: 12px; }
+  .seccion { margin-bottom: 20px; padding: 16px; border: 1px solid #e0e0e0; border-radius: 8px; }
+  .seccion h2 { font-size: 13px; font-weight: 700; color: #7c2d12; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 1px solid #f0e0d0; }
+  .fila { display: flex; gap: 8px; margin-bottom: 8px; font-size: 12px; }
+  .label { font-weight: 700; color: #555; min-width: 160px; }
+  .valor { color: #1a1a1a; flex: 1; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-prevista { background: #fff7ed; color: #92400e; border: 1px solid #fbbf24; }
+  .badge-imprevista { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .badge-just { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+  .badge-sinj { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+  .badge-pend { background: #fef3c7; color: #92400e; border: 1px solid #fbbf24; }
+  .tarea { margin-top: 8px; padding: 10px; background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; font-size: 12px; }
+  .privado { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+  .privado h2 { color: #1e40af; }
+  footer { margin-top: 32px; padding-top: 12px; border-top: 1px solid #e0e0e0; font-size: 11px; color: #888; text-align: center; }
+</style></head><body>
+<div class="header">
+  <h1>📋 Informe de Ausencia — IES Gregorio Prieto</h1>
+  <p>Generado el ${new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Confidencial — Uso interno del Equipo Directivo</p>
+</div>
+
+<div class="seccion">
+  <h2>DATOS DE LA AUSENCIA</h2>
+  <div class="fila"><span class="label">Profesor/a:</span><span class="valor"><strong>${a.profesor_nombre}</strong></span></div>
+  <div class="fila"><span class="label">Departamento:</span><span class="valor">${a.departamento || '—'}</span></div>
+  <div class="fila"><span class="label">Fecha:</span><span class="valor">${fechaStr}</span></div>
+  <div class="fila"><span class="label">Tipo:</span><span class="valor">
+    <span class="badge badge-${a.tipo}">${a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista'}</span>
+    ${SUBT ? `&nbsp;<span class="badge badge-prevista">${SUBT.emoji} ${SUBT.label}</span>` : ''}
+  </span></div>
+  <div class="fila"><span class="label">Estado:</span><span class="valor">
+    <span class="badge ${a.estado === 'justificada' ? 'badge-just' : a.estado === 'sin_justificar' ? 'badge-sinj' : 'badge-pend'}">
+      ${a.estado === 'justificada' ? '✅ Justificada' : a.estado === 'sin_justificar' ? '❌ Sin justificar' : '⏳ Pendiente'}
+    </span>
+  </span></div>
+  ${a.motivo ? `<div class="fila"><span class="label">Motivo:</span><span class="valor">${a.motivo}</span></div>` : ''}
+</div>
+
+${a.justificacion_texto || a.justificacion_url ? `
+<div class="seccion">
+  <h2>JUSTIFICACIÓN APORTADA POR EL PROFESOR</h2>
+  ${a.justificacion_texto ? `<div class="fila"><span class="label">Texto:</span><span class="valor">${a.justificacion_texto}</span></div>` : ''}
+  ${a.justificacion_url ? `<div class="fila"><span class="label">Documento:</span><span class="valor"><a href="${a.justificacion_url}" target="_blank">📎 Ver documento adjunto</a></span></div>` : ''}
+  ${a.comentario_secretario ? `<div class="fila"><span class="label">Comentario secretaría:</span><span class="valor">${a.comentario_secretario}</span></div>` : ''}
+</div>` : '<div class="seccion"><h2>JUSTIFICACIÓN</h2><p style="color:#aaa;font-style:italic">El profesor aún no ha aportado justificación.</p></div>'}
+
+${horasClase.length > 0 ? `
+<div class="seccion">
+  <h2>HORAS DE CLASE AFECTADAS Y TAREAS</h2>
+  ${horasClase.map(h => `
+    <div style="margin-bottom:12px;padding:10px;border:1px solid #e0e0e0;border-radius:6px;">
+      <div class="fila">
+        <span class="label">Hora · Grupo:</span>
+        <span class="valor"><strong>${h.hora}</strong> · ${h.grupo || '—'}${h.materia ? ' · ' + h.materia : ''}</span>
+      </div>
+      ${h.instrucciones ? `<div class="tarea"><strong>📝 Tarea:</strong> ${h.instrucciones}</div>` : '<div style="color:#aaa;font-size:11px;font-style:italic;margin-top:4px">Sin tarea asignada</div>'}
+      ${h.archivo_url ? `<div style="margin-top:6px;font-size:11px">📎 <a href="${h.archivo_url}">Archivo adjunto: ${h.archivo_nombre || 'descargar'}</a></div>` : ''}
+    </div>
+  `).join('')}
+</div>` : ''}
+
+${a.observaciones_directivo ? `
+<div class="privado">
+  <h2>🔒 OBSERVACIONES INTERNAS DEL EQUIPO DIRECTIVO</h2>
+  <p>${a.observaciones_directivo}</p>
+</div>` : ''}
+
+<footer>IES Gregorio Prieto · Valdepeñas · Documento de uso interno · No distribuir</footer>
+</body></html>`;
+
+    const ventana = window.open('', '_blank');
+    ventana.document.write(html);
+    ventana.document.close();
+    ventana.onload = () => { ventana.print(); };
   }
 
   return (
@@ -331,7 +433,14 @@ export default function GestionAusencias() {
                           ? ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`
                           : ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
                       </div>
-                      <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{a.motivo}</div>
+                      <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
+                        {a.subtipo && SUBTIPOS[a.subtipo] && (
+                          <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, backgroundColor:'#eff6ff', color:'#1e40af', border:'1px solid #bfdbfe', marginRight:6 }}>
+                            {SUBTIPOS[a.subtipo].emoji} {SUBTIPOS[a.subtipo].label}
+                          </span>
+                        )}
+                        {a.motivo}
+                      </div>
                     </div>
                     <span style={{ padding: '4px 10px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
                   </div>
@@ -400,7 +509,8 @@ export default function GestionAusencias() {
                   {/* BOTONES */}
                   <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {a.estado === 'pendiente' && a.justificacion_texto && (
-                      <button onClick={() => { setAusenciaGestion(a); setComentarioJust(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📋 Gestionar justificación</button>
+                      <button onClick={() => { setAusenciaGestion(a); setComentarioJust(''); setObsDirectivo(a.observaciones_directivo||''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📋 Gestionar</button>
+                      <button onClick={() => generarPDFAusencia(a)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📄 PDF</button>
                     )}
                     <button onClick={() => eliminarAusencia(a.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: rojo, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
                   </div>
@@ -563,20 +673,49 @@ export default function GestionAusencias() {
               <button onClick={() => setAusenciaGestion(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
             </div>
             <div style={{ fontSize: 14, color: '#555', marginBottom: 4 }}><strong>{ausenciaGestion.profesor_nombre}</strong></div>
-            <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>{ausenciaGestion.motivo}</div>
-            <div style={{ padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+            <div style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>
+              {ausenciaGestion.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista'}
+              {ausenciaGestion.subtipo && SUBTIPOS[ausenciaGestion.subtipo] && (
+                <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 20, fontSize: 11, fontWeight: 700, backgroundColor: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                  {SUBTIPOS[ausenciaGestion.subtipo].emoji} {SUBTIPOS[ausenciaGestion.subtipo].label}
+                </span>
+              )}
+              {ausenciaGestion.motivo && <span style={{ marginLeft: 8 }}>· {ausenciaGestion.motivo}</span>}
+            </div>
+
+            {/* JUSTIFICACIÓN DEL PROFESOR */}
+            <div style={{ padding: '10px 12px', backgroundColor: '#eff6ff', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
               <strong style={{ color: '#1e40af' }}>Justificación del profesor:</strong>
-              <div style={{ color: '#1e40af', marginTop: 4 }}>{ausenciaGestion.justificacion_texto}</div>
-              {ausenciaGestion.justificacion_url && <a href={ausenciaGestion.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 600, fontSize: 12 }}>📎 Ver documento</a>}
+              {ausenciaGestion.justificacion_texto
+                ? <div style={{ color: '#1e40af', marginTop: 4 }}>{ausenciaGestion.justificacion_texto}</div>
+                : <div style={{ color: '#aaa', fontStyle: 'italic', marginTop: 4 }}>Aún no ha aportado justificación.</div>
+              }
+              {ausenciaGestion.justificacion_url && (
+                <a href={ausenciaGestion.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#1e40af', fontWeight: 600, fontSize: 12 }}>📎 Ver documento adjunto</a>
+              )}
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 6 }}>💬 Comentario (obligatorio si rechazas)</label>
-              <textarea value={comentarioJust} onChange={e => setComentarioJust(e.target.value)} placeholder="Motivo de aprobación o rechazo..." rows={3} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+
+            {/* OBSERVACIONES PRIVADAS DIRECTIVO */}
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', display: 'block', marginBottom: 5 }}>🔒 Observaciones internas (solo directivo)</label>
+              <textarea value={obsDirectivo} onChange={e => setObsDirectivo(e.target.value)}
+                placeholder="Notas internas sobre esta ausencia (no visibles para el profesor)..."
+                rows={2} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #bfdbfe', backgroundColor: '#eff6ff', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+
+            {/* COMENTARIO PARA EL PROFESOR */}
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 5 }}>💬 Comentario para el profesor (obligatorio si rechazas)</label>
+              <textarea value={comentarioJust} onChange={e => setComentarioJust(e.target.value)} placeholder="Motivo de aprobación o rechazo..." rows={2} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <button onClick={() => aprobarJustificacion(ausenciaGestion.id)} disabled={procesando} style={{ flex: 1, padding: 11, borderRadius: 8, border: 'none', backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>✅ Aprobar</button>
               <button onClick={() => rechazarJustificacion(ausenciaGestion.id)} disabled={procesando} style={{ flex: 1, padding: 11, borderRadius: 8, border: 'none', backgroundColor: '#fee2e2', color: rojo, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>❌ Rechazar</button>
             </div>
+            <button onClick={() => generarPDFAusencia(ausenciaGestion)} style={{ width: '100%', padding: 11, borderRadius: 8, border: '1.5px solid #6ee7b7', backgroundColor: '#f0fdf4', color: '#065f46', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              📄 Generar PDF completo (con justificación y observaciones)
+            </button>
           </div>
         </div>
       )}
