@@ -42,9 +42,9 @@ function sumarDias(fecha, n) {
   return d.toISOString().split('T')[0];
 }
 
-function fechaLegible(fecha) {
+function fechaCorta(fecha) {
   const d = new Date(fecha+'T12:00:00');
-  return d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  return d.toLocaleDateString('es-ES',{ weekday:'long', day:'numeric', month:'long' });
 }
 
 function pesoSector(n) {
@@ -81,16 +81,17 @@ function nombreCorto(nombreCompleto) {
 }
 
 export default function Guardias() {
-  const [cargando, setCargando]       = useState(true);
-  const [fecha, setFecha]             = useState(new Date().toISOString().split('T')[0]);
-  const [sectores, setSectores]       = useState([]);
-  const [horarioGuardias, setHG]      = useState({});
-  const [horariosClase, setHC]        = useState([]);
-  const [ausenciasDia, setAusDia]     = useState([]);
-  const [cargandoDia, setCargandoDia] = useState(false);
-  const [profAbierto, setProfAbierto] = useState(null); // {profesor, hora, sector}
-  const [profesorNombre, setPN]       = useState('');
-  const [esDirectivo, setEsDir]       = useState(false);
+  const [cargando, setCargando]         = useState(true);
+  const [fecha, setFecha]               = useState(new Date().toISOString().split('T')[0]);
+  const [horaActiva, setHoraActiva]     = useState('1');
+  const [sectores, setSectores]         = useState([]);
+  const [horarioGuardias, setHG]        = useState({});
+  const [horariosClase, setHC]          = useState([]);
+  const [ausenciasDia, setAusDia]       = useState([]);
+  const [cargandoDia, setCargandoDia]   = useState(false);
+  const [popupAbierto, setPopupAbierto] = useState(null);
+  const [profesorNombre, setPN]         = useState('');
+  const [esDirectivo, setEsDir]         = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -140,18 +141,15 @@ export default function Guardias() {
   async function cargarAusencias(f) {
     setCargandoDia(true);
     setAusDia([]);
-    setProfAbierto(null);
+    setPopupAbierto(null);
 
     const diaSem = diaSemanaEs(f);
     if (diaSem==='sábado'||diaSem==='domingo') { setCargandoDia(false); return; }
 
-    const { data: aus } = await getSupabase().from('ausencias')
-      .select('profesor_id,profesor_nombre,motivo,horas')
-      .lte('fecha_inicio',f).gte('fecha_fin',f);
-
-    const { data: dlds } = await getSupabase().from('dld')
-      .select('profesor_id,profesor_nombre,motivo,horas')
-      .eq('fecha_solicitada',f).eq('estado','aprobada');
+    const [{ data: aus }, { data: dlds }] = await Promise.all([
+      getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio',f).gte('fecha_fin',f),
+      getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada',f).eq('estado','aprobada'),
+    ]);
 
     const todas = [
       ...(aus||[]).map(a=>({...a,tipo_falta:'ausencia'})),
@@ -160,13 +158,26 @@ export default function Guardias() {
 
     const resultado = [];
     for (const falta of todas) {
-      const { data: prof } = await getSupabase().from('profesores')
-        .select('nombre,apellidos').eq('id',falta.profesor_id);
+      const { data: prof } = await getSupabase().from('profesores').select('nombre,apellidos').eq('id',falta.profesor_id);
       if (!prof||prof.length===0) continue;
-
       const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
-      const cuadrante = cuadranteDeProfesor(nombrePdf, sectores, horarioGuardias);
 
+      // Buscar su sector en horarios de guardia
+      let cuadrante = null;
+      for (const s of sectores) {
+        const datos = horarioGuardias[s]||{};
+        for (const d of Object.keys(datos)) {
+          for (const h of Object.keys(datos[d])) {
+            if ((datos[d][h]||[]).some(p=>(p||'').toLowerCase()===nombrePdf.toLowerCase())) {
+              cuadrante = s; break;
+            }
+          }
+          if (cuadrante) break;
+        }
+        if (cuadrante) break;
+      }
+
+      // Sus clases ese día
       const clases = horariosClase.filter(h=>
         h.tipo==='clase' &&
         (h.dia||'').toLowerCase()===diaSem &&
@@ -183,102 +194,79 @@ export default function Guardias() {
           return hn===horaN||lb.includes(`${horaN}ª`)||lb.includes(`${horaN}a`);
         });
         return {
-          hora: horaN, grupo: c.grupo, materia: c.materia, aula: c.aula,
+          hora: horaN,
+          grupo: c.grupo,
+          materia: c.materia,
+          aula: c.aula,
           instrucciones: tarea?.instrucciones||null,
           archivo_url: tarea?.archivo_url||null,
           archivo_nombre: tarea?.archivo_nombre||null,
         };
       });
 
-      resultado.push({
-        profesor: falta.profesor_nombre,
-        nombrePdf,
-        tipo: falta.tipo_falta,
-        motivo: falta.motivo,
-        cuadranteAusente: cuadrante,
-        horas: horasEnriq,
-      });
+      resultado.push({ profesor: falta.profesor_nombre, nombrePdf, tipo: falta.tipo_falta, cuadrante, horas: horasEnriq });
     }
 
     setAusDia(resultado);
     setCargandoDia(false);
   }
 
-  function cuadranteDeProfesor(nombrePdf, listaSectores, horarios) {
-    const lc = nombrePdf.toLowerCase();
-    for (const s of listaSectores) {
-      const datos = horarios[s]||{};
-      for (const d of Object.keys(datos)) {
-        for (const h of Object.keys(datos[d])) {
-          if ((datos[d][h]||[]).some(p=>(p||'').toLowerCase()===lc)) return s;
-        }
-      }
-    }
-    return null;
+  const diaSem  = diaSemanaEs(fecha);
+  const esFinde = diaSem==='sábado'||diaSem==='domingo';
+  const horaInfo = HORAS.find(h=>h.id===horaActiva);
+
+  // Para la hora activa: guardias y ausentes por sector
+  function guardiasDeSector(sector) {
+    return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
   }
 
-  const diaSem    = diaSemanaEs(fecha);
-  const esFinde   = diaSem==='sábado'||diaSem==='domingo';
-  const totalAus  = ausenciasDia.filter(a=>a.tipo==='ausencia').length;
-  const totalDld  = ausenciasDia.filter(a=>a.tipo==='dld').length;
-
-  // Para una hora y sector, devuelve los ausentes que tenían clase en ese sector esa hora
-  function ausentesEnCelda(sector, hora) {
+  function ausentesDeSector(sector) {
     return ausenciasDia.filter(a =>
-      a.cuadranteAusente===sector &&
-      a.horas.some(h=>h.hora===hora)
+      a.cuadrante === sector &&
+      a.horas.some(h => h.hora === horaActiva)
     );
   }
 
-  // Popup con las tareas del ausente para esa hora
-  function TareaPopup({ prof, hora, clase, onClose }) {
-    const claseDeHora = clase || prof.horas.find(h=>h.hora===hora);
-    if (!claseDeHora) return null;
+  // ── POPUP TAREA ──────────────────────────────
+  function TareaPopup({ datos, onClose }) {
     return (
-      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
         onClick={onClose}>
         <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:460, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}
           onClick={e=>e.stopPropagation()}>
-
-          {/* CABECERA */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:42, height:42, borderRadius:12, backgroundColor:'#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:20 }}>
-                👥
-              </div>
+              <div style={{ width:44, height:44, borderRadius:12, backgroundColor:'#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>👥</div>
               <div>
-                <div style={{ fontWeight:800, fontSize:15, color:azul }}>{claseDeHora.grupo || '—'}</div>
-                <div style={{ fontSize:12, color:'#888' }}>
-                  {claseDeHora.materia && <span>{claseDeHora.materia}</span>}
-                  {claseDeHora.aula && <span style={{ marginLeft:8, padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>📍 {claseDeHora.aula}</span>}
+                <div style={{ fontWeight:800, fontSize:16, color:azul }}>{datos.grupo||'—'}</div>
+                <div style={{ fontSize:12, color:'#888', marginTop:2, display:'flex', alignItems:'center', gap:6 }}>
+                  {datos.materia && <span>{datos.materia}</span>}
+                  {datos.aula && <span style={{ padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>📍 {datos.aula}</span>}
                 </div>
               </div>
             </div>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#aaa' }}>✕</button>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, cursor:'pointer', color:'#bbb' }}>✕</button>
           </div>
 
-          {/* TAREA */}
-          {(claseDeHora.instrucciones || claseDeHora.archivo_url) ? (
-            <div style={{ backgroundColor:'#fffbeb', border:'1.5px solid #fcd34d', borderRadius:12, padding:'14px 16px' }}>
-              <div style={{ fontSize:12, fontWeight:800, color:'#78350f', marginBottom:10, display:'flex', alignItems:'center', gap:6 }}>
-                📝 Tarea para los alumnos
-              </div>
-              {claseDeHora.instrucciones && (
-                <div style={{ fontSize:14, color:'#78350f', lineHeight:1.6, whiteSpace:'pre-wrap', marginBottom: claseDeHora.archivo_url ? 12 : 0 }}>
-                  {claseDeHora.instrucciones}
+          {(datos.instrucciones||datos.archivo_url) ? (
+            <div style={{ backgroundColor:'#fffbeb', border:'2px solid #fcd34d', borderRadius:12, padding:16 }}>
+              <div style={{ fontSize:12, fontWeight:800, color:'#78350f', marginBottom:10 }}>📝 Tarea para los alumnos</div>
+              {datos.instrucciones && (
+                <div style={{ fontSize:14, color:'#78350f', lineHeight:1.7, whiteSpace:'pre-wrap', marginBottom:datos.archivo_url?12:0 }}>
+                  {datos.instrucciones}
                 </div>
               )}
-              {claseDeHora.archivo_url && (
-                <a href={claseDeHora.archivo_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'inline-flex', alignItems:'center', gap:8, fontSize:13, padding:'9px 16px', backgroundColor:'white', color:'#78350f', border:'1.5px solid #fcd34d', borderRadius:10, textDecoration:'none', fontWeight:700 }}>
-                  📎 {claseDeHora.archivo_nombre || 'Descargar archivo'}
+              {datos.archivo_url && (
+                <a href={datos.archivo_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:'inline-flex', alignItems:'center', gap:8, fontSize:13, padding:'10px 18px', backgroundColor:'white', color:'#78350f', border:'1.5px solid #fcd34d', borderRadius:10, textDecoration:'none', fontWeight:700 }}>
+                  📎 {datos.archivo_nombre||'Descargar archivo'}
                 </a>
               )}
             </div>
           ) : (
-            <div style={{ backgroundColor:'#f5f5f5', borderRadius:12, padding:'20px 16px', textAlign:'center' }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
-              <div style={{ fontSize:13, color:'#aaa', fontWeight:600 }}>El profesor no dejó tarea asignada</div>
+            <div style={{ backgroundColor:'#f5f5f5', borderRadius:12, padding:24, textAlign:'center' }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>📭</div>
+              <div style={{ fontSize:14, color:'#888', fontWeight:600 }}>Sin tarea asignada</div>
               <div style={{ fontSize:12, color:'#bbb', marginTop:4 }}>Mantén el orden en el aula</div>
             </div>
           )}
@@ -290,176 +278,205 @@ export default function Guardias() {
   return (
     <div style={{ minHeight:'100vh', backgroundColor:'#f0f4f0', fontFamily:'system-ui, sans-serif' }}>
 
-      {/* POPUP */}
-      {profAbierto && (
-        <TareaPopup
-          prof={profAbierto.prof}
-          hora={profAbierto.hora}
-          clase={profAbierto.clase}
-          onClose={()=>setProfAbierto(null)}
-        />
-      )}
+      {popupAbierto && <TareaPopup datos={popupAbierto} onClose={()=>setPopupAbierto(null)} />}
 
       {/* HEADER */}
-      <div style={{ backgroundColor:marron, color:'white', padding:'16px 20px', display:'flex', alignItems:'center', gap:12 }}>
+      <div style={{ backgroundColor:marron, color:'white', padding:'14px 20px', display:'flex', alignItems:'center', gap:12 }}>
         <button onClick={()=>{ window.location.href=esDirectivo?'/gestion':'/profesor'; }}
           style={{ background:'none', border:'none', color:'white', fontSize:22, cursor:'pointer' }}>←</button>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:800, fontSize:17 }}>🛡️ Guardias</div>
-          <div style={{ fontSize:12, opacity:0.85 }}>Curso 2025-2026 · {sectores.length} sectores</div>
+          <div style={{ fontSize:12, opacity:0.85 }}>Curso 2025-2026</div>
         </div>
       </div>
 
-      {/* SELECTOR FECHA */}
-      <div style={{ padding:16 }}>
-        <div style={{ backgroundColor:'white', borderRadius:12, padding:12, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          <button onClick={()=>setFecha(sumarDias(fecha,-1))} style={btnNav}>← Anterior</button>
-          <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)}
-            style={{ padding:'8px 12px', borderRadius:8, border:'1.5px solid #e0e0e0', fontSize:14, flex:1, minWidth:140 }} />
-          <button onClick={()=>setFecha(sumarDias(fecha,1))} style={btnNav}>Siguiente →</button>
+      {/* NAVEGACIÓN FECHA */}
+      <div style={{ padding:'12px 16px 0' }}>
+        <div style={{ backgroundColor:'white', borderRadius:12, padding:'10px 12px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:8, alignItems:'center' }}>
+          <button onClick={()=>setFecha(sumarDias(fecha,-1))} style={btnNav}>←</button>
+          <div style={{ flex:1, textAlign:'center' }}>
+            <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>
+              {fechaCorta(fecha)}
+            </div>
+            {esFinde && <div style={{ fontSize:11, color:'#aaa' }}>Fin de semana</div>}
+            {!esFinde && cargandoDia && <div style={{ fontSize:11, color:'#aaa' }}>⏳ Cargando...</div>}
+            {!esFinde && !cargandoDia && (
+              <div style={{ fontSize:11, color:'#888' }}>
+                {ausenciasDia.length > 0
+                  ? `${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`
+                  : '✅ Sin ausencias'}
+              </div>
+            )}
+          </div>
+          <button onClick={()=>setFecha(sumarDias(fecha,1))} style={btnNav}>→</button>
           <button onClick={()=>setFecha(new Date().toISOString().split('T')[0])}
-            style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none' }}>📅 Hoy</button>
-        </div>
-
-        <div style={{ marginTop:10, padding:'10px 14px', backgroundColor:'white', borderRadius:10, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
-          <span style={{ fontWeight:700, color:azul, fontSize:14 }}>📆 {fechaLegible(fecha)}</span>
-          {!esFinde && (
-            <>
-              <span style={{ padding:'3px 10px', backgroundColor:'#fef3c7', color:'#78350f', borderRadius:20, fontSize:12, fontWeight:600 }}>🏥 {totalAus} ausencia{totalAus!==1?'s':''}</span>
-              <span style={{ padding:'3px 10px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:20, fontSize:12, fontWeight:600 }}>📄 {totalDld} DLD</span>
-              {cargandoDia && <span style={{ fontSize:12, color:'#888' }}>⏳ Cargando faltas...</span>}
-            </>
-          )}
+            style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
         </div>
       </div>
 
+      {/* SELECTOR DE HORAS */}
+      {!esFinde && (
+        <div style={{ padding:'10px 16px 0' }}>
+          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4 }}>
+            {HORAS.map(h => {
+              const activa = h.id === horaActiva;
+              // ¿Tengo yo guardia esta hora?
+              const tengoGuardia = sectores.some(s =>
+                (horarioGuardias[s]?.[diaSem]?.[h.id]||[])
+                  .some(p => p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]))
+              );
+              // ¿Hay ausencias esta hora?
+              const hayAusencias = ausenciasDia.some(a => a.horas.some(hh=>hh.hora===h.id));
+
+              return (
+                <button key={h.id} onClick={()=>setHoraActiva(h.id)} style={{
+                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer', border:'none',
+                  backgroundColor: activa ? marron : 'white',
+                  color: activa ? 'white' : '#555',
+                  fontWeight: activa ? 800 : 600,
+                  fontSize:13,
+                  boxShadow: activa ? `0 3px 10px ${marron}50` : '0 1px 4px rgba(0,0,0,0.08)',
+                  position:'relative',
+                }}>
+                  {h.label}
+                  {/* Indicadores */}
+                  {tengoGuardia && !activa && (
+                    <span style={{ position:'absolute', top:3, right:3, width:7, height:7, borderRadius:'50%', backgroundColor:'#22c55e' }} />
+                  )}
+                  {hayAusencias && !activa && (
+                    <span style={{ position:'absolute', top:3, left:3, width:7, height:7, borderRadius:'50%', backgroundColor:'#ef4444' }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {/* Horario de la hora activa */}
+          <div style={{ textAlign:'center', fontSize:12, color:'#888', marginTop:6 }}>
+            🕐 {horaInfo?.horario}
+          </div>
+        </div>
+      )}
+
+      {/* CONTENIDO */}
       {cargando ? (
         <div style={{ padding:60, textAlign:'center', color:'#888' }}>
           <div style={{ fontSize:40, marginBottom:12 }}>⏳</div>Cargando datos...
         </div>
       ) : esFinde ? (
-        <div style={{ padding:'0 16px 16px' }}>
+        <div style={{ padding:16 }}>
           <div style={{ backgroundColor:'white', borderRadius:12, padding:40, textAlign:'center', color:'#888' }}>
             <div style={{ fontSize:40, marginBottom:12 }}>🏖️</div>
             <div>Fin de semana — selecciona un día laborable</div>
           </div>
         </div>
       ) : (
-        <div style={{ padding:'0 16px 16px' }}>
-          <div style={{ backgroundColor:'white', borderRadius:12, boxShadow:'0 2px 8px rgba(0,0,0,0.06)', overflow:'hidden' }}>
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ borderCollapse:'collapse', fontSize:12, width:'100%', minWidth: Math.max(700, sectores.length*110+80) }}>
-                <thead>
-                  <tr>
-                    <th style={thFijo}>Hora</th>
-                    {sectores.map(s=>(
-                      <th key={s} style={thSector}>
-                        <div style={{ fontSize:18, marginBottom:2 }}>{emojiSector(s)}</div>
-                        <div style={{ fontSize:10, fontWeight:700, lineHeight:1.2 }} title={s}>{s.length>16?s.substring(0,14)+'…':s}</div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {HORAS.map(h => (
-                    <tr key={h.id}>
-                      {/* CELDA HORA */}
-                      <td style={tdHora}>
-                        <div style={{ fontWeight:700, color:azul }}>{h.label}</div>
-                        <div style={{ fontSize:10, color:'#888' }}>{h.horario}</div>
-                      </td>
-
-                      {/* CELDAS POR SECTOR */}
-                      {sectores.map(s => {
-                        const guardias  = horarioGuardias[s]?.[diaSem]?.[h.id] || [];
-                        const ausentes  = ausentesEnCelda(s, h.id);
-                        const hayAlgo   = guardias.length>0 || ausentes.length>0;
-
-                        return (
-                          <td key={s} style={{ ...tdBase, backgroundColor: ausentes.length>0 ? '#fffbeb' : 'white', padding:0 }}>
-                            {!hayAlgo ? (
-                              <div style={{ padding:'8px 6px', textAlign:'center' }}>
-                                <span style={{ color:'#e0e0e0', fontSize:10 }}>—</span>
-                              </div>
-                            ) : (
-                              <div style={{ display:'flex', flexDirection:'column' }}>
-
-                                {/* FILA 1: Profesores de guardia */}
-                                {guardias.length>0 && (
-                                  <div style={{ padding:'4px 5px', borderBottom: ausentes.length>0 ? '2px solid #fcd34d' : 'none', backgroundColor:'#f0fdf4' }}>
-                                    {guardias.map((p,i) => {
-                                      const esYo = p && profesorNombre && p.toLowerCase().includes((profesorNombre||'').toLowerCase().split(' ')[0]);
-                                      return (
-                                        <div key={i} style={{
-                                          padding:'3px 6px', borderRadius:5, fontSize:10, fontWeight:700, lineHeight:1.4, marginBottom:2,
-                                          backgroundColor: esYo?'#fef3c7':'white',
-                                          color: esYo?'#78350f':'#065f46',
-                                          border: `1px solid ${esYo?'#fbbf24':'#bbf7d0'}`,
-                                          display:'flex', alignItems:'center', gap:3,
-                                        }}>
-                                          <span style={{ fontSize:8 }}>🛡️</span>
-                                          {nombreCorto(p)}
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-
-                                {/* FILA 2: Grupos sin profesor — clickables */}
-                                {ausentes.length>0 && (
-                                  <div style={{ padding:'4px 5px', backgroundColor:'#fffbeb' }}>
-                                    {ausentes.map((a,i) => {
-                                      const clasesHora = a.horas.filter(hh=>hh.hora===h.id);
-                                      return clasesHora.map((c,j) => (
-                                        <button key={`${i}-${j}`}
-                                          onClick={()=>setProfAbierto({ prof:a, hora:h.id, clase:c })}
-                                          style={{
-                                            display:'block', width:'100%', padding:'4px 6px', borderRadius:6,
-                                            fontSize:10, fontWeight:700, lineHeight:1.4, textAlign:'left',
-                                            cursor:'pointer', marginBottom:2,
-                                            backgroundColor: a.tipo==='dld'?'#dbeafe':'#fee2e2',
-                                            color: a.tipo==='dld'?'#1e40af':'#991b1b',
-                                            border:`1.5px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
-                                          }}>
-                                          <div style={{ display:'flex', alignItems:'center', gap:3 }}>
-                                            <span>👥</span>
-                                            <span>{c.grupo||nombreCorto(a.nombrePdf)}</span>
-                                            <span style={{ fontSize:9, opacity:0.6, marginLeft:'auto' }}>▼</span>
-                                          </div>
-                                          {c.aula && <div style={{ fontSize:9, opacity:0.7, marginTop:1 }}>📍 {c.aula}</div>}
-                                        </button>
-                                      ));
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        <div style={{ padding:16, display:'flex', flexDirection:'column', gap:12 }}>
 
           {/* LEYENDA */}
-          <div style={{ marginTop:10, padding:'8px 14px', backgroundColor:'white', borderRadius:10, fontSize:11, color:'#666', display:'flex', gap:14, flexWrap:'wrap' }}>
-            <span><span style={pill('#f0fdf4','#065f46','#bbf7d0')}>🛡️ Verde</span> Profesor de guardia</span>
-            <span><span style={pill('#fef3c7','#78350f','#fbbf24')}>🛡️ Amarillo</span> Tú de guardia</span>
-            <span><span style={pill('#fee2e2','#991b1b','#fca5a5')}>👥 Rojo ▼</span> Grupo sin profesor (pulsa para ver tarea)</span>
-            <span><span style={pill('#dbeafe','#1e40af','#93c5fd')}>👥 Azul ▼</span> Grupo con DLD (pulsa para ver tarea)</span>
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', fontSize:11, color:'#888' }}>
+            <span>🟢 Tú de guardia</span>
+            <span>🔴 Grupo sin profesor (pulsa)</span>
+            <span>🔵 DLD (pulsa)</span>
           </div>
+
+          {/* TARJETA POR SECTOR */}
+          {sectores.map(s => {
+            const guardias = guardiasDeSector(s);
+            const ausentes = ausentesDeSector(s);
+            if (guardias.length === 0 && ausentes.length === 0) return null;
+
+            return (
+              <div key={s} style={{ backgroundColor:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 2px 8px rgba(0,0,0,0.07)' }}>
+                {/* Cabecera sector */}
+                <div style={{ backgroundColor: ausentes.length>0 ? '#fff7ed' : '#f8fffe', padding:'10px 16px', borderBottom:'1px solid #eee', display:'flex', alignItems:'center', gap:8 }}>
+                  <span style={{ fontSize:18 }}>{emojiSector(s)}</span>
+                  <span style={{ fontWeight:800, fontSize:14, color:azul }}>{s}</span>
+                  {ausentes.length>0 && (
+                    <span style={{ marginLeft:'auto', padding:'2px 10px', backgroundColor:'#fee2e2', color:'#991b1b', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      ⚠️ {ausentes.length} ausente{ausentes.length!==1?'s':''}
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ padding:'10px 14px' }}>
+                  {/* FILA GUARDIAS */}
+                  {guardias.length>0 && (
+                    <div style={{ marginBottom: ausentes.length>0 ? 10 : 0 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#888', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>🛡️ De guardia</div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                        {guardias.map((p,i) => {
+                          const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
+                          return (
+                            <span key={i} style={{
+                              padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                              backgroundColor: esYo ? '#fef3c7' : '#f0fdf4',
+                              color: esYo ? '#78350f' : '#065f46',
+                              border: `1.5px solid ${esYo ? '#fbbf24' : '#bbf7d0'}`,
+                              display:'flex', alignItems:'center', gap:4,
+                            }}>
+                              {esYo && <span>⭐</span>}
+                              {nombreCorto(p)}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SEPARADOR */}
+                  {guardias.length>0 && ausentes.length>0 && (
+                    <div style={{ height:1, backgroundColor:'#fde68a', margin:'10px 0' }} />
+                  )}
+
+                  {/* FILA AUSENTES → GRUPOS CLICKABLES */}
+                  {ausentes.length>0 && (
+                    <div>
+                      <div style={{ fontSize:10, fontWeight:700, color:'#991b1b', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>👥 Grupos sin profesor</div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                        {ausentes.map((a,i) => {
+                          const clasesHora = a.horas.filter(h=>h.hora===horaActiva);
+                          return clasesHora.map((c,j) => (
+                            <button key={`${i}-${j}`}
+                              onClick={()=>setPopupAbierto(c)}
+                              style={{
+                                display:'flex', alignItems:'center', gap:10, width:'100%',
+                                padding:'10px 14px', borderRadius:10, cursor:'pointer', textAlign:'left',
+                                backgroundColor: a.tipo==='dld' ? '#eff6ff' : '#fef2f2',
+                                border:`1.5px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
+                                color: a.tipo==='dld' ? '#1e40af' : '#991b1b',
+                              }}>
+                              <div style={{ flex:1 }}>
+                                <div style={{ fontWeight:800, fontSize:13 }}>{c.grupo||'Grupo'}</div>
+                                {c.materia && <div style={{ fontSize:11, opacity:0.8, marginTop:1 }}>{c.materia}</div>}
+                              </div>
+                              {c.aula && (
+                                <span style={{ padding:'3px 10px', backgroundColor:'white', borderRadius:20, fontSize:11, fontWeight:700, border:'1px solid currentColor', opacity:0.8 }}>
+                                  📍 {c.aula}
+                                </span>
+                              )}
+                              <span style={{ fontSize:16, opacity:0.5 }}>›</span>
+                            </button>
+                          ));
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Si no hay nada esta hora */}
+          {sectores.every(s => guardiasDeSector(s).length===0 && ausentesDeSector(s).length===0) && (
+            <div style={{ backgroundColor:'white', borderRadius:12, padding:32, textAlign:'center', color:'#aaa' }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>☕</div>
+              <div style={{ fontSize:14 }}>Sin guardias asignadas esta hora</div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-const btnNav = { padding:'8px 12px', borderRadius:8, border:'1.5px solid #e0e0e0', backgroundColor:'white', color:'#555', fontSize:12, fontWeight:600, cursor:'pointer' };
-const thFijo    = { padding:'10px 8px', backgroundColor:marron, color:'white', fontSize:11, fontWeight:700, textAlign:'center', border:`1px solid #6b2a10`, position:'sticky', left:0, zIndex:2, minWidth:65 };
-const thSector  = { padding:'8px 6px', backgroundColor:marron, color:'white', fontSize:11, fontWeight:700, textAlign:'center', border:`1px solid #6b2a10`, minWidth:100, maxWidth:130 };
-const tdHora    = { padding:'8px', backgroundColor:'#fafafa', border:'1px solid #eee', textAlign:'center', minWidth:65, whiteSpace:'nowrap', position:'sticky', left:0, zIndex:1, fontSize:12 };
-const tdBase    = { padding:'5px', border:'1px solid #eee', verticalAlign:'top', minWidth:100 };
-const pill      = (bg,color,border) => ({ display:'inline-block', backgroundColor:bg, color, padding:'1px 6px', borderRadius:4, fontSize:10, fontWeight:700, border:`1px solid ${border}` });
+const btnNav = { padding:'8px 14px', borderRadius:8, border:'1.5px solid #e0e0e0', backgroundColor:'white', color:'#555', fontSize:16, fontWeight:600, cursor:'pointer' };
