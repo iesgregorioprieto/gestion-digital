@@ -356,7 +356,14 @@ export default function GestionDatos() {
         
         // Detectar tipo
         const tipo = detectarTipoHora(textoCelda);
-        const { grupo, materia, aula } = tipo === 'clase' ? extraerGrupoYMateria(textoCelda) : { grupo: '', materia: '', aula: '' };
+        let grupo = '', materia = '', aula = '';
+        if (tipo === 'clase') {
+          const extraido = extraerGrupoYMateria(textoCelda);
+          grupo = extraido.grupo; materia = extraido.materia; aula = extraido.aula;
+        } else if (tipo === 'guardia') {
+          // El texto es "GUARDIA TMV/Carrocería" → el cuadrante es lo que va después de "GUARDIA "
+          grupo = textoCelda.replace(/^GUARDIA\s*/i, '').trim();
+        }
         
         // Añadir a las columnas que ocupa (colspan)
         for (let c = 0; c < colspan && colDia < 5; c++) {
