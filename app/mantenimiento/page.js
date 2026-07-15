@@ -44,6 +44,8 @@ export default function Mantenimiento() {
     descripcion: '',
     foto: null,
     fotoPreview: null,
+    archivoNombre: '',
+    archivoEsImagen: false,
   });
 
   useEffect(() => {
@@ -84,7 +86,11 @@ export default function Mantenimiento() {
   function manejarFoto(e) {
     const archivo = e.target.files[0];
     if (!archivo) return;
-    setForm(f => ({ ...f, foto: archivo, fotoPreview: URL.createObjectURL(archivo) }));
+    const esImagen = archivo.type.startsWith('image/');
+    const preview = esImagen ? URL.createObjectURL(archivo) : null;
+    setForm(f => ({ ...f, foto: archivo, fotoPreview: preview, archivoNombre: archivo.name, archivoEsImagen: esImagen }));
+    // Resetear input para que funcione al volver a seleccionar el mismo archivo
+    e.target.value = '';
   }
 
   async function enviar() {
@@ -103,13 +109,17 @@ export default function Mantenimiento() {
         const nombreArchivo = `${Date.now()}_${form.foto.name}`;
         const { data: uploadData, error: uploadError } = await getSupabase().storage
           .from('mantenimiento-fotos')
-          .upload(nombreArchivo, form.foto);
-        if (!uploadError && uploadData) {
-          const { data: urlData } = getSupabase().storage
-            .from('mantenimiento-fotos')
-            .getPublicUrl(nombreArchivo);
-          foto_url = urlData.publicUrl;
+          .upload(nombreArchivo, form.foto, { contentType: form.foto.type || 'application/octet-stream', upsert: false });
+        if (uploadError) {
+          console.error('Error subiendo archivo:', uploadError.message);
+          setError('Error al subir el archivo: ' + uploadError.message);
+          setEnviando(false);
+          return;
         }
+        const { data: urlData } = getSupabase().storage
+          .from('mantenimiento-fotos')
+          .getPublicUrl(nombreArchivo);
+        foto_url = urlData.publicUrl;
       }
 
       const { error: err } = await getSupabase().from('mantenimiento').insert([{
@@ -150,7 +160,7 @@ export default function Mantenimiento() {
           </p>
           <p style={{ color: '#888', fontSize: 14 }}>El equipo de mantenimiento la atenderá lo antes posible.</p>
           <div style={{ display: 'flex', gap: 12, marginTop: 28, justifyContent: 'center' }}>
-            <button onClick={() => { setEnviado(false); setPaso(1); setForm({ estancia: '', ubicacion_exacta: '', descripcion: '', foto: null, fotoPreview: null }); }} style={{
+            <button onClick={() => { setEnviado(false); setPaso(1); setForm({ estancia: '', ubicacion_exacta: '', descripcion: '', foto: null, fotoPreview: null, archivoNombre: '', archivoEsImagen: false }); }} style={{
               padding: '12px 20px', borderRadius: 10, border: `2px solid ${verde}`,
               backgroundColor: 'white', color: verde, fontWeight: 700, cursor: 'pointer', fontSize: 14
             }}>+ Nueva incidencia</button>
@@ -338,22 +348,33 @@ export default function Mantenimiento() {
               <div style={{ marginBottom: 20 }}>
                 <label style={labelEstilo}>📷 Foto (opcional)</label>
                 {/* PREVIEW */}
-                {form.fotoPreview && (
-                  <div style={{ textAlign: 'center', marginBottom: 10 }}>
-                    <img src={form.fotoPreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 6 }} />
-                    <div style={{ fontSize: 12, color: '#888' }}>{form.foto?.name || 'Archivo adjunto'}</div>
-                    <button onClick={() => setForm(f => ({ ...f, foto: null, fotoPreview: null }))}
-                      style={{ marginTop: 6, fontSize: 12, color: '#991b1b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
+                {form.foto && (
+                  <div style={{ textAlign: 'center', marginBottom: 10, padding: '10px', backgroundColor: '#f8f8f8', borderRadius: 10, border: '1px solid #e0e0e0' }}>
+                    {form.archivoEsImagen && form.fotoPreview ? (
+                      <img src={form.fotoPreview} alt="preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginBottom: 8 }} />
+                    ) : (
+                      <div style={{ fontSize: 36, marginBottom: 8 }}>
+                        {form.archivoNombre?.endsWith('.pdf') ? '📄' : form.archivoNombre?.endsWith('.doc') || form.archivoNombre?.endsWith('.docx') ? '📝' : '📎'}
+                      </div>
+                    )}
+                    <div style={{ fontSize: 12, color: '#555', fontWeight: 600, marginBottom: 6 }}>
+                      ✅ {form.archivoNombre || 'Archivo adjunto'}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#aaa', marginBottom: 6 }}>
+                      {form.foto.size ? `${(form.foto.size / 1024).toFixed(0)} KB` : ''}
+                    </div>
+                    <button onClick={() => setForm(f => ({ ...f, foto: null, fotoPreview: null, archivoNombre: '', archivoEsImagen: false }))}
+                      style={{ fontSize: 12, color: '#991b1b', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}>
                       ✕ Quitar archivo
                     </button>
                   </div>
                 )}
 
                 {/* BOTONES */}
-                {!form.fotoPreview && (
+                {!form.foto ? (
                   <div style={{ border: '2px dashed #ddd', borderRadius: 10, padding: 16, textAlign: 'center', backgroundColor: '#fafafa' }}>
                     <div style={{ fontSize: 13, color: '#aaa', marginBottom: 12 }}>📎 Adjunta una foto o documento del problema</div>
-                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
                       <button onClick={() => document.getElementById('inputCamara').click()}
                         style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', borderRadius: 9, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                         📷 Hacer foto
@@ -364,10 +385,8 @@ export default function Mantenimiento() {
                       </button>
                     </div>
                   </div>
-                )}
-
-                {form.fotoPreview && (
-                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => document.getElementById('inputCamara').click()}
                       style={{ fontSize: 12, padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontWeight: 600, cursor: 'pointer' }}>
                       📷 Cambiar foto
