@@ -142,6 +142,8 @@ export default function GestionGuardias() {
     setMotivo('');
     setProfesorSeleccionado('');
     cargarGuardiasManuales();
+    // Forzar re-render del cuadrante
+    setFecha(f => f);
   }
 
   async function eliminarGuardia(id) {
@@ -280,6 +282,13 @@ export default function GestionGuardias() {
                                     {p.split(',')[0]?.trim() || p}
                                   </div>
                                 ))}
+                                {guardiasManuales
+                                  .filter(g => g.hora_id === h.id && g.sector === sector)
+                                  .map((g, j) => (
+                                    <div key={'m'+j} style={{ fontSize:11, color:'white', padding:'2px 6px', backgroundColor:'#15803d', borderRadius:4, marginBottom:2, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}>
+                                      ➕ {g.profesor_nombre.split(',')[0]?.trim()}
+                                    </div>
+                                  ))}
                               </td>
                             );
                           })}
