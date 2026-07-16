@@ -32,7 +32,7 @@ const HORAS = [
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
 function diaSemanaEs(fecha) {
-  const dias = ['domingo','lunes','martes','miércoles','jueves','viernes','sábado'];
+  const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   return dias[new Date(fecha+'T12:00:00').getDay()];
 }
 
@@ -144,7 +144,7 @@ export default function Guardias() {
     setPopupAbierto(null);
 
     const diaSem = diaSemanaEs(f);
-    if (diaSem==='sábado'||diaSem==='domingo') { setCargandoDia(false); return; }
+    if (diaSem==='sabado'||diaSem==='domingo') { setCargandoDia(false); return; }
 
     const [{ data: aus }, { data: dlds }] = await Promise.all([
       getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio',f).gte('fecha_fin',f),
@@ -212,7 +212,7 @@ export default function Guardias() {
   }
 
   const diaSem  = diaSemanaEs(fecha);
-  const esFinde = diaSem==='sábado'||diaSem==='domingo';
+  const esFinde = diaSem==='sabado'||diaSem==='domingo';
   const horaInfo = HORAS.find(h=>h.id===horaActiva);
 
   // Para la hora activa: guardias y ausentes por sector
@@ -467,10 +467,20 @@ export default function Guardias() {
           })}
 
           {/* Si no hay nada esta hora */}
-          {sectores.every(s => guardiasDeSector(s).length===0 && ausentesDeSector(s).length===0) && (
+          {sectores.length === 0 ? (
+            <div style={{ backgroundColor:'#fffbeb', border:'1.5px solid #fbbf24', borderRadius:12, padding:24, textAlign:'center' }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>📋</div>
+              <div style={{ fontSize:14, fontWeight:700, color:'#92400e', marginBottom:6 }}>Aún no hay cuadrantes de guardia cargados</div>
+              <div style={{ fontSize:12, color:'#78350f', lineHeight:1.5 }}>
+                El equipo directivo aún no ha subido el cuadrante de guardias del curso 2025-2026.<br/>
+                Cuando lo cargue en <strong>/gestion/datos → 🛡️ Guardias</strong>, aquí aparecerán las guardias por día y hora.
+              </div>
+            </div>
+          ) : sectores.every(s => guardiasDeSector(s).length===0 && ausentesDeSector(s).length===0) && (
             <div style={{ backgroundColor:'white', borderRadius:12, padding:32, textAlign:'center', color:'#aaa' }}>
               <div style={{ fontSize:32, marginBottom:8 }}>☕</div>
               <div style={{ fontSize:14 }}>Sin guardias asignadas esta hora</div>
+              <div style={{ fontSize:12, color:'#bbb', marginTop:6 }}>Navega con ← → para ver otro día</div>
             </div>
           )}
         </div>
