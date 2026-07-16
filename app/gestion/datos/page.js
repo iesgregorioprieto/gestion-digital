@@ -532,8 +532,8 @@ export default function GestionDatos() {
         let colDia = 0, celdaIdx = 0;
 
         while (colDia < 5) {
-          while (ocupadas[\`\${fi},\${colDia}\`]) {
-            const info = ocupadas[\`\${fi},\${colDia}\`];
+          while (ocupadas[`${fi},${colDia}`]) {
+            const info = ocupadas[`${fi},${colDia}`];
             if (info.nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: info.nombre });
             colDia++;
             if (colDia >= 5) break;
@@ -553,7 +553,7 @@ export default function GestionDatos() {
               if (nombre.trim()) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre.trim() });
             });
             for (let r = 1; r < rowspan; r++) {
-              ocupadas[\`\${fi + r},\${colDia}\`] = { nombre: nombres[0] || '' };
+              ocupadas[`${fi + r},${colDia}`] = { nombre: nombres[0] || '' };
             }
             colDia++;
           }
