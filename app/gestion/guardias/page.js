@@ -232,6 +232,20 @@ export default function GestionGuardias() {
                                     {p.split(',')[0]?.trim()}
                                   </div>
                                 ))}
+                                {ausentes.length > 0 && profs.length > 0 && (
+                                  <div style={{ marginTop:4, borderTop:'1px dashed #fca5a5', paddingTop:4 }}>
+                                    {ausentes.map((a, j) => {
+                                      const horasAusente = Array.isArray(a.horas) ? a.horas : [];
+                                      const horaAusente = horasAusente.find(hh => normHora(hh.hora_id || hh.hora || '') === h.id || (hh.hora||'').includes(h.id));
+                                      if (!horaAusente) return null;
+                                      return (
+                                        <div key={j} style={{ fontSize:10, color:'#991b1b', padding:'2px 5px', backgroundColor:'#fee2e2', borderRadius:4, marginBottom:2, whiteSpace:'nowrap' }}>
+                                          📚 {horaAusente.grupo || a.profesor_nombre?.split(' ')[0] || 'Grupo'}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </td>
                             );
                           })}
