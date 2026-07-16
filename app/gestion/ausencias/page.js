@@ -71,7 +71,6 @@ export default function GestionAusencias() {
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState('imprevista');
-  const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [enviando, setEnviando] = useState(false);
