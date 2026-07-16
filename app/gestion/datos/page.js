@@ -1,4 +1,4 @@
-'use client';
+'use client'; // rebuild
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
