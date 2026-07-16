@@ -102,6 +102,16 @@ export default function PanelGestion() {
       color: '#7e22ce',
     },
     {
+      id: 'guardias',
+      emoji: '🛡️',
+      titulo: 'Guardias',
+      descripcion: 'Gestiona y asigna guardias manualmente al profesorado',
+      href: '/gestion/guardias',
+      bg: '#fef3c7',
+      border: '#fcd34d',
+      color: '#92400e',
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones del Alumnado',
