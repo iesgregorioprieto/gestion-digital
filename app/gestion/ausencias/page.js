@@ -49,6 +49,8 @@ export default function GestionAusencias() {
   const [ausencias, setAusencias] = useState([]);
   const [profesores, setProfesores] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [cargandoHorario, setCargandoHorario] = useState(false);
+  const [horario, setHorario] = useState({});
   const [mensaje, setMensaje] = useState(null);
 
   // Filtros
@@ -199,6 +201,50 @@ export default function GestionAusencias() {
     setMotivo(''); setTipo('imprevista'); setHorario({});
     setVista('lista');
     cargarTodo();
+  }
+
+  async function cargarHorarioProfesor(profId, fecha) {
+    if (!profId || !fecha) return;
+    setCargandoHorario(true);
+    setHorario({});
+    const prof = profesores.find(p => p.id === profId);
+    if (!prof) { setCargandoHorario(false); return; }
+    
+    const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+    const diaSem = dias[new Date(fecha+'T12:00:00').getDay()];
+    if (diaSem === 'sabado' || diaSem === 'domingo') { setCargandoHorario(false); return; }
+    
+    // Buscar nombre en horarios_profesores usando unaccent
+    const { data: fnResult } = await getSupabase()
+      .rpc('buscar_profesor_horario', { 
+        p_nombre: prof.nombre.split(' ')[0], 
+        p_apellido: prof.apellidos.split(' ')[0] 
+      });
+    
+    if (!fnResult) { setCargandoHorario(false); return; }
+    
+    const { data: horas } = await getSupabase()
+      .from('horarios_profesores')
+      .select('hora_id, tipo, grupo, materia')
+      .eq('profesor_nombre_pdf', fnResult)
+      .eq('dia', diaSem)
+      .eq('curso_academico', '2025-2026');
+    
+    if (horas?.length > 0) {
+      const nuevoHorario = {};
+      horas.forEach(h => {
+        const horaIdNorm = h.hora_id.replace(/[aª]$/, '');
+        nuevoHorario[horaIdNorm] = {
+          tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo,
+          grupo: h.grupo || '',
+          materia: h.materia || '',
+          instrucciones: '',
+          precargado: true,
+        };
+      });
+      setHorario(nuevoHorario);
+    }
+    setCargandoHorario(false);
   }
 
   function diasParaJustificar(createdAt) {
@@ -530,7 +576,7 @@ ${a.observaciones_directivo ? `
             {/* PROFESOR */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>👨‍🏫 Profesor *</label>
-              <select value={profesorSeleccionado} onChange={e => setProfesorSeleccionado(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
+              <select value={profesorSeleccionado} onChange={e => { setProfesorSeleccionado(e.target.value); cargarHorarioProfesor(e.target.value, fechaInicio); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
                 <option value="">-- Selecciona el profesor --</option>
                 {profesores.map(p => <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre} {p.departamento ? `· ${p.departamento}` : ''}</option>)}
               </select>
@@ -540,13 +586,46 @@ ${a.observaciones_directivo ? `
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
-                <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); if (!fechaFin) setFechaFin(e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); if (!fechaFin) setFechaFin(e.target.value); cargarHorarioProfesor(profesorSeleccionado, e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin</label>
                 <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
             </div>
+
+            {/* HORARIO CARGADO AUTOMÁTICAMENTE */}
+            {cargandoHorario && (
+              <div style={{ marginBottom: 16, padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, color: '#1e40af' }}>
+                ⏳ Cargando horario del profesor...
+              </div>
+            )}
+            {!cargandoHorario && Object.keys(horario).length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: azul, marginBottom: 8 }}>📅 Horario del día (cargado automáticamente)</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px,1fr))', gap: 8 }}>
+                  {HORAS.map(h => {
+                    const datos = horario[h.id];
+                    if (!datos) return (
+                      <div key={h.id} style={{ padding: '8px 10px', borderRadius: 8, backgroundColor: '#f3f4f6', fontSize: 12, color: '#aaa', textAlign: 'center' }}>
+                        {h.label}<br/><span style={{ fontSize: 10 }}>Libre</span>
+                      </div>
+                    );
+                    const esClase = datos.tipo === 'clase';
+                    return (
+                      <div key={h.id} style={{ padding: '8px 10px', borderRadius: 8, backgroundColor: esClase ? '#dbeafe' : '#fef3c7', border: `1.5px solid ${esClase ? '#93c5fd' : '#fcd34d'}`, fontSize: 12 }}>
+                        <div style={{ fontWeight: 700, color: esClase ? '#1e40af' : '#92400e' }}>{h.label}</div>
+                        {esClase && <div style={{ fontSize: 11, marginTop: 2, color: '#1e40af' }}>{datos.grupo}</div>}
+                        {!esClase && <div style={{ fontSize: 11, marginTop: 2, color: '#92400e' }}>🛡️ Guardia</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+                  Las horas de clase serán cubiertas por los profesores de guardia asignados en el cuadrante.
+                </div>
+              </div>
+            )}
 
             {/* TIPO */}
             <div style={{ marginBottom: 16 }}>
