@@ -137,6 +137,19 @@ export default function GestionGuardias() {
     });
     setGuardando(false);
     if (error) { mostrarMensaje('❌ Error al guardar: ' + error.message, 'error'); return; }
+    
+    // Crear notificación en ausencias para que el profesor pueda justificarlo
+    const hora = HORAS.find(h => h.id === horaSeleccionada);
+    await getSupabase().from('ausencias').insert({
+      profesor_id: profesorSeleccionado,
+      profesor_nombre: `${prof.apellidos}, ${prof.nombre}`,
+      fecha_inicio: fecha,
+      fecha_fin: fecha,
+      tipo: 'guardia',
+      motivo: motivo || `Guardia asignada — ${sectorSeleccionado} — ${hora?.label}`,
+      estado: 'pendiente',
+      horas: [{ hora_id: horaSeleccionada, hora: hora?.label, instrucciones: '', tipo: 'guardia' }],
+    });
     mostrarMensaje('✅ Guardia añadida correctamente', 'ok');
     setModalAbierto(false);
     setMotivo('');
@@ -277,18 +290,17 @@ export default function GestionGuardias() {
                             const profs = guardiasHorario[sector]?.[diaSem]?.[h.id] || [];
                             return (
                               <td key={h.id} style={{ padding:'8px', textAlign:'center', borderBottom:'1px solid #e5e7eb', verticalAlign:'top' }}>
-                                {profs.map((p, j) => (
-                                  <div key={j} style={{ fontSize:11, color:'#333', padding:'2px 6px', backgroundColor:'#e0e7ff', borderRadius:4, marginBottom:2, whiteSpace:'nowrap' }}>
-                                    {p.split(',')[0]?.trim() || p}
+                                {[
+                                  ...profs.map(p => ({ nombre: p.split(',')[0]?.trim() || p, tipo: 'delphos' })),
+                                  ...guardiasManuales
+                                    .filter(g => g.hora_id === h.id && g.sector === sector)
+                                    .map(g => ({ nombre: g.profesor_nombre.split(',')[0]?.trim(), tipo: 'manual', motivo: g.motivo }))
+                                ].map((item, j) => (
+                                  <div key={j} title={item.tipo==='manual' && item.motivo ? item.motivo : ''}
+                                    style={{ fontSize:11, color:'#1e3a5f', padding:'2px 6px', backgroundColor:'#e0e7ff', borderRadius:4, marginBottom:2, whiteSpace:'nowrap' }}>
+                                    {item.nombre}
                                   </div>
                                 ))}
-                                {guardiasManuales
-                                  .filter(g => g.hora_id === h.id && g.sector === sector)
-                                  .map((g, j) => (
-                                    <div key={'m'+j} style={{ fontSize:11, color:'white', padding:'2px 6px', backgroundColor:'#15803d', borderRadius:4, marginBottom:2, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}>
-                                      ➕ {g.profesor_nombre.split(',')[0]?.trim()}
-                                    </div>
-                                  ))}
                               </td>
                             );
                           })}
