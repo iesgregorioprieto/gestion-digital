@@ -951,6 +951,23 @@ export default function GestionDatos() {
             </div>
           </div>
         )}
+      {/* PESTAÑA GUARDIAS */}
+      {vistaTab === 'guardias' && (
+        <div style={{ padding: '0 16px 24px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Delphos)</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
+              Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias. Cada archivo es un sector (TMV, FOL, Recreo Activos...).
+            </div>
+            <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+              <input ref={fileRefGuardias} type="file" webkitdirectory="" directory="" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
+              <div style={{ padding: '16px', borderRadius: 10, backgroundColor: procesando ? '#f5f5f5' : '#7c3aed', color: procesando ? '#999' : 'white', fontWeight: 700, fontSize: 14, textAlign: 'center', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                {procesando ? '⏳ Procesando...' : '📁 Seleccionar carpeta de Guardias'}
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* MODAL PREVIEW PROFESORES */}
@@ -1120,25 +1137,6 @@ export default function GestionDatos() {
           </div>
         </div>
       )}
-
-      {/* PESTAÑA GUARDIAS */}
-      {vistaTab === 'guardias' && (
-        <div style={{ padding: '0 16px 24px' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Delphos)</div>
-            <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
-              Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias. Cada archivo es un sector (TMV, FOL, Recreo Activos...).
-            </div>
-            <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
-              <input ref={fileRefGuardias} type="file" webkitdirectory="" directory="" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
-              <div style={{ padding: '16px', borderRadius: 10, backgroundColor: procesando ? '#f5f5f5' : '#7c3aed', color: procesando ? '#999' : 'white', fontWeight: 700, fontSize: 14, textAlign: 'center', cursor: procesando ? 'not-allowed' : 'pointer' }}>
-                {procesando ? '⏳ Procesando...' : '📁 Seleccionar carpeta de Guardias'}
-              </div>
-            </label>
-          </div>
-        </div>
-      )}
-
       {/* MODAL GUARDIAS */}
       {modalGuardias && previewGuardias.length > 0 && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
