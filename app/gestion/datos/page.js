@@ -75,6 +75,12 @@ export default function GestionDatos() {
   const [progresoHorarios, setProgresoHorarios] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefHorarios = useRef(null);
 
+  // Guardias
+  const [previewGuardias, setPreviewGuardias] = useState([]);
+  const [modalGuardias, setModalGuardias] = useState(false);
+  const [progresoGuardias, setProgresoGuardias] = useState({ actual: 0, total: 0, mensaje: '' });
+  const fileRefGuardias = useRef(null);
+
   // Profesorado
   const [previewProfesores, setPreviewProfesores] = useState([]);
   const [modalProfesores, setModalProfesores] = useState(false);
@@ -470,6 +476,132 @@ export default function GestionDatos() {
     return resultado;
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // PARSER HTML DE GUARDIAS DE DELPHOS
+  // ═══════════════════════════════════════════════════════════════
+  
+  const MAPA_HORAS_GUARDIAS = {
+    '8:30': '1', '9:25': '2', '10:20': '3',
+    '11:45': '4', '12:40': '5', '13:35': '6',
+  };
+  const DIAS_GUARDIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
+
+  async function procesarCarpetaGuardias(e) {
+    const archivos = Array.from(e.target.files || []).filter(f =>
+      f.name.toLowerCase().match(/\.(htm|html)$/)
+    );
+    if (archivos.length === 0) {
+      setMensaje({ tipo: 'error', texto: '❌ No se encontraron archivos HTM/HTML' });
+      return;
+    }
+    setProcesando(true);
+    setProgresoGuardias({ actual: 0, total: archivos.length, mensaje: 'Analizando...' });
+
+    const registros = [];
+
+    for (let i = 0; i < archivos.length; i++) {
+      const archivo = archivos[i];
+      setProgresoGuardias({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
+
+      const buffer = await archivo.arrayBuffer();
+      const decoder = new TextDecoder('windows-1252');
+      const html = decoder.decode(buffer);
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // Nombre del sector (th colspan=6)
+      const thSector = doc.querySelector('th[colspan="6"]');
+      if (!thSector) continue;
+      const sector = thSector.textContent.trim();
+
+      // Parsear filas
+      const filas = Array.from(doc.querySelectorAll('tr'));
+      const ocupadas = {};
+      let filaIdx = 0;
+
+      filas.forEach((fila, fi) => {
+        const th = fila.querySelector('th:not([colspan])');
+        if (!th) { filaIdx++; return; }
+        const textoTh = th.textContent.replace(/&nbsp;/g, '').trim();
+        const matchHora = textoTh.match(/(\d{1,2}:\d{2})/);
+        if (!matchHora) { filaIdx++; return; }
+        const horaId = MAPA_HORAS_GUARDIAS[matchHora[1]];
+        if (!horaId) { filaIdx++; return; }
+
+        const celdas = Array.from(fila.querySelectorAll('td'));
+        let colDia = 0, celdaIdx = 0;
+
+        while (colDia < 5) {
+          while (ocupadas[\`\${fi},\${colDia}\`]) {
+            const info = ocupadas[\`\${fi},\${colDia}\`];
+            if (info.nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: info.nombre });
+            colDia++;
+            if (colDia >= 5) break;
+          }
+          if (colDia >= 5) break;
+
+          const celda = celdas[celdaIdx];
+          if (!celda) break;
+
+          const colspan = parseInt(celda.getAttribute('colspan') || '1');
+          const rowspan = parseInt(celda.getAttribute('rowspan') || '1');
+          const texto = celda.textContent.replace(/\s+/g, ' ').trim();
+          const nombres = texto.split('\n').map(n => n.trim()).filter(n => n && n !== '&nbsp;' && n.length > 2);
+
+          for (let c = 0; c < colspan && colDia < 5; c++) {
+            nombres.forEach(nombre => {
+              if (nombre.trim()) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre.trim() });
+            });
+            for (let r = 1; r < rowspan; r++) {
+              ocupadas[\`\${fi + r},\${colDia}\`] = { nombre: nombres[0] || '' };
+            }
+            colDia++;
+          }
+          celdaIdx++;
+        }
+        filaIdx++;
+      });
+    }
+
+    setPreviewGuardias(registros);
+    setModalGuardias(true);
+    setProcesando(false);
+    if (fileRefGuardias.current) fileRefGuardias.current.value = '';
+  }
+
+  async function confirmarGuardias() {
+    if (!previewGuardias.length) return;
+    setProcesando(true);
+
+    // Borrar guardias existentes del curso
+    await getSupabase().from('horarios_profesores').delete()
+      .eq('curso_academico', cursoNuevo)
+      .eq('tipo', 'guardia');
+
+    // Insertar en lotes
+    const LOTE = 200;
+    for (let i = 0; i < previewGuardias.length; i += LOTE) {
+      const lote = previewGuardias.slice(i, i + LOTE).map(g => ({
+        profesor_nombre_pdf: g.nombre_abrev,
+        hora_id: g.hora_id + 'a',
+        dia: g.dia,
+        tipo: 'guardia',
+        grupo: g.sector,
+        materia: '',
+        curso_academico: cursoNuevo,
+      }));
+      setProgresoGuardias({ actual: i + LOTE, total: previewGuardias.length, mensaje: `Guardando ${i}/${previewGuardias.length}...` });
+      const { error } = await getSupabase().from('horarios_profesores').insert(lote);
+      if (error) { setMensaje({ tipo: 'error', texto: `❌ Error: ${error.message}` }); setProcesando(false); return; }
+    }
+
+    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente` });
+    setModalGuardias(false);
+    setPreviewGuardias([]);
+    setProcesando(false);
+    cargarStats();
+  }
+
   async function procesarCSVProfesores(e) {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
@@ -635,6 +767,7 @@ export default function GestionDatos() {
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'profesorado', label: '👨‍🏫 Profesorado' },
+            { id: 'guardias', label: '🛡️ Guardias' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               {t.label}
@@ -983,6 +1116,53 @@ export default function GestionDatos() {
                 {procesando ? '⏳ Importando...' : `✅ Importar ${previewAlumnos.alumnos?.length} alumnos`}
               </button>
               <button onClick={() => { setModalAlumnos(false); setPreviewAlumnos([]); }} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PESTAÑA GUARDIAS */}
+      {vistaTab === 'guardias' && (
+        <div style={{ padding: '0 16px 24px' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Delphos)</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
+              Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias. Cada archivo es un sector (TMV, FOL, Recreo Activos...).
+            </div>
+            <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+              <input ref={fileRefGuardias} type="file" webkitdirectory="" directory="" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
+              <div style={{ padding: '16px', borderRadius: 10, backgroundColor: procesando ? '#f5f5f5' : '#7c3aed', color: procesando ? '#999' : 'white', fontWeight: 700, fontSize: 14, textAlign: 'center', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                {procesando ? '⏳ Procesando...' : '📁 Seleccionar carpeta de Guardias'}
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL GUARDIAS */}
+      {modalGuardias && previewGuardias.length > 0 && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 12 }}>🛡️ Vista previa de guardias</div>
+            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
+              <strong>{previewGuardias.length}</strong> registros detectados en {[...new Set(previewGuardias.map(g => g.sector))].length} sectores.
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              {[...new Set(previewGuardias.map(g => g.sector))].map(sector => (
+                <div key={sector} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, backgroundColor: '#f5f3ff', marginBottom: 4, fontSize: 13 }}>
+                  <span style={{ fontWeight: 600, color: '#7c3aed' }}>🛡️ {sector}</span>
+                  <span style={{ color: '#666' }}>{previewGuardias.filter(g => g.sector === sector).length} registros</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8 }}>
+              ⚠️ Se borrarán las guardias del curso <strong>{cursoNuevo}</strong> y se reemplazarán.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={confirmarGuardias} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
+                {procesando ? '⏳ Guardando...' : `✅ Confirmar (${previewGuardias.length} registros)`}
+              </button>
+              <button onClick={() => { setModalGuardias(false); setPreviewGuardias([]); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
             </div>
           </div>
         </div>
