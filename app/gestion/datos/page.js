@@ -513,20 +513,39 @@ export default function GestionDatos() {
       return MAPA_HORAS_GUARDIAS[m[1]] || null;
     }
 
+    const errores = [];
+
     for (let i = 0; i < archivos.length; i++) {
       const archivo = archivos[i];
       setProgresoGuardias({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
 
-      const buffer = await archivo.arrayBuffer();
-      const html = new TextDecoder('windows-1252').decode(buffer);
-      const doc = new DOMParser().parseFromString(html, 'text/html');
+      let buffer, html, doc;
+      try {
+        buffer = await archivo.arrayBuffer();
+        // Intentar windows-1252, si falla usar utf-8
+        try {
+          html = new TextDecoder('windows-1252').decode(buffer);
+        } catch {
+          html = new TextDecoder('utf-8').decode(buffer);
+        }
+        doc = new DOMParser().parseFromString(html, 'text/html');
+      } catch (err) {
+        errores.push(archivo.name);
+        continue;
+      }
 
       // Nombre del sector: primer th con colspan >= 5
-      let sector = archivo.name.replace(/\.(htm|html)$/i, ''); // fallback = nombre de archivo
-      const thSector = doc.querySelector('th[colspan="6"], th[colspan="5"]');
-      if (thSector) {
-        const txt = thSector.textContent.trim();
-        if (txt) sector = txt;
+      // Fallback = nombre de archivo sin extensión (cubre casos de fallo en selector)
+      let sector = archivo.name.replace(/\.(htm|html)$/i, '').toUpperCase();
+      // Buscar th con colspan 5 o 6
+      const allThs = Array.from(doc.querySelectorAll('th'));
+      for (const th of allThs) {
+        const cs = parseInt(th.getAttribute('colspan') || '1');
+        if (cs >= 5) {
+          // Usar textContent decodificado por el propio DOM (decodifica &nbsp; etc.)
+          const txt = th.textContent.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+          if (txt && txt.length > 0) { sector = txt; break; }
+        }
       }
 
       // Construir matriz de celdas con rowspan resuelto
@@ -585,6 +604,9 @@ export default function GestionDatos() {
     setModalGuardias(true);
     setProcesando(false);
     if (fileRefGuardias.current) fileRefGuardias.current.value = '';
+    if (errores.length > 0) {
+      setMensaje({ tipo: 'aviso', texto: `⚠️ No se pudieron leer ${errores.length} archivos: ${errores.join(', ')}` });
+    }
   }
 
   async function confirmarGuardias() {
@@ -730,7 +752,7 @@ export default function GestionDatos() {
       </div>
 
       {mensaje && (
-        <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>
+        <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : mensaje.tipo === 'aviso' ? '#fef3c7' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : mensaje.tipo === 'aviso' ? '#92400e' : '#991b1b', fontWeight: 600, fontSize: 14 }}>
           {mensaje.texto}
         </div>
       )}
