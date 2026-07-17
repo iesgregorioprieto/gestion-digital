@@ -471,7 +471,7 @@ export default function GestionDatos() {
   // ═══════════════════════════════════════════════════════════════
   // PARSER HTML DE GUARDIAS DE DELPHOS
   // ═══════════════════════════════════════════════════════════════
-  
+
   const MAPA_HORAS_GUARDIAS = {
     '8:30': '1', '9:25': '2', '10:20': '3',
     '11:45': '4', '12:40': '5', '13:35': '6',
@@ -491,19 +491,26 @@ export default function GestionDatos() {
 
     const registros = [];
 
-    // Helper: extraer nombres de una celda respetando <br> como separador
+    // Helper: extrae nombres de una celda usando <br> como separador
     function extraerNombres(celda) {
-      // Convertir <br> a \n en el innerHTML antes de leer texto
-      const html = celda.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-      // Crear div temporal para decodificar entidades y leer texto
       const tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      const texto = tmp.textContent || '';
-      // Ahora SÍ podemos split por \n (los <br> se convirtieron en \n)
-      return texto
+      // Convertir <br> en salto de línea ANTES de asignar innerHTML
+      tmp.innerHTML = celda.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+      return (tmp.textContent || '')
         .split('\n')
         .map(n => n.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim())
-        .filter(n => n && n !== '&nbsp;' && n.length > 2);
+        .filter(n => n.length > 2 && !/^[&\s]*$/.test(n));
+    }
+
+    // Helper: detecta si un th contiene una hora de guardia válida
+    function horaDeGuardia(th) {
+      // Ignorar th con colspan > 1 (son cabeceras de sector o días)
+      const cs = parseInt(th.getAttribute('colspan') || '1');
+      if (cs > 1) return null;
+      const texto = th.textContent.replace(/\u00a0/g, '').trim();
+      const m = texto.match(/(\d{1,2}:\d{2})/);
+      if (!m) return null;
+      return MAPA_HORAS_GUARDIAS[m[1]] || null;
     }
 
     for (let i = 0; i < archivos.length; i++) {
@@ -511,62 +518,65 @@ export default function GestionDatos() {
       setProgresoGuardias({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
 
       const buffer = await archivo.arrayBuffer();
-      const decoder = new TextDecoder('windows-1252');
-      const html = decoder.decode(buffer);
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
+      const html = new TextDecoder('windows-1252').decode(buffer);
+      const doc = new DOMParser().parseFromString(html, 'text/html');
 
-      // Nombre del sector (th colspan=6)
-      const thSector = doc.querySelector('th[colspan="6"]');
-      if (!thSector) continue;
-      const sector = thSector.textContent.trim();
+      // Nombre del sector: primer th con colspan >= 5
+      let sector = archivo.name.replace(/\.(htm|html)$/i, ''); // fallback = nombre de archivo
+      const thSector = doc.querySelector('th[colspan="6"], th[colspan="5"]');
+      if (thSector) {
+        const txt = thSector.textContent.trim();
+        if (txt) sector = txt;
+      }
 
-      // Parsear filas
+      // Construir matriz de celdas con rowspan resuelto
+      // Usamos un enfoque de "grid virtual" para evitar bugs con rowspan
       const filas = Array.from(doc.querySelectorAll('tr'));
-      const ocupadas = {}; // clave "fi,colDia" -> { nombres: [] }
+      // grid[fi][colDia] = { nombres, horaId }  — sólo cols 1-5 (días)
+      const grid = {}; // "fi-col" -> nombres ya asignadas
 
       filas.forEach((fila, fi) => {
-        const th = fila.querySelector('th:not([colspan])');
-        if (!th) return;
-        const textoTh = th.textContent.replace(/&nbsp;/g, '').trim();
-        const matchHora = textoTh.match(/(\d{1,2}:\d{2})/);
-        if (!matchHora) return;
-        const horaId = MAPA_HORAS_GUARDIAS[matchHora[1]];
-        if (!horaId) return;
+        // Buscar el th de hora en esta fila
+        const ths = Array.from(fila.querySelectorAll('th'));
+        let horaId = null;
+        for (const th of ths) {
+          const h = horaDeGuardia(th);
+          if (h) { horaId = h; break; }
+        }
+        if (!horaId) return; // fila sin hora válida (cabecera, recreo, mediodía...)
 
-        const celdas = Array.from(fila.querySelectorAll('td'));
-        let colDia = 0, celdaIdx = 0;
+        // Recorrer las celdas td de la fila
+        const tds = Array.from(fila.querySelectorAll('td'));
+        let col = 0;   // columna lógica 0-4 (lunes-viernes)
+        let tdIdx = 0;
 
-        while (colDia < 5) {
-          // Volcar celdas ocupadas por rowspan de filas anteriores
-          while (ocupadas[`${fi},${colDia}`]) {
-            const info = ocupadas[`${fi},${colDia}`];
-            (info.nombres || []).forEach(nombre => {
-              if (nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre });
-            });
-            colDia++;
-            if (colDia >= 5) break;
+        while (col < 5) {
+          const key = `${fi}-${col}`;
+          if (grid[key] !== undefined) {
+            // Esta celda ya fue rellenada por el rowspan de una fila anterior
+            const nombres = grid[key];
+            nombres.forEach(n => registros.push({ sector, dia: DIAS_GUARDIAS[col], hora_id: horaId, nombre_abrev: n }));
+            col++;
+            continue;
           }
-          if (colDia >= 5) break;
 
-          const celda = celdas[celdaIdx];
-          if (!celda) break;
+          const td = tds[tdIdx];
+          if (!td) { col++; continue; }
+          tdIdx++;
 
-          const colspan = parseInt(celda.getAttribute('colspan') || '1');
-          const rowspan = parseInt(celda.getAttribute('rowspan') || '1');
-          const nombres = extraerNombres(celda);
+          const colspan = parseInt(td.getAttribute('colspan') || '1');
+          const rowspan = parseInt(td.getAttribute('rowspan') || '1');
+          const nombres = extraerNombres(td);
 
-          for (let c = 0; c < colspan && colDia < 5; c++) {
-            nombres.forEach(nombre => {
-              if (nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre });
-            });
-            // Propagar TODA la lista de nombres por rowspan (no solo el primero)
+          for (let c = 0; c < colspan && col < 5; c++) {
+            // Registrar esta hora/día
+            nombres.forEach(n => registros.push({ sector, dia: DIAS_GUARDIAS[col], hora_id: horaId, nombre_abrev: n }));
+            // Propagar rowspan a filas siguientes
             for (let r = 1; r < rowspan; r++) {
-              ocupadas[`${fi + r},${colDia}`] = { nombres: [...nombres] };
+              grid[`${fi + r}-${col}`] = [...nombres];
             }
-            colDia++;
+            col++;
           }
-          celdaIdx++;
         }
       });
     }
