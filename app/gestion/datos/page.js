@@ -499,6 +499,21 @@ export default function GestionDatos() {
 
     const registros = [];
 
+    // Helper: extraer nombres de una celda respetando <br> como separador
+    function extraerNombres(celda) {
+      // Convertir <br> a \n en el innerHTML antes de leer texto
+      const html = celda.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+      // Crear div temporal para decodificar entidades y leer texto
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const texto = tmp.textContent || '';
+      // Ahora SÍ podemos split por \n (los <br> se convirtieron en \n)
+      return texto
+        .split('\n')
+        .map(n => n.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(n => n && n !== '&nbsp;' && n.length > 2);
+    }
+
     for (let i = 0; i < archivos.length; i++) {
       const archivo = archivos[i];
       setProgresoGuardias({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
@@ -516,25 +531,27 @@ export default function GestionDatos() {
 
       // Parsear filas
       const filas = Array.from(doc.querySelectorAll('tr'));
-      const ocupadas = {};
-      let filaIdx = 0;
+      const ocupadas = {}; // clave "fi,colDia" -> { nombres: [] }
 
       filas.forEach((fila, fi) => {
         const th = fila.querySelector('th:not([colspan])');
-        if (!th) { filaIdx++; return; }
+        if (!th) return;
         const textoTh = th.textContent.replace(/&nbsp;/g, '').trim();
         const matchHora = textoTh.match(/(\d{1,2}:\d{2})/);
-        if (!matchHora) { filaIdx++; return; }
+        if (!matchHora) return;
         const horaId = MAPA_HORAS_GUARDIAS[matchHora[1]];
-        if (!horaId) { filaIdx++; return; }
+        if (!horaId) return;
 
         const celdas = Array.from(fila.querySelectorAll('td'));
         let colDia = 0, celdaIdx = 0;
 
         while (colDia < 5) {
+          // Volcar celdas ocupadas por rowspan de filas anteriores
           while (ocupadas[`${fi},${colDia}`]) {
             const info = ocupadas[`${fi},${colDia}`];
-            if (info.nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: info.nombre });
+            (info.nombres || []).forEach(nombre => {
+              if (nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre });
+            });
             colDia++;
             if (colDia >= 5) break;
           }
@@ -545,21 +562,20 @@ export default function GestionDatos() {
 
           const colspan = parseInt(celda.getAttribute('colspan') || '1');
           const rowspan = parseInt(celda.getAttribute('rowspan') || '1');
-          const texto = celda.textContent.replace(/\s+/g, ' ').trim();
-          const nombres = texto.split('\n').map(n => n.trim()).filter(n => n && n !== '&nbsp;' && n.length > 2);
+          const nombres = extraerNombres(celda);
 
           for (let c = 0; c < colspan && colDia < 5; c++) {
             nombres.forEach(nombre => {
-              if (nombre.trim()) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre.trim() });
+              if (nombre) registros.push({ sector, dia: DIAS_GUARDIAS[colDia], hora_id: horaId, nombre_abrev: nombre });
             });
+            // Propagar TODA la lista de nombres por rowspan (no solo el primero)
             for (let r = 1; r < rowspan; r++) {
-              ocupadas[`${fi + r},${colDia}`] = { nombre: nombres[0] || '' };
+              ocupadas[`${fi + r},${colDia}`] = { nombres: [...nombres] };
             }
             colDia++;
           }
           celdaIdx++;
         }
-        filaIdx++;
       });
     }
 
@@ -1145,6 +1161,25 @@ export default function GestionDatos() {
             <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
               <strong>{previewGuardias.length}</strong> registros detectados en {[...new Set(previewGuardias.map(g => g.sector))].length} sectores.
             </div>
+
+            {/* DESGLOSE POR DÍA - detecta días vacíos */}
+            <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>📅 Reparto por día</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                {['lunes','martes','miercoles','jueves','viernes'].map(d => {
+                  const count = previewGuardias.filter(g => g.dia === d).length;
+                  const vacio = count === 0;
+                  return (
+                    <div key={d} style={{ textAlign: 'center', padding: '8px 4px', borderRadius: 6, backgroundColor: vacio ? '#fee2e2' : 'white', border: `1.5px solid ${vacio ? '#ef4444' : '#e2e8f0'}` }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: vacio ? '#991b1b' : '#64748b', textTransform: 'capitalize' }}>{d.substring(0,3)}</div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: vacio ? '#991b1b' : '#0f172a', marginTop: 2 }}>{count}</div>
+                      {vacio && <div style={{ fontSize: 9, color: '#991b1b', marginTop: 2 }}>⚠️ VACÍO</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             <div style={{ marginBottom: 16 }}>
               {[...new Set(previewGuardias.map(g => g.sector))].map(sector => (
                 <div key={sector} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 12px', borderRadius: 6, backgroundColor: '#f5f3ff', marginBottom: 4, fontSize: 13 }}>
