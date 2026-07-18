@@ -52,26 +52,26 @@ export default function GestionGuardias() {
   async function cargarBase() {
     setCargando(true);
     try {
-      // Intenta primero con tipo='guardia'
+      // Query simple y robusta
       let { data: horarios, error } = await getSupabase()
         .from('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
         .eq('curso_academico','2025-2026')
         .eq('tipo','guardia');
       
-      // Si no hay datos, intenta sin filtro de tipo (por si los datos se guardaron sin marcar tipo)
+      // Si no hay datos con tipo='guardia', intenta SIN ese filtro pero con un grupo válido
       if ((!horarios || horarios.length === 0) && !error) {
         const { data: horarios2 } = await getSupabase()
           .from('horarios_profesores')
           .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
           .eq('curso_academico','2025-2026')
-          .not('grupo','is',null);
+          .in('tipo', ['guardia', 'complementaria']);
         if (horarios2?.length > 0) horarios = horarios2;
       }
 
       const porSector = {};
       (horarios || []).forEach(g => {
-        // Saltarse horas no válidas (recreo, comida, etc)
+        // Solo procesar horas válidas (1-6)
         const horaNum = normHora(g.hora_id);
         if (!/^[1-6]$/.test(horaNum)) return;
         
@@ -89,7 +89,9 @@ export default function GestionGuardias() {
       setGuardiasHorario(porSector);
       
       if (!horarios || horarios.length === 0) {
-        console.warn('⚠️ No se cargaron guardias. Verifica que estén en Supabase con tipo=guardia y curso=2025-2026');
+        console.warn('⚠️ Sin guardias en BD. Verifica: curso_academico=2025-2026 y tipo=guardia');
+      } else {
+        console.log('✅ Guardias cargadas:', horarios.length, 'registros en', Object.keys(porSector).length, 'sectores');
       }
       setCargando(false);
     } catch (err) {
