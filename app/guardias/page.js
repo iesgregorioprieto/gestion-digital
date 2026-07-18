@@ -87,6 +87,12 @@ export default function Guardias() {
     setPN(sessionStorage.getItem('profesor_nombre')||'');
     const rol = sessionStorage.getItem('profesor_rol_gestion')||'';
     setEsDir(['secretario','director','jefe_estudios'].includes(rol));
+    
+    // Detectar de dónde viene el usuario para saber a dónde volver
+    const referer = document.referrer || '';
+    const vieneDeGestion = referer.includes('/gestion');
+    sessionStorage.setItem('guardias_origen', vieneDeGestion ? 'gestion' : 'profesor');
+    
     cargarBase();
   }, []);
 
@@ -294,7 +300,10 @@ export default function Guardias() {
 
       {/* HEADER */}
       <div style={{ backgroundColor:marron, color:'white', padding:'14px 20px', display:'flex', alignItems:'center', gap:12 }}>
-        <button onClick={()=>{ window.location.href=esDirectivo?'/gestion':'/profesor'; }}
+        <button onClick={()=>{
+          const origen = sessionStorage.getItem('guardias_origen') || 'profesor';
+          window.location.href = origen === 'gestion' ? '/gestion' : '/profesor';
+        }}
           style={{ background:'none', border:'none', color:'white', fontSize:22, cursor:'pointer' }}>←</button>
         <div style={{ flex:1 }}>
           <div style={{ fontWeight:800, fontSize:17 }}>🛡️ Guardias</div>
