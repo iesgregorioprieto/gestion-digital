@@ -31,7 +31,6 @@ export default function GestionGuardias() {
   const [ausenciasDia, setAusenciasDia] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
-  const [debugInfo, setDebugInfo] = useState({ fetched: 0, procesados: 0, saltados: 0, sectores: [] });
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -52,37 +51,29 @@ export default function GestionGuardias() {
 
   async function cargarBase() {
     setCargando(true);
-    try {
-      // Query SIMPLE - sin validaciones complejas
-      const { data: horarios } = await getSupabase()
-        .from('horarios_profesores')
-        .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
-        .eq('curso_academico','2025-2026')
-        .eq('tipo','guardia');
+    const { data: horarios } = await getSupabase()
+      .from('horarios_profesores')
+      .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
+      .eq('curso_academico','2025-2026')
+      .eq('tipo','guardia');
 
-      console.log('Total registros:', horarios?.length);
+    const porSector = {};
+    (horarios || []).forEach(g => {
+      const sector = (g.grupo || g.materia || 'General').trim();
+      const hora = (g.hora_id || '').toString().replace(/[aª]/g, '');
+      const dia = (g.dia || '').toLowerCase().trim();
       
-      const porSector = {};
-      (horarios || []).forEach(g => {
-        const sector = g.grupo || 'Sin sector';
-        const hora = (g.hora_id || '').replace(/[aª]/g, '');
-        const dia = (g.dia || '').toLowerCase();
-        
-        if (!hora || !dia) return;
-        if (!porSector[sector]) porSector[sector] = {};
-        if (!porSector[sector][dia]) porSector[sector][dia] = {};
-        if (!porSector[sector][dia][hora]) porSector[sector][dia][hora] = [];
-        porSector[sector][dia][hora].push(g.profesor_nombre_pdf || 'N/A');
-      });
+      if (!hora || !dia || !sector) return;
+      
+      if (!porSector[sector]) porSector[sector] = {};
+      if (!porSector[sector][dia]) porSector[sector][dia] = {};
+      if (!porSector[sector][dia][hora]) porSector[sector][dia][hora] = [];
+      porSector[sector][dia][hora].push(g.profesor_nombre_pdf || 'N/A');
+    });
 
-      setSectores(Object.keys(porSector).sort());
-      setGuardiasHorario(porSector);
-      console.log('Sectores encontrados:', Object.keys(porSector).length, '-', Object.keys(porSector));
-      setCargando(false);
-    } catch (err) {
-      console.error('Error:', err);
-      setCargando(false);
-    }
+    setSectores(Object.keys(porSector).sort());
+    setGuardiasHorario(porSector);
+    setCargando(false);
   }
 
   async function cargarDia() {
@@ -147,16 +138,6 @@ export default function GestionGuardias() {
 
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 16px' }}>
 
-        {/* DEBUG PANEL */}
-        {!cargando && (
-          <div style={{ backgroundColor:'#f0fdf4', borderLeft:'4px solid #22c55e', padding:'12px 16px', borderRadius:'0 8px 8px 0', marginBottom:16, fontSize:12, fontFamily:'monospace', color:'#166534' }}>
-            <div style={{ fontWeight:700, marginBottom:6 }}>🔍 DEBUG INFO</div>
-            <div>📊 Fetched: <strong>{debugInfo.fetched}</strong> registros</div>
-            <div>✅ Procesados: <strong>{debugInfo.procesados}</strong> | ❌ Saltados: <strong>{debugInfo.saltados}</strong></div>
-            <div>🛡️ Sectores ({debugInfo.sectores.length}): <strong>{debugInfo.sectores.join(', ')}</strong></div>
-          </div>
-        )}
-
         {/* SELECTOR FECHA */}
         <div style={{ backgroundColor:'white', borderRadius:12, padding:16, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.07)', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
           <div style={{ flex:1 }}>
@@ -205,28 +186,12 @@ export default function GestionGuardias() {
                 📊 Cuadrante — {diaSem.charAt(0).toUpperCase()+diaSem.slice(1)} {new Date(fecha+'T12:00:00').toLocaleDateString('es-ES',{day:'numeric',month:'long'})}
               </div>
 
-              {/* DEBUG: Mostrar estado de carga */}
-              {sectores.length === 0 && (
-                <div style={{ backgroundColor:'#fef3c7', borderLeft:'4px solid #f59e0b', padding:'14px 16px', borderRadius:'0 8px 8px 0', marginBottom:16, fontSize:13, color:'#92400e' }}>
-                  <div style={{ fontWeight:700, marginBottom:6 }}>⚠️ No hay sectores cargados</div>
-                  <div style={{ marginBottom:8 }}>La carpeta de guardias aún no ha sido sincronizada. Ve a <strong>Gestión → Datos del Centro → Guardias</strong> y sube los archivos HTM de Delphos.</div>
-                  <div style={{ fontSize:12, opacity:0.8 }}>Si ya los has cargado, verifica en la consola (F12) si hay errores.</div>
-                </div>
-              )}
-              </div>
-
               {sectores.length === 0 ? (
                 <div style={{ textAlign:'center', padding:24, color:'#aaa', fontSize:14 }}>
                   No hay cuadrante cargado. Importa los horarios desde Datos del Centro.
                 </div>
               ) : (
-                <>
-                  {/* Info badge */}
-                  <div style={{ backgroundColor:'#d1fae5', borderLeft:'4px solid #059669', padding:'10px 14px', borderRadius:'0 8px 8px 0', marginBottom:14, fontSize:12, color:'#047857', fontWeight:600 }}>
-                    ✅ Cuadrante cargado: <strong>{sectores.length} sectores</strong> · Total de guardias: <strong>{Object.values(guardiasHorario).reduce((sum, s) => sum + Object.values(s).reduce((sum2, d) => sum2 + Object.values(d).reduce((sum3, h) => sum3 + h.length, 0), 0), 0)}</strong>
-                  </div>
-                  
-                  <div style={{ overflowX:'auto' }}>
+                <div style={{ overflowX:'auto' }}>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                     <thead>
                       <tr style={{ backgroundColor:'#f8f9fa' }}>
