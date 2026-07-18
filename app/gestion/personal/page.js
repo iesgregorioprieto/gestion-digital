@@ -24,6 +24,18 @@ const ROLES_DOCENTES = [
   { valor: 'jefe_departamento', etiqueta: '📂 Jefe/a de Departamento' },
 ];
 
+// Especialidades / Sectores de guardia - lista fija que coincide con los sectores del cuadrante
+const ESPECIALIDADES = [
+  'TMV',
+  'COMERCIO',
+  'ELECTRICIDAD',
+  'INFORMÁTICA',
+  'HOSTELERÍA',
+  'INDUSTRIAS ALIMENTARIAS',
+  'ADMINISTRACIÓN',
+  'GENERAL',
+];
+
 export default function PanelSecretario() {
   const [pestana, setPestana] = useState('profesores');
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
@@ -152,6 +164,20 @@ export default function PanelSecretario() {
     }
   }
 
+  function sugerirEspecialidad(departamento) {
+    if (!departamento) return '';
+    const d = departamento.toUpperCase();
+    if (d.includes('TMV') || d.includes('CARROC')) return 'TMV';
+    if (d.includes('COMERC')) return 'COMERCIO';
+    if (d.includes('ELECTR')) return 'ELECTRICIDAD';
+    if (d.includes('INFORM')) return 'INFORMÁTICA';
+    if (d.includes('HOSTEL') || d.includes('COCIN')) return 'HOSTELERÍA';
+    if (d.includes('INDUSTR') || d.includes('ALIMENT') || d.includes('PANAD')) return 'INDUSTRIAS ALIMENTARIAS';
+    if (d.includes('ADMIN')) return 'ADMINISTRACIÓN';
+    // Cualquier otro departamento (FOL, Matemáticas, Lengua, Inglés, etc.) → GENERAL
+    return 'GENERAL';
+  }
+
   function abrirFicha(profesor) {
     setProfesorSeleccionado(profesor);
     setModoVista('ficha');
@@ -165,7 +191,7 @@ export default function PanelSecretario() {
       apellidos: profesor.apellidos,
       email: profesor.email,
       departamento: profesor.departamento,
-      especialidad: profesor.especialidad || '',
+      especialidad: profesor.especialidad || sugerirEspecialidad(profesor.departamento),
       tipo_contrato: profesor.tipo_contrato,
       antiguedad_centro: profesor.antiguedad_centro || '',
       antiguedad_cuerpo: profesor.antiguedad_cuerpo || '',
@@ -447,7 +473,7 @@ export default function PanelSecretario() {
             <Campo label="Apellidos" value={formEdicion.apellidos} onChange={v => setFormEdicion(f => ({ ...f, apellidos: v }))} />
             <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
             <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
-            <Campo label="Especialidad" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} />
+            <CampoSelect label="🛡️ Sector de guardia" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} opciones={ESPECIALIDADES} />
             <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
             <Campo label="Antigüedad centro (años)" value={formEdicion.antiguedad_centro} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_centro: v }))} tipo="number" />
             <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
