@@ -19,6 +19,18 @@ const HORAS = [
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
+// Compara una hora guardada (puede ser "1", "1ª", "1ª hora"...) con horaId ("1")
+function horaCoincide(horaGuardada, horaId) {
+  if (!horaGuardada) return false;
+  const s = horaGuardada.toString().toLowerCase().trim();
+  // Buscar el primer dígito
+  const m = s.match(/^(\d)/);
+  if (m) return m[1] === horaId;
+  // También aceptar "recreo"
+  if (s.includes('recreo') && horaId === 'recreo') return true;
+  return false;
+}
+
 function diaSemanaEs(fecha) {
   const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   return dias[new Date(fecha+'T12:00:00').getDay()];
@@ -275,7 +287,7 @@ export default function Guardias() {
   function ausentesDeSector(sector) {
     return ausenciasDia.filter(a =>
       a.cuadrante === sector &&
-      a.horas.some(h => h.hora === horaActiva)
+      a.horas.some(h => horaCoincide(h.hora, horaActiva))
     );
   }
 
@@ -381,7 +393,7 @@ export default function Guardias() {
                   .some(p => p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]))
               );
               // ¿Hay ausencias esta hora?
-              const hayAusencias = ausenciasDia.some(a => a.horas.some(hh=>hh.hora===h.id));
+              const hayAusencias = ausenciasDia.some(a => a.horas.some(hh=>horaCoincide(hh.hora, h.id)));
 
               return (
                 <button key={h.id} onClick={()=>setHoraActiva(h.id)} style={{
@@ -490,7 +502,7 @@ export default function Guardias() {
                       <div style={{ fontSize:10, fontWeight:700, color:'#991b1b', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>👥 Grupos sin profesor</div>
                       <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                         {ausentes.map((a,i) => {
-                          const clasesHora = a.horas.filter(h=>h.hora===horaActiva);
+                          const clasesHora = a.horas.filter(h=>horaCoincide(h.hora, horaActiva));
                           return clasesHora.map((c,j) => (
                             <button key={`${i}-${j}`}
                               onClick={()=>setPopupAbierto(c)}
