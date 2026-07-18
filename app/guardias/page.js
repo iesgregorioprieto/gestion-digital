@@ -222,31 +222,25 @@ export default function Guardias() {
 
     const resultado = [];
     for (const falta of todas) {
-      const { data: prof } = await getSupabase().from('profesores').select('nombre,apellidos').eq('id',falta.profesor_id);
+      const { data: prof } = await getSupabase().from('profesores').select('nombre,apellidos,especialidad').eq('id',falta.profesor_id);
       if (!prof||prof.length===0) continue;
       const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
-      const abrev = claveAbreviatura(prof[0].apellidos, prof[0].nombre); // "cár.c,lj"
+      const abrev = claveAbreviatura(prof[0].apellidos, prof[0].nombre);
 
-      // Buscar su sector en horarios de guardia (buscar por abreviatura Delphos)
-      let cuadrante = null;
-      for (const s of sectores) {
-        const datos = horarioGuardias[s]||{};
-        for (const d of Object.keys(datos)) {
-          for (const h of Object.keys(datos[d])) {
-            const encontrado = (datos[d][h]||[]).some(p => normAbrev(p) === abrev);
-            if (encontrado) { cuadrante = s; break; }
-          }
-          if (cuadrante) break;
-        }
-        if (cuadrante) break;
-      }
+      // SECTOR = especialidad del profesor (rellenada al registrarse)
+      // Fallback: si no la tiene, GENERAL (para no perder al profesor)
+      let cuadrante = prof[0].especialidad || 'GENERAL';
       
-      // Si no encuentra sector, asignar "GENERAL" como fallback
-      if (!cuadrante && sectores.length > 0) {
-        cuadrante = sectores.find(s => s.toUpperCase().includes('GENERAL')) || sectores[0];
+      // Verificar que el sector existe en el cuadrante cargado
+      const sectorReal = sectores.find(s => s.toUpperCase() === cuadrante.toUpperCase());
+      if (sectorReal) {
+        cuadrante = sectorReal;
+      } else {
+        // Si no existe ese sector en el cuadrante, buscar GENERAL como último recurso
+        cuadrante = sectores.find(s => s.toUpperCase() === 'GENERAL') || sectores[0] || cuadrante;
       }
 
-      // Sus clases ese día (buscar también por abreviatura)
+      // Sus clases ese día (para saber qué grupos deja huérfanos)
       const clases = horariosClase.filter(h=>
         h.tipo==='clase' &&
         (h.dia||'').toLowerCase()===diaSem &&
@@ -294,6 +288,58 @@ export default function Guardias() {
       a.cuadrante === sector &&
       a.horas.some(h => horaCoincide(h.hora, horaActiva))
     );
+  }
+
+  // Grupos huérfanos totales en un sector para esta hora
+  function gruposHuerfanosSector(sector) {
+    let n = 0;
+    ausentesDeSector(sector).forEach(a => {
+      n += a.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase').length;
+    });
+    return n;
+  }
+
+  // Detecta si un sector necesita APOYO (más grupos huérfanos que guardias disponibles)
+  function necesitaApoyo(sector) {
+    const guardias = guardiasDeSector(sector).length;
+    const grupos = gruposHuerfanosSector(sector);
+    return grupos > guardias;
+  }
+
+  // Profesores de FP libres (no dan clase esa hora y no están ausentes)
+  // Sólo se sugieren si el sector GENERAL necesita apoyo
+  function profesoresFPLibresParaApoyo() {
+    if (!necesitaApoyo('GENERAL')) return [];
+    
+    // Todos los profesores que dan clase esa hora ese día
+    const ocupadosEnClase = new Set(
+      horariosClase
+        .filter(h => h.tipo === 'clase' && (h.dia||'').toLowerCase() === diaSem && normHora(h.hora_id) === horaActiva)
+        .map(h => normAbrev(h.profesor_nombre_pdf))
+    );
+    
+    // Profesores ausentes
+    const ausentesAbrev = new Set(
+      ausenciasDia.map(a => normAbrev(a.nombrePdf || ''))
+    );
+    
+    // Buscar profesores de guardia FP (no GENERAL) que estén disponibles
+    const sectoresFP = sectores.filter(s => s.toUpperCase() !== 'GENERAL');
+    const libres = [];
+    
+    for (const sector of sectoresFP) {
+      // Si ese sector no tiene ausencias que cubrir esta hora
+      if (gruposHuerfanosSector(sector) === 0) {
+        const guardiasFP = guardiasDeSector(sector);
+        guardiasFP.forEach(p => {
+          const key = normAbrev(p);
+          if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key)) {
+            libres.push({ abrev: p, sector, nombre: mapaProfesores[key] || p });
+          }
+        });
+      }
+    }
+    return libres;
   }
 
   // ── POPUP TAREA ──────────────────────────────
@@ -531,6 +577,32 @@ export default function Guardias() {
                             </button>
                           ));
                         })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* PANEL DE APOYO - Solo si el sector necesita ayuda */}
+                  {necesitaApoyo(s) && profesoresFPLibresParaApoyo().length > 0 && (
+                    <div style={{ marginTop:12, padding:'10px 14px', backgroundColor:'#fef3c7', borderRadius:10, border:'1.5px solid #fbbf24' }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:'#92400e', marginBottom:6, display:'flex', alignItems:'center', gap:5 }}>
+                        💡 APOYO SUGERIDO
+                        <span style={{ fontSize:10, fontWeight:600, opacity:0.8 }}>
+                          ({gruposHuerfanosSector(s)} grupos · {guardiasDeSector(s).length} guardias)
+                        </span>
+                      </div>
+                      <div style={{ fontSize:10, color:'#78350f', marginBottom:8 }}>
+                        Profesores de sectores FP libres esta hora que pueden apoyar:
+                      </div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {profesoresFPLibresParaApoyo().map((p, i) => (
+                          <span key={i} style={{
+                            padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:600,
+                            backgroundColor:'white', color:'#78350f',
+                            border:'1.5px solid #fbbf24',
+                          }}>
+                            {p.nombre} <span style={{ opacity:0.7, fontSize:10 }}>({p.sector})</span>
+                          </span>
+                        ))}
                       </div>
                     </div>
                   )}
