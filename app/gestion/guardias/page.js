@@ -13,12 +13,37 @@ function diaSemanaEs(fecha) {
   return dias[new Date(fecha+'T12:00:00').getDay()];
 }
 
+// Helpers para mapear abreviaturas Delphos → nombre completo
+function abreviarApellido(apellidos) {
+  if (!apellidos) return '';
+  const partes = apellidos.trim().split(/\s+/);
+  const primero = partes[0].slice(0, 3);
+  const iniciales = partes.slice(1).map(p => p[0]).join('');
+  return iniciales ? `${primero}. ${iniciales}` : `${primero}.`;
+}
+
+function inicialesNombre(nombre) {
+  if (!nombre) return '';
+  return nombre.trim().split(/\s+/).map(p => p[0]).join('');
+}
+
+function claveAbreviatura(apellidos, nombre) {
+  const ap = abreviarApellido(apellidos);
+  const nom = inicialesNombre(nombre);
+  return `${ap}, ${nom}`.toLowerCase().replace(/\s/g, '');
+}
+
+function normAbrev(str) {
+  return (str || '').toLowerCase().replace(/\s/g, '');
+}
+
 export default function GestionGuardias() {
   const [usuario, setUsuario] = useState(null);
   const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
-  const [guardias, setGuardias] = useState({}); // { ACOMPAÑAMIENTO: { lunes: { 1: [...] } } }
+  const [guardias, setGuardias] = useState({});
   const [sectores, setSectores] = useState([]);
   const [cargando, setCargando] = useState(true);
+  const [mapaProfesores, setMapaProf] = useState({});
 
   // CHECK AUTH
   useEffect(() => {
@@ -43,6 +68,16 @@ export default function GestionGuardias() {
   async function cargarGuardias() {
     setCargando(true);
     try {
+      // Cargar profesores para mapear abreviaturas Delphos → nombre completo
+      const { data: profes } = await getSupabase()
+        .from('profesores')
+        .select('nombre,apellidos');
+      const mapa = {};
+      (profes || []).forEach(p => {
+        mapa[claveAbreviatura(p.apellidos, p.nombre)] = `${p.apellidos}, ${p.nombre}`;
+      });
+      setMapaProf(mapa);
+
       // Query simple - trae TODOS los guardias
       const { data, error } = await getSupabase()
         .from('horarios_profesores')
@@ -171,19 +206,22 @@ export default function GestionGuardias() {
                       const profs = guardias[sector]?.[diaSem]?.[hora] || [];
                       return (
                         <td key={hora} style={{ padding: '8px', textAlign: 'center', verticalAlign: 'top' }}>
-                          {profs.map((p, j) => (
-                            <div key={j} style={{ 
-                              fontSize: 10, 
-                              color: '#1e3a5f', 
-                              background: '#e0e7ff', 
-                              padding: '4px 6px', 
-                              borderRadius: 4, 
-                              marginBottom: 2,
-                              whiteSpace: 'nowrap'
-                            }}>
-                              {p.split(',')[0]?.trim()}
-                            </div>
-                          ))}
+                          {profs.map((p, j) => {
+                            const nombreCompleto = mapaProfesores[normAbrev(p)] || p;
+                            return (
+                              <div key={j} style={{ 
+                                fontSize: 10, 
+                                color: '#1e3a5f', 
+                                background: '#e0e7ff', 
+                                padding: '4px 6px', 
+                                borderRadius: 4, 
+                                marginBottom: 2,
+                                whiteSpace: 'nowrap'
+                              }}>
+                                {nombreCompleto}
+                              </div>
+                            );
+                          })}
                           {profs.length === 0 && <div style={{ fontSize: 10, color: '#ccc' }}>—</div>}
                         </td>
                       );
