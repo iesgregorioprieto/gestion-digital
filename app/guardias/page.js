@@ -225,27 +225,32 @@ export default function Guardias() {
       const { data: prof } = await getSupabase().from('profesores').select('nombre,apellidos').eq('id',falta.profesor_id);
       if (!prof||prof.length===0) continue;
       const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
+      const abrev = claveAbreviatura(prof[0].apellidos, prof[0].nombre); // "cár.c,lj"
 
-      // Buscar su sector en horarios de guardia
+      // Buscar su sector en horarios de guardia (buscar por abreviatura Delphos)
       let cuadrante = null;
       for (const s of sectores) {
         const datos = horarioGuardias[s]||{};
         for (const d of Object.keys(datos)) {
           for (const h of Object.keys(datos[d])) {
-            if ((datos[d][h]||[]).some(p=>(p||'').toLowerCase()===nombrePdf.toLowerCase())) {
-              cuadrante = s; break;
-            }
+            const encontrado = (datos[d][h]||[]).some(p => normAbrev(p) === abrev);
+            if (encontrado) { cuadrante = s; break; }
           }
           if (cuadrante) break;
         }
         if (cuadrante) break;
       }
+      
+      // Si no encuentra sector, asignar "GENERAL" como fallback
+      if (!cuadrante && sectores.length > 0) {
+        cuadrante = sectores.find(s => s.toUpperCase().includes('GENERAL')) || sectores[0];
+      }
 
-      // Sus clases ese día
+      // Sus clases ese día (buscar también por abreviatura)
       const clases = horariosClase.filter(h=>
         h.tipo==='clase' &&
         (h.dia||'').toLowerCase()===diaSem &&
-        (h.profesor_nombre_pdf||'').toLowerCase()===nombrePdf.toLowerCase()
+        normAbrev(h.profesor_nombre_pdf) === abrev
       );
 
       const horasFalta = Array.isArray(falta.horas)?falta.horas:[];
