@@ -31,6 +31,7 @@ export default function GestionGuardias() {
   const [ausenciasDia, setAusenciasDia] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
+  const [debugInfo, setDebugInfo] = useState({ fetched: 0, procesados: 0, saltados: 0, sectores: [] });
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -66,7 +67,6 @@ export default function GestionGuardias() {
       
       (horarios || []).forEach((g, idx) => {
         try {
-          // Debug de cada registro
           if (idx < 3) console.log(`Registro ${idx}:`, { 
             prof: g.profesor_nombre_pdf?.slice(0,20), 
             hora: g.hora_id, 
@@ -75,16 +75,14 @@ export default function GestionGuardias() {
             tipo: g.tipo
           });
           
-          // Validar hora
           const horaNum = normHora(g.hora_id || '');
           if (!horaNum || !/^[1-6]$/.test(horaNum)) {
             saltados++;
             return;
           }
           
-          // Validar y limpiar sector
           const sectorRaw = (g.grupo || g.materia || 'General').trim();
-          const sector = sectorRaw.replace(/&[A-Za-z0-9]+;/g, ''); // limpiar entidades HTML si las hay
+          const sector = sectorRaw.replace(/&[A-Za-z0-9]+;/g, '');
           if (!sector) {
             saltados++;
             return;
@@ -98,7 +96,6 @@ export default function GestionGuardias() {
             return;
           }
           
-          // Agrupar
           if (!porSector[sector]) porSector[sector] = {};
           if (!porSector[sector][dia]) porSector[sector][dia] = {};
           if (!porSector[sector][dia][horaNum]) porSector[sector][dia][horaNum] = [];
@@ -110,10 +107,19 @@ export default function GestionGuardias() {
         }
       });
 
+      const sectorList = Object.keys(porSector).sort();
       console.log(`✅ Procesados: ${procesados}, Saltados: ${saltados}`);
-      console.log('🛡️ Sectores cargados:', Object.keys(porSector));
+      console.log('🛡️ Sectores cargados:', sectorList);
       
-      setSectores(Object.keys(porSector).sort());
+      // Guardar info de debug
+      setDebugInfo({
+        fetched: horarios?.length || 0,
+        procesados,
+        saltados,
+        sectores: sectorList
+      });
+      
+      setSectores(sectorList);
       setGuardiasHorario(porSector);
       setCargando(false);
     } catch (err) {
@@ -183,6 +189,16 @@ export default function GestionGuardias() {
       </div>
 
       <div style={{ maxWidth:1100, margin:'0 auto', padding:'24px 16px' }}>
+
+        {/* DEBUG PANEL */}
+        {!cargando && (
+          <div style={{ backgroundColor:'#f0fdf4', borderLeft:'4px solid #22c55e', padding:'12px 16px', borderRadius:'0 8px 8px 0', marginBottom:16, fontSize:12, fontFamily:'monospace', color:'#166534' }}>
+            <div style={{ fontWeight:700, marginBottom:6 }}>🔍 DEBUG INFO</div>
+            <div>📊 Fetched: <strong>{debugInfo.fetched}</strong> registros</div>
+            <div>✅ Procesados: <strong>{debugInfo.procesados}</strong> | ❌ Saltados: <strong>{debugInfo.saltados}</strong></div>
+            <div>🛡️ Sectores ({debugInfo.sectores.length}): <strong>{debugInfo.sectores.join(', ')}</strong></div>
+          </div>
+        )}
 
         {/* SELECTOR FECHA */}
         <div style={{ backgroundColor:'white', borderRadius:12, padding:16, marginBottom:20, boxShadow:'0 1px 4px rgba(0,0,0,0.07)', display:'flex', alignItems:'center', gap:16, flexWrap:'wrap' }}>
