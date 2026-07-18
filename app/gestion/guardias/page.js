@@ -1,5 +1,6 @@
 'use client';
 export const dynamic = 'force-dynamic';
+// v2.0 - REWRITE COMPLETO 2026-07-18
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
