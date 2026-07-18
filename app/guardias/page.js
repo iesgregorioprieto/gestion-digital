@@ -111,12 +111,18 @@ export default function Guardias() {
   const [cargandoDia, setCargandoDia]   = useState(false);
   const [popupAbierto, setPopupAbierto] = useState(null);
   const [profesorNombre, setPN]         = useState('');
+  const [profesorId, setProfId]         = useState('');
   const [esDirectivo, setEsDir]         = useState(false);
   const [mapaProfesores, setMapaProf]   = useState({});
+  const [profesoresList, setProfsList]  = useState([]); // {id, nombre, apellidos, especialidad}
+  const [contadorApoyos, setContApoyos] = useState({}); // { SECTOR: count }
+  const [apoyosAsignados, setApAsig]    = useState([]); // apoyos ya asignados
+  const [modalAsignar, setModalAsig]    = useState(null); // {sectorDestino, grupo, aula, materia, tarea, hora, fecha}
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     if (!id) { window.location.href='/login'; return; }
+    setProfId(id);
     setPN(sessionStorage.getItem('profesor_nombre')||'');
     const rol = sessionStorage.getItem('profesor_rol_gestion')||'';
     setEsDir(['secretario','director','jefe_estudios'].includes(rol));
@@ -159,7 +165,7 @@ export default function Guardias() {
     // 2. Cargar TODOS los profesores para poder mapear abreviaturas a nombres completos
     const { data: profes } = await getSupabase()
       .from('profesores')
-      .select('nombre,apellidos');
+      .select('id,nombre,apellidos,especialidad');
     
     const mapa = {};
     (profes || []).forEach(p => {
@@ -168,6 +174,23 @@ export default function Guardias() {
     });
     console.log('👥 Profesores mapeados:', Object.keys(mapa).length);
     setMapaProf(mapa);
+    setProfsList(profes || []);
+    
+    // 3. Cargar contador de apoyos por sector del curso actual
+    const { data: apoyos } = await getSupabase()
+      .from('apoyos_asignados')
+      .select('sector_apoyo,estado')
+      .eq('curso_academico', '2025-2026');
+    
+    const cont = {};
+    (apoyos || []).forEach(a => {
+      // Solo contamos los confirmados
+      if (a.estado === 'confirmado' || a.estado === 'realizado') {
+        cont[a.sector_apoyo] = (cont[a.sector_apoyo] || 0) + 1;
+      }
+    });
+    console.log('📊 Contador de apoyos:', cont);
+    setContApoyos(cont);
 
     const guardias = horarios.filter(h=>h.tipo==='guardia');
     console.log('🛡️ Guardias filtradas:', guardias.length);
@@ -219,6 +242,16 @@ export default function Guardias() {
       ...(aus||[]).map(a=>({...a,tipo_falta:'ausencia'})),
       ...(dlds||[]).map(d=>({...d,tipo_falta:'dld'})),
     ];
+    
+    // Cargar apoyos ya asignados para esta fecha
+    try {
+      const r = await getSupabase()
+        .from('apoyos_asignados')
+        .select('*')
+        .eq('fecha', f)
+        .eq('curso_academico', '2025-2026');
+      setApAsig(r.data || []);
+    } catch(e) { console.warn('Error apoyos:', e); setApAsig([]); }
 
     const resultado = [];
     for (const falta of todas) {
@@ -306,10 +339,10 @@ export default function Guardias() {
     return grupos > guardias;
   }
 
-  // Profesores de FP libres (no dan clase esa hora y no están ausentes)
-  // Sólo se sugieren si el sector GENERAL necesita apoyo
-  function profesoresFPLibresParaApoyo() {
-    if (!necesitaApoyo('GENERAL')) return [];
+  // Profesores de FP libres esa hora, ordenados por menos apoyos previos
+  // Se sugieren solo si el sector necesita apoyo
+  function profesoresFPLibresParaApoyo(sectorNecesita) {
+    if (!necesitaApoyo(sectorNecesita)) return [];
     
     // Todos los profesores que dan clase esa hora ese día
     const ocupadosEnClase = new Set(
@@ -323,8 +356,18 @@ export default function Guardias() {
       ausenciasDia.map(a => normAbrev(a.nombrePdf || ''))
     );
     
-    // Buscar profesores de guardia FP (no GENERAL) que estén disponibles
-    const sectoresFP = sectores.filter(s => s.toUpperCase() !== 'GENERAL');
+    // Profesores ya asignados a un apoyo esta hora (para no doblarles)
+    const yaAsignadosAbrev = new Set(
+      apoyosAsignados
+        .filter(ap => ap.hora === horaActiva)
+        .map(ap => {
+          const prof = profesoresList.find(p => p.id === ap.profesor_id);
+          return prof ? claveAbreviatura(prof.apellidos, prof.nombre) : '';
+        })
+    );
+    
+    // Buscar profesores de guardia FP (no del sector necesita) que estén disponibles
+    const sectoresFP = sectores.filter(s => s.toUpperCase() !== sectorNecesita.toUpperCase());
     const libres = [];
     
     for (const sector of sectoresFP) {
@@ -333,13 +376,75 @@ export default function Guardias() {
         const guardiasFP = guardiasDeSector(sector);
         guardiasFP.forEach(p => {
           const key = normAbrev(p);
-          if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key)) {
-            libres.push({ abrev: p, sector, nombre: mapaProfesores[key] || p });
+          if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key) && !yaAsignadosAbrev.has(key)) {
+            // Buscar el profesor completo
+            const profCompleto = profesoresList.find(pf => 
+              claveAbreviatura(pf.apellidos, pf.nombre) === key
+            );
+            libres.push({ 
+              abrev: p, 
+              sector, 
+              nombre: mapaProfesores[key] || p,
+              profesorId: profCompleto?.id || null,
+              apoyosPrevios: contadorApoyos[sector.toUpperCase()] || 0,
+            });
           }
         });
       }
     }
+    
+    // Ordenar por menos apoyos primero, después por nombre
+    libres.sort((a, b) => {
+      if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
+      return a.nombre.localeCompare(b.nombre);
+    });
+    
     return libres;
+  }
+  
+  // Apoyos ya asignados para un sector destino esta hora
+  function apoyosDeSectorEstaHora(sectorDestino) {
+    return apoyosAsignados.filter(ap => 
+      ap.sector_destino.toUpperCase() === sectorDestino.toUpperCase() &&
+      ap.hora === horaActiva
+    );
+  }
+  
+  // ── ASIGNAR APOYO ──
+  async function asignarApoyo(profesorSeleccionado) {
+    if (!modalAsignar) return;
+    const { grupo, aula, materia, tarea, sectorDestino } = modalAsignar;
+    
+    const prof = profesoresList.find(p => p.id === profesorSeleccionado.profesorId);
+    
+    const { error } = await getSupabase().from('apoyos_asignados').insert([{
+      fecha,
+      hora: horaActiva,
+      sector_apoyo: profesorSeleccionado.sector,
+      sector_destino: sectorDestino,
+      profesor_id: profesorSeleccionado.profesorId,
+      grupo: grupo || null,
+      aula: aula || null,
+      materia: materia || null,
+      tarea: tarea || null,
+      asignado_por: profesorId,
+      estado: 'pendiente',
+      curso_academico: '2025-2026',
+    }]);
+    
+    if (error) {
+      alert('Error al asignar apoyo: ' + error.message);
+      return;
+    }
+    
+    setModalAsig(null);
+    // Recargar apoyos
+    const r = await getSupabase()
+      .from('apoyos_asignados')
+      .select('*')
+      .eq('fecha', fecha)
+      .eq('curso_academico', '2025-2026');
+    setApAsig(r.data || []);
   }
 
   // ── POPUP TAREA ──────────────────────────────
@@ -394,6 +499,57 @@ export default function Guardias() {
     <div style={{ minHeight:'100vh', backgroundColor:'#f0f4f0', fontFamily:'system-ui, sans-serif' }}>
 
       {popupAbierto && <TareaPopup datos={popupAbierto} onClose={()=>setPopupAbierto(null)} />}
+      
+      {/* MODAL ASIGNAR APOYO */}
+      {modalAsignar && (
+        <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={()=>setModalAsig(null)}>
+          <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:500, width:'100%', maxHeight:'80vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}
+            onClick={e=>e.stopPropagation()}>
+            
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
+              <div>
+                <div style={{ fontWeight:800, fontSize:17, color:azul }}>💡 Asignar apoyo</div>
+                <div style={{ fontSize:12, color:'#666', marginTop:2 }}>Sector destino: <strong>{modalAsignar.sectorDestino}</strong></div>
+              </div>
+              <button onClick={()=>setModalAsig(null)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#bbb' }}>✕</button>
+            </div>
+            
+            <div style={{ backgroundColor:'#f9fafb', borderRadius:10, padding:12, marginBottom:14, fontSize:12 }}>
+              <div><strong>👥 Grupo:</strong> {modalAsignar.grupo || '—'}</div>
+              {modalAsignar.materia && <div><strong>📚 Materia:</strong> {modalAsignar.materia}</div>}
+              {modalAsignar.aula && <div><strong>📍 Aula:</strong> {modalAsignar.aula}</div>}
+              {modalAsignar.tarea && <div style={{ marginTop:6, padding:8, backgroundColor:'#fffbeb', borderRadius:6 }}><strong>📝 Tarea:</strong> {modalAsignar.tarea}</div>}
+            </div>
+            
+            <div style={{ fontSize:12, fontWeight:700, color:'#555', marginBottom:8 }}>
+              Selecciona el profesor que apoyará (ordenado por menos apoyos previos):
+            </div>
+            
+            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+              {modalAsignar.sugeridos.map((p, i) => (
+                <button key={i}
+                  onClick={()=>asignarApoyo(p)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:10,
+                    padding:'10px 12px', borderRadius:10, cursor:'pointer', textAlign:'left',
+                    backgroundColor: i===0 ? '#fef3c7' : 'white',
+                    border: i===0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb',
+                  }}>
+                  <span style={{ fontSize:14 }}>
+                    {i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `#${i+1}`}
+                  </span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:700, fontSize:13, color:'#333' }}>{p.nombre}</div>
+                    <div style={{ fontSize:11, color:'#666' }}>{p.sector} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''} este curso</div>
+                  </div>
+                  <span style={{ fontSize:11, color:'#059669', fontWeight:700 }}>ASIGNAR →</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div style={{ backgroundColor:marron, color:'white', padding:'14px 20px', display:'flex', alignItems:'center', gap:12 }}>
@@ -581,29 +737,83 @@ export default function Guardias() {
                     </div>
                   )}
 
-                  {/* PANEL DE APOYO - Solo si el sector necesita ayuda */}
-                  {necesitaApoyo(s) && profesoresFPLibresParaApoyo().length > 0 && (
-                    <div style={{ marginTop:12, padding:'10px 14px', backgroundColor:'#fef3c7', borderRadius:10, border:'1.5px solid #fbbf24' }}>
+                  {/* PANEL DE APOYO - Solo si el sector necesita ayuda Y el usuario es directivo */}
+                  {necesitaApoyo(s) && profesoresFPLibresParaApoyo(s).length > 0 && (
+                    <div style={{ marginTop:12, padding:'12px 14px', backgroundColor:'#fef3c7', borderRadius:10, border:'1.5px solid #fbbf24' }}>
                       <div style={{ fontSize:11, fontWeight:800, color:'#92400e', marginBottom:6, display:'flex', alignItems:'center', gap:5 }}>
                         💡 APOYO SUGERIDO
                         <span style={{ fontSize:10, fontWeight:600, opacity:0.8 }}>
                           ({gruposHuerfanosSector(s)} grupos · {guardiasDeSector(s).length} guardias)
                         </span>
                       </div>
-                      <div style={{ fontSize:10, color:'#78350f', marginBottom:8 }}>
-                        Profesores de sectores FP libres esta hora que pueden apoyar:
+                      <div style={{ fontSize:11, color:'#78350f', marginBottom:8 }}>
+                        Ordenados por menos apoyos previos (curso actual):
                       </div>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                        {profesoresFPLibresParaApoyo().map((p, i) => (
-                          <span key={i} style={{
-                            padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:600,
-                            backgroundColor:'white', color:'#78350f',
-                            border:'1.5px solid #fbbf24',
+                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                        {profesoresFPLibresParaApoyo(s).slice(0, 5).map((p, i) => (
+                          <div key={i} style={{
+                            display:'flex', alignItems:'center', gap:8,
+                            padding:'6px 10px', borderRadius:8,
+                            backgroundColor:'white',
+                            border: i===0 ? '2px solid #f59e0b' : '1px solid #fde68a',
                           }}>
-                            {p.nombre} <span style={{ opacity:0.7, fontSize:10 }}>({p.sector})</span>
-                          </span>
+                            <span style={{ fontSize:11, fontWeight:800, color: i===0?'#92400e':'#a16207' }}>
+                              {i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `#${i+1}`}
+                            </span>
+                            <div style={{ flex:1, fontSize:11, color:'#78350f' }}>
+                              <div style={{ fontWeight:700 }}>{p.nombre}</div>
+                              <div style={{ fontSize:10, opacity:0.7 }}>{p.sector} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''} este curso</div>
+                            </div>
+                            {esDirectivo && (() => {
+                              // Encontrar el grupo huérfano que corresponde
+                              const primerAusente = ausentesDeSector(s)[0];
+                              const primeraClaseHora = primerAusente?.horas?.filter(h => horaCoincide(h.hora, horaActiva))[0];
+                              if (!primeraClaseHora) return null;
+                              return (
+                                <button
+                                  onClick={() => setModalAsig({
+                                    sectorDestino: s,
+                                    grupo: primeraClaseHora.grupo || '',
+                                    aula: primeraClaseHora.aula || '',
+                                    materia: primeraClaseHora.materia || '',
+                                    tarea: primeraClaseHora.instrucciones || '',
+                                    sugeridos: profesoresFPLibresParaApoyo(s),
+                                    seleccionado: p,
+                                  })}
+                                  style={{
+                                    padding:'5px 10px', borderRadius:6, border:'none',
+                                    backgroundColor: i===0?'#f59e0b':'#e5e7eb',
+                                    color: i===0?'white':'#555',
+                                    fontSize:11, fontWeight:700, cursor:'pointer'
+                                  }}
+                                >✅ Asignar</button>
+                              );
+                            })()}
+                          </div>
                         ))}
                       </div>
+                    </div>
+                  )}
+                  
+                  {/* Apoyos ya asignados a este sector esta hora */}
+                  {apoyosDeSectorEstaHora(s).length > 0 && (
+                    <div style={{ marginTop:12, padding:'10px 14px', backgroundColor:'#dbeafe', borderRadius:10, border:'1.5px solid #93c5fd' }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:'#1e3a8a', marginBottom:6 }}>
+                        ✅ APOYOS ASIGNADOS
+                      </div>
+                      {apoyosDeSectorEstaHora(s).map((ap, i) => {
+                        const prof = profesoresList.find(pf => pf.id === ap.profesor_id);
+                        const nombre = prof ? `${prof.apellidos}, ${prof.nombre}` : 'Profesor';
+                        return (
+                          <div key={i} style={{ fontSize:11, color:'#1e40af', padding:'4px 0', display:'flex', alignItems:'center', gap:6 }}>
+                            <span>{ap.estado==='confirmado'?'✅':ap.estado==='realizado'?'✔️':'⏳'}</span>
+                            <span style={{ fontWeight:700 }}>{nombre}</span>
+                            <span style={{ opacity:0.7 }}>({ap.sector_apoyo})</span>
+                            <span style={{ opacity:0.7, marginLeft:'auto' }}>{ap.grupo}</span>
+                            {ap.estado === 'pendiente' && <span style={{ fontSize:9, color:'#f59e0b', fontWeight:700 }}>ESPERANDO CONFIRMACIÓN</span>}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
