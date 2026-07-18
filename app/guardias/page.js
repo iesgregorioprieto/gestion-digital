@@ -96,15 +96,30 @@ export default function Guardias() {
 
   async function cargarBase() {
     setCargando(true);
-    const { data: horarios } = await getSupabase()
-      .from('horarios_profesores')
-      .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
-      .eq('curso_academico','2025-2026');
+    
+    // Cargar TODOS los horarios (con paginación por si son >1000)
+    let horarios = [];
+    let offset = 0;
+    const limit = 1000;
+    while (true) {
+      const { data } = await getSupabase()
+        .from('horarios_profesores')
+        .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
+        .eq('curso_academico','2025-2026')
+        .range(offset, offset + limit - 1);
+      
+      if (!data || data.length === 0) break;
+      horarios = horarios.concat(data);
+      if (data.length < limit) break;
+      offset += limit;
+    }
 
-    if (!horarios) { setCargando(false); return; }
+    console.log('📊 Total horarios cargados:', horarios.length);
     setHC(horarios);
 
     const guardias = horarios.filter(h=>h.tipo==='guardia');
+    console.log('🛡️ Guardias filtradas:', guardias.length);
+    
     const porSector = {};
     guardias.forEach(g => {
       const sector = g.grupo?.trim()||g.materia?.trim()||'Sin clasificar';
@@ -120,6 +135,8 @@ export default function Guardias() {
       const p = pesoSector(a)-pesoSector(b);
       return p!==0 ? p : a.localeCompare(b);
     });
+    
+    console.log('✅ Sectores:', nombres.length, nombres);
 
     setSectores(nombres);
     setHG(porSector);
@@ -134,10 +151,17 @@ export default function Guardias() {
     const diaSem = diaSemanaEs(f);
     if (diaSem==='sabado'||diaSem==='domingo') { setCargandoDia(false); return; }
 
-    const [{ data: aus }, { data: dlds }] = await Promise.all([
-      getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio',f).gte('fecha_fin',f),
-      getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada',f).eq('estado','aprobada'),
-    ]);
+    // Cargar cada query por separado para que una no rompa la otra
+    let aus = [], dlds = [];
+    try {
+      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio',f).gte('fecha_fin',f);
+      aus = r.data || [];
+    } catch(e) { console.warn('Error ausencias:', e); }
+    
+    try {
+      const r = await getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada',f).eq('estado','aprobada');
+      dlds = r.data || [];
+    } catch(e) { console.warn('Error dld:', e); }
 
     const todas = [
       ...(aus||[]).map(a=>({...a,tipo_falta:'ausencia'})),
