@@ -61,11 +61,31 @@ function emojiSector(n) {
   return '📚';
 }
 
-function nombreCorto(nombreCompleto) {
-  if (!nombreCompleto) return '';
-  const partes = nombreCompleto.split(',').map(p=>p.trim());
-  if (partes.length < 2) return nombreCompleto;
-  return `${partes[0].split(' ')[0]}, ${partes[1].split(' ')[0]}`;
+// Convierte "Cárdenas Calcerrada" en "Cár. C" al estilo Delphos abreviado
+function abreviarApellido(apellidos) {
+  if (!apellidos) return '';
+  const partes = apellidos.trim().split(/\s+/);
+  const primero = partes[0].slice(0, 3);
+  const iniciales = partes.slice(1).map(p => p[0]).join('');
+  return iniciales ? `${primero}. ${iniciales}` : `${primero}.`;
+}
+
+// Convierte "Luis Javier" en "LJ"
+function inicialesNombre(nombre) {
+  if (!nombre) return '';
+  return nombre.trim().split(/\s+/).map(p => p[0]).join('');
+}
+
+// Genera clave de abreviatura tipo "Cár. C, LJ" desde profesor completo
+function claveAbreviatura(apellidos, nombre) {
+  const ap = abreviarApellido(apellidos);
+  const nom = inicialesNombre(nombre);
+  return `${ap}, ${nom}`.toLowerCase().replace(/\s/g, '');
+}
+
+// Normaliza una abreviatura del cuadrante para poder buscarla
+function normAbrev(str) {
+  return (str || '').toLowerCase().replace(/\s/g, '');
 }
 
 export default function Guardias() {
@@ -80,6 +100,7 @@ export default function Guardias() {
   const [popupAbierto, setPopupAbierto] = useState(null);
   const [profesorNombre, setPN]         = useState('');
   const [esDirectivo, setEsDir]         = useState(false);
+  const [mapaProfesores, setMapaProf]   = useState({});
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -103,7 +124,7 @@ export default function Guardias() {
   async function cargarBase() {
     setCargando(true);
     
-    // Cargar TODOS los horarios (con paginación por si son >1000)
+    // 1. Cargar TODOS los horarios (con paginación por si son >1000)
     let horarios = [];
     let offset = 0;
     const limit = 1000;
@@ -122,6 +143,19 @@ export default function Guardias() {
 
     console.log('📊 Total horarios cargados:', horarios.length);
     setHC(horarios);
+
+    // 2. Cargar TODOS los profesores para poder mapear abreviaturas a nombres completos
+    const { data: profes } = await getSupabase()
+      .from('profesores')
+      .select('nombre,apellidos');
+    
+    const mapa = {};
+    (profes || []).forEach(p => {
+      const clave = claveAbreviatura(p.apellidos, p.nombre);
+      mapa[clave] = `${p.apellidos}, ${p.nombre}`;
+    });
+    console.log('👥 Profesores mapeados:', Object.keys(mapa).length);
+    setMapaProf(mapa);
 
     const guardias = horarios.filter(h=>h.tipo==='guardia');
     console.log('🛡️ Guardias filtradas:', guardias.length);
@@ -426,6 +460,7 @@ export default function Guardias() {
                       <div style={{ fontSize:10, fontWeight:700, color:'#888', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>🛡️ De guardia</div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
                         {guardias.map((p,i) => {
+                          const nombreCompleto = mapaProfesores[normAbrev(p)] || p;
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           return (
                             <span key={i} style={{
@@ -436,7 +471,7 @@ export default function Guardias() {
                               display:'flex', alignItems:'center', gap:4,
                             }}>
                               {esYo && <span>⭐</span>}
-                              {nombreCorto(p)}
+                              {nombreCompleto}
                             </span>
                           );
                         })}
