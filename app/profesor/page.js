@@ -2,11 +2,14 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { getSupabase } from '@/lib/supabase';
 
 export default function PanelProfesor() {
   const [nombre, setNombre] = useState('');
   const [roles, setRoles] = useState(['profesor']);
   const [rolGestion, setRolGestion] = useState('');
+  const [apoyosPendientes, setApoyosPendientes] = useState([]);
+  const [profId, setProfId] = useState('');
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -19,10 +22,37 @@ export default function PanelProfesor() {
       return;
     }
 
+    setProfId(id);
     setNombre(nombreGuardado || '');
     setRolGestion(rolGestionGuardado || '');
     setRoles(rolesGuardados ? JSON.parse(rolesGuardados) : ['profesor']);
+    
+    cargarApoyosPendientes(id);
   }, []);
+  
+  async function cargarApoyosPendientes(id) {
+    // Buscar apoyos pendientes de HOY y siguientes días (hasta 7)
+    const hoy = new Date().toISOString().split('T')[0];
+    const dentroDe7 = new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0];
+    const { data } = await getSupabase()
+      .from('apoyos_asignados')
+      .select('*')
+      .eq('profesor_id', id)
+      .eq('estado', 'pendiente')
+      .gte('fecha', hoy)
+      .lte('fecha', dentroDe7)
+      .order('fecha', { ascending: true });
+    setApoyosPendientes(data || []);
+  }
+  
+  async function confirmarApoyo(apoyoId) {
+    const { error } = await getSupabase()
+      .from('apoyos_asignados')
+      .update({ estado: 'confirmado', confirmado_at: new Date().toISOString() })
+      .eq('id', apoyoId);
+    if (error) { alert('Error confirmando: ' + error.message); return; }
+    cargarApoyosPendientes(profId);
+  }
 
   function cerrarSesion() {
     sessionStorage.clear();
@@ -187,6 +217,90 @@ export default function PanelProfesor() {
       </div>
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '28px 16px' }}>
+
+        {/* BANNER DE APOYOS PENDIENTES - LLAMATIVO */}
+        {apoyosPendientes.length > 0 && (
+          <div style={{ 
+            backgroundColor: '#fef3c7', 
+            border: '3px solid #f59e0b',
+            borderRadius: 14, 
+            padding: 20, 
+            marginBottom: 20, 
+            boxShadow: '0 4px 20px rgba(245, 158, 11, 0.3)',
+            animation: 'pulse 2s ease-in-out infinite'
+          }}>
+            <style>{`
+              @keyframes pulse {
+                0%, 100% { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
+                50% { box-shadow: 0 4px 30px rgba(245, 158, 11, 0.6); }
+              }
+            `}</style>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
+              <span style={{ fontSize:28 }}>🚨</span>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>APOYO ASIGNADO</div>
+                <div style={{ fontSize:12, color:'#92400e' }}>Debes cubrir {apoyosPendientes.length === 1 ? 'este grupo' : `estos ${apoyosPendientes.length} grupos`}</div>
+              </div>
+            </div>
+            {apoyosPendientes.map(ap => (
+              <div key={ap.id} style={{ 
+                backgroundColor:'white', 
+                borderRadius:10, 
+                padding:14, 
+                marginBottom:8,
+                border:'1.5px solid #fbbf24'
+              }}>
+                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+                  <span style={{ 
+                    backgroundColor:'#f59e0b', color:'white', 
+                    padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:800
+                  }}>
+                    📅 {new Date(ap.fecha+'T12:00:00').toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}
+                  </span>
+                  <span style={{ 
+                    backgroundColor:'#78350f', color:'white', 
+                    padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:800
+                  }}>
+                    ⏰ {ap.hora}ª hora
+                  </span>
+                </div>
+                <div style={{ fontSize:14, color:'#78350f', marginBottom:6 }}>
+                  <strong>👥 Grupo:</strong> {ap.grupo || '—'}
+                </div>
+                {ap.materia && (
+                  <div style={{ fontSize:13, color:'#92400e', marginBottom:4 }}>
+                    <strong>📚 Materia:</strong> {ap.materia}
+                  </div>
+                )}
+                {ap.aula && (
+                  <div style={{ fontSize:13, color:'#92400e', marginBottom:4 }}>
+                    <strong>📍 Aula:</strong> {ap.aula}
+                  </div>
+                )}
+                {ap.tarea && (
+                  <div style={{ 
+                    marginTop:8, padding:10, backgroundColor:'#fffbeb', 
+                    borderRadius:8, fontSize:12, color:'#78350f',
+                    border:'1px solid #fde68a'
+                  }}>
+                    <strong>📝 Tarea para los alumnos:</strong><br/>{ap.tarea}
+                  </div>
+                )}
+                <button 
+                  onClick={()=>confirmarApoyo(ap.id)}
+                  style={{
+                    marginTop:12, padding:'10px 20px', width:'100%',
+                    backgroundColor:'#059669', color:'white', 
+                    border:'none', borderRadius:10, cursor:'pointer',
+                    fontSize:14, fontWeight:800, boxShadow:'0 2px 8px rgba(5, 150, 105, 0.3)'
+                  }}
+                >
+                  ✅ CONFIRMAR QUE LO CUBRO
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* BIENVENIDA */}
         <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, marginBottom: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.07)', borderLeft: `5px solid ${verde}` }}>
