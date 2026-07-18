@@ -52,50 +52,72 @@ export default function GestionGuardias() {
   async function cargarBase() {
     setCargando(true);
     try {
-      // Query simple y robusta
       let { data: horarios, error } = await getSupabase()
         .from('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
         .eq('curso_academico','2025-2026')
         .eq('tipo','guardia');
       
-      // Si no hay datos con tipo='guardia', intenta SIN ese filtro pero con un grupo válido
-      if ((!horarios || horarios.length === 0) && !error) {
-        const { data: horarios2 } = await getSupabase()
-          .from('horarios_profesores')
-          .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia')
-          .eq('curso_academico','2025-2026')
-          .in('tipo', ['guardia', 'complementaria']);
-        if (horarios2?.length > 0) horarios = horarios2;
-      }
-
+      console.log('📊 Guardias fetched:', horarios?.length || 0, 'registros');
+      if (error) console.error('❌ Error en query:', error);
+      
       const porSector = {};
-      (horarios || []).forEach(g => {
-        // Solo procesar horas válidas (1-6)
-        const horaNum = normHora(g.hora_id);
-        if (!/^[1-6]$/.test(horaNum)) return;
-        
-        const sector = g.grupo?.trim() || g.materia?.trim() || 'General';
-        const hora = horaNum;
-        const dia = (g.dia || '').toLowerCase();
-        
-        if (!porSector[sector]) porSector[sector] = {};
-        if (!porSector[sector][dia]) porSector[sector][dia] = {};
-        if (!porSector[sector][dia][hora]) porSector[sector][dia][hora] = [];
-        porSector[sector][dia][hora].push(g.profesor_nombre_pdf);
+      let procesados = 0, saltados = 0;
+      
+      (horarios || []).forEach((g, idx) => {
+        try {
+          // Debug de cada registro
+          if (idx < 3) console.log(`Registro ${idx}:`, { 
+            prof: g.profesor_nombre_pdf?.slice(0,20), 
+            hora: g.hora_id, 
+            dia: g.dia, 
+            grupo: g.grupo,
+            tipo: g.tipo
+          });
+          
+          // Validar hora
+          const horaNum = normHora(g.hora_id || '');
+          if (!horaNum || !/^[1-6]$/.test(horaNum)) {
+            saltados++;
+            return;
+          }
+          
+          // Validar y limpiar sector
+          const sectorRaw = (g.grupo || g.materia || 'General').trim();
+          const sector = sectorRaw.replace(/&[A-Za-z0-9]+;/g, ''); // limpiar entidades HTML si las hay
+          if (!sector) {
+            saltados++;
+            return;
+          }
+          
+          const dia = (g.dia || '').toLowerCase().trim();
+          const prof = (g.profesor_nombre_pdf || 'N/A').trim();
+          
+          if (!dia) {
+            saltados++;
+            return;
+          }
+          
+          // Agrupar
+          if (!porSector[sector]) porSector[sector] = {};
+          if (!porSector[sector][dia]) porSector[sector][dia] = {};
+          if (!porSector[sector][dia][horaNum]) porSector[sector][dia][horaNum] = [];
+          porSector[sector][dia][horaNum].push(prof);
+          procesados++;
+        } catch (e) {
+          console.error(`Error procesando registro ${idx}:`, e);
+          saltados++;
+        }
       });
 
+      console.log(`✅ Procesados: ${procesados}, Saltados: ${saltados}`);
+      console.log('🛡️ Sectores cargados:', Object.keys(porSector));
+      
       setSectores(Object.keys(porSector).sort());
       setGuardiasHorario(porSector);
-      
-      if (!horarios || horarios.length === 0) {
-        console.warn('⚠️ Sin guardias en BD. Verifica: curso_academico=2025-2026 y tipo=guardia');
-      } else {
-        console.log('✅ Guardias cargadas:', horarios.length, 'registros en', Object.keys(porSector).length, 'sectores');
-      }
       setCargando(false);
     } catch (err) {
-      console.error('Error cargando guardias:', err);
+      console.error('💥 Error cargando guardias:', err);
       setCargando(false);
     }
   }
