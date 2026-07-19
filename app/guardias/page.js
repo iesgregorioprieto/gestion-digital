@@ -287,6 +287,15 @@ export default function Guardias() {
     });
   }
 
+  // Sectores FP reales (los que tienen especialidad asignable)
+  // BIBLIOTECA, ACOMPAÑAMIENTO no son sectores FP - son roles auxiliares
+  const SECTORES_FP = ['TMV', 'COMERCIO', 'ELECTRICIDAD', 'INFORMÁTICA', 'HOSTELERÍA', 'INDUSTRIAS ALIMENTARIAS', 'ADMINISTRACIÓN'];
+  
+  function esSectorFP(sector) {
+    const sup = (sector || '').toUpperCase();
+    return SECTORES_FP.some(fp => sup === fp);
+  }
+
   // Encontrar el sector real (case-sensitive) para acceder a horarioGuardias
   function sectorReal(nombreSector) {
     return sectores.find(s => s.toUpperCase() === nombreSector.toUpperCase()) || nombreSector;
@@ -348,6 +357,7 @@ export default function Guardias() {
 
   // Profesores FP libres esta hora (no dan clase, no ausentes, no ya asignados)
   // Ordenados por menos apoyos previos
+  // SOLO cuentan sectores FP reales (no BIBLIOTECA, no ACOMPAÑAMIENTO, no GENERAL)
   function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null) {
     if (porSector === null) porSector = ausenciasPorSector();
 
@@ -358,14 +368,15 @@ export default function Guardias() {
     );
     const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
-    // Sectores FP que NO tienen ausencia esta hora
-    const sectoresFP = sectores.filter(s => {
+    // Sectores FP que NO tienen ausencia esta hora (no pueden apoyar si están ocupados con los suyos)
+    const sectoresFPLibres = sectores.filter(s => {
+      if (!esSectorFP(s)) return false;
       const sup = s.toUpperCase();
-      return sup !== 'GENERAL' && !porSector[sup];
+      return !porSector[sup];
     });
 
     const libres = [];
-    for (const sector of sectoresFP) {
+    for (const sector of sectoresFPLibres) {
       const guardiasFP = guardiasDeSector(sector);
       guardiasFP.forEach(p => {
         const key = normAbrev(p);
@@ -390,56 +401,9 @@ export default function Guardias() {
     return libres;
   }
 
-  // === AUTO-GUARDAR APOYOS al detectar cambios ===
-  // Al abrir el cuadrante, si hay apoyos cruzados sin registrar en apoyos_asignados, los registramos
-  useEffect(() => {
-    if (cargandoDia || cargando || !esDirectivo) return;
-    autoRegistrarApoyos();
-  }, [ausenciasDia, horaActiva, apoyosAsignados, cargandoDia, cargando]);
-
-  async function autoRegistrarApoyos() {
-    if (!esDirectivo) return;
-    const asignaciones = asignacionAutomatica();
-    const apoyosNuevos = [];
-
-    for (const asig of asignaciones) {
-      if (asig.cubre?.tipo !== 'apoyo_cruzado') continue;
-      if (!asig.cubre.profesorId) continue;
-
-      // Verificar que no exista ya
-      const yaExiste = apoyosAsignados.some(ap =>
-        ap.fecha === fecha &&
-        ap.hora === horaActiva &&
-        ap.profesor_id === asig.cubre.profesorId
-      );
-      if (yaExiste) continue;
-
-      apoyosNuevos.push({
-        fecha,
-        hora: horaActiva,
-        sector_apoyo: asig.cubre.sectorOriginal,
-        sector_destino: asig.ausencia.sector.toUpperCase(),
-        profesor_id: asig.cubre.profesorId,
-        grupo: asig.clase.grupo || null,
-        aula: asig.clase.aula || null,
-        materia: asig.clase.materia || null,
-        tarea: asig.clase.instrucciones || null,
-        asignado_por: profesorId,
-        estado: 'pendiente',
-        curso_academico: '2025-2026',
-      });
-    }
-
-    if (apoyosNuevos.length > 0) {
-      const { data, error } = await getSupabase()
-        .from('apoyos_asignados')
-        .insert(apoyosNuevos)
-        .select();
-      if (!error && data) {
-        setApAsig(prev => [...prev, ...data]);
-      }
-    }
-  }
+  // === Registro automático DESACTIVADO en /guardias ===
+  // El registro de apoyos solo ocurre en /gestion/guardias donde los jefes de estudio 
+  // pueden revisar y modificar antes de que se cuente en el contador
 
   // Cambiar el profesor asignado a un apoyo (solo directivos)
   async function cambiarApoyo(apoyoId, nuevoProfesor) {
@@ -646,6 +610,16 @@ export default function Guardias() {
                                 }}>
                                   ⚠️ NO HAY QUIEN CUBRA — sin profesores disponibles
                                 </div>
+                              ) : cubre.tipo === 'apoyo_cruzado' && !apoyoRegistrado ? (
+                                // En vista de profesor, si es un apoyo cruzado sin registrar aún, mostrar aviso neutral
+                                <div style={{
+                                  padding:'8px 10px', borderRadius:6,
+                                  backgroundColor:'#f3f4f6',
+                                  border:'1px solid #d1d5db',
+                                  fontSize:12, color:'#666', fontStyle:'italic',
+                                }}>
+                                  ⏳ Pendiente de asignar apoyo — jefatura decidirá
+                                </div>
                               ) : (
                                 <div style={{
                                   padding:'8px 10px', borderRadius:6,
@@ -654,7 +628,7 @@ export default function Guardias() {
                                   display:'flex', alignItems:'center', gap:8, fontSize:12,
                                 }}>
                                   <span style={{ fontWeight:700, color: yoCubro ? verde : (cubre.tipo === 'apoyo_cruzado' ? '#78350f' : '#333') }}>
-                                    {yoCubro ? '✅ TE CUBRE:' : cubre.tipo === 'apoyo_cruzado' ? '💡 APOYO:' : '✅ CUBRE:'}
+                                    {yoCubro ? '✅ TE CUBRE:' : cubre.tipo === 'apoyo_cruzado' ? '🚨 APOYO ASIGNADO:' : '✅ CUBRE:'}
                                   </span>
                                   <span style={{ fontWeight:800, color: yoCubro ? verde : '#333' }}>
                                     {yoCubro ? 'TÚ' : cubre.nombre}
@@ -664,20 +638,6 @@ export default function Guardias() {
                                       ? `${cubre.sectorOriginal} (${cubre.apoyosPrevios} apoyos)`
                                       : `guardia ${cubre.sectorOriginal}`}
                                   </span>
-                                  {esDirectivo && cubre.tipo === 'apoyo_cruzado' && apoyoRegistrado && (
-                                    <button
-                                      onClick={() => setModalCambiar({
-                                        apoyoId: apoyoRegistrado.id,
-                                        actual: cubre,
-                                        alternativas: cubre.alternativas || [],
-                                        asig,
-                                      })}
-                                      style={{
-                                        padding:'4px 8px', borderRadius:6, border:'none',
-                                        backgroundColor:'#f59e0b', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
-                                      }}
-                                    >Cambiar</button>
-                                  )}
                                 </div>
                               )}
                             </div>
