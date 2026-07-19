@@ -73,10 +73,18 @@ export default function PanelProfesor() {
         const nombres = await caches.keys();
         await Promise.all(nombres.map(n => caches.delete(n)));
       }
-      // 3. Recargar sin caché
-      window.location.reload(true);
+      // 3. Limpiar localStorage/sessionStorage relacionados con la app
+      // (mantener las claves de sesión del usuario)
+      const claves = ['profesor_id', 'profesor_nombre', 'profesor_rol_gestion', 'profesor_roles', 'guardias_origen'];
+      const backup = {};
+      claves.forEach(k => { backup[k] = sessionStorage.getItem(k); });
+      sessionStorage.clear();
+      claves.forEach(k => { if (backup[k]) sessionStorage.setItem(k, backup[k]); });
+      
+      // 4. Redirigir con un cache-buster (URL con timestamp único)
+      const url = window.location.origin + window.location.pathname + '?_refresh=' + Date.now();
+      window.location.replace(url);
     } catch (e) {
-      // Si algo falla, al menos recargar
       window.location.reload();
     }
   }
