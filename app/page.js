@@ -14,7 +14,9 @@ export default function Home() {
         const nombres = await caches.keys();
         await Promise.all(nombres.map(n => caches.delete(n)));
       }
-      window.location.reload(true);
+      // Cache-buster URL
+      const url = window.location.origin + '/?_refresh=' + Date.now();
+      window.location.replace(url);
     } catch (e) {
       window.location.reload();
     }
