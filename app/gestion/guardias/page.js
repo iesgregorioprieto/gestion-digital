@@ -213,12 +213,15 @@ export default function GestionGuardias() {
       const prof = profesoresList.find(p => p.id === falta.profesor_id);
       if (!prof) continue;
       const nombrePdf = `${prof.apellidos}, ${prof.nombre}`;
+      // Mapear "ESO/BACHILLERATO" del profesor al sector "GENERAL" del cuadrante Delphos
+      let sectorProf = prof.especialidad || 'GENERAL';
+      if (sectorProf === 'ESO/BACHILLERATO') sectorProf = 'GENERAL';
       resultado.push({
         profesorId: falta.profesor_id,
         profesor: nombrePdf,
         nombrePdf,
         abrev: claveAbreviatura(prof.apellidos, prof.nombre),
-        sector: prof.especialidad || 'GENERAL',
+        sector: sectorProf,
         tipo: falta.tipo_falta,
         horas: falta.horas || [],
       });
