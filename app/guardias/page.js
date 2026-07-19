@@ -3,9 +3,12 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
 const verde = '#1e6b2e';
+const rojo = '#b91c1c';
+const naranja = '#c2410c';
 
 const HORAS = [
   { id: '1',      label: '1ª',     horario: '8:30–9:25'   },
@@ -18,62 +21,44 @@ const HORAS = [
 ];
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
-
-// Compara una hora guardada (puede ser "1", "1ª", "1ª hora"...) con horaId ("1")
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
   const s = horaGuardada.toString().toLowerCase().trim();
-  // Buscar el primer dígito
   const m = s.match(/^(\d)/);
   if (m) return m[1] === horaId;
-  // También aceptar "recreo"
   if (s.includes('recreo') && horaId === 'recreo') return true;
   return false;
 }
-
 function diaSemanaEs(fecha) {
   const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   return dias[new Date(fecha+'T12:00:00').getDay()];
 }
-
 function sumarDias(fecha, n) {
   const d = new Date(fecha+'T12:00:00');
   d.setDate(d.getDate()+n);
   return d.toISOString().split('T')[0];
 }
-
 function fechaCorta(fecha) {
   const d = new Date(fecha+'T12:00:00');
   return d.toLocaleDateString('es-ES',{ weekday:'long', day:'numeric', month:'long' });
 }
-
-function pesoSector(n) {
-  const u = n.toUpperCase();
-  if (u.includes('GENERAL')) return 9;
-  if (u.includes('JEFATURA')) return 8;
-  if (u.includes('ADMINIST')) return 7;
-  if (u.includes('RECREO')) return 6;
-  return 1;
-}
-
 function emojiSector(n) {
-  const u = n.toUpperCase();
-  if (u.includes('GENERAL')) return '🌐';
-  if (u.includes('JEFATURA')) return '📋';
-  if (u.includes('ADMINIST')) return '🏢';
-  if (u.includes('RECREO')) return '☕';
-  if (u.includes('CARROC')) return '🚗';
-  if (u.includes('COCIN')||u.includes('HOSTEL')) return '🍽️';
+  const u = (n||'').toUpperCase();
+  if (u.includes('TMV')) return '🚗';
+  if (u.includes('COMERC')) return '🛍️';
   if (u.includes('ELECTR')) return '⚡';
   if (u.includes('INFORM')) return '💻';
-  if (u.includes('COMERC')) return '🛍️';
-  if (u.includes('AUTOM')) return '🔧';
-  if (u.includes('ALIMENT')) return '🥖';
-  if (u.includes('JARDIN')) return '🌳';
-  return '📚';
+  if (u.includes('HOSTEL')) return '🍽️';
+  if (u.includes('INDUSTR') || u.includes('ALIMENT')) return '🥖';
+  if (u.includes('ADMIN')) return '🏢';
+  if (u.includes('FOL')) return '📚';
+  if (u.includes('GENERAL')) return '🌐';
+  if (u.includes('BIBLIOTECA')) return '📖';
+  if (u.includes('ACOMPAÑ')) return '🤝';
+  return '📌';
 }
 
-// Convierte "Cárdenas Calcerrada" en "Cár. C" al estilo Delphos abreviado
+// Helpers para mapear abreviaturas Delphos → nombre completo
 function abreviarApellido(apellidos) {
   if (!apellidos) return '';
   const partes = apellidos.trim().split(/\s+/);
@@ -81,21 +66,15 @@ function abreviarApellido(apellidos) {
   const iniciales = partes.slice(1).map(p => p[0]).join('');
   return iniciales ? `${primero}. ${iniciales}` : `${primero}.`;
 }
-
-// Convierte "Luis Javier" en "LJ"
 function inicialesNombre(nombre) {
   if (!nombre) return '';
   return nombre.trim().split(/\s+/).map(p => p[0]).join('');
 }
-
-// Genera clave de abreviatura tipo "Cár. C, LJ" desde profesor completo
 function claveAbreviatura(apellidos, nombre) {
   const ap = abreviarApellido(apellidos);
   const nom = inicialesNombre(nombre);
   return `${ap}, ${nom}`.toLowerCase().replace(/\s/g, '');
 }
-
-// Normaliza una abreviatura del cuadrante para poder buscarla
 function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
 }
@@ -112,12 +91,13 @@ export default function Guardias() {
   const [popupAbierto, setPopupAbierto] = useState(null);
   const [profesorNombre, setPN]         = useState('');
   const [profesorId, setProfId]         = useState('');
+  const [miEspecialidad, setMiEsp]      = useState('');
   const [esDirectivo, setEsDir]         = useState(false);
   const [mapaProfesores, setMapaProf]   = useState({});
-  const [profesoresList, setProfsList]  = useState([]); // {id, nombre, apellidos, especialidad}
-  const [contadorApoyos, setContApoyos] = useState({}); // { SECTOR: count }
-  const [apoyosAsignados, setApAsig]    = useState([]); // apoyos ya asignados
-  const [modalAsignar, setModalAsig]    = useState(null); // {sectorDestino, grupo, aula, materia, tarea, hora, fecha}
+  const [profesoresList, setProfsList]  = useState([]);
+  const [contadorApoyos, setContApoyos] = useState({});
+  const [apoyosAsignados, setApAsig]    = useState([]);
+  const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -126,23 +106,21 @@ export default function Guardias() {
     setPN(sessionStorage.getItem('profesor_nombre')||'');
     const rol = sessionStorage.getItem('profesor_rol_gestion')||'';
     setEsDir(['secretario','director','jefe_estudios'].includes(rol));
-    
-    // Detectar de dónde viene el usuario para saber a dónde volver
+
     const referer = document.referrer || '';
     const vieneDeGestion = referer.includes('/gestion');
     sessionStorage.setItem('guardias_origen', vieneDeGestion ? 'gestion' : 'profesor');
-    
-    cargarBase();
+
+    cargarBase(id);
   }, []);
 
   useEffect(() => {
     if (!cargando) cargarAusencias(fecha);
   }, [fecha, cargando]);
 
-  async function cargarBase() {
+  async function cargarBase(id) {
     setCargando(true);
-    
-    // 1. Cargar TODOS los horarios (con paginación por si son >1000)
+
     let horarios = [];
     let offset = 0;
     const limit = 1000;
@@ -152,67 +130,56 @@ export default function Guardias() {
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
         .eq('curso_academico','2025-2026')
         .range(offset, offset + limit - 1);
-      
       if (!data || data.length === 0) break;
       horarios = horarios.concat(data);
       if (data.length < limit) break;
       offset += limit;
     }
-
-    console.log('📊 Total horarios cargados:', horarios.length);
     setHC(horarios);
 
-    // 2. Cargar TODOS los profesores para poder mapear abreviaturas a nombres completos
     const { data: profes } = await getSupabase()
       .from('profesores')
       .select('id,nombre,apellidos,especialidad');
-    
+
     const mapa = {};
     (profes || []).forEach(p => {
       const clave = claveAbreviatura(p.apellidos, p.nombre);
       mapa[clave] = `${p.apellidos}, ${p.nombre}`;
     });
-    console.log('👥 Profesores mapeados:', Object.keys(mapa).length);
     setMapaProf(mapa);
     setProfsList(profes || []);
-    
-    // 3. Cargar contador de apoyos por sector del curso actual
+
+    // Mi especialidad
+    const yo = (profes||[]).find(p => p.id === id);
+    setMiEsp(yo?.especialidad || '');
+
+    // Contador de apoyos por sector
     const { data: apoyos } = await getSupabase()
       .from('apoyos_asignados')
       .select('sector_apoyo,estado')
       .eq('curso_academico', '2025-2026');
-    
     const cont = {};
     (apoyos || []).forEach(a => {
-      // Solo contamos los confirmados
       if (a.estado === 'confirmado' || a.estado === 'realizado') {
         cont[a.sector_apoyo] = (cont[a.sector_apoyo] || 0) + 1;
       }
     });
-    console.log('📊 Contador de apoyos:', cont);
     setContApoyos(cont);
 
-    const guardias = horarios.filter(h=>h.tipo==='guardia');
-    console.log('🛡️ Guardias filtradas:', guardias.length);
-    
+    // Sectores del cuadrante
+    const guardias = horarios.filter(h => h.tipo === 'guardia');
     const porSector = {};
     guardias.forEach(g => {
-      const sector = g.grupo?.trim()||g.materia?.trim()||'Sin clasificar';
-      const hora   = normHora(g.hora_id);
-      const dia    = (g.dia||'').toLowerCase();
-      if (!porSector[sector]) porSector[sector]={};
-      if (!porSector[sector][dia]) porSector[sector][dia]={};
-      if (!porSector[sector][dia][hora]) porSector[sector][dia][hora]=[];
+      const sector = g.grupo?.trim() || g.materia?.trim() || 'Sin clasificar';
+      const hora = normHora(g.hora_id);
+      const dia = (g.dia||'').toLowerCase();
+      if (!porSector[sector]) porSector[sector] = {};
+      if (!porSector[sector][dia]) porSector[sector][dia] = {};
+      if (!porSector[sector][dia][hora]) porSector[sector][dia][hora] = [];
       porSector[sector][dia][hora].push(g.profesor_nombre_pdf);
     });
 
-    const nombres = Object.keys(porSector).sort((a,b)=>{
-      const p = pesoSector(a)-pesoSector(b);
-      return p!==0 ? p : a.localeCompare(b);
-    });
-    
-    console.log('✅ Sectores:', nombres.length, nombres);
-
+    const nombres = Object.keys(porSector).sort();
     setSectores(nombres);
     setHG(porSector);
     setCargando(false);
@@ -221,29 +188,27 @@ export default function Guardias() {
   async function cargarAusencias(f) {
     setCargandoDia(true);
     setAusDia([]);
-    setPopupAbierto(null);
+    setApAsig([]);
 
     const diaSem = diaSemanaEs(f);
-    if (diaSem==='sabado'||diaSem==='domingo') { setCargandoDia(false); return; }
+    if (diaSem === 'sabado' || diaSem === 'domingo') { setCargandoDia(false); return; }
 
-    // Cargar cada query por separado para que una no rompa la otra
     let aus = [], dlds = [];
     try {
-      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio',f).gte('fecha_fin',f);
+      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio', f).gte('fecha_fin', f);
       aus = r.data || [];
     } catch(e) { console.warn('Error ausencias:', e); }
-    
     try {
-      const r = await getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada',f).eq('estado','aprobada');
+      const r = await getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada', f).eq('estado','aprobada');
       dlds = r.data || [];
     } catch(e) { console.warn('Error dld:', e); }
 
     const todas = [
-      ...(aus||[]).map(a=>({...a,tipo_falta:'ausencia'})),
-      ...(dlds||[]).map(d=>({...d,tipo_falta:'dld'})),
+      ...aus.map(a => ({...a, tipo_falta:'ausencia'})),
+      ...dlds.map(d => ({...d, tipo_falta:'dld'})),
     ];
-    
-    // Cargar apoyos ya asignados para esta fecha
+
+    // Cargar apoyos para esta fecha
     try {
       const r = await getSupabase()
         .from('apoyos_asignados')
@@ -251,597 +216,565 @@ export default function Guardias() {
         .eq('fecha', f)
         .eq('curso_academico', '2025-2026');
       setApAsig(r.data || []);
-    } catch(e) { console.warn('Error apoyos:', e); setApAsig([]); }
+    } catch(e) { console.warn('Error apoyos:', e); }
 
+    // Enriquecer cada ausencia con info del profesor + sector
     const resultado = [];
     for (const falta of todas) {
-      const { data: prof } = await getSupabase().from('profesores').select('nombre,apellidos,especialidad').eq('id',falta.profesor_id);
-      if (!prof||prof.length===0) continue;
-      const nombrePdf = `${prof[0].apellidos}, ${prof[0].nombre}`;
-      const abrev = claveAbreviatura(prof[0].apellidos, prof[0].nombre);
+      const prof = profesoresList.find(p => p.id === falta.profesor_id);
+      if (!prof) continue;
+      const nombrePdf = `${prof.apellidos}, ${prof.nombre}`;
+      const abrev = claveAbreviatura(prof.apellidos, prof.nombre);
+      const sector = prof.especialidad || 'GENERAL';
 
-      // SECTOR = especialidad del profesor (rellenada al registrarse)
-      // Fallback: si no la tiene, GENERAL (para no perder al profesor)
-      let cuadrante = prof[0].especialidad || 'GENERAL';
-      
-      // Verificar que el sector existe en el cuadrante cargado
-      const sectorReal = sectores.find(s => s.toUpperCase() === cuadrante.toUpperCase());
-      if (sectorReal) {
-        cuadrante = sectorReal;
-      } else {
-        // Si no existe ese sector en el cuadrante, buscar GENERAL como último recurso
-        cuadrante = sectores.find(s => s.toUpperCase() === 'GENERAL') || sectores[0] || cuadrante;
-      }
-
-      // Sus clases ese día (para saber qué grupos deja huérfanos)
-      const clases = horariosClase.filter(h=>
-        h.tipo==='clase' &&
-        (h.dia||'').toLowerCase()===diaSem &&
-        normAbrev(h.profesor_nombre_pdf) === abrev
-      );
-
-      const horasFalta = Array.isArray(falta.horas)?falta.horas:[];
-      const horasEnriq = clases.map(c=>{
-        const horaN = normHora(c.hora_id);
-        const tarea = horasFalta.find(h=>{
-          if (!h) return false;
-          const hn = normHora(h.hora_id)||normHora(h.hora)||'';
-          const lb = (h.hora||'').toLowerCase();
-          return hn===horaN||lb.includes(`${horaN}ª`)||lb.includes(`${horaN}a`);
-        });
-        return {
-          hora: horaN,
-          grupo: c.grupo,
-          materia: c.materia,
-          aula: c.aula,
-          instrucciones: tarea?.instrucciones||null,
-          archivo_url: tarea?.archivo_url||null,
-          archivo_nombre: tarea?.archivo_nombre||null,
-        };
+      resultado.push({
+        id: falta.profesor_id + '-' + f,
+        profesorId: falta.profesor_id,
+        profesor: nombrePdf,
+        nombrePdf,
+        abrev,
+        sector,
+        tipo: falta.tipo_falta,
+        horas: falta.horas || [],
       });
-
-      resultado.push({ profesor: falta.profesor_nombre, nombrePdf, tipo: falta.tipo_falta, cuadrante, horas: horasEnriq });
     }
-
     setAusDia(resultado);
     setCargandoDia(false);
   }
 
-  const diaSem  = diaSemanaEs(fecha);
-  const esFinde = diaSem==='sabado'||diaSem==='domingo';
-  const horaInfo = HORAS.find(h=>h.id===horaActiva);
+  const diaSem = diaSemanaEs(fecha);
+  const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
+  const horaInfo = HORAS.find(h => h.id === horaActiva);
 
-  // Para la hora activa: guardias y ausentes por sector
-  function guardiasDeSector(sector) {
-    return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
-  }
+  // === LÓGICA CENTRAL POR HORA ===
 
-  function ausentesDeSector(sector) {
+  // Profesores ausentes esta hora concreta
+  function ausentesEstaHora() {
     return ausenciasDia.filter(a =>
-      a.cuadrante === sector &&
       a.horas.some(h => horaCoincide(h.hora, horaActiva))
     );
   }
 
-  // Grupos huérfanos totales en un sector para esta hora
-  function gruposHuerfanosSector(sector) {
-    let n = 0;
-    ausentesDeSector(sector).forEach(a => {
-      n += a.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase').length;
+  // Profesores de guardia en un sector esta hora
+  function guardiasDeSector(sector) {
+    return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
+  }
+
+  // Ausencias por sector esta hora (agrupadas)
+  function ausenciasPorSector() {
+    const grupos = {};
+    ausentesEstaHora().forEach(a => {
+      const s = a.sector.toUpperCase();
+      if (!grupos[s]) grupos[s] = [];
+      grupos[s].push(a);
     });
-    return n;
+    return grupos;
   }
 
-  // Detecta si un sector necesita APOYO (más grupos huérfanos que guardias disponibles)
-  function necesitaApoyo(sector) {
-    const guardias = guardiasDeSector(sector).length;
-    const grupos = gruposHuerfanosSector(sector);
-    return grupos > guardias;
+  // Todos los sectores con actividad hoy (con ausencia o con guardia)
+  function sectoresConActividad() {
+    const set = new Set();
+    ausentesEstaHora().forEach(a => set.add(a.sector.toUpperCase()));
+    sectores.forEach(s => {
+      const sup = s.toUpperCase();
+      if (guardiasDeSector(s).length > 0) set.add(sup);
+    });
+    return Array.from(set).sort((a, b) => {
+      // GENERAL al final
+      if (a === 'GENERAL' && b !== 'GENERAL') return 1;
+      if (b === 'GENERAL' && a !== 'GENERAL') return -1;
+      return a.localeCompare(b);
+    });
   }
 
-  // Profesores de FP libres esa hora, ordenados por menos apoyos previos
-  // Se sugieren solo si el sector necesita apoyo
-  function profesoresFPLibresParaApoyo(sectorNecesita) {
-    if (!necesitaApoyo(sectorNecesita)) return [];
-    
-    // Todos los profesores que dan clase esa hora ese día
+  // Encontrar el sector real (case-sensitive) para acceder a horarioGuardias
+  function sectorReal(nombreSector) {
+    return sectores.find(s => s.toUpperCase() === nombreSector.toUpperCase()) || nombreSector;
+  }
+
+  // Auto-asignación: para cada clase huérfana de esta hora, decidir quién cubre
+  // Devuelve: { ausenciaId, hora, tipo:'guardia_sector'|'apoyo_cruzado', profesorCubre: {nombre,abrev,sectorOriginal}, alternativas: [] }
+  function asignacionAutomatica() {
+    const asignaciones = [];
+    const porSector = ausenciasPorSector();
+
+    // Trackear profesores ya asignados esta hora para no doblarles
+    const asignadosAbrev = new Set();
+
+    // Trackear cuántas asignaciones lleva cada sector (para reparto interno)
+    const usadosDelSector = {};
+
+    for (const sectorSup of Object.keys(porSector)) {
+      const sReal = sectorReal(sectorSup);
+      const ausentes = porSector[sectorSup];
+      const guardiasDisp = guardiasDeSector(sReal);
+
+      for (const aus of ausentes) {
+        const clasesHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase');
+
+        for (const clase of clasesHora) {
+          // 1) Intentar cubrir con guardia del mismo sector
+          let cubre = null;
+          for (const p of guardiasDisp) {
+            const key = normAbrev(p);
+            if (!asignadosAbrev.has(key)) {
+              cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+              asignadosAbrev.add(key);
+              usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
+              break;
+            }
+          }
+
+          // 2) Si no hay guardia del sector, buscar apoyo FP libre
+          if (!cubre) {
+            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector);
+            if (libres.length > 0) {
+              const primero = libres[0];
+              asignadosAbrev.add(normAbrev(primero.abrev));
+              cubre = { ...primero, tipo: 'apoyo_cruzado', alternativas: libres.slice(1, 5) };
+            }
+          }
+
+          asignaciones.push({
+            ausencia: aus,
+            clase,
+            cubre,
+          });
+        }
+      }
+    }
+    return asignaciones;
+  }
+
+  // Profesores FP libres esta hora (no dan clase, no ausentes, no ya asignados)
+  // Ordenados por menos apoyos previos
+  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null) {
+    if (porSector === null) porSector = ausenciasPorSector();
+
     const ocupadosEnClase = new Set(
       horariosClase
         .filter(h => h.tipo === 'clase' && (h.dia||'').toLowerCase() === diaSem && normHora(h.hora_id) === horaActiva)
         .map(h => normAbrev(h.profesor_nombre_pdf))
     );
-    
-    // Profesores ausentes
-    const ausentesAbrev = new Set(
-      ausenciasDia.map(a => normAbrev(a.nombrePdf || ''))
-    );
-    
-    // Profesores ya asignados a un apoyo esta hora (para no doblarles)
-    const yaAsignadosAbrev = new Set(
-      apoyosAsignados
-        .filter(ap => ap.hora === horaActiva)
-        .map(ap => {
-          const prof = profesoresList.find(p => p.id === ap.profesor_id);
-          return prof ? claveAbreviatura(prof.apellidos, prof.nombre) : '';
-        })
-    );
-    
-    // Buscar profesores de guardia FP (no del sector necesita) que estén disponibles
-    const sectoresFP = sectores.filter(s => s.toUpperCase() !== sectorNecesita.toUpperCase());
+    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
+
+    // Sectores FP que NO tienen ausencia esta hora
+    const sectoresFP = sectores.filter(s => {
+      const sup = s.toUpperCase();
+      return sup !== 'GENERAL' && !porSector[sup];
+    });
+
     const libres = [];
-    
     for (const sector of sectoresFP) {
-      // Si ese sector no tiene ausencias que cubrir esta hora
-      if (gruposHuerfanosSector(sector) === 0) {
-        const guardiasFP = guardiasDeSector(sector);
-        guardiasFP.forEach(p => {
-          const key = normAbrev(p);
-          if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key) && !yaAsignadosAbrev.has(key)) {
-            // Buscar el profesor completo
-            const profCompleto = profesoresList.find(pf => 
-              claveAbreviatura(pf.apellidos, pf.nombre) === key
-            );
-            libres.push({ 
-              abrev: p, 
-              sector, 
-              nombre: mapaProfesores[key] || p,
-              profesorId: profCompleto?.id || null,
-              apoyosPrevios: contadorApoyos[sector.toUpperCase()] || 0,
-            });
-          }
-        });
-      }
+      const guardiasFP = guardiasDeSector(sector);
+      guardiasFP.forEach(p => {
+        const key = normAbrev(p);
+        if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key) && !asignadosAbrev.has(key)) {
+          const profCompleto = profesoresList.find(pf =>
+            claveAbreviatura(pf.apellidos, pf.nombre) === key
+          );
+          libres.push({
+            abrev: p,
+            sectorOriginal: sector.toUpperCase(),
+            nombre: mapaProfesores[key] || p,
+            profesorId: profCompleto?.id || null,
+            apoyosPrevios: contadorApoyos[sector.toUpperCase()] || 0,
+          });
+        }
+      });
     }
-    
-    // Ordenar por menos apoyos primero, después por nombre
     libres.sort((a, b) => {
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
       return a.nombre.localeCompare(b.nombre);
     });
-    
     return libres;
   }
-  
-  // Apoyos ya asignados para un sector destino esta hora
-  function apoyosDeSectorEstaHora(sectorDestino) {
-    return apoyosAsignados.filter(ap => 
-      ap.sector_destino.toUpperCase() === sectorDestino.toUpperCase() &&
-      ap.hora === horaActiva
-    );
-  }
-  
-  // ── ASIGNAR APOYO ──
-  async function asignarApoyo(profesorSeleccionado) {
-    if (!modalAsignar) return;
-    const { grupo, aula, materia, tarea, sectorDestino } = modalAsignar;
-    
-    const prof = profesoresList.find(p => p.id === profesorSeleccionado.profesorId);
-    
-    const { error } = await getSupabase().from('apoyos_asignados').insert([{
-      fecha,
-      hora: horaActiva,
-      sector_apoyo: profesorSeleccionado.sector,
-      sector_destino: sectorDestino,
-      profesor_id: profesorSeleccionado.profesorId,
-      grupo: grupo || null,
-      aula: aula || null,
-      materia: materia || null,
-      tarea: tarea || null,
-      asignado_por: profesorId,
-      estado: 'pendiente',
-      curso_academico: '2025-2026',
-    }]);
-    
-    if (error) {
-      alert('Error al asignar apoyo: ' + error.message);
-      return;
+
+  // === AUTO-GUARDAR APOYOS al detectar cambios ===
+  // Al abrir el cuadrante, si hay apoyos cruzados sin registrar en apoyos_asignados, los registramos
+  useEffect(() => {
+    if (cargandoDia || cargando || !esDirectivo) return;
+    autoRegistrarApoyos();
+  }, [ausenciasDia, horaActiva, apoyosAsignados, cargandoDia, cargando]);
+
+  async function autoRegistrarApoyos() {
+    if (!esDirectivo) return;
+    const asignaciones = asignacionAutomatica();
+    const apoyosNuevos = [];
+
+    for (const asig of asignaciones) {
+      if (asig.cubre?.tipo !== 'apoyo_cruzado') continue;
+      if (!asig.cubre.profesorId) continue;
+
+      // Verificar que no exista ya
+      const yaExiste = apoyosAsignados.some(ap =>
+        ap.fecha === fecha &&
+        ap.hora === horaActiva &&
+        ap.profesor_id === asig.cubre.profesorId
+      );
+      if (yaExiste) continue;
+
+      apoyosNuevos.push({
+        fecha,
+        hora: horaActiva,
+        sector_apoyo: asig.cubre.sectorOriginal,
+        sector_destino: asig.ausencia.sector.toUpperCase(),
+        profesor_id: asig.cubre.profesorId,
+        grupo: asig.clase.grupo || null,
+        aula: asig.clase.aula || null,
+        materia: asig.clase.materia || null,
+        tarea: asig.clase.instrucciones || null,
+        asignado_por: profesorId,
+        estado: 'pendiente',
+        curso_academico: '2025-2026',
+      });
     }
-    
-    setModalAsig(null);
-    // Recargar apoyos
+
+    if (apoyosNuevos.length > 0) {
+      const { data, error } = await getSupabase()
+        .from('apoyos_asignados')
+        .insert(apoyosNuevos)
+        .select();
+      if (!error && data) {
+        setApAsig(prev => [...prev, ...data]);
+      }
+    }
+  }
+
+  // Cambiar el profesor asignado a un apoyo (solo directivos)
+  async function cambiarApoyo(apoyoId, nuevoProfesor) {
+    const { error } = await getSupabase()
+      .from('apoyos_asignados')
+      .update({
+        profesor_id: nuevoProfesor.profesorId,
+        sector_apoyo: nuevoProfesor.sectorOriginal,
+        asignado_por: profesorId,
+      })
+      .eq('id', apoyoId);
+    if (error) { alert('Error: ' + error.message); return; }
     const r = await getSupabase()
       .from('apoyos_asignados')
       .select('*')
       .eq('fecha', fecha)
       .eq('curso_academico', '2025-2026');
     setApAsig(r.data || []);
+    setModalCambiar(null);
   }
 
-  // ── POPUP TAREA ──────────────────────────────
-  function TareaPopup({ datos, onClose }) {
-    return (
-      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
-        onClick={onClose}>
-        <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:460, width:'100%', boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}
-          onClick={e=>e.stopPropagation()}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:44, height:44, borderRadius:12, backgroundColor:'#fee2e2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22 }}>👥</div>
-              <div>
-                <div style={{ fontWeight:800, fontSize:16, color:azul }}>{datos.grupo||'—'}</div>
-                <div style={{ fontSize:12, color:'#888', marginTop:2, display:'flex', alignItems:'center', gap:6 }}>
-                  {datos.materia && <span>{datos.materia}</span>}
-                  {datos.aula && <span style={{ padding:'2px 8px', backgroundColor:'#e0e7ff', color:'#3730a3', borderRadius:20, fontSize:11, fontWeight:700 }}>📍 {datos.aula}</span>}
-                </div>
-              </div>
-            </div>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, cursor:'pointer', color:'#bbb' }}>✕</button>
-          </div>
+  // === RENDER ===
+  const btnNav = {
+    padding:'8px 14px', borderRadius:10, cursor:'pointer', fontSize:13,
+    backgroundColor:'white', border:'1.5px solid #d1d5db',
+  };
 
-          {(datos.instrucciones||datos.archivo_url) ? (
-            <div style={{ backgroundColor:'#fffbeb', border:'2px solid #fcd34d', borderRadius:12, padding:16 }}>
-              <div style={{ fontSize:12, fontWeight:800, color:'#78350f', marginBottom:10 }}>📝 Tarea para los alumnos</div>
-              {datos.instrucciones && (
-                <div style={{ fontSize:14, color:'#78350f', lineHeight:1.7, whiteSpace:'pre-wrap', marginBottom:datos.archivo_url?12:0 }}>
-                  {datos.instrucciones}
-                </div>
-              )}
-              {datos.archivo_url && (
-                <a href={datos.archivo_url} target="_blank" rel="noopener noreferrer"
-                  style={{ display:'inline-flex', alignItems:'center', gap:8, fontSize:13, padding:'10px 18px', backgroundColor:'white', color:'#78350f', border:'1.5px solid #fcd34d', borderRadius:10, textDecoration:'none', fontWeight:700 }}>
-                  📎 {datos.archivo_nombre||'Descargar archivo'}
-                </a>
-              )}
-            </div>
-          ) : (
-            <div style={{ backgroundColor:'#f5f5f5', borderRadius:12, padding:24, textAlign:'center' }}>
-              <div style={{ fontSize:36, marginBottom:8 }}>📭</div>
-              <div style={{ fontSize:14, color:'#888', fontWeight:600 }}>Sin tarea asignada</div>
-              <div style={{ fontSize:12, color:'#bbb', marginTop:4 }}>Mantén el orden en el aula</div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
+  if (cargando) return <div style={{ padding:40, textAlign:'center', fontFamily:'system-ui' }}>Cargando cuadrante…</div>;
 
   return (
-    <div style={{ minHeight:'100vh', backgroundColor:'#f0f4f0', fontFamily:'system-ui, sans-serif' }}>
-
-      {popupAbierto && <TareaPopup datos={popupAbierto} onClose={()=>setPopupAbierto(null)} />}
-      
-      {/* MODAL ASIGNAR APOYO */}
-      {modalAsignar && (
-        <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
-          onClick={()=>setModalAsig(null)}>
-          <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:500, width:'100%', maxHeight:'80vh', overflowY:'auto', boxShadow:'0 8px 32px rgba(0,0,0,0.25)' }}
-            onClick={e=>e.stopPropagation()}>
-            
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14 }}>
-              <div>
-                <div style={{ fontWeight:800, fontSize:17, color:azul }}>💡 Asignar apoyo</div>
-                <div style={{ fontSize:12, color:'#666', marginTop:2 }}>Sector destino: <strong>{modalAsignar.sectorDestino}</strong></div>
-              </div>
-              <button onClick={()=>setModalAsig(null)} style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', color:'#bbb' }}>✕</button>
-            </div>
-            
-            <div style={{ backgroundColor:'#f9fafb', borderRadius:10, padding:12, marginBottom:14, fontSize:12 }}>
-              <div><strong>👥 Grupo:</strong> {modalAsignar.grupo || '—'}</div>
-              {modalAsignar.materia && <div><strong>📚 Materia:</strong> {modalAsignar.materia}</div>}
-              {modalAsignar.aula && <div><strong>📍 Aula:</strong> {modalAsignar.aula}</div>}
-              {modalAsignar.tarea && <div style={{ marginTop:6, padding:8, backgroundColor:'#fffbeb', borderRadius:6 }}><strong>📝 Tarea:</strong> {modalAsignar.tarea}</div>}
-            </div>
-            
-            <div style={{ fontSize:12, fontWeight:700, color:'#555', marginBottom:8 }}>
-              Selecciona el profesor que apoyará (ordenado por menos apoyos previos):
-            </div>
-            
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {modalAsignar.sugeridos.map((p, i) => (
-                <button key={i}
-                  onClick={()=>asignarApoyo(p)}
-                  style={{
-                    display:'flex', alignItems:'center', gap:10,
-                    padding:'10px 12px', borderRadius:10, cursor:'pointer', textAlign:'left',
-                    backgroundColor: i===0 ? '#fef3c7' : 'white',
-                    border: i===0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb',
-                  }}>
-                  <span style={{ fontSize:14 }}>
-                    {i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `#${i+1}`}
-                  </span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:13, color:'#333' }}>{p.nombre}</div>
-                    <div style={{ fontSize:11, color:'#666' }}>{p.sector} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''} este curso</div>
-                  </div>
-                  <span style={{ fontSize:11, color:'#059669', fontWeight:700 }}>ASIGNAR →</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+    <div style={{ minHeight:'100vh', backgroundColor:'#f9fafb', fontFamily:'system-ui,sans-serif', paddingBottom:60 }}>
 
       {/* HEADER */}
-      <div style={{ backgroundColor:marron, color:'white', padding:'14px 20px', display:'flex', alignItems:'center', gap:12 }}>
-        <button onClick={()=>{
-          const origen = sessionStorage.getItem('guardias_origen') || 'profesor';
-          window.location.href = origen === 'gestion' ? '/gestion' : '/profesor';
-        }}
-          style={{ background:'none', border:'none', color:'white', fontSize:22, cursor:'pointer' }}>←</button>
-        <div style={{ flex:1 }}>
-          <div style={{ fontWeight:800, fontSize:17 }}>🛡️ Guardias</div>
-          <div style={{ fontSize:12, opacity:0.85 }}>Curso 2025-2026</div>
+      <div style={{ backgroundColor:marron, color:'white', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <button onClick={() => {
+            const origen = sessionStorage.getItem('guardias_origen') || 'profesor';
+            window.location.href = origen === 'gestion' ? '/gestion' : '/profesor';
+          }} style={{ backgroundColor:'transparent', border:'none', color:'white', cursor:'pointer', fontSize:20 }}>←</button>
+          <div>
+            <div style={{ fontSize:15, fontWeight:800 }}>🛡️ Guardias</div>
+            <div style={{ fontSize:11, opacity:0.85 }}>Curso 2025-2026</div>
+          </div>
         </div>
       </div>
 
-      {/* NAVEGACIÓN FECHA */}
-      <div style={{ padding:'12px 16px 0' }}>
-        <div style={{ backgroundColor:'white', borderRadius:12, padding:'10px 12px', boxShadow:'0 2px 8px rgba(0,0,0,0.06)', display:'flex', gap:8, alignItems:'center' }}>
-          <button onClick={()=>setFecha(sumarDias(fecha,-1))} style={btnNav}>←</button>
-          <div style={{ flex:1, textAlign:'center' }}>
-            <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>
-              {fechaCorta(fecha)}
-            </div>
-            {esFinde && <div style={{ fontSize:11, color:'#aaa' }}>Fin de semana</div>}
-            {!esFinde && cargandoDia && <div style={{ fontSize:11, color:'#aaa' }}>⏳ Cargando...</div>}
-            {!esFinde && !cargandoDia && (
-              <div style={{ fontSize:11, color:'#888' }}>
-                {ausenciasDia.length > 0
-                  ? `${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`
-                  : '✅ Sin ausencias'}
-              </div>
-            )}
+      {/* NAV FECHA */}
+      <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
+        <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>←</button>
+        <div style={{ flex:1, textAlign:'center' }}>
+          <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>{fechaCorta(fecha)}</div>
+          <div style={{ fontSize:12, color:'#666', marginTop:2 }}>
+            {esFinde ? '🏖️ Fin de semana' : `${ausentesEstaHora().length === 0 ? '✅ Sin ausencias' : `🚨 ${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`}`}
           </div>
-          <button onClick={()=>setFecha(sumarDias(fecha,1))} style={btnNav}>→</button>
-          <button onClick={()=>setFecha(new Date().toISOString().split('T')[0])}
-            style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
         </div>
+        <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
+        <button onClick={() => setFecha(new Date().toISOString().split('T')[0])}
+          style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
       {/* SELECTOR DE HORAS */}
       {!esFinde && (
-        <div style={{ padding:'10px 16px 0' }}>
-          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:4 }}>
+        <div style={{ padding:'10px 16px 0', backgroundColor:'white', borderBottom:'1px solid #e5e7eb' }}>
+          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
             {HORAS.map(h => {
               const activa = h.id === horaActiva;
-              // ¿Tengo yo guardia esta hora?
-              const tengoGuardia = sectores.some(s =>
-                (horarioGuardias[s]?.[diaSem]?.[h.id]||[])
-                  .some(p => p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]))
-              );
-              // ¿Hay ausencias esta hora?
-              const hayAusencias = ausenciasDia.some(a => a.horas.some(hh=>horaCoincide(hh.hora, h.id)));
+              const ausentesH = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)));
+              const cnt = ausentesH.length;
 
               return (
-                <button key={h.id} onClick={()=>setHoraActiva(h.id)} style={{
+                <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
                   flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer', border:'none',
-                  backgroundColor: activa ? marron : 'white',
-                  color: activa ? 'white' : '#555',
-                  fontWeight: activa ? 800 : 600,
-                  fontSize:13,
-                  boxShadow: activa ? `0 3px 10px ${marron}50` : '0 1px 4px rgba(0,0,0,0.08)',
-                  position:'relative',
+                  backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
+                  color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
+                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
+                  fontWeight:700, fontSize:13, position:'relative',
                 }}>
                   {h.label}
-                  {/* Indicadores */}
-                  {tengoGuardia && !activa && (
-                    <span style={{ position:'absolute', top:3, right:3, width:7, height:7, borderRadius:'50%', backgroundColor:'#22c55e' }} />
-                  )}
-                  {hayAusencias && !activa && (
-                    <span style={{ position:'absolute', top:3, left:3, width:7, height:7, borderRadius:'50%', backgroundColor:'#ef4444' }} />
+                  {cnt > 0 && (
+                    <span style={{
+                      position:'absolute', top:-6, right:-6, backgroundColor:rojo, color:'white',
+                      borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:800,
+                      display:'flex', alignItems:'center', justifyContent:'center'
+                    }}>{cnt}</span>
                   )}
                 </button>
               );
             })}
           </div>
-          {/* Horario de la hora activa */}
-          <div style={{ textAlign:'center', fontSize:12, color:'#888', marginTop:6 }}>
-            🕐 {horaInfo?.horario}
-          </div>
+        </div>
+      )}
+
+      {/* HORARIO ACTIVO */}
+      {!esFinde && horaInfo && (
+        <div style={{ textAlign:'center', padding:'8px 16px', backgroundColor:'#f3f4f6', fontSize:12, color:'#666' }}>
+          ⏰ {horaInfo.horario}
         </div>
       )}
 
       {/* CONTENIDO */}
-      {cargando ? (
-        <div style={{ padding:60, textAlign:'center', color:'#888' }}>
-          <div style={{ fontSize:40, marginBottom:12 }}>⏳</div>Cargando datos...
-        </div>
-      ) : esFinde ? (
-        <div style={{ padding:16 }}>
-          <div style={{ backgroundColor:'white', borderRadius:12, padding:40, textAlign:'center', color:'#888' }}>
-            <div style={{ fontSize:40, marginBottom:12 }}>🏖️</div>
-            <div>Fin de semana — selecciona un día laborable</div>
+      <div style={{ padding:'16px' }}>
+        {cargandoDia ? (
+          <div style={{ textAlign:'center', padding:40, color:'#888' }}>Cargando…</div>
+        ) : esFinde ? (
+          <div style={{ backgroundColor:'white', borderRadius:12, padding:30, textAlign:'center', color:'#666' }}>
+            🏖️ Fin de semana. No hay guardias programadas.
           </div>
-        </div>
-      ) : (
-        <div style={{ padding:16, display:'flex', flexDirection:'column', gap:12 }}>
-
-          {/* LEYENDA */}
-          <div style={{ display:'flex', gap:10, flexWrap:'wrap', fontSize:11, color:'#888' }}>
-            <span>🟢 Tú de guardia</span>
-            <span>🔴 Grupo sin profesor (pulsa)</span>
-            <span>🔵 DLD (pulsa)</span>
-          </div>
-
-          {/* TARJETA POR SECTOR */}
-          {sectores.map(s => {
-            const guardias = guardiasDeSector(s);
-            const ausentes = ausentesDeSector(s);
-            if (guardias.length === 0 && ausentes.length === 0) return null;
-
-            return (
-              <div key={s} style={{ backgroundColor:'white', borderRadius:14, overflow:'hidden', boxShadow:'0 2px 8px rgba(0,0,0,0.07)' }}>
-                {/* Cabecera sector */}
-                <div style={{ backgroundColor: ausentes.length>0 ? '#fff7ed' : '#f8fffe', padding:'10px 16px', borderBottom:'1px solid #eee', display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:18 }}>{emojiSector(s)}</span>
-                  <span style={{ fontWeight:800, fontSize:14, color:azul }}>{s}</span>
-                  {ausentes.length>0 && (
-                    <span style={{ marginLeft:'auto', padding:'2px 10px', backgroundColor:'#fee2e2', color:'#991b1b', borderRadius:20, fontSize:11, fontWeight:700 }}>
-                      ⚠️ {ausentes.length} ausente{ausentes.length!==1?'s':''}
-                    </span>
-                  )}
+        ) : (
+          <>
+            {/* SECCIÓN 1: PROFESORES QUE FALTAN (PROTAGONISTA) */}
+            {ausentesEstaHora().length === 0 ? (
+              <div style={{
+                backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
+                padding:20, textAlign:'center', color:verde, fontSize:14,
+              }}>
+                ✅ No hay profesores ausentes esta hora
+              </div>
+            ) : (
+              <>
+                <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                  🚨 PROFESORES QUE FALTAN ({ausentesEstaHora().length})
                 </div>
 
-                <div style={{ padding:'10px 14px' }}>
-                  {/* FILA GUARDIAS */}
-                  {guardias.length>0 && (
-                    <div style={{ marginBottom: ausentes.length>0 ? 10 : 0 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:'#888', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>🛡️ De guardia</div>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-                        {guardias.map((p,i) => {
-                          const nombreCompleto = mapaProfesores[normAbrev(p)] || p;
+                {/* AGRUPAR POR SECTOR */}
+                {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
+                  const asignaciones = asignacionAutomatica().filter(a =>
+                    a.ausencia.sector.toUpperCase() === sectorSup
+                  );
+
+                  return (
+                    <div key={sectorSup} style={{ marginBottom:16 }}>
+                      {/* Cabecera del sector */}
+                      <div style={{
+                        backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:'10px 10px 0 0',
+                        padding:'8px 14px', display:'flex', alignItems:'center', gap:8,
+                      }}>
+                        <span style={{ fontSize:16 }}>{emojiSector(sectorSup)}</span>
+                        <span style={{ fontWeight:800, fontSize:13, color:rojo }}>{sectorSup}</span>
+                        <span style={{ fontSize:11, color:'#7f1d1d', marginLeft:'auto' }}>
+                          {ausentes.length} ausente{ausentes.length !== 1 ? 's' : ''} · {asignaciones.length} clase{asignaciones.length !== 1 ? 's' : ''} a cubrir
+                        </span>
+                      </div>
+
+                      {/* Cada asignación */}
+                      <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
+                        {asignaciones.length === 0 ? (
+                          <div style={{ fontSize:12, color:'#999', textAlign:'center', padding:'8px 0' }}>
+                            Sin clases esta hora (complementaria u hora libre del profesor)
+                          </div>
+                        ) : asignaciones.map((asig, idx) => {
+                          const cubre = asig.cubre;
+                          const yoCubro = cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
+                            profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
+                            profesoresList.find(p=>p.id===profesorId)?.nombre || ''
+                          ));
+
+                          // Buscar apoyo registrado para poder cambiarlo si es apoyo_cruzado
+                          const apoyoRegistrado = cubre?.tipo === 'apoyo_cruzado'
+                            ? apoyosAsignados.find(ap =>
+                                ap.hora === horaActiva &&
+                                ap.profesor_id === cubre.profesorId &&
+                                ap.grupo === asig.clase.grupo
+                              )
+                            : null;
+
+                          return (
+                            <div key={idx} style={{
+                              padding:'10px 12px', marginBottom:8,
+                              backgroundColor: yoCubro ? '#f0fdf4' : '#fafafa',
+                              borderRadius:8, border: yoCubro ? '2px solid ' + verde : '1px solid #e5e7eb',
+                            }}>
+                              {/* Datos del profesor ausente */}
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                                <span style={{ fontSize:13, fontWeight:700, color:'#333' }}>
+                                  {asig.ausencia.profesor}
+                                </span>
+                                {asig.ausencia.tipo === 'dld' && (
+                                  <span style={{ fontSize:10, padding:'2px 6px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:8, fontWeight:700 }}>DLD</span>
+                                )}
+                              </div>
+
+                              {/* Datos de la clase huérfana */}
+                              <div style={{ fontSize:12, color:'#555', marginBottom:6, display:'flex', gap:12, flexWrap:'wrap' }}>
+                                {asig.clase.grupo && <span>👥 <strong>{asig.clase.grupo}</strong></span>}
+                                {asig.clase.aula && <span>📍 {asig.clase.aula}</span>}
+                                {asig.clase.materia && <span>📚 {asig.clase.materia}</span>}
+                              </div>
+
+                              {/* Tarea */}
+                              {asig.clase.instrucciones && (
+                                <div style={{
+                                  padding:'8px 10px', backgroundColor:'#fffbeb', borderRadius:6,
+                                  fontSize:12, color:'#78350f', marginBottom:8, border:'1px solid #fde68a',
+                                }}>
+                                  📝 <strong>Tarea:</strong> {asig.clase.instrucciones}
+                                </div>
+                              )}
+
+                              {/* Quien cubre */}
+                              {!cubre ? (
+                                <div style={{
+                                  padding:'8px 10px', backgroundColor:'#fef2f2', borderRadius:6,
+                                  fontSize:12, color:rojo, fontWeight:700,
+                                }}>
+                                  ⚠️ NO HAY QUIEN CUBRA — sin profesores disponibles
+                                </div>
+                              ) : (
+                                <div style={{
+                                  padding:'8px 10px', borderRadius:6,
+                                  backgroundColor: yoCubro ? '#dcfce7' : (cubre.tipo === 'apoyo_cruzado' ? '#fef3c7' : '#f3f4f6'),
+                                  border:'1px solid ' + (yoCubro ? '#86efac' : (cubre.tipo === 'apoyo_cruzado' ? '#fbbf24' : '#e5e7eb')),
+                                  display:'flex', alignItems:'center', gap:8, fontSize:12,
+                                }}>
+                                  <span style={{ fontWeight:700, color: yoCubro ? verde : (cubre.tipo === 'apoyo_cruzado' ? '#78350f' : '#333') }}>
+                                    {yoCubro ? '✅ TE CUBRE:' : cubre.tipo === 'apoyo_cruzado' ? '💡 APOYO:' : '✅ CUBRE:'}
+                                  </span>
+                                  <span style={{ fontWeight:800, color: yoCubro ? verde : '#333' }}>
+                                    {yoCubro ? 'TÚ' : cubre.nombre}
+                                  </span>
+                                  <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
+                                    {cubre.tipo === 'apoyo_cruzado'
+                                      ? `${cubre.sectorOriginal} (${cubre.apoyosPrevios} apoyos)`
+                                      : `guardia ${cubre.sectorOriginal}`}
+                                  </span>
+                                  {esDirectivo && cubre.tipo === 'apoyo_cruzado' && apoyoRegistrado && (
+                                    <button
+                                      onClick={() => setModalCambiar({
+                                        apoyoId: apoyoRegistrado.id,
+                                        actual: cubre,
+                                        alternativas: cubre.alternativas || [],
+                                        asig,
+                                      })}
+                                      style={{
+                                        padding:'4px 8px', borderRadius:6, border:'none',
+                                        backgroundColor:'#f59e0b', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
+                                      }}
+                                    >Cambiar</button>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
+            {/* SECCIÓN 2: PROFESORES DE GUARDIA (COLAPSABLE, SECUNDARIO) */}
+            <details style={{ marginTop:20, backgroundColor:'white', border:'1px solid #e5e7eb', borderRadius:10 }}>
+              <summary style={{
+                cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
+                display:'flex', alignItems:'center', gap:8,
+              }}>
+                📊 Profesores de guardia esta hora (todos los sectores)
+              </summary>
+              <div style={{ padding:'0 16px 16px' }}>
+                {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
+                  const guardias = guardiasDeSector(s);
+                  return (
+                    <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
+                        {emojiSector(s)} {s.toUpperCase()}
+                      </div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {guardias.map((p, i) => {
+                          const key = normAbrev(p);
+                          const nombre = mapaProfesores[key] || p;
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           return (
                             <span key={i} style={{
-                              padding:'5px 12px', borderRadius:20, fontSize:12, fontWeight:700,
+                              padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
                               backgroundColor: esYo ? '#fef3c7' : '#f0fdf4',
-                              color: esYo ? '#78350f' : '#065f46',
-                              border: `1.5px solid ${esYo ? '#fbbf24' : '#bbf7d0'}`,
-                              display:'flex', alignItems:'center', gap:4,
+                              color: esYo ? '#78350f' : verde,
+                              border:'1.5px solid ' + (esYo ? '#fbbf24' : '#bbf7d0'),
                             }}>
-                              {esYo && <span>⭐</span>}
-                              {nombreCompleto}
+                              {esYo && '⭐ '}{nombre}
                             </span>
                           );
                         })}
                       </div>
                     </div>
-                  )}
-
-                  {/* SEPARADOR */}
-                  {guardias.length>0 && ausentes.length>0 && (
-                    <div style={{ height:1, backgroundColor:'#fde68a', margin:'10px 0' }} />
-                  )}
-
-                  {/* FILA AUSENTES → GRUPOS CLICKABLES */}
-                  {ausentes.length>0 && (
-                    <div>
-                      <div style={{ fontSize:10, fontWeight:700, color:'#991b1b', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>👥 Grupos sin profesor</div>
-                      <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                        {ausentes.map((a,i) => {
-                          const clasesHora = a.horas.filter(h=>horaCoincide(h.hora, horaActiva));
-                          return clasesHora.map((c,j) => (
-                            <button key={`${i}-${j}`}
-                              onClick={()=>setPopupAbierto(c)}
-                              style={{
-                                display:'flex', alignItems:'center', gap:10, width:'100%',
-                                padding:'10px 14px', borderRadius:10, cursor:'pointer', textAlign:'left',
-                                backgroundColor: a.tipo==='dld' ? '#eff6ff' : '#fef2f2',
-                                border:`1.5px solid ${a.tipo==='dld'?'#93c5fd':'#fca5a5'}`,
-                                color: a.tipo==='dld' ? '#1e40af' : '#991b1b',
-                              }}>
-                              <div style={{ flex:1 }}>
-                                <div style={{ fontWeight:800, fontSize:13 }}>{c.grupo||'Grupo'}</div>
-                                {c.materia && <div style={{ fontSize:11, opacity:0.8, marginTop:1 }}>{c.materia}</div>}
-                              </div>
-                              {c.aula && (
-                                <span style={{ padding:'3px 10px', backgroundColor:'white', borderRadius:20, fontSize:11, fontWeight:700, border:'1px solid currentColor', opacity:0.8 }}>
-                                  📍 {c.aula}
-                                </span>
-                              )}
-                              <span style={{ fontSize:16, opacity:0.5 }}>›</span>
-                            </button>
-                          ));
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* PANEL DE APOYO - Solo si el sector necesita ayuda Y el usuario es directivo */}
-                  {necesitaApoyo(s) && profesoresFPLibresParaApoyo(s).length > 0 && (
-                    <div style={{ marginTop:12, padding:'12px 14px', backgroundColor:'#fef3c7', borderRadius:10, border:'1.5px solid #fbbf24' }}>
-                      <div style={{ fontSize:11, fontWeight:800, color:'#92400e', marginBottom:6, display:'flex', alignItems:'center', gap:5 }}>
-                        💡 APOYO SUGERIDO
-                        <span style={{ fontSize:10, fontWeight:600, opacity:0.8 }}>
-                          ({gruposHuerfanosSector(s)} grupos · {guardiasDeSector(s).length} guardias)
-                        </span>
-                      </div>
-                      <div style={{ fontSize:11, color:'#78350f', marginBottom:8 }}>
-                        Ordenados por menos apoyos previos (curso actual):
-                      </div>
-                      <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                        {profesoresFPLibresParaApoyo(s).slice(0, 5).map((p, i) => (
-                          <div key={i} style={{
-                            display:'flex', alignItems:'center', gap:8,
-                            padding:'6px 10px', borderRadius:8,
-                            backgroundColor:'white',
-                            border: i===0 ? '2px solid #f59e0b' : '1px solid #fde68a',
-                          }}>
-                            <span style={{ fontSize:11, fontWeight:800, color: i===0?'#92400e':'#a16207' }}>
-                              {i===0 ? '🥇' : i===1 ? '🥈' : i===2 ? '🥉' : `#${i+1}`}
-                            </span>
-                            <div style={{ flex:1, fontSize:11, color:'#78350f' }}>
-                              <div style={{ fontWeight:700 }}>{p.nombre}</div>
-                              <div style={{ fontSize:10, opacity:0.7 }}>{p.sector} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''} este curso</div>
-                            </div>
-                            {esDirectivo && (() => {
-                              // Encontrar el grupo huérfano que corresponde
-                              const primerAusente = ausentesDeSector(s)[0];
-                              const primeraClaseHora = primerAusente?.horas?.filter(h => horaCoincide(h.hora, horaActiva))[0];
-                              if (!primeraClaseHora) return null;
-                              return (
-                                <button
-                                  onClick={() => setModalAsig({
-                                    sectorDestino: s,
-                                    grupo: primeraClaseHora.grupo || '',
-                                    aula: primeraClaseHora.aula || '',
-                                    materia: primeraClaseHora.materia || '',
-                                    tarea: primeraClaseHora.instrucciones || '',
-                                    sugeridos: profesoresFPLibresParaApoyo(s),
-                                    seleccionado: p,
-                                  })}
-                                  style={{
-                                    padding:'5px 10px', borderRadius:6, border:'none',
-                                    backgroundColor: i===0?'#f59e0b':'#e5e7eb',
-                                    color: i===0?'white':'#555',
-                                    fontSize:11, fontWeight:700, cursor:'pointer'
-                                  }}
-                                >✅ Asignar</button>
-                              );
-                            })()}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  
-                  {/* Apoyos ya asignados a este sector esta hora */}
-                  {apoyosDeSectorEstaHora(s).length > 0 && (
-                    <div style={{ marginTop:12, padding:'10px 14px', backgroundColor:'#dbeafe', borderRadius:10, border:'1.5px solid #93c5fd' }}>
-                      <div style={{ fontSize:11, fontWeight:800, color:'#1e3a8a', marginBottom:6 }}>
-                        ✅ APOYOS ASIGNADOS
-                      </div>
-                      {apoyosDeSectorEstaHora(s).map((ap, i) => {
-                        const prof = profesoresList.find(pf => pf.id === ap.profesor_id);
-                        const nombre = prof ? `${prof.apellidos}, ${prof.nombre}` : 'Profesor';
-                        return (
-                          <div key={i} style={{ fontSize:11, color:'#1e40af', padding:'4px 0', display:'flex', alignItems:'center', gap:6 }}>
-                            <span>{ap.estado==='confirmado'?'✅':ap.estado==='realizado'?'✔️':'⏳'}</span>
-                            <span style={{ fontWeight:700 }}>{nombre}</span>
-                            <span style={{ opacity:0.7 }}>({ap.sector_apoyo})</span>
-                            <span style={{ opacity:0.7, marginLeft:'auto' }}>{ap.grupo}</span>
-                            {ap.estado === 'pendiente' && <span style={{ fontSize:9, color:'#f59e0b', fontWeight:700 }}>ESPERANDO CONFIRMACIÓN</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </details>
+          </>
+        )}
+      </div>
 
-          {/* Si no hay nada esta hora */}
-          {sectores.length === 0 ? (
-            <div style={{ backgroundColor:'#fffbeb', border:'1.5px solid #fbbf24', borderRadius:12, padding:24, textAlign:'center' }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>📋</div>
-              <div style={{ fontSize:14, fontWeight:700, color:'#92400e', marginBottom:6 }}>Aún no hay cuadrantes de guardia cargados</div>
-              <div style={{ fontSize:12, color:'#78350f', lineHeight:1.5 }}>
-                El equipo directivo aún no ha subido el cuadrante de guardias del curso 2025-2026.<br/>
-                Cuando lo cargue en <strong>/gestion/datos → 🛡️ Guardias</strong>, aquí aparecerán las guardias por día y hora.
+      {/* MODAL CAMBIAR APOYO */}
+      {modalCambiar && (
+        <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.55)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => setModalCambiar(null)}>
+          <div style={{ backgroundColor:'white', borderRadius:16, padding:24, maxWidth:500, width:'100%', maxHeight:'80vh', overflowY:'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontWeight:800, fontSize:16, color:azul, marginBottom:6 }}>Cambiar profesor de apoyo</div>
+            <div style={{ fontSize:12, color:'#666', marginBottom:14 }}>
+              Grupo: <strong>{modalCambiar.asig.clase.grupo}</strong> · Actual: <strong>{modalCambiar.actual.nombre}</strong>
+            </div>
+            <div style={{ fontSize:12, fontWeight:700, color:'#555', marginBottom:8 }}>
+              Selecciona otro profesor (ordenados por menos apoyos previos):
+            </div>
+            {modalCambiar.alternativas.length === 0 ? (
+              <div style={{ padding:16, textAlign:'center', color:'#999', fontSize:12 }}>
+                No hay más profesores disponibles esta hora
               </div>
-            </div>
-          ) : sectores.every(s => guardiasDeSector(s).length===0 && ausentesDeSector(s).length===0) && (
-            <div style={{ backgroundColor:'white', borderRadius:12, padding:32, textAlign:'center', color:'#aaa' }}>
-              <div style={{ fontSize:32, marginBottom:8 }}>☕</div>
-              <div style={{ fontSize:14 }}>Sin guardias asignadas esta hora</div>
-              <div style={{ fontSize:12, color:'#bbb', marginTop:6 }}>Navega con ← → para ver otro día</div>
-            </div>
-          )}
+            ) : (
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {modalCambiar.alternativas.map((p, i) => (
+                  <button key={i} onClick={() => cambiarApoyo(modalCambiar.apoyoId, p)} style={{
+                    padding:'10px 12px', borderRadius:10, cursor:'pointer', textAlign:'left',
+                    backgroundColor: i === 0 ? '#fef3c7' : 'white',
+                    border: i === 0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb',
+                    display:'flex', alignItems:'center', gap:10,
+                  }}>
+                    <span style={{ fontSize:14 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</span>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontWeight:700, fontSize:13 }}>{p.nombre}</div>
+                      <div style={{ fontSize:11, color:'#666' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''}</div>
+                    </div>
+                    <span style={{ fontSize:11, color:verde, fontWeight:700 }}>ASIGNAR</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => setModalCambiar(null)} style={{
+              marginTop:14, padding:'8px 16px', width:'100%', borderRadius:8, border:'1px solid #ddd',
+              backgroundColor:'white', color:'#666', cursor:'pointer', fontSize:13,
+            }}>Cancelar</button>
+          </div>
         </div>
       )}
     </div>
   );
 }
-
-const btnNav = { padding:'8px 14px', borderRadius:8, border:'1.5px solid #e0e0e0', backgroundColor:'white', color:'#555', fontSize:16, fontWeight:600, cursor:'pointer' };
