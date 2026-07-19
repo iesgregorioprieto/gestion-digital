@@ -33,7 +33,7 @@ const ESPECIALIDADES = [
   'HOSTELERÍA',
   'INDUSTRIAS ALIMENTARIAS',
   'ADMINISTRACIÓN',
-  'GENERAL',
+  'ESO/BACHILLERATO',
 ];
 
 export default function PanelSecretario() {
@@ -174,8 +174,8 @@ export default function PanelSecretario() {
     if (d.includes('HOSTEL') || d.includes('COCIN')) return 'HOSTELERÍA';
     if (d.includes('INDUSTR') || d.includes('ALIMENT') || d.includes('PANAD')) return 'INDUSTRIAS ALIMENTARIAS';
     if (d.includes('ADMIN')) return 'ADMINISTRACIÓN';
-    // Cualquier otro departamento (FOL, Matemáticas, Lengua, Inglés, etc.) → GENERAL
-    return 'GENERAL';
+    // Cualquier otro departamento (FOL, Matemáticas, Lengua, Inglés, etc.) → ESO/BACHILLERATO
+    return 'ESO/BACHILLERATO';
   }
 
   function abrirFicha(profesor) {
@@ -473,7 +473,7 @@ export default function PanelSecretario() {
             <Campo label="Apellidos" value={formEdicion.apellidos} onChange={v => setFormEdicion(f => ({ ...f, apellidos: v }))} />
             <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
             <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
-            <CampoSelect label="🛡️ Sector de guardia" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} opciones={ESPECIALIDADES} />
+            <CampoSelect label="🎓 Especialidad" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} opciones={ESPECIALIDADES} />
             <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
             <Campo label="Antigüedad centro (años)" value={formEdicion.antiguedad_centro} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_centro: v }))} tipo="number" />
             <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
