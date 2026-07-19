@@ -11,7 +11,7 @@ const DEPARTAMENTOS = [
   'Música','Tecnología','Orientación','PT/AL'
 ];
 
-// Sectores de guardia - lista fija que coincide con los sectores del cuadrante
+// Especialidades - lista fija que coincide con los sectores del cuadrante de guardias
 const ESPECIALIDADES = [
   { valor: 'TMV', emoji: '🚗', descripcion: 'Familia FP' },
   { valor: 'COMERCIO', emoji: '🛍️', descripcion: 'Familia FP' },
@@ -20,7 +20,7 @@ const ESPECIALIDADES = [
   { valor: 'HOSTELERÍA', emoji: '🍽️', descripcion: 'Familia FP' },
   { valor: 'INDUSTRIAS ALIMENTARIAS', emoji: '🥖', descripcion: 'Familia FP' },
   { valor: 'ADMINISTRACIÓN', emoji: '🏢', descripcion: 'Familia FP' },
-  { valor: 'GENERAL', emoji: '🌐', descripcion: 'ESO, Bachillerato, FOL' },
+  { valor: 'ESO/BACHILLERATO', emoji: '🎓', descripcion: 'Guardias generales (incluye FOL)' },
 ];
 
 const ROLES = [
@@ -137,7 +137,7 @@ export default function Registro() {
     setError('');
     if (!form.nombre.trim() || !form.apellidos.trim()) { setError('Nombre y apellidos son obligatorios.'); return; }
     if (!form.departamento) { setError('Selecciona tu departamento.'); return; }
-    if (!form.especialidad) { setError('Selecciona tu sector de guardia (TMV, COMERCIO, GENERAL, etc.).'); return; }
+    if (!form.especialidad) { setError('Selecciona tu especialidad (TMV, COMERCIO, ESO/BACHILLERATO, etc.).'); return; }
     if (!form.password || form.password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return; }
     if (form.password !== form.password2) { setError('Las contraseñas no coinciden.'); return; }
 
@@ -275,15 +275,15 @@ export default function Registro() {
                 {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </Campo>
-            <Campo label="🛡️ Sector de guardia *">
+            <Campo label="🎓 Especialidad *">
               <select value={form.especialidad} onChange={e => set('especialidad', e.target.value)} style={inputEstilo}>
-                <option value="">— Selecciona tu sector —</option>
+                <option value="">— Selecciona tu especialidad —</option>
                 {ESPECIALIDADES.map(e => (
                   <option key={e.valor} value={e.valor}>{e.emoji} {e.valor} — {e.descripcion}</option>
                 ))}
               </select>
               <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
-                💡 Selecciona el sector al que perteneces según el cuadrante de guardias. Si eres profesor/a de ESO, Bachillerato o FOL selecciona <strong>GENERAL</strong>.
+                💡 Selecciona la familia profesional a la que perteneces. Si eres profesor/a de ESO, Bachillerato o FOL selecciona <strong>ESO/BACHILLERATO</strong>.
               </div>
             </Campo>
             <Campo label="Tipo de contrato">
