@@ -554,26 +554,90 @@ export default function GestionGuardias() {
           </div>
         ) : (
           <>
-            <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12 }}>
-              🚨 PROFESORES QUE FALTAN ({ausentesEstaHora().length})
-            </div>
+            {(() => {
+              const todasAsig = asignacionAutomatica();
+              const totalSinCubrir = todasAsig.filter(a => !a.cubre).length;
+              const totalClases = todasAsig.length;
+              const cubiertasPorApoyo = todasAsig.filter(a => a.cubre?.tipo === 'apoyo_obligatorio').length;
+              
+              if (totalSinCubrir > 0) {
+                return (
+                  <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12 }}>
+                    🚨 {totalSinCubrir} CLASE{totalSinCubrir !== 1 ? 'S' : ''} SIN CUBRIR — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                  </div>
+                );
+              } else if (cubiertasPorApoyo > 0) {
+                return (
+                  <div style={{ fontWeight:800, fontSize:14, color:'#78350f', marginBottom:12 }}>
+                    ⚠️ TODAS CUBIERTAS ({cubiertasPorApoyo} con apoyo externo) — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                  </div>
+                );
+              } else {
+                return (
+                  <div style={{ fontWeight:800, fontSize:14, color:verde, marginBottom:12 }}>
+                    ✅ TODAS LAS CLASES CUBIERTAS — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                  </div>
+                );
+              }
+            })()}
 
             {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
               const asignaciones = asignacionAutomatica().filter(a => a.ausencia.sector.toUpperCase() === sectorSup);
+              
+              // Estado global del sector
+              const totalClases = asignaciones.length;
+              const cubiertasPorGuardia = asignaciones.filter(a => a.cubre?.tipo === 'guardia_sector').length;
+              const cubiertasPorApoyo = asignaciones.filter(a => a.cubre?.tipo === 'apoyo_obligatorio').length;
+              const sinCubrir = asignaciones.filter(a => !a.cubre).length;
+              
+              // Colores: verde si todo cubierto por guardia, ámbar si hay apoyo, rojo si falta alguna
+              let bgCabecera, borderCabecera, colorTexto, colorSub;
+              if (sinCubrir > 0) {
+                // Hay clases sin cubrir → ROJO real
+                bgCabecera = '#fef2f2';
+                borderCabecera = '#fca5a5';
+                colorTexto = rojo;
+                colorSub = '#7f1d1d';
+              } else if (cubiertasPorApoyo > 0) {
+                // Todas cubiertas pero con apoyo → ÁMBAR (aviso pero no crisis)
+                bgCabecera = '#fffbeb';
+                borderCabecera = '#fbbf24';
+                colorTexto = '#78350f';
+                colorSub = '#92400e';
+              } else {
+                // Todo cubierto por guardias del sector → VERDE
+                bgCabecera = '#f0fdf4';
+                borderCabecera = '#86efac';
+                colorTexto = verde;
+                colorSub = '#166534';
+              }
+              
+              // Texto resumen
+              let resumen;
+              if (totalClases === 0) {
+                resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · sin clases esta hora`;
+              } else if (sinCubrir > 0) {
+                resumen = `${sinCubrir} sin cubrir · ${cubiertasPorGuardia + cubiertasPorApoyo}/${totalClases} cubiertas`;
+              } else if (cubiertasPorApoyo > 0) {
+                resumen = `✓ Cubiertas ${totalClases}/${totalClases} (${cubiertasPorApoyo} con apoyo externo)`;
+              } else {
+                resumen = `✓ Cubiertas ${totalClases}/${totalClases}`;
+              }
+              
               return (
                 <div key={sectorSup} style={{ marginBottom:16 }}>
                   <div style={{
-                    backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:'10px 10px 0 0',
+                    backgroundColor: bgCabecera, border:'1.5px solid ' + borderCabecera, borderRadius:'10px 10px 0 0',
                     padding:'8px 14px', display:'flex', alignItems:'center', gap:8,
                   }}>
                     <span style={{ fontSize:16 }}>{emojiSector(sectorSup)}</span>
-                    <span style={{ fontWeight:800, fontSize:13, color:rojo }}>{sectorSup}</span>
-                    <span style={{ fontSize:11, color:'#7f1d1d', marginLeft:'auto' }}>
-                      {ausentes.length} ausente{ausentes.length !== 1 ? 's' : ''} · {asignaciones.length} clase{asignaciones.length !== 1 ? 's' : ''}
+                    <span style={{ fontWeight:800, fontSize:13, color: colorTexto }}>{sectorSup}</span>
+                    <span style={{ fontSize:11, color: colorSub, marginLeft:'auto' }}>
+                      {resumen}
                     </span>
                   </div>
 
-                  <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
+                  <div style={{ backgroundColor:'white', border:'1.5px solid ' + borderCabecera, borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
                     {asignaciones.length === 0 ? (
                       <div style={{ fontSize:12, color:'#999', padding:8, textAlign:'center' }}>
                         Sin clases esta hora (complementaria u hora libre)
