@@ -59,6 +59,28 @@ export default function PanelProfesor() {
     window.location.href = '/login';
   }
 
+  async function forzarActualizacion() {
+    try {
+      // 1. Desregistrar todos los Service Workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) {
+          await reg.unregister();
+        }
+      }
+      // 2. Borrar todas las caches
+      if ('caches' in window) {
+        const nombres = await caches.keys();
+        await Promise.all(nombres.map(n => caches.delete(n)));
+      }
+      // 3. Recargar sin caché
+      window.location.reload(true);
+    } catch (e) {
+      // Si algo falla, al menos recargar
+      window.location.reload();
+    }
+  }
+
   const verde = '#1e6b2e';
 
   const MODULOS = [
@@ -207,6 +229,12 @@ export default function PanelProfesor() {
               🔐 {(panelDirectivo || panelTutor).titulo}
             </a>
           )}
+          <button onClick={forzarActualizacion} style={{
+            padding: '7px 12px', borderRadius: 8,
+            border: '1.5px solid rgba(255,255,255,0.4)',
+            backgroundColor: 'transparent', color: 'white',
+            cursor: 'pointer', fontSize: 13,
+          }} title="Fuerza descargar la última versión">🔄</button>
           <button onClick={cerrarSesion} style={{
             padding: '7px 14px', borderRadius: 8,
             border: '1.5px solid rgba(255,255,255,0.4)',
