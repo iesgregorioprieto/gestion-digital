@@ -225,7 +225,9 @@ export default function Guardias() {
       if (!prof) continue;
       const nombrePdf = `${prof.apellidos}, ${prof.nombre}`;
       const abrev = claveAbreviatura(prof.apellidos, prof.nombre);
-      const sector = prof.especialidad || 'GENERAL';
+      let sector = prof.especialidad || 'GENERAL';
+      // Mapear "ESO/BACHILLERATO" del profesor al sector "GENERAL" del cuadrante Delphos
+      if (sector === 'ESO/BACHILLERATO') sector = 'GENERAL';
 
       resultado.push({
         id: falta.profesor_id + '-' + f,
