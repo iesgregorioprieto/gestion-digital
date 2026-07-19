@@ -682,22 +682,37 @@ export default function GestionGuardias() {
                           {cubre?.tipo === 'apoyo_obligatorio' && (
                             <div style={{
                               padding:'8px 10px', borderRadius:6, backgroundColor:'#fef3c7',
-                              border:'2px solid #f59e0b', display:'flex', alignItems:'center', gap:8, fontSize:12,
+                              border:'2px solid #f59e0b', display:'flex', alignItems:'center', gap:8, fontSize:12, flexWrap:'wrap',
                             }}>
                               <span style={{ fontWeight:800, color:'#78350f' }}>🚨 APOYO OBLIGATORIO:</span>
                               <span style={{ fontWeight:800, color:'#78350f' }}>{cubre.nombre}</span>
                               <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
                                 {cubre.sectorOriginal} ({cubre.apoyosPrevios} apoyos)
                               </span>
-                              {apoyoReg && cubre.alternativas.length > 0 && (
+                              {cubre.alternativas && cubre.alternativas.length > 0 && (
                                 <button
-                                  onClick={() => setModalActivar({
-                                    modo: 'cambiar',
-                                    apoyoId: apoyoReg.id,
-                                    asig,
-                                    sugeridos: cubre.alternativas,
-                                    actual: cubre,
-                                  })}
+                                  onClick={() => {
+                                    // Buscar el apoyo registrado o el más reciente que coincida
+                                    let apoyoParaCambiar = apoyoReg;
+                                    if (!apoyoParaCambiar) {
+                                      apoyoParaCambiar = apoyosAsignados.find(ap =>
+                                        ap.hora === horaActiva &&
+                                        ap.grupo === (asig.clase.grupo || null) &&
+                                        ap.sector_destino === asig.ausencia.sector.toUpperCase()
+                                      );
+                                    }
+                                    if (!apoyoParaCambiar) {
+                                      alert('El apoyo todavía se está registrando. Espera 2 segundos y vuelve a intentar.');
+                                      return;
+                                    }
+                                    setModalActivar({
+                                      modo: 'cambiar',
+                                      apoyoId: apoyoParaCambiar.id,
+                                      asig,
+                                      sugeridos: cubre.alternativas,
+                                      actual: cubre,
+                                    });
+                                  }}
                                   style={{
                                     padding:'4px 10px', borderRadius:6, border:'none',
                                     backgroundColor:'#f59e0b', color:'white', fontSize:11, fontWeight:700, cursor:'pointer',
