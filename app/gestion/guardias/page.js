@@ -396,12 +396,19 @@ export default function GestionGuardias() {
       materia: asig.clase.materia || null,
       tarea: asig.clase.instrucciones || null,
       asignado_por: usuario?.id,
-      estado: 'pendiente',
+      estado: 'confirmado', // Se marca como confirmado directamente para contar
       tipo_apoyo: 'urgente',
       curso_academico: '2025-2026',
     }]).select();
     if (error) { alert('Error: ' + error.message); return; }
-    if (data) setApAsig(prev => [...prev, ...data]);
+    if (data) {
+      setApAsig(prev => [...prev, ...data]);
+      // Actualizar contador local para que la lista se reordene
+      setContApoyos(prev => ({
+        ...prev,
+        [profesorSeleccionado.sectorOriginal]: (prev[profesorSeleccionado.sectorOriginal] || 0) + 1
+      }));
+    }
     setModalActivar(null);
   }
 
@@ -423,10 +430,18 @@ export default function GestionGuardias() {
 
   // Eliminar apoyo urgente activado por error
   async function desactivarApoyo(apoyoId) {
-    if (!confirm('¿Desactivar este apoyo? El profesor dejará de estar asignado.')) return;
+    if (!confirm('¿Desactivar este apoyo? El profesor dejará de estar asignado y no contará en la rotación.')) return;
+    const apoyo = apoyosAsignados.find(a => a.id === apoyoId);
     const { error } = await getSupabase().from('apoyos_asignados').delete().eq('id', apoyoId);
     if (error) { alert('Error: ' + error.message); return; }
     setApAsig(prev => prev.filter(a => a.id !== apoyoId));
+    // Decrementar contador local si era confirmado o realizado
+    if (apoyo && (apoyo.estado === 'confirmado' || apoyo.estado === 'realizado')) {
+      setContApoyos(prev => ({
+        ...prev,
+        [apoyo.sector_apoyo]: Math.max(0, (prev[apoyo.sector_apoyo] || 0) - 1)
+      }));
+    }
   }
 
   const btnNav = {
@@ -621,6 +636,7 @@ export default function GestionGuardias() {
                             <div style={{
                               padding:'8px 10px', borderRadius:6, backgroundColor:'#dcfce7',
                               border:'1px solid #86efac', display:'flex', alignItems:'center', gap:8, fontSize:12,
+                              marginBottom: apoyoUrgenteExistente ? 6 : 0,
                             }}>
                               <span style={{ fontWeight:700, color:verde }}>✅ CUBRE:</span>
                               <span style={{ fontWeight:800 }}>{cubre.nombre}</span>
@@ -628,7 +644,38 @@ export default function GestionGuardias() {
                             </div>
                           )}
 
-                          {/* APOYO OBLIGATORIO (ROJO/NARANJA) */}
+                          {/* APOYO URGENTE YA ACTIVADO — TAMBIÉN EN VERDE (como cover activo) */}
+                          {apoyoUrgenteExistente && (() => {
+                            const prof = profesoresList.find(p => p.id === apoyoUrgenteExistente.profesor_id);
+                            const nombreAp = prof ? `${prof.apellidos}, ${prof.nombre}` : 'Profesor';
+                            const confirmado = apoyoUrgenteExistente.estado === 'confirmado' || apoyoUrgenteExistente.estado === 'realizado';
+                            return (
+                              <div style={{
+                                padding:'8px 10px', borderRadius:6,
+                                backgroundColor: '#dcfce7',
+                                border:'1.5px solid ' + verde,
+                                display:'flex', alignItems:'center', gap:8, fontSize:12,
+                              }}>
+                                <span style={{ fontWeight:800, color:verde }}>
+                                  {confirmado ? '✅' : '⏳'} APOYO ACTIVO:
+                                </span>
+                                <span style={{ fontWeight:800, color:verde }}>{nombreAp}</span>
+                                <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
+                                  {apoyoUrgenteExistente.sector_apoyo} · contado
+                                </span>
+                                <button
+                                  onClick={() => desactivarApoyo(apoyoUrgenteExistente.id)}
+                                  style={{
+                                    padding:'4px 8px', borderRadius:6, border:'none',
+                                    backgroundColor:'#6b7280', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
+                                  }}
+                                  title="Desactivar y restar del contador"
+                                >✕</button>
+                              </div>
+                            );
+                          })()}
+
+                          {/* APOYO OBLIGATORIO (NARANJA) */}
                           {cubre?.tipo === 'apoyo_obligatorio' && (
                             <div style={{
                               padding:'8px 10px', borderRadius:6, backgroundColor:'#fef3c7',
@@ -667,39 +714,14 @@ export default function GestionGuardias() {
                             </div>
                           )}
 
-                          {/* APOYO URGENTE YA ACTIVADO */}
-                          {apoyoUrgenteExistente && (() => {
-                            const prof = profesoresList.find(p => p.id === apoyoUrgenteExistente.profesor_id);
-                            const nombreAp = prof ? `${prof.apellidos}, ${prof.nombre}` : 'Profesor';
-                            return (
-                              <div style={{
-                                marginTop:8, padding:'8px 10px', borderRadius:6, backgroundColor:'#fee2e2',
-                                border:'2px solid #dc2626', display:'flex', alignItems:'center', gap:8, fontSize:12,
-                              }}>
-                                <span style={{ fontWeight:800, color:rojo }}>🚨 APOYO URGENTE:</span>
-                                <span style={{ fontWeight:800, color:rojo }}>{nombreAp}</span>
-                                <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
-                                  {apoyoUrgenteExistente.sector_apoyo}
-                                </span>
-                                <button
-                                  onClick={() => desactivarApoyo(apoyoUrgenteExistente.id)}
-                                  style={{
-                                    padding:'4px 8px', borderRadius:6, border:'none',
-                                    backgroundColor:'#dc2626', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
-                                  }}
-                                >✕ Desactivar</button>
-                              </div>
-                            );
-                          })()}
-
-                          {/* PANEL DE SUGERENCIAS BACKUP (solo si sector cubierto y no hay apoyo urgente) */}
+                          {/* PANEL DE SUGERENCIAS BACKUP (solo si sector cubierto por guardia normal y no hay apoyo urgente aún) */}
                           {sectorEstaCubierto && sugerenciasBackup.length > 0 && !apoyoUrgenteExistente && (
                             <div style={{ marginTop:10, padding:'10px 12px', backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
                               <div style={{ fontSize:11, fontWeight:700, color:'#78350f', marginBottom:6 }}>
-                                💡 SUGERENCIAS DE APOYO EXTRA (rotación)
+                                💡 SUGERENCIAS DE APOYO EXTRA (rotación por menos apoyos)
                               </div>
                               <div style={{ fontSize:10, color:'#92400e', marginBottom:8 }}>
-                                Por si necesitas activar apoyo urgente. No cuenta en el contador salvo que actives.
+                                Si activas alguno subirá arriba en verde y contará en el contador.
                               </div>
                               <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
                                 {sugerenciasBackup.slice(0, 6).map((p, i) => (
@@ -720,9 +742,10 @@ export default function GestionGuardias() {
                                       onClick={() => activarApoyoUrgente(asig, p)}
                                       style={{
                                         padding:'4px 10px', borderRadius:6, border:'none',
-                                        backgroundColor: '#f59e0b', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
+                                        backgroundColor: i === 0 ? '#059669' : '#f59e0b',
+                                        color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
                                       }}
-                                    >Activar</button>
+                                    >✅ Activar</button>
                                   </div>
                                 ))}
                               </div>
