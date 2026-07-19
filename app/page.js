@@ -4,6 +4,22 @@ export default function Home() {
   const verde = '#1e6b2e';
   const verdeClaro = '#e8f5e9';
 
+  async function forzarActualizacion() {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const reg of registrations) await reg.unregister();
+      }
+      if ('caches' in window) {
+        const nombres = await caches.keys();
+        await Promise.all(nombres.map(n => caches.delete(n)));
+      }
+      window.location.reload(true);
+    } catch (e) {
+      window.location.reload();
+    }
+  }
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -12,7 +28,23 @@ export default function Home() {
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
+      position: 'relative',
     }}>
+
+      {/* BOTÓN REFRESCAR (arriba a la derecha) */}
+      <button 
+        onClick={forzarActualizacion} 
+        title="Actualizar app - fuerza descargar última versión"
+        style={{
+          position: 'absolute', top: 12, right: 12,
+          padding: '8px 12px', borderRadius: 20,
+          backgroundColor: 'rgba(255,255,255,0.9)',
+          border: '1.5px solid rgba(255,255,255,0.4)',
+          color: verde, cursor: 'pointer', fontSize: 15, zIndex: 10,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+          fontWeight: 700,
+        }}
+      >🔄 Actualizar</button>
 
       {/* HEADER */}
       <div style={{
