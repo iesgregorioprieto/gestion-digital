@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -139,7 +140,7 @@ export default function Guardias() {
 
     const { data: profes } = await getSupabase()
       .from('profesores')
-      .select('id,nombre,apellidos,especialidad');
+      .select('id,nombre,apellidos,departamento,especialidad');
 
     const mapa = {};
     (profes || []).forEach(p => {
@@ -225,9 +226,12 @@ export default function Guardias() {
       if (!prof) continue;
       const nombrePdf = `${prof.apellidos}, ${prof.nombre}`;
       const abrev = claveAbreviatura(prof.apellidos, prof.nombre);
-      let sector = prof.especialidad || 'GENERAL';
-      // Mapear "ESO/BACHILLERATO" del profesor al sector "GENERAL" del cuadrante Delphos
-      if (sector === 'ESO/BACHILLERATO') sector = 'GENERAL';
+      // Derivar sector automáticamente del departamento (fallback: especialidad legacy)
+      let sector = departamentoASector(prof.departamento);
+      // Si no hay departamento pero sí especialidad (legacy), usar esa
+      if (sector === 'GENERAL' && prof.especialidad && prof.especialidad !== 'ESO/BACHILLERATO' && prof.especialidad !== 'GENERAL') {
+        sector = prof.especialidad;
+      }
 
       resultado.push({
         id: falta.profesor_id + '-' + f,
@@ -287,15 +291,6 @@ export default function Guardias() {
       if (b === 'GENERAL' && a !== 'GENERAL') return -1;
       return a.localeCompare(b);
     });
-  }
-
-  // Sectores FP reales (los que tienen especialidad asignable)
-  // BIBLIOTECA, ACOMPAÑAMIENTO no son sectores FP - son roles auxiliares
-  const SECTORES_FP = ['TMV', 'COMERCIO', 'ELECTRICIDAD', 'INFORMÁTICA', 'HOSTELERÍA', 'INDUSTRIAS ALIMENTARIAS', 'ADMINISTRACIÓN'];
-  
-  function esSectorFP(sector) {
-    const sup = (sector || '').toUpperCase();
-    return SECTORES_FP.some(fp => sup === fp);
   }
 
   // Encontrar el sector real (case-sensitive) para acceder a horarioGuardias
