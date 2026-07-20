@@ -24,17 +24,7 @@ const ROLES_DOCENTES = [
   { valor: 'jefe_departamento', etiqueta: '📂 Jefe/a de Departamento' },
 ];
 
-// Especialidades / Sectores de guardia - lista fija que coincide con los sectores del cuadrante
-const ESPECIALIDADES = [
-  'TMV',
-  'COMERCIO',
-  'ELECTRICIDAD',
-  'INFORMÁTICA',
-  'HOSTELERÍA',
-  'INDUSTRIAS ALIMENTARIAS',
-  'ADMINISTRACIÓN',
-  'ESO/BACHILLERATO',
-];
+// El sector de guardia se deriva automáticamente del departamento (ver lib/sectores.js)
 
 export default function PanelSecretario() {
   const [pestana, setPestana] = useState('profesores');
@@ -131,7 +121,6 @@ export default function PanelSecretario() {
       apellidos: formEdicion.apellidos,
       email: formEdicion.email,
       departamento: formEdicion.departamento,
-      especialidad: formEdicion.especialidad || '',
       tipo_contrato: formEdicion.tipo_contrato,
       antiguedad_centro: formEdicion.antiguedad_centro || 0,
       antiguedad_cuerpo: formEdicion.antiguedad_cuerpo || 0,
@@ -164,20 +153,6 @@ export default function PanelSecretario() {
     }
   }
 
-  function sugerirEspecialidad(departamento) {
-    if (!departamento) return '';
-    const d = departamento.toUpperCase();
-    if (d.includes('TMV') || d.includes('CARROC')) return 'TMV';
-    if (d.includes('COMERC')) return 'COMERCIO';
-    if (d.includes('ELECTR')) return 'ELECTRICIDAD';
-    if (d.includes('INFORM')) return 'INFORMÁTICA';
-    if (d.includes('HOSTEL') || d.includes('COCIN')) return 'HOSTELERÍA';
-    if (d.includes('INDUSTR') || d.includes('ALIMENT') || d.includes('PANAD')) return 'INDUSTRIAS ALIMENTARIAS';
-    if (d.includes('ADMIN')) return 'ADMINISTRACIÓN';
-    // Cualquier otro departamento (FOL, Matemáticas, Lengua, Inglés, etc.) → ESO/BACHILLERATO
-    return 'ESO/BACHILLERATO';
-  }
-
   function abrirFicha(profesor) {
     setProfesorSeleccionado(profesor);
     setModoVista('ficha');
@@ -191,7 +166,6 @@ export default function PanelSecretario() {
       apellidos: profesor.apellidos,
       email: profesor.email,
       departamento: profesor.departamento,
-      especialidad: profesor.especialidad || sugerirEspecialidad(profesor.departamento),
       tipo_contrato: profesor.tipo_contrato,
       antiguedad_centro: profesor.antiguedad_centro || '',
       antiguedad_cuerpo: profesor.antiguedad_cuerpo || '',
@@ -258,7 +232,7 @@ export default function PanelSecretario() {
           <div>
             <div style={{ fontWeight: 700, fontSize: 16, color: verde }}>{p.apellidos}, {p.nombre}</div>
             <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>📧 {p.email}</div>
-            <div style={{ fontSize: 13, color: '#555' }}>🏫 {p.departamento || '—'}{p.especialidad ? ` · ${p.especialidad}` : ''}</div>
+            <div style={{ fontSize: 13, color: '#555' }}>🏫 {p.departamento || '—'}</div>
             <div style={{ fontSize: 13, color: '#555' }}>💼 {p.tipo_contrato || '—'}</div>
             <div style={{ fontSize: 13, color: '#555' }}>🎭 {etiquetaRoles(p)}</div>
             <div style={{ fontSize: 12, color: '#aaa', marginTop: 4 }}>
@@ -450,7 +424,7 @@ export default function PanelSecretario() {
           <FilaInfo label="Nombre" valor={`${profesorSeleccionado.nombre} ${profesorSeleccionado.apellidos}`} />
           <FilaInfo label="Email" valor={profesorSeleccionado.email} />
           <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento} />
-          <FilaInfo label="Especialidad" valor={profesorSeleccionado.especialidad || '—'} />
+          <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento || '—'} />
           <FilaInfo label="Tipo contrato" valor={profesorSeleccionado.tipo_contrato} />
           <FilaInfo label="Roles" valor={etiquetaRoles(profesorSeleccionado)} />
           <FilaInfo label="Rol gestión" valor={profesorSeleccionado.rol_gestion || '—'} />
@@ -473,7 +447,6 @@ export default function PanelSecretario() {
             <Campo label="Apellidos" value={formEdicion.apellidos} onChange={v => setFormEdicion(f => ({ ...f, apellidos: v }))} />
             <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
             <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
-            <CampoSelect label="🎓 Especialidad" value={formEdicion.especialidad} onChange={v => setFormEdicion(f => ({ ...f, especialidad: v }))} opciones={ESPECIALIDADES} />
             <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
             <Campo label="Antigüedad centro (años)" value={formEdicion.antiguedad_centro} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_centro: v }))} tipo="number" />
             <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
