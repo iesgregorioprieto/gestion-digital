@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { departamentoASector } from '@/lib/sectores';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -138,7 +139,7 @@ export default function GestionGuardias() {
     // Profesores
     const { data: profes } = await getSupabase()
       .from('profesores')
-      .select('id,nombre,apellidos,especialidad');
+      .select('id,nombre,apellidos,departamento,especialidad');
     const mapa = {};
     (profes || []).forEach(p => {
       mapa[claveAbreviatura(p.apellidos, p.nombre)] = `${p.apellidos}, ${p.nombre}`;
@@ -213,9 +214,11 @@ export default function GestionGuardias() {
       const prof = profesoresList.find(p => p.id === falta.profesor_id);
       if (!prof) continue;
       const nombrePdf = `${prof.apellidos}, ${prof.nombre}`;
-      // Mapear "ESO/BACHILLERATO" del profesor al sector "GENERAL" del cuadrante Delphos
-      let sectorProf = prof.especialidad || 'GENERAL';
-      if (sectorProf === 'ESO/BACHILLERATO') sectorProf = 'GENERAL';
+      // Derivar sector automáticamente del departamento (fallback: especialidad legacy)
+      let sectorProf = departamentoASector(prof.departamento);
+      if (sectorProf === 'GENERAL' && prof.especialidad && prof.especialidad !== 'ESO/BACHILLERATO' && prof.especialidad !== 'GENERAL') {
+        sectorProf = prof.especialidad;
+      }
       resultado.push({
         profesorId: falta.profesor_id,
         profesor: nombrePdf,
