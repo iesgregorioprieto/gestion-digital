@@ -307,6 +307,10 @@ export default function GestionGuardias() {
     const asignaciones = [];
     const porSector = ausenciasPorSector();
     const asignadosAbrev = new Set();
+    
+    // Set con las abreviaturas de los profesores ausentes esta hora
+    // (para no poder asignarles cubrir a otros - ellos también faltan)
+    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
     for (const sectorSup of Object.keys(porSector)) {
       const sReal = sectorReal(sectorSup);
@@ -320,11 +324,11 @@ export default function GestionGuardias() {
           let cubre = null;
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
-            if (!asignadosAbrev.has(key)) {
-              cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
-              asignadosAbrev.add(key);
-              break;
-            }
+            // Excluir: ya asignado a otra cosa, o él mismo está ausente
+            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
+            cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            asignadosAbrev.add(key);
+            break;
           }
 
           if (!cubre) {
