@@ -661,22 +661,107 @@ export default function GestionGuardias() {
                           const horasAusente = aus.horas.filter(h => horaCoincide(h.hora, horaActiva));
                           const teniaGuardia = horasAusente.some(h => h.tipo === 'guardia');
                           const teniaComp = horasAusente.some(h => h.tipo === 'complementaria');
+                          const grupoGuardia = horasAusente.find(h => h.tipo === 'guardia')?.grupo;
+                          
+                          // Existe ya un apoyo asignado para este caso?
+                          const apoyoParaGuardia = apoyosAsignados.find(ap =>
+                            ap.hora === horaActiva &&
+                            ap.sector_destino === sectorSup &&
+                            ap.materia === 'GUARDIA_SUSTITUTO'
+                          );
+                          const nombreApoyo = apoyoParaGuardia 
+                            ? (() => {
+                                const pf = profesoresList.find(p => p.id === apoyoParaGuardia.profesor_id);
+                                return pf ? `${pf.apellidos}, ${pf.nombre}` : 'Profesor';
+                              })()
+                            : null;
+
                           return (
                             <div key={i} style={{
-                              padding:'10px 12px', marginBottom:6,
+                              padding:'10px 12px', marginBottom:8,
                               backgroundColor: teniaGuardia ? '#fef2f2' : '#fafafa',
                               borderRadius:8, border: teniaGuardia ? '1.5px solid #fca5a5' : '1px solid #e5e7eb',
                             }}>
-                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                                 <span style={{ fontSize:13, fontWeight:700 }}>{aus.profesor}</span>
                                 {aus.tipo === 'dld' && (
                                   <span style={{ fontSize:10, padding:'2px 6px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:8, fontWeight:700 }}>DLD</span>
                                 )}
                               </div>
+                              
                               {teniaGuardia && (
-                                <div style={{ fontSize:12, color:rojo, fontWeight:600, marginTop:4 }}>
-                                  ⚠️ Tenía GUARDIA esta hora — el sector pierde capacidad de cobertura
-                                </div>
+                                <>
+                                  <div style={{ fontSize:12, color:rojo, fontWeight:700, marginTop:4, padding:'8px 10px', backgroundColor:'#fee2e2', borderRadius:6 }}>
+                                    ⚠️ Faltaba y tenía <strong>GUARDIA en {sectorSup}</strong>{grupoGuardia ? ` (${grupoGuardia})` : ''}
+                                    <div style={{ fontSize:11, fontWeight:400, marginTop:4 }}>
+                                      El sector pierde 1 profesor de guardia. Puede necesitar un sustituto si otros profesores del sector también faltan.
+                                    </div>
+                                  </div>
+                                  
+                                  {nombreApoyo ? (
+                                    <div style={{
+                                      marginTop:6, padding:'8px 10px', borderRadius:6, backgroundColor:'#dcfce7',
+                                      border:'1.5px solid ' + verde, display:'flex', alignItems:'center', gap:8, fontSize:12,
+                                    }}>
+                                      <span style={{ fontWeight:800, color:verde }}>✅ SUSTITUTO ASIGNADO:</span>
+                                      <span style={{ fontWeight:800, color:verde }}>{nombreApoyo}</span>
+                                      <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
+                                        {apoyoParaGuardia.sector_apoyo} · contado
+                                      </span>
+                                      <button
+                                        onClick={() => desactivarApoyo(apoyoParaGuardia.id)}
+                                        style={{ padding:'4px 8px', borderRadius:6, border:'none', backgroundColor:'#6b7280', color:'white', fontSize:10, fontWeight:700, cursor:'pointer' }}
+                                      >✕</button>
+                                    </div>
+                                  ) : (
+                                    (() => {
+                                      // Sugerencias para sustituir esta guardia
+                                      const sugerencias = profesoresLibresParaApoyo(new Set(), ausenciasPorSector());
+                                      if (sugerencias.length === 0) return null;
+                                      return (
+                                        <details open style={{ marginTop:6, backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
+                                          <summary style={{ cursor:'pointer', padding:'8px 12px', fontSize:11, fontWeight:700, color:'#78350f', userSelect:'none', display:'flex', alignItems:'center', gap:6 }}>
+                                            💡 Asignar sustituto de guardia ({sugerencias.length} disponibles)
+                                            <span style={{ fontSize:10, fontWeight:400, opacity:0.75, marginLeft:'auto' }}>pulsa para ver</span>
+                                          </summary>
+                                          <div style={{ padding:'4px 12px 10px 12px' }}>
+                                            <div style={{ fontSize:10, color:'#92400e', marginBottom:8 }}>
+                                              Ordenados por menos apoyos previos. Al activar contará en el contador.
+                                            </div>
+                                            <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                                              {sugerencias.slice(0, 6).map((p, si) => (
+                                                <div key={si} style={{
+                                                  display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:6,
+                                                  backgroundColor: si === 0 ? '#fef3c7' : 'white',
+                                                  border: si === 0 ? '1.5px solid #f59e0b' : '1px solid #fde68a',
+                                                }}>
+                                                  <span style={{ fontSize:12, fontWeight:800 }}>
+                                                    {si === 0 ? '🥇' : si === 1 ? '🥈' : si === 2 ? '🥉' : `#${si+1}`}
+                                                  </span>
+                                                  <div style={{ flex:1 }}>
+                                                    <div style={{ fontSize:11, fontWeight:700, color:'#78350f' }}>{p.nombre}</div>
+                                                    <div style={{ fontSize:10, color:'#92400e' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios !== 1 ? 's' : ''}</div>
+                                                  </div>
+                                                  <button
+                                                    onClick={() => activarApoyoUrgente({
+                                                      ausencia: aus,
+                                                      clase: { grupo: grupoGuardia || 'GUARDIA', aula: null, materia: 'GUARDIA_SUSTITUTO', instrucciones: 'Sustituir en la guardia de ' + sectorSup },
+                                                    }, p)}
+                                                    style={{
+                                                      padding:'4px 10px', borderRadius:6, border:'none',
+                                                      backgroundColor: si === 0 ? '#059669' : '#f59e0b',
+                                                      color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
+                                                    }}
+                                                  >✅ Activar</button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        </details>
+                                      );
+                                    })()
+                                  )}
+                                </>
                               )}
                               {teniaComp && !teniaGuardia && (
                                 <div style={{ fontSize:12, color:'#666' }}>
