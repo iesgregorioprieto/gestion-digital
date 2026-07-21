@@ -597,7 +597,12 @@ export default function GestionGuardias() {
               const cubiertasPorApoyo = asignaciones.filter(a => a.cubre?.tipo === 'apoyo_obligatorio').length;
               const sinCubrir = asignaciones.filter(a => !a.cubre).length;
               
-              // Colores: verde si todo cubierto por guardia, ámbar si hay apoyo, rojo si falta alguna
+              // Detectar si algún ausente TENÍA guardia esa hora (pérdida de capacidad del sector)
+              const perdidaGuardia = ausentes.some(a => 
+                a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')
+              );
+              
+              // Colores: verde si todo cubierto por guardia, ámbar si hay apoyo o guardia perdida, rojo si falta alguna
               let bgCabecera, borderCabecera, colorTexto, colorSub;
               if (sinCubrir > 0) {
                 // Hay clases sin cubrir → ROJO real
@@ -605,8 +610,8 @@ export default function GestionGuardias() {
                 borderCabecera = '#fca5a5';
                 colorTexto = rojo;
                 colorSub = '#7f1d1d';
-              } else if (cubiertasPorApoyo > 0) {
-                // Todas cubiertas pero con apoyo → ÁMBAR (aviso pero no crisis)
+              } else if (cubiertasPorApoyo > 0 || perdidaGuardia) {
+                // Cubiertas pero con apoyo, o guardia perdida → ÁMBAR
                 bgCabecera = '#fffbeb';
                 borderCabecera = '#fbbf24';
                 colorTexto = '#78350f';
@@ -622,7 +627,11 @@ export default function GestionGuardias() {
               // Texto resumen
               let resumen;
               if (totalClases === 0) {
-                resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · sin clases esta hora`;
+                if (perdidaGuardia) {
+                  resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · tenía(n) guardia`;
+                } else {
+                  resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · sin clases esta hora`;
+                }
               } else if (sinCubrir > 0) {
                 resumen = `${sinCubrir} sin cubrir · ${cubiertasPorGuardia + cubiertasPorApoyo}/${totalClases} cubiertas`;
               } else if (cubiertasPorApoyo > 0) {
@@ -646,9 +655,38 @@ export default function GestionGuardias() {
 
                   <div style={{ backgroundColor:'white', border:'1.5px solid ' + borderCabecera, borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
                     {asignaciones.length === 0 ? (
-                      <div style={{ fontSize:12, color:'#999', padding:8, textAlign:'center' }}>
-                        Sin clases esta hora (complementaria u hora libre)
-                      </div>
+                      <>
+                        {/* Mostrar profesores ausentes con guardia (aunque no dejen clases huérfanas) */}
+                        {ausentes.map((aus, i) => {
+                          const horasAusente = aus.horas.filter(h => horaCoincide(h.hora, horaActiva));
+                          const teniaGuardia = horasAusente.some(h => h.tipo === 'guardia');
+                          const teniaComp = horasAusente.some(h => h.tipo === 'complementaria');
+                          return (
+                            <div key={i} style={{
+                              padding:'10px 12px', marginBottom:6,
+                              backgroundColor: teniaGuardia ? '#fef2f2' : '#fafafa',
+                              borderRadius:8, border: teniaGuardia ? '1.5px solid #fca5a5' : '1px solid #e5e7eb',
+                            }}>
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                                <span style={{ fontSize:13, fontWeight:700 }}>{aus.profesor}</span>
+                                {aus.tipo === 'dld' && (
+                                  <span style={{ fontSize:10, padding:'2px 6px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:8, fontWeight:700 }}>DLD</span>
+                                )}
+                              </div>
+                              {teniaGuardia && (
+                                <div style={{ fontSize:12, color:rojo, fontWeight:600, marginTop:4 }}>
+                                  ⚠️ Tenía GUARDIA esta hora — el sector pierde capacidad de cobertura
+                                </div>
+                              )}
+                              {teniaComp && !teniaGuardia && (
+                                <div style={{ fontSize:12, color:'#666' }}>
+                                  Complementaria — sin clase que cubrir
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </>
                     ) : asignaciones.map((asig, idx) => {
                       const cubre = asig.cubre;
 
