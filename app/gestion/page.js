@@ -113,16 +113,6 @@ export default function PanelGestion() {
       border: '#fbcfe8',
       color: '#be185d',
     },
-    {
-      id: 'guardias',
-      emoji: '🛡️',
-      titulo: 'Guardias',
-      descripcion: 'Cuadrantes semanales y asignación rotatoria de apoyos',
-      href: '/guardias',
-      bg: '#fef3c7',
-      border: '#fcd34d',
-      color: '#78350f',
-    },
   ];
 
   return (
