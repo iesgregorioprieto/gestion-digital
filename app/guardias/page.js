@@ -307,6 +307,10 @@ export default function Guardias() {
     // Trackear profesores ya asignados esta hora para no doblarles
     const asignadosAbrev = new Set();
 
+    // Set con las abreviaturas de los profesores ausentes esta hora
+    // (para no poder asignarles cubrir a otros - ellos también faltan)
+    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
+
     // Trackear cuántas asignaciones lleva cada sector (para reparto interno)
     const usadosDelSector = {};
 
@@ -323,12 +327,12 @@ export default function Guardias() {
           let cubre = null;
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
-            if (!asignadosAbrev.has(key)) {
-              cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
-              asignadosAbrev.add(key);
-              usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
-              break;
-            }
+            // Excluir: ya asignado a otra cosa, o él mismo está ausente
+            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
+            cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            asignadosAbrev.add(key);
+            usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
+            break;
           }
 
           // 2) Si no hay guardia del sector, buscar apoyo FP libre
