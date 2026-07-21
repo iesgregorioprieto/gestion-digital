@@ -799,42 +799,51 @@ export default function GestionGuardias() {
                             </div>
                           )}
 
-                          {/* PANEL DE SUGERENCIAS BACKUP (solo si sector cubierto por guardia normal y no hay apoyo urgente aún) */}
+                          {/* PANEL DE SUGERENCIAS BACKUP (colapsable) */}
                           {sectorEstaCubierto && sugerenciasBackup.length > 0 && !apoyoUrgenteExistente && (
-                            <div style={{ marginTop:10, padding:'10px 12px', backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
-                              <div style={{ fontSize:11, fontWeight:700, color:'#78350f', marginBottom:6 }}>
-                                💡 SUGERENCIAS DE APOYO EXTRA (rotación por menos apoyos)
-                              </div>
-                              <div style={{ fontSize:10, color:'#92400e', marginBottom:8 }}>
-                                Si activas alguno subirá arriba en verde y contará en el contador.
-                              </div>
-                              <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
-                                {sugerenciasBackup.slice(0, 6).map((p, i) => (
-                                  <div key={i} style={{
-                                    display:'flex', alignItems:'center', gap:8,
-                                    padding:'6px 10px', borderRadius:6,
-                                    backgroundColor: i === 0 ? '#fef3c7' : 'white',
-                                    border: i === 0 ? '1.5px solid #f59e0b' : '1px solid #fde68a',
-                                  }}>
-                                    <span style={{ fontSize:12, fontWeight:800 }}>
-                                      {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
-                                    </span>
-                                    <div style={{ flex:1 }}>
-                                      <div style={{ fontSize:11, fontWeight:700, color:'#78350f' }}>{p.nombre}</div>
-                                      <div style={{ fontSize:10, color:'#92400e' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios !== 1 ? 's' : ''}</div>
+                            <details style={{ marginTop:10, backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
+                              <summary style={{
+                                cursor:'pointer', padding:'8px 12px', fontSize:11, fontWeight:700,
+                                color:'#78350f', display:'flex', alignItems:'center', gap:6,
+                                userSelect:'none',
+                              }}>
+                                💡 Ver sugerencias de apoyo extra ({sugerenciasBackup.length})
+                                <span style={{ fontSize:10, fontWeight:400, opacity:0.75, marginLeft:'auto' }}>
+                                  rotación · pulsa para ver
+                                </span>
+                              </summary>
+                              <div style={{ padding:'4px 12px 10px 12px' }}>
+                                <div style={{ fontSize:10, color:'#92400e', marginBottom:8 }}>
+                                  Si activas alguno subirá arriba en verde y contará en el contador.
+                                </div>
+                                <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                                  {sugerenciasBackup.slice(0, 6).map((p, i) => (
+                                    <div key={i} style={{
+                                      display:'flex', alignItems:'center', gap:8,
+                                      padding:'6px 10px', borderRadius:6,
+                                      backgroundColor: i === 0 ? '#fef3c7' : 'white',
+                                      border: i === 0 ? '1.5px solid #f59e0b' : '1px solid #fde68a',
+                                    }}>
+                                      <span style={{ fontSize:12, fontWeight:800 }}>
+                                        {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+                                      </span>
+                                      <div style={{ flex:1 }}>
+                                        <div style={{ fontSize:11, fontWeight:700, color:'#78350f' }}>{p.nombre}</div>
+                                        <div style={{ fontSize:10, color:'#92400e' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios !== 1 ? 's' : ''}</div>
+                                      </div>
+                                      <button
+                                        onClick={() => activarApoyoUrgente(asig, p)}
+                                        style={{
+                                          padding:'4px 10px', borderRadius:6, border:'none',
+                                          backgroundColor: i === 0 ? '#059669' : '#f59e0b',
+                                          color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
+                                        }}
+                                      >✅ Activar</button>
                                     </div>
-                                    <button
-                                      onClick={() => activarApoyoUrgente(asig, p)}
-                                      style={{
-                                        padding:'4px 10px', borderRadius:6, border:'none',
-                                        backgroundColor: i === 0 ? '#059669' : '#f59e0b',
-                                        color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
-                                      }}
-                                    >✅ Activar</button>
-                                  </div>
-                                ))}
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            </details>
                           )}
                         </div>
                       );
