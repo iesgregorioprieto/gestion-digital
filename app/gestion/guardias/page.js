@@ -979,6 +979,47 @@ export default function GestionGuardias() {
                 </div>
               );
             })}
+
+            {/* PROFESORES DE GUARDIA ESTA HORA (colapsable, con nombres completos) */}
+            <details style={{ marginTop:20, backgroundColor:'white', border:'1px solid #e5e7eb', borderRadius:10 }}>
+              <summary style={{
+                cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
+                display:'flex', alignItems:'center', gap:8, userSelect:'none',
+              }}>
+                📊 Profesores de guardia esta hora (todos los sectores)
+              </summary>
+              <div style={{ padding:'0 16px 16px' }}>
+                {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
+                  const guardias = guardiasDeSector(s);
+                  const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
+                  return (
+                    <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
+                        {emojiSector(s)} {s.toUpperCase()}
+                      </div>
+                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
+                        {guardias.map((p, i) => {
+                          const key = normAbrev(p);
+                          const nombre = mapaProfesores[key] || p;
+                          const estaAusente = ausentesAbrev.has(key);
+                          return (
+                            <span key={i} style={{
+                              padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
+                              backgroundColor: estaAusente ? '#fee2e2' : '#f0fdf4',
+                              color: estaAusente ? rojo : verde,
+                              border:'1.5px solid ' + (estaAusente ? '#fca5a5' : '#bbf7d0'),
+                              textDecoration: estaAusente ? 'line-through' : 'none',
+                            }}>
+                              {estaAusente && '🚫 '}{nombre}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </details>
           </>
         )}
       </div>
