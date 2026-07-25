@@ -144,6 +144,16 @@ export default function PanelProfesor() {
       color: '#b45309', bg: '#fffbeb', border: '#fcd34d',
     },
     {
+      id: 'limpieza',
+      emoji: '🧹',
+      titulo: 'Incidencia de limpieza',
+      descripcion: 'Escanea el QR de la dependencia y reporta el problema al equipo de limpieza',
+      href: '/limpieza',
+      disponible: true,
+      roles: ['todos'],
+      color: '#0891b2', bg: '#ecfeff', border: '#67e8f9',
+    },
+    {
       id: 'compras',
       emoji: '🛒',
       titulo: 'Solicitud de Compras',
