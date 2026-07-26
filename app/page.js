@@ -126,6 +126,39 @@ export default function Home() {
           </div>
         </a>
 
+        {/* TARJETA PERSONAL LABORAL */}
+        <a href="/personal" style={{ textDecoration: 'none' }}>
+          <div style={{
+            backgroundColor: 'white',
+            borderRadius: 16,
+            padding: 28,
+            marginBottom: 16,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+            border: '2px solid #0891b2',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 20,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: '50%',
+              backgroundColor: '#ecfeff',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 32, flexShrink: 0,
+            }}>🧹</div>
+            <div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: '#0891b2', marginBottom: 4 }}>
+                Soy Personal Laboral
+              </div>
+              <div style={{ fontSize: 14, color: '#666', lineHeight: 1.4 }}>
+                Limpieza, cocina, conserjería, biblioteca...
+              </div>
+            </div>
+            <div style={{ marginLeft: 'auto', fontSize: 22, color: '#0891b2' }}>→</div>
+          </div>
+        </a>
+
         {/* TARJETA ALUMNOS */}
         <div style={{
           backgroundColor: 'white',
