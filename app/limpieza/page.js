@@ -226,7 +226,18 @@ export default function Limpieza() {
           }
         });
         await videoRef.current.play();
-        setEstadoScanner('Apunta al código QR...');
+        
+        // Inicializar BarcodeDetector nativo si disponible
+        if ('BarcodeDetector' in window && !barcodeDetectorRef.current) {
+          try {
+            barcodeDetectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+            console.log('✅ BarcodeDetector nativo listo');
+          } catch(e) {}
+        }
+        
+        setEstadoScanner(barcodeDetectorRef.current 
+          ? 'Apunta al código QR... (lector nativo activo)' 
+          : 'Apunta al código QR...');
         escaneandoRef.current = true;
         escanearFrame();
       }
@@ -245,45 +256,75 @@ export default function Limpieza() {
     }
   }
 
-  function escanearFrame() {
-    // Salir si ya no debemos seguir escaneando
-    if (!escaneandoRef.current) return;
-    
-    if (!videoRef.current || !canvasRef.current || !jsQRRef.current) {
-      animRef.current = requestAnimationFrame(escanearFrame);
-      return;
+  // Detector nativo del navegador (muy potente en Android Chrome)
+  const barcodeDetectorRef = useRef(null);
+  
+  useEffect(() => {
+    // Intentar usar BarcodeDetector nativo si existe
+    if ('BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        console.log('✅ BarcodeDetector nativo disponible');
+      } catch(e) {
+        console.warn('BarcodeDetector no disponible:', e);
+      }
     }
+  }, []);
+
+  async function escanearFrame() {
+    if (!escaneandoRef.current) return;
+    if (!videoRef.current) return;
     
     const video = videoRef.current;
-    const canvas = canvasRef.current;
-    
     if (video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) {
       animRef.current = requestAnimationFrame(escanearFrame);
       return;
     }
-    
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    
+
     try {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'attemptBoth', // Prueba QRs invertidos también
-      });
-      
-      if (code && code.data) {
-        console.log('QR detectado:', code.data);
-        escaneandoRef.current = false;
-        procesarQR(code.data);
-        return;
+      // MÉTODO 1: BarcodeDetector nativo (más rápido y fiable en móvil)
+      if (barcodeDetectorRef.current) {
+        const codes = await barcodeDetectorRef.current.detect(video);
+        if (codes && codes.length > 0) {
+          const data = codes[0].rawValue;
+          console.log('✅ QR detectado (nativo):', data);
+          escaneandoRef.current = false;
+          procesarQR(data);
+          return;
+        }
       }
-    } catch (e) {
-      console.warn('Error escaneando frame:', e);
+      // MÉTODO 2: jsQR con canvas (fallback universal)
+      else if (canvasRef.current && jsQRRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        
+        // Reducir resolución a la mitad para mayor velocidad
+        canvas.width = Math.floor(video.videoWidth / 2);
+        canvas.height = Math.floor(video.videoHeight / 2);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: 'attemptBoth',
+        });
+        
+        if (code && code.data) {
+          console.log('✅ QR detectado (jsQR):', code.data);
+          escaneandoRef.current = false;
+          procesarQR(code.data);
+          return;
+        }
+      }
+    } catch(e) {
+      console.warn('Error frame:', e);
     }
     
-    animRef.current = requestAnimationFrame(escanearFrame);
+    // Pequeña pausa entre frames para no saturar el procesador
+    setTimeout(() => {
+      if (escaneandoRef.current) {
+        animRef.current = requestAnimationFrame(escanearFrame);
+      }
+    }, 150);
   }
 
   async function procesarQR(data) {
