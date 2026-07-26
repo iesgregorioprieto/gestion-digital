@@ -321,21 +321,19 @@ export default function Guardias() {
 
       for (const aus of ausentes) {
         const clasesHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase');
+        const guardiasHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia');
 
+        // Procesar clases huérfanas → necesitan sustituto con tarea
         for (const clase of clasesHora) {
-          // 1) Intentar cubrir con guardia del mismo sector
           let cubre = null;
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
-            // Excluir: ya asignado a otra cosa, o él mismo está ausente
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
             cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
             break;
           }
-
-          // 2) Si no hay guardia del sector, buscar apoyo FP libre
           if (!cubre) {
             const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector);
             if (libres.length > 0) {
@@ -344,11 +342,16 @@ export default function Guardias() {
               cubre = { ...primero, tipo: 'apoyo_cruzado', alternativas: libres.slice(1, 5) };
             }
           }
+          asignaciones.push({ ausencia: aus, clase, tipoHora: 'clase', cubre });
+        }
 
+        // Procesar guardias huérfanas → el sector pierde un profesor de guardia
+        for (const guardia of guardiasHora) {
           asignaciones.push({
             ausencia: aus,
-            clase,
-            cubre,
+            clase: { ...guardia, grupo: guardia.grupo || sectorSup },
+            tipoHora: 'guardia',
+            cubre: null, // Se informa pero jefatura decide el sustituto
           });
         }
       }
@@ -556,6 +559,28 @@ export default function Guardias() {
                           </div>
                         ) : asignaciones.map((asig, idx) => {
                           const cubre = asig.cubre;
+                          
+                          // Si es una guardia huérfana (no clase)
+                          if (asig.tipoHora === 'guardia') {
+                            return (
+                              <div key={idx} style={{
+                                padding:'10px 12px', marginBottom:8,
+                                backgroundColor:'#fef3c7', borderRadius:8,
+                                border:'1.5px solid #fbbf24',
+                              }}>
+                                <div style={{ fontSize:13, fontWeight:700, color:'#78350f', marginBottom:4 }}>
+                                  {asig.ausencia.profesor}
+                                </div>
+                                <div style={{ fontSize:12, color:'#92400e', fontWeight:600 }}>
+                                  ⚠️ Tenía GUARDIA en {sectorSup} — el sector pierde capacidad de cobertura
+                                </div>
+                                <div style={{ fontSize:11, color:'#78350f', marginTop:4, fontStyle:'italic' }}>
+                                  El equipo directivo debe revisar si necesita asignar sustituto
+                                </div>
+                              </div>
+                            );
+                          }
+
                           const yoCubro = cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
                             profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
                             profesoresList.find(p=>p.id===profesorId)?.nombre || ''
