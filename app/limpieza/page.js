@@ -98,9 +98,13 @@ export default function Limpieza() {
   // Historial + duplicados + foto
   const [misIncidencias, setMisIncidencias] = useState([]);
   const [incidenciasAbiertas, setIncidenciasAbiertas] = useState([]);
-  const [foto, setFoto] = useState(null); // File object
-  const [fotoPreview, setFotoPreview] = useState(null); // URL preview
+  const [foto, setFoto] = useState(null);
+  const [fotoPreview, setFotoPreview] = useState(null);
   const [subiendoFoto, setSubiendoFoto] = useState(false);
+  
+  // Estado del escáner (diagnóstico)
+  const [estadoScanner, setEstadoScanner] = useState('');
+  const [jsQRCargado, setJsQRCargado] = useState(false);
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -108,6 +112,7 @@ export default function Limpieza() {
   const animRef = useRef(null);
   const jsQRRef = useRef(null);
   const inputFotoRef = useRef(null);
+  const escaneandoRef = useRef(false); // control loop
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -116,20 +121,42 @@ export default function Limpieza() {
     const nombre = sessionStorage.getItem('profesor_nombre') || '';
     setNombreProfesor(nombre);
     
-    // Cargar jsQR desde CDN
-    if (typeof window !== 'undefined' && !window.jsQR) {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
-      script.onload = () => { jsQRRef.current = window.jsQR; };
-      document.head.appendChild(script);
-    } else if (window.jsQR) {
-      jsQRRef.current = window.jsQR;
+    // Cargar jsQR desde CDN con Promise
+    if (typeof window !== 'undefined') {
+      if (window.jsQR) {
+        jsQRRef.current = window.jsQR;
+        setJsQRCargado(true);
+      } else {
+        const scriptExistente = document.querySelector('script[src*="jsQR"]');
+        if (!scriptExistente) {
+          const script = document.createElement('script');
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
+          script.async = true;
+          script.onload = () => { 
+            jsQRRef.current = window.jsQR;
+            setJsQRCargado(true);
+          };
+          script.onerror = () => {
+            console.error('No se pudo cargar jsQR');
+          };
+          document.head.appendChild(script);
+        } else {
+          // Ya se está cargando desde otro sitio, esperar
+          const check = setInterval(() => {
+            if (window.jsQR) {
+              jsQRRef.current = window.jsQR;
+              setJsQRCargado(true);
+              clearInterval(check);
+            }
+          }, 100);
+        }
+      }
     }
     
-    // Cargar mis últimas 3 incidencias
     cargarMisIncidencias(nombre);
     
     return () => {
+      escaneandoRef.current = false;
       pararCamara();
     };
   }, []);
@@ -148,6 +175,7 @@ export default function Limpieza() {
   }
 
   function pararCamara() {
+    escaneandoRef.current = false;
     if (animRef.current) {
       cancelAnimationFrame(animRef.current);
       animRef.current = null;
@@ -161,25 +189,66 @@ export default function Limpieza() {
   async function iniciarEscaneo() {
     setPantalla('escaneando');
     setErrorMensaje('');
+    setEstadoScanner('Iniciando cámara...');
+    
+    // Esperar a que jsQR esté cargado (hasta 5 segundos)
+    let intentos = 0;
+    while (!jsQRRef.current && intentos < 50) {
+      await new Promise(r => setTimeout(r, 100));
+      intentos++;
+    }
+    
+    if (!jsQRRef.current) {
+      setErrorMensaje('No se pudo cargar el lector de QR. Verifica tu conexión a internet.');
+      setPantalla('inicio');
+      return;
+    }
     
     try {
+      setEstadoScanner('Solicitando permisos de cámara...');
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { 
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
       });
       streamRef.current = stream;
+      
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Esperar a que el video pueda reproducirse
+        await new Promise((resolve) => {
+          if (videoRef.current.readyState >= 2) {
+            resolve();
+          } else {
+            videoRef.current.onloadedmetadata = () => resolve();
+          }
+        });
         await videoRef.current.play();
+        setEstadoScanner('Apunta al código QR...');
+        escaneandoRef.current = true;
         escanearFrame();
       }
     } catch (e) {
       console.error('Error cámara:', e);
-      setErrorMensaje('No se pudo acceder a la cámara. Puedes introducir el código manualmente abajo.');
+      let msg = 'No se pudo acceder a la cámara.';
+      if (e.name === 'NotAllowedError') {
+        msg = 'No se permitió el acceso a la cámara. Debes autorizarla en los ajustes del navegador.';
+      } else if (e.name === 'NotFoundError') {
+        msg = 'No se detectó ninguna cámara en el dispositivo.';
+      } else if (e.name === 'NotReadableError') {
+        msg = 'La cámara está siendo usada por otra aplicación. Ciérrala y vuelve a intentar.';
+      }
+      setErrorMensaje(msg + ' Puedes introducir el código manualmente abajo.');
       setPantalla('inicio');
     }
   }
 
   function escanearFrame() {
+    // Salir si ya no debemos seguir escaneando
+    if (!escaneandoRef.current) return;
+    
     if (!videoRef.current || !canvasRef.current || !jsQRRef.current) {
       animRef.current = requestAnimationFrame(escanearFrame);
       return;
@@ -187,24 +256,31 @@ export default function Limpieza() {
     
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     
-    if (video.readyState === video.HAVE_ENOUGH_DATA) {
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
+    if (video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) {
+      animRef.current = requestAnimationFrame(escanearFrame);
+      return;
+    }
+    
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    
+    try {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQRRef.current(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth', // Prueba QRs invertidos también
+      });
       
-      try {
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQRRef.current(imageData.data, imageData.width, imageData.height);
-        
-        if (code && code.data) {
-          procesarQR(code.data);
-          return;
-        }
-      } catch (e) {
-        console.warn('Error escaneando:', e);
+      if (code && code.data) {
+        console.log('QR detectado:', code.data);
+        escaneandoRef.current = false;
+        procesarQR(code.data);
+        return;
       }
+    } catch (e) {
+      console.warn('Error escaneando frame:', e);
     }
     
     animRef.current = requestAnimationFrame(escanearFrame);
@@ -212,33 +288,82 @@ export default function Limpieza() {
 
   async function procesarQR(data) {
     pararCamara();
+    setEstadoScanner('QR detectado, procesando...');
     
-    if (!data.startsWith('IES_DEP_')) {
-      setErrorMensaje('El código escaneado no es un QR de dependencia del IES. Debe empezar por "IES_DEP_".');
+    console.log('Datos QR:', data);
+    
+    // Aceptar múltiples formatos posibles
+    let uuid = null;
+    
+    // Formato esperado: IES_DEP_{uuid}
+    if (data.startsWith('IES_DEP_')) {
+      uuid = data.replace('IES_DEP_', '').trim();
+    }
+    // Puede ser URL con el UUID: https://.../IES_DEP_xxx
+    else if (data.includes('IES_DEP_')) {
+      const match = data.match(/IES_DEP_([a-f0-9-]+)/i);
+      if (match) uuid = match[1];
+    }
+    // Puede ser solo el UUID directo (36 caracteres)
+    else if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data.trim())) {
+      uuid = data.trim();
+    }
+    
+    if (!uuid) {
+      setErrorMensaje(`El código escaneado no tiene un formato reconocible. Se leyó: "${data.slice(0, 50)}${data.length > 50 ? '...' : ''}". Debe empezar por "IES_DEP_" o ser un UUID válido.`);
       setPantalla('inicio');
       return;
     }
     
-    const uuid = data.replace('IES_DEP_', '');
     await cargarDependencia(uuid);
   }
 
   async function cargarDependencia(uuid) {
     try {
-      const { data, error } = await supaLimpieza
-        .from('limpieza_dependencias')
-        .select('id, nombre, sector_id, limpieza_sectores(nombre)');
+      // Buscar primero por id exacto, luego por qr_code
+      let dep = null;
       
-      if (error) {
-        console.error('Error consulta:', error);
-        setErrorMensaje('No se pudo conectar con el sistema de limpieza. Prueba de nuevo.');
-        setPantalla('inicio');
-        return;
+      // Intento 1: buscar directamente por id
+      const { data: porId } = await supaLimpieza
+        .from('limpieza_dependencias')
+        .select('id, nombre, sector_id, limpieza_sectores(nombre)')
+        .eq('id', uuid)
+        .limit(1);
+      
+      if (porId && porId.length > 0) {
+        dep = porId[0];
       }
       
-      const dep = (data || []).find(d => d.id === uuid);
+      // Intento 2: buscar por qr_code (el campo que genera la app de limpieza)
       if (!dep) {
-        setErrorMensaje('Esta dependencia no está registrada en el sistema de limpieza. Contacta con secretaría.');
+        const qrCode = uuid.startsWith('IES_DEP_') ? uuid : 'IES_DEP_' + uuid;
+        const { data: porQr } = await supaLimpieza
+          .from('limpieza_dependencias')
+          .select('id, nombre, sector_id, limpieza_sectores(nombre)')
+          .eq('qr_code', qrCode)
+          .limit(1);
+        
+        if (porQr && porQr.length > 0) {
+          dep = porQr[0];
+        }
+      }
+      
+      // Intento 3: traer todas y buscar (fallback)
+      if (!dep) {
+        const { data: todas } = await supaLimpieza
+          .from('limpieza_dependencias')
+          .select('id, nombre, sector_id, qr_code, limpieza_sectores(nombre)');
+        
+        dep = (todas || []).find(d => 
+          d.id === uuid || 
+          d.qr_code === uuid ||
+          d.qr_code === 'IES_DEP_' + uuid ||
+          d.id === uuid.replace('IES_DEP_', '')
+        );
+      }
+
+      if (!dep) {
+        setErrorMensaje(`Dependencia no encontrada (código: ${uuid.slice(0,20)}...). ¿Está registrada en el sistema de limpieza?`);
         setPantalla('inicio');
         return;
       }
