@@ -95,17 +95,26 @@ export default function Limpieza() {
   const [descripcion, setDescripcion] = useState('');
   const [entradaManual, setEntradaManual] = useState('');
   
+  // Historial + duplicados + foto
+  const [misIncidencias, setMisIncidencias] = useState([]);
+  const [incidenciasAbiertas, setIncidenciasAbiertas] = useState([]);
+  const [foto, setFoto] = useState(null); // File object
+  const [fotoPreview, setFotoPreview] = useState(null); // URL preview
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
+  
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
   const animRef = useRef(null);
   const jsQRRef = useRef(null);
+  const inputFotoRef = useRef(null);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     if (!id) { window.location.href = '/login'; return; }
     setProfesorId(id);
-    setNombreProfesor(sessionStorage.getItem('profesor_nombre') || '');
+    const nombre = sessionStorage.getItem('profesor_nombre') || '';
+    setNombreProfesor(nombre);
     
     // Cargar jsQR desde CDN
     if (typeof window !== 'undefined' && !window.jsQR) {
@@ -117,10 +126,26 @@ export default function Limpieza() {
       jsQRRef.current = window.jsQR;
     }
     
+    // Cargar mis últimas 3 incidencias
+    cargarMisIncidencias(nombre);
+    
     return () => {
       pararCamara();
     };
   }, []);
+  
+  async function cargarMisIncidencias(nombre) {
+    if (!nombre) return;
+    try {
+      const { data } = await supaLimpieza
+        .from('limpieza_incidencias')
+        .select('id, descripcion, fecha, resuelta, dependencia_id, limpieza_dependencias(nombre)')
+        .eq('reportado_por_nombre', nombre)
+        .order('fecha', { ascending: false })
+        .limit(3);
+      setMisIncidencias(data || []);
+    } catch(e) { console.warn('Error cargando historial:', e); }
+  }
 
   function pararCamara() {
     if (animRef.current) {
@@ -218,9 +243,28 @@ export default function Limpieza() {
         return;
       }
       
+      // Comprobar incidencias abiertas de esa dependencia (últimos 3 días, no resueltas)
+      const hace3dias = new Date();
+      hace3dias.setDate(hace3dias.getDate() - 3);
+      const fechaDesde = hace3dias.toISOString().split('T')[0];
+      
+      try {
+        const { data: abiertas } = await supaLimpieza
+          .from('limpieza_incidencias')
+          .select('id, descripcion, fecha, reportado_por_nombre, resuelta')
+          .eq('dependencia_id', dep.id)
+          .gte('fecha', fechaDesde)
+          .order('fecha', { ascending: false });
+        // Filtrar solo las no resueltas (resuelta puede ser null, false...)
+        const noResueltas = (abiertas || []).filter(a => a.resuelta !== true);
+        setIncidenciasAbiertas(noResueltas);
+      } catch(e) { console.warn('Error comprobando incidencias:', e); }
+      
       setDependencia(dep);
       setProblemasSeleccionados([]);
       setDescripcion('');
+      setFoto(null);
+      setFotoPreview(null);
       setPantalla('formulario');
     } catch (e) {
       console.error('Error:', e);
@@ -244,6 +288,56 @@ export default function Limpieza() {
     );
   }
 
+  function seleccionarFoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Validar que sea imagen y no muy grande (<10MB)
+    if (!file.type.startsWith('image/')) {
+      alert('Debe ser un archivo de imagen');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      alert('La foto es demasiado grande (máx 10 MB)');
+      return;
+    }
+    setFoto(file);
+    const url = URL.createObjectURL(file);
+    setFotoPreview(url);
+  }
+
+  function quitarFoto() {
+    setFoto(null);
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview);
+    setFotoPreview(null);
+    if (inputFotoRef.current) inputFotoRef.current.value = '';
+  }
+
+  async function subirFoto() {
+    if (!foto) return null;
+    setSubiendoFoto(true);
+    try {
+      const ext = foto.name.split('.').pop() || 'jpg';
+      const nombre = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+      const { data, error } = await supaLimpieza.storage
+        .from('limpieza-incidencias-fotos')
+        .upload(nombre, foto, { cacheControl: '3600', upsert: false });
+      if (error) {
+        console.error('Error subiendo foto:', error);
+        setSubiendoFoto(false);
+        return null;
+      }
+      const { data: urlData } = supaLimpieza.storage
+        .from('limpieza-incidencias-fotos')
+        .getPublicUrl(nombre);
+      setSubiendoFoto(false);
+      return urlData.publicUrl;
+    } catch (e) {
+      console.error('Error foto:', e);
+      setSubiendoFoto(false);
+      return null;
+    }
+  }
+
   async function enviarIncidencia() {
     if (problemasSeleccionados.length === 0 && !descripcion.trim()) {
       alert('Selecciona al menos un tipo de problema o escribe una descripción.');
@@ -252,6 +346,16 @@ export default function Limpieza() {
     
     setPantalla('enviando');
     
+    // Subir foto si hay
+    let fotoUrl = null;
+    if (foto) {
+      fotoUrl = await subirFoto();
+      if (!fotoUrl) {
+        // Foto falló pero seguimos con la incidencia sin foto
+        console.warn('Foto no se pudo subir, incidencia sin foto');
+      }
+    }
+    
     // Componer descripción final
     const partes = [];
     if (problemasSeleccionados.length > 0) partes.push(problemasSeleccionados.join(' · '));
@@ -259,14 +363,17 @@ export default function Limpieza() {
     const textoFinal = partes.join(' — ');
     
     try {
-      const { error } = await supaLimpieza.from('limpieza_incidencias').insert({
+      const insertData = {
         dependencia_id: dependencia.id,
         sector_id: dependencia.sector_id || null,
         reportado_por_tipo: 'profesor',
         reportado_por_nombre: nombreProfesor,
         descripcion: textoFinal,
         fecha: new Date().toISOString().split('T')[0],
-      });
+      };
+      if (fotoUrl) insertData.foto_url = fotoUrl;
+      
+      const { error } = await supaLimpieza.from('limpieza_incidencias').insert(insertData);
       
       if (error) {
         console.error('Error insertando:', error);
@@ -274,6 +381,9 @@ export default function Limpieza() {
         setPantalla('error');
         return;
       }
+      
+      // Refrescar historial
+      cargarMisIncidencias(nombreProfesor);
       
       setPantalla('enviado');
     } catch (e) {
@@ -289,6 +399,8 @@ export default function Limpieza() {
     setProblemasSeleccionados([]);
     setDescripcion('');
     setErrorMensaje('');
+    setIncidenciasAbiertas([]);
+    quitarFoto();
     pararCamara();
   }
 
@@ -360,6 +472,38 @@ export default function Limpieza() {
                 >Ir</button>
               </div>
             </div>
+            
+            {/* MIS ÚLTIMAS INCIDENCIAS */}
+            {misIncidencias.length > 0 && (
+              <div style={{ marginTop:20 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:'#555', marginBottom:8, textTransform:'uppercase', letterSpacing:0.5 }}>
+                  📋 Mis últimos reportes
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {misIncidencias.map((inc, i) => (
+                    <div key={i} style={{
+                      backgroundColor:'white', borderRadius:8, padding:'10px 12px',
+                      border:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:10,
+                    }}>
+                      <span style={{ fontSize:16 }}>
+                        {inc.resuelta ? '✅' : '⏳'}
+                      </span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:12, fontWeight:700, color:'#333', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {inc.limpieza_dependencias?.nombre || 'Dependencia'}
+                        </div>
+                        <div style={{ fontSize:10, color:'#666', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {inc.descripcion || 'Sin descripción'}
+                        </div>
+                      </div>
+                      <div style={{ fontSize:10, color:'#999', flexShrink:0 }}>
+                        {new Date(inc.fecha+'T12:00:00').toLocaleDateString('es-ES', { day:'numeric', month:'short' })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -405,6 +549,42 @@ export default function Limpieza() {
               )}
             </div>
 
+            {/* AVISO DE INCIDENCIAS ABIERTAS */}
+            {incidenciasAbiertas.length > 0 && (
+              <div style={{
+                backgroundColor:'#fef3c7', border:'2px solid #f59e0b', borderRadius:12, padding:14, marginBottom:14,
+              }}>
+                <div style={{ fontSize:13, fontWeight:800, color:'#78350f', marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                  ⚠️ Ya hay {incidenciasAbiertas.length} incidencia{incidenciasAbiertas.length !== 1 ? 's' : ''} sin resolver aquí
+                </div>
+                <div style={{ fontSize:11, color:'#92400e', marginBottom:8 }}>
+                  Puedes añadir otra si el problema es distinto o simplemente cerrar.
+                </div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                  {incidenciasAbiertas.slice(0, 3).map((inc, i) => (
+                    <div key={i} style={{
+                      backgroundColor:'white', borderRadius:6, padding:'6px 10px',
+                      fontSize:11, border:'1px solid #fde68a',
+                    }}>
+                      <div style={{ fontWeight:700, color:'#78350f' }}>
+                        {inc.descripcion || 'Sin descripción'}
+                      </div>
+                      <div style={{ fontSize:10, color:'#92400e', marginTop:2 }}>
+                        {inc.reportado_por_nombre || 'Anónimo'} · {new Date(inc.fecha+'T12:00:00').toLocaleDateString('es-ES', { day:'numeric', month:'short' })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  onClick={volverInicio}
+                  style={{
+                    marginTop:10, width:'100%', padding:'8px 12px', borderRadius:8, border:'1.5px solid #f59e0b',
+                    backgroundColor:'white', color:'#78350f', fontSize:12, fontWeight:700, cursor:'pointer',
+                  }}
+                >← Volver sin reportar (ya hay avisos)</button>
+              </div>
+            )}
+
             <div style={{ backgroundColor:'white', borderRadius:12, padding:16, marginBottom:14, boxShadow:'0 1px 3px rgba(0,0,0,0.08)' }}>
               <div style={{ fontSize:13, fontWeight:800, color:'#333', marginBottom:10 }}>
                 ¿Qué has visto? <span style={{ fontWeight:400, color:'#666', fontSize:12 }}>(puedes marcar varios)</span>
@@ -446,6 +626,48 @@ export default function Limpieza() {
                   fontSize:14, fontFamily:'inherit', resize:'vertical', boxSizing:'border-box',
                 }}
               />
+            </div>
+
+            {/* FOTO OPCIONAL */}
+            <div style={{ backgroundColor:'white', borderRadius:12, padding:16, marginBottom:14, boxShadow:'0 1px 3px rgba(0,0,0,0.08)' }}>
+              <div style={{ fontSize:13, fontWeight:800, color:'#333', marginBottom:10 }}>
+                Foto del problema <span style={{ fontWeight:400, color:'#666', fontSize:12 }}>(opcional)</span>
+              </div>
+              {!fotoPreview ? (
+                <>
+                  <input
+                    ref={inputFotoRef}
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={seleccionarFoto}
+                    style={{ display:'none' }}
+                  />
+                  <button
+                    onClick={() => inputFotoRef.current?.click()}
+                    style={{
+                      width:'100%', padding:'12px', borderRadius:10, border:'1.5px dashed #d1d5db',
+                      backgroundColor:'#f9fafb', color:'#555', fontSize:14, fontWeight:700, cursor:'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:8,
+                    }}
+                  >📷 Adjuntar foto</button>
+                </>
+              ) : (
+                <div style={{ position:'relative' }}>
+                  <img
+                    src={fotoPreview}
+                    alt="Preview"
+                    style={{ width:'100%', maxHeight:250, objectFit:'cover', borderRadius:10, display:'block' }}
+                  />
+                  <button
+                    onClick={quitarFoto}
+                    style={{
+                      position:'absolute', top:8, right:8, padding:'6px 10px', borderRadius:20, border:'none',
+                      backgroundColor:'rgba(0,0,0,0.7)', color:'white', fontSize:12, fontWeight:700, cursor:'pointer',
+                    }}
+                  >✕ Quitar</button>
+                </div>
+              )}
             </div>
 
             <div style={{ display:'flex', gap:8 }}>
