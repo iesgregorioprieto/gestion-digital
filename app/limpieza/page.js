@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import jsQR from 'jsqr';
 
 // Cliente Supabase específico del proyecto de LIMPIEZA (NO usar getSupabase principal)
 const supaLimpieza = createClient(
@@ -121,36 +122,16 @@ export default function Limpieza() {
     const nombre = sessionStorage.getItem('profesor_nombre') || '';
     setNombreProfesor(nombre);
     
-    // Cargar jsQR desde CDN con Promise
-    if (typeof window !== 'undefined') {
-      if (window.jsQR) {
-        jsQRRef.current = window.jsQR;
-        setJsQRCargado(true);
-      } else {
-        const scriptExistente = document.querySelector('script[src*="jsQR"]');
-        if (!scriptExistente) {
-          const script = document.createElement('script');
-          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
-          script.async = true;
-          script.onload = () => { 
-            jsQRRef.current = window.jsQR;
-            setJsQRCargado(true);
-          };
-          script.onerror = () => {
-            console.error('No se pudo cargar jsQR');
-          };
-          document.head.appendChild(script);
-        } else {
-          // Ya se está cargando desde otro sitio, esperar
-          const check = setInterval(() => {
-            if (window.jsQR) {
-              jsQRRef.current = window.jsQR;
-              setJsQRCargado(true);
-              clearInterval(check);
-            }
-          }, 100);
-        }
-      }
+    // jsQR disponible como import local — no necesita CDN ni internet
+    jsQRRef.current = jsQR;
+    setJsQRCargado(true);
+    
+    // BarcodeDetector nativo si disponible (Android Chrome)
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        barcodeDetectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
+        console.log('✅ BarcodeDetector nativo disponible');
+      } catch(e) {}
     }
     
     cargarMisIncidencias(nombre);
