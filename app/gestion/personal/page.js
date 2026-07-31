@@ -338,7 +338,7 @@ export default function PanelSecretario() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {[
             { id: 'profesores', emoji: '👥', label: 'Profesorado' },
-            { id: 'claustro', emoji: '🎓', label: 'Activación Claustro' },
+            { id: 'claustro', emoji: '🎓', label: 'Alta masiva' },
             { id: 'mantenimiento', emoji: '🔧', label: 'Mantenimiento' },
             { id: 'compras', emoji: '🛒', label: 'Compras' },
           ].map(t => (
@@ -605,7 +605,7 @@ export default function PanelSecretario() {
           return (
             <div>
               <div style={{ backgroundColor: '#1e6b2e', borderRadius: 12, padding: '20px 24px', marginBottom: 20, color: 'white' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 6 }}>🎓 Activación masiva — Claustro</div>
+                <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 6 }}>🎓 Alta masiva de profesores</div>
                 <div style={{ fontSize: 13, opacity: 0.9 }}>
                   Los profesores se registran en <strong>/registro</strong> durante el claustro.
                   Aquí puedes activarlos todos de una sola vez.
