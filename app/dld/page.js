@@ -47,11 +47,32 @@ const GRUPOS_POR_ETAPA = {
     cursos: { 'Cuadrante general': null, 'Familias profesionales': null, 'Guardia de recreo': null, 'Otras situaciones': null },
   },
 };
+// =========================================================
+// NORMATIVA DLD — Resolución 07/07/2026 (curso 26/27)
+// =========================================================
 const TIPOS_DLD = [
-  { valor: 'no_lectivo', emoji: '🌙', label: 'DLD en período no lectivo' },
-  { valor: '1_lectivo', emoji: '📚', label: '1º DLD en período lectivo' },
-  { valor: '2_lectivo', emoji: '📖', label: '2º DLD en período lectivo' },
+  { valor: 'no_lectivo',  emoji: '🌙', label: 'Moscoso en período no lectivo' },
+  { valor: '1_lectivo',   emoji: '📚', label: '1º Moscoso en período lectivo' },
+  { valor: '2_lectivo',   emoji: '📖', label: '2º Moscoso en período lectivo' },
+  { valor: '3_lectivo',   emoji: '📗', label: '3º Moscoso en período lectivo' },
+  { valor: 'canoso',      emoji: '🦳', label: 'CANOSO (+55 años o +18 años servicio)' },
 ];
+
+// Días según tipo de contrato (Resolución 07/07/2026)
+function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
+  const tieneDerechoCanoso = antiguedadCuerpo >= 18;
+  let moscosos = 0;
+  if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') {
+    moscosos = 3;
+  } else if (tipoContrato === 'Interino sin vacante') {
+    // Depende de meses trabajados — ponemos 2 como base (8+ meses)
+    moscosos = 2;
+  } else {
+    moscosos = 1;
+  }
+  const canosos = tieneDerechoCanoso ? 1 : 0;
+  return { moscosos, canosos, total: moscosos + canosos, tieneDerechoCanoso };
+}
 
 export default function DLD() {
   const [vista, setVista] = useState('historial'); // 'historial' | 'nueva'
@@ -105,12 +126,24 @@ export default function DLD() {
   }
 
   function diasCorrespondientes() {
-    if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') return 3;
-    if (tipoContrato === 'Interino sin vacante') return 2;
-    return 1;
+    const { total } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+    return total;
+  }
+
+  function tieneDerecho(tipoDld) {
+    const { moscosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+    if (tipoDld === 'canoso') return tieneDerechoCanoso;
+    // 3º moscoso solo para carrera/vacante
+    if (tipoDld === '3_lectivo') return tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante';
+    // 2º moscoso: carrera/vacante y sin vacante con 8+ meses
+    if (tipoDld === '2_lectivo') return tipoContrato !== '';
+    return true;
   }
 
   const diasAprobados = misSolicitudes.filter(s => s.estado === 'aprobada').length;
+  const { moscosos: maxMoscosos, canosos: maxCanosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+  const canososUsados = misSolicitudes.filter(s => s.estado === 'aprobada' && s.tipo_dld === 'canoso').length;
+  const moscososUsados = diasAprobados - canososUsados;
   const diasRestantes = diasCorrespondientes() - diasAprobados;
   const sinDias = diasRestantes <= 0;
 
@@ -303,9 +336,31 @@ export default function DLD() {
           <div style={{ fontWeight: 700, color: verde, fontSize: 15, marginBottom: 10 }}>📊 Mis días de libre disposición</div>
           <div style={{ fontSize: 13, color: '#555', marginBottom: 10 }}>{tipoContrato} → <strong>{diasCorrespondientes()} días</strong> correspondientes</div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-            {Array(diasCorrespondientes()).fill(null).map((_, i) => (
-              <div key={i} style={{ flex: 1, height: 12, borderRadius: 6, backgroundColor: i < diasAprobados ? verde : '#e0e0e0' }} />
-            ))}
+            {/* MOSCOSOS */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>🌙 MOSCOSOS ({moscososUsados}/{maxMoscosos})</div>
+            <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+              {Array(maxMoscosos).fill(null).map((_, i) => (
+                <div key={i} style={{ flex: 1, height: 10, borderRadius: 4, backgroundColor: i < moscososUsados ? verde : '#e0e0e0' }} />
+              ))}
+            </div>
+          </div>
+          {/* CANOSO */}
+          {tieneDerechoCanoso && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>🦳 CANOSO ({canososUsados}/{maxCanosos})</div>
+              <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+                {Array(maxCanosos).fill(null).map((_, i) => (
+                  <div key={i} style={{ flex: 1, height: 10, borderRadius: 4, backgroundColor: i < canososUsados ? '#7c3aed' : '#e0e0e0' }} />
+                ))}
+              </div>
+            </div>
+          )}
+          {!tieneDerechoCanoso && (
+            <div style={{ fontSize: 11, color: '#bbb', marginBottom: 4 }}>
+              🦳 CANOSO: No tienes derecho aún ({'<'}18 años de servicio)
+            </div>
+          )}
           </div>
           <div style={{ fontSize: 13, color: '#555' }}>
             <span style={{ color: verde, fontWeight: 700 }}>{diasAprobados} aprobado{diasAprobados !== 1 ? 's' : ''}</span>
