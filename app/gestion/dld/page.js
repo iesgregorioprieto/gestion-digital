@@ -310,6 +310,7 @@ function AlertasPanel({ alertas, prelacion }) {
 export default function PanelDirector() {
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [todasSolicitudes, setTodasSolicitudes] = useState([]);
+  const [totalProfesores, setTotalProfesores] = useState(150); // Se carga dinámicamente de la BD
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState('calendario');
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
@@ -337,8 +338,12 @@ export default function PanelDirector() {
 
   async function cargarSolicitudes() {
     setCargando(true);
-    const { data } = await getSupabase().from('dld').select('*').order('created_at', { ascending: false });
+    const [{ data }, { count }] = await Promise.all([
+      getSupabase().from('dld').select('*').order('created_at', { ascending: false }),
+      getSupabase().from('profesores').select('*', { count: 'exact', head: true }).eq('estado', 'activo'),
+    ]);
     setTodasSolicitudes(data || []);
+    if (count) setTotalProfesores(count);
     setCargando(false);
   }
 
@@ -357,8 +362,8 @@ export default function PanelDirector() {
     return Array.isArray(g.horas) ? g.horas : [];
   }
 
-  // Total profesores del centro (para calcular el % permitido)
-  const TOTAL_PROFESORES = 150; // IES Gregorio Prieto — actualizar si cambia
+  // Total profesores activos — cargado dinámicamente de la BD
+  const TOTAL_PROFESORES = totalProfesores;
 
   function calcularAlertas(solicitud) {
     const alertas = [];
