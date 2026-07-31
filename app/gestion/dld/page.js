@@ -9,10 +9,26 @@ const azul = '#1a3a6b';
 const verde = '#1e6b2e';
 
 function etiquetaTipoDLD(tipo) {
-  if (tipo === 'no_lectivo') return '🌙 No lectivo';
-  if (tipo === '1_lectivo') return '📚 1º Lectivo';
-  if (tipo === '2_lectivo') return '📖 2º Lectivo';
+  if (tipo === 'no_lectivo') return '🌙 Moscoso no lectivo';
+  if (tipo === '1_lectivo') return '📚 1º Moscoso lectivo';
+  if (tipo === '2_lectivo') return '📖 2º Moscoso lectivo';
+  if (tipo === '3_lectivo') return '📗 3º Moscoso lectivo';
+  if (tipo === 'canoso') return '🦳 Canoso (+55 años o +18 años servicio)';
   return tipo;
+}
+
+// Calcular días DLD según normativa 07/07/2026
+function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
+  const tieneDerechoCanoso = (antiguedadCuerpo || 0) >= 18;
+  let moscosos = 0;
+  if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') {
+    moscosos = 3;
+  } else if (tipoContrato === 'Interino sin vacante') {
+    moscosos = 2;
+  } else {
+    moscosos = 1;
+  }
+  return { moscosos, canosos: tieneDerechoCanoso ? 1 : 0, tieneDerechoCanoso };
 }
 
 function Fila({ label, valor }) {
@@ -21,6 +37,164 @@ function Fila({ label, valor }) {
       <span style={{ width: 150, fontWeight: 600, color: '#555', fontSize: 13, flexShrink: 0 }}>{label}</span>
       <span style={{ fontSize: 13, color: '#222' }}>{valor}</span>
     </div>
+  );
+}
+
+function GruposAfectados({ grupos }) {
+  if (!grupos || !grupos.length) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 15 }}>👥 Grupos y horas afectadas</div>
+      {grupos.map((g, i) => {
+        const nombre = typeof g === 'object' ? g.grupo : g;
+        const horas = typeof g === 'object' && g.horas ? g.horas : [];
+        return (
+          <div key={i} style={{ backgroundColor: '#f8fdf8', borderRadius: 8, padding: '8px 12px', marginBottom: 6, border: '1px solid #c8e6c9' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: verde, marginBottom: 4 }}>📚 {nombre}</div>
+            {horas.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {horas.map(h => (
+                  <span key={h} style={{ fontSize: 11, backgroundColor: verde, color: 'white', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{h}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function GuardiasHorario({ guardias }) {
+  if (!guardias || !guardias.length) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 8, fontSize: 15 }}>🛡️ Guardias ese día</div>
+      {guardias.map((g, i) => (
+        <div key={i} style={{ backgroundColor: '#eff6ff', borderRadius: 8, padding: '8px 12px', marginBottom: 6, border: '1px solid #93c5fd', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 11, backgroundColor: '#1e40af', color: 'white', padding: '2px 10px', borderRadius: 10, fontWeight: 700, flexShrink: 0 }}>{g.hora}</span>
+          <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 600 }}>{g.tipo_guardia}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function HorarioCompleto({ grupos, guardias }) {
+  const HORAS = ['1ª hora','2ª hora','3ª hora','Recreo','4ª hora','5ª hora','6ª hora'];
+  const mapaClases = {};
+  if (Array.isArray(grupos)) {
+    grupos.forEach(g => {
+      const nombre = typeof g === 'object' ? g.grupo : g;
+      const horas = typeof g === 'object' && g.horas ? g.horas : [];
+      horas.forEach(h => { mapaClases[h] = nombre; });
+    });
+  }
+  const mapaGuardias = {};
+  if (Array.isArray(guardias)) {
+    guardias.forEach(g => { mapaGuardias[g.hora] = g.tipo_guardia; });
+  }
+  const tieneAlgo = HORAS.some(h => mapaClases[h] || mapaGuardias[h]);
+  if (!tieneAlgo) return null;
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 15 }}>🕐 Horario del día</div>
+      <div style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid #e0e0e0' }}>
+        {HORAS.map((hora, i) => {
+          const clase = mapaClases[hora];
+          const guardia = mapaGuardias[hora];
+          const esRecreo = hora === 'Recreo';
+          const bgColor = clase ? '#e8f5e9' : guardia ? '#eff6ff' : esRecreo ? '#fafafa' : '#fafafa';
+          const borderColor = clase ? '#c8e6c9' : guardia ? '#93c5fd' : '#f0f0f0';
+          return (
+            <div key={hora} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 14px', backgroundColor: bgColor, borderBottom: i < HORAS.length - 1 ? `1px solid ${borderColor}` : 'none' }}>
+              <span style={{ width: 70, fontSize: 12, fontWeight: 700, color: esRecreo ? '#92400e' : '#555', flexShrink: 0 }}>
+                {esRecreo ? '☕ Recreo' : hora}
+              </span>
+              {clase && <span style={{ fontSize: 13, color: verde, fontWeight: 700 }}>📚 {clase}</span>}
+              {guardia && <span style={{ fontSize: 13, color: '#1e40af', fontWeight: 700 }}>🛡️ {guardia}</span>}
+              {!clase && !guardia && <span style={{ fontSize: 12, color: '#ccc' }}>— libre —</span>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AlertasPanel({ alertas, prelacion }) {
+  const colores = {
+    rojo:     { bg: '#fef2f2', border: '#fca5a5', color: '#b91c1c' },
+    amarillo: { bg: '#fffbeb', border: '#fcd34d', color: '#92400e' },
+    verde:    { bg: '#f0fdf4', border: '#86efac', color: '#166534' },
+    info:     { bg: '#eff6ff', border: '#93c5fd', color: '#1d4ed8' },
+  };
+
+  return (
+    <>
+      {alertas.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: '#1e3a5f', marginBottom: 8, fontSize: 15 }}>🔔 Alertas y avisos</div>
+          {alertas.map((a, i) => {
+            const c = colores[a.tipo] || colores.info;
+            return (
+              <div key={i} style={{ fontSize: 13, color: c.color, marginBottom: 6, padding: '8px 12px', backgroundColor: c.bg, borderRadius: 8, border: `1px solid ${c.border}` }}>
+                {a.texto}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {prelacion && prelacion.length > 0 && (
+        <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, color: '#92400e', marginBottom: 8, fontSize: 15 }}>📊 Prelación ese día — Criterios normativa 07/07/2026</div>
+          <div style={{ fontSize: 11, color: '#92400e', marginBottom: 10, fontStyle: 'italic' }}>
+            Orden: a) Causa sobrevenida → b) Menos días usados → c) Mayor antigüedad en centro → d) Mayor antigüedad en cuerpo
+          </div>
+          {prelacion.map((p, i) => (
+            <div key={i} style={{
+              fontSize: 13, color: '#555', marginBottom: 8, padding: '10px 12px',
+              backgroundColor: p.esPrincipal ? '#fef3c7' : 'white',
+              borderRadius: 8, border: p.esPrincipal ? '2px solid #f59e0b' : '1px solid #e5e7eb',
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+            }}>
+              <span style={{ fontWeight: 800, fontSize: 16, flexShrink: 0 }}>
+                {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+              </span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, color: p.esPrincipal ? '#78350f' : '#1e293b', marginBottom: 3 }}>
+                  {p.nombre} {p.esPrincipal && <span style={{ fontSize: 11, color: '#f59e0b', fontWeight: 800 }}>← ESTA SOLICITUD</span>}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                  {p.causa_sobrevenida && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#fee2e2', color: '#b91c1c', fontWeight: 700 }}>⚠️ Causa sobrevenida</span>
+                  )}
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#f3f4f6', color: '#555' }}>
+                    {p.dias_disfrutados} días usados
+                  </span>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#f3f4f6', color: '#555' }}>
+                    {p.antiguedad_centro}a en centro
+                  </span>
+                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#f3f4f6', color: '#555' }}>
+                    {p.antiguedad_cuerpo}a en cuerpo
+                  </span>
+                  {p.tipo_contrato && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#dbeafe', color: '#1e40af' }}>
+                      {p.tipo_contrato}
+                    </span>
+                  )}
+                  {p.tipo_dld && (
+                    <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, backgroundColor: '#f0fdf4', color: '#166534' }}>
+                      {p.tipo_dld === 'canoso' ? '🦳 Canoso' : p.tipo_dld.replace('_', ' ')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -183,22 +357,45 @@ export default function PanelDirector() {
     return Array.isArray(g.horas) ? g.horas : [];
   }
 
+  // Total profesores del centro (para calcular el % permitido)
+  const TOTAL_PROFESORES = 150; // IES Gregorio Prieto — actualizar si cambia
+
   function calcularAlertas(solicitud) {
     const alertas = [];
     const fecha = solicitud.fecha_solicitada;
     const grupos = Array.isArray(solicitud.grupos_afectados) ? solicitud.grupos_afectados : [];
+
+    // Solicitudes ese mismo día (excluir rechazadas y canceladas)
     const mismaFecha = todasSolicitudes.filter(s =>
       s.id !== solicitud.id && s.fecha_solicitada === fecha &&
       s.estado !== 'rechazada' && s.estado !== 'cancelada'
     );
-    if (mismaFecha.length + 1 > 4) {
-      alertas.push({ tipo: 'rojo', texto: `⚠️ Hay ${mismaFecha.length + 1} solicitudes ese día` });
+
+    // === LÍMITE DE PROFESORES POR DÍA (normativa 07/07/2026) ===
+    // Centro >60 prof: máximo 4 por día en periodo lectivo
+    const maxPermitidos = TOTAL_PROFESORES > 60 ? 4 : TOTAL_PROFESORES > 40 ? 3 : TOTAL_PROFESORES > 20 ? 2 : 1;
+    const aprobadosEseDia = todasSolicitudes.filter(s =>
+      s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
+    ).length;
+    const porcentajeOcupacion = Math.round(((aprobadosEseDia + 1) / TOTAL_PROFESORES) * 100);
+
+    if (aprobadosEseDia >= maxPermitidos) {
+      alertas.push({ tipo: 'rojo', texto: `🔴 LÍMITE ALCANZADO: ya hay ${aprobadosEseDia} aprobados ese día (máx ${maxPermitidos} para centro de ${TOTAL_PROFESORES} prof). Solo por causas excepcionales.` });
+    } else if (aprobadosEseDia === maxPermitidos - 1) {
+      alertas.push({ tipo: 'amarillo', texto: `🟡 CUPO CASI LLENO: ${aprobadosEseDia}/${maxPermitidos} aprobados ese día. Si se aprueba esta, se llena el cupo.` });
     }
-    // Aviso general: hay más de una solicitud ese día (aunque no choquen grupos)
-    if (mismaFecha.length > 0 && mismaFecha.length + 1 <= 4) {
-      alertas.push({ tipo: 'amarillo', texto: `🟡 Hay ${mismaFecha.length + 1} profesores solicitando ese mismo día` });
+
+    // % de profesores ese día
+    if (porcentajeOcupacion > 0) {
+      alertas.push({ tipo: 'info', texto: `📊 Con esta solicitud: ${aprobadosEseDia + 1} prof. ese día (${porcentajeOcupacion}% del claustro)` });
     }
-    // Conflictos por grupo (comparando nombres normalizados) y por hora
+
+    // Otras solicitudes pendientes ese día
+    if (mismaFecha.filter(s => s.estado === 'pendiente').length > 0) {
+      alertas.push({ tipo: 'amarillo', texto: `🟡 Hay ${mismaFecha.filter(s => s.estado === 'pendiente').length} solicitud(es) más pendientes ese mismo día` });
+    }
+
+    // Conflictos por grupo
     grupos.forEach(g => {
       const nombreGrupo = typeof g === 'object' ? g.grupo : g;
       const nombreNorm = normalizarGrupo(nombreGrupo);
@@ -210,12 +407,10 @@ export default function PanelDirector() {
           const otroNombre = typeof og === 'object' ? og.grupo : og;
           if (normalizarGrupo(otroNombre) !== nombreNorm) return;
           const otrasHoras = horasDeGrupo(og);
-          // Si alguno no tiene horas guardadas, avisar en amarillo (posible solape)
           if (!horasEste.length || !otrasHoras.length) {
             alertas.push({ tipo: 'amarillo', texto: `🟡 ${nombreGrupo}: también solicitado por ${s.profesor_nombre}` });
             return;
           }
-          // Ver si comparten alguna hora
           const horasComunes = horasEste.filter(h => otrasHoras.includes(h));
           if (horasComunes.length > 0) {
             alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: choca con ${s.profesor_nombre} en ${horasComunes.join(', ')}` });
@@ -225,16 +420,33 @@ export default function PanelDirector() {
         });
       });
     });
+
+    // Días disfrutados vs derecho
+    const { moscosos: maxMoscosos, canosos: maxCanosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo);
+    const totalMax = maxMoscosos + maxCanosos;
     const diasDisfrutados = todasSolicitudes.filter(s =>
       s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada'
     ).length;
-    const diasMax = solicitud.tipo_contrato === 'Funcionario de carrera' || solicitud.tipo_contrato === 'Interino con vacante' ? 3 :
-      solicitud.tipo_contrato === 'Interino sin vacante' ? 2 : 1;
-    if (diasDisfrutados >= diasMax) {
-      alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha disfrutado ${diasDisfrutados} de ${diasMax} días` });
-    } else if (diasDisfrutados > 0) {
-      alertas.push({ tipo: 'amarillo', texto: `🟡 Ha disfrutado ${diasDisfrutados} de ${diasMax} días` });
+    const esCanoso = solicitud.tipo_dld === 'canoso';
+    const canososDisfrutados = todasSolicitudes.filter(s =>
+      s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada' && s.tipo_dld === 'canoso'
+    ).length;
+
+    if (esCanoso && maxCanosos === 0) {
+      alertas.push({ tipo: 'rojo', texto: `🔴 NO tiene derecho al CANOSO (<18 años de servicio)` });
+    } else if (esCanoso && canososDisfrutados >= maxCanosos) {
+      alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha disfrutado el CANOSO este curso` });
+    } else if (diasDisfrutados >= totalMax) {
+      alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha agotado todos sus días (${diasDisfrutados}/${totalMax})` });
+    } else {
+      alertas.push({ tipo: 'info', texto: `ℹ️ Ha usado ${diasDisfrutados} de ${totalMax} días este curso` });
     }
+
+    // Causa sobrevenida
+    if (solicitud.causa_sobrevenida) {
+      alertas.push({ tipo: 'verde', texto: `✅ CAUSA SOBREVENIDA: tiene prioridad máxima en prelación` });
+    }
+
     return alertas;
   }
 
@@ -243,13 +455,41 @@ export default function PanelDirector() {
       s.id !== solicitud.id && s.fecha_solicitada === solicitud.fecha_solicitada && s.estado === 'pendiente'
     );
     if (!mismaFecha.length) return null;
-    return mismaFecha.map(s => ({
-      nombre: s.profesor_nombre,
-      causa_sobrevenida: s.causa_sobrevenida,
-      dias_disfrutados: todasSolicitudes.filter(x => x.profesor_id === s.profesor_id && x.estado === 'aprobada').length,
-      antiguedad_centro: s.antiguedad_centro || 0,
-      antiguedad_cuerpo: s.antiguedad_cuerpo || 0,
-    }));
+
+    // Construir lista con TODOS los criterios de desempate (normativa 07/07/2026):
+    // a) Causas sobrevenidas  b) Menos días disfrutados  c) Antigüedad en centro  d) Antigüedad en cuerpo
+    const lista = [
+      {
+        nombre: solicitud.profesor_nombre,
+        causa_sobrevenida: solicitud.causa_sobrevenida,
+        tipo_dld: solicitud.tipo_dld,
+        tipo_contrato: solicitud.tipo_contrato,
+        dias_disfrutados: todasSolicitudes.filter(x => x.profesor_id === solicitud.profesor_id && x.estado === 'aprobada').length,
+        antiguedad_centro: solicitud.antiguedad_centro || 0,
+        antiguedad_cuerpo: solicitud.antiguedad_cuerpo || 0,
+        esPrincipal: true,
+      },
+      ...mismaFecha.map(s => ({
+        nombre: s.profesor_nombre,
+        causa_sobrevenida: s.causa_sobrevenida,
+        tipo_dld: s.tipo_dld,
+        tipo_contrato: s.tipo_contrato,
+        dias_disfrutados: todasSolicitudes.filter(x => x.profesor_id === s.profesor_id && x.estado === 'aprobada').length,
+        antiguedad_centro: s.antiguedad_centro || 0,
+        antiguedad_cuerpo: s.antiguedad_cuerpo || 0,
+        esPrincipal: false,
+      })),
+    ];
+
+    // Ordenar por prelación
+    lista.sort((a, b) => {
+      if (a.causa_sobrevenida !== b.causa_sobrevenida) return b.causa_sobrevenida ? 1 : -1;
+      if (a.dias_disfrutados !== b.dias_disfrutados) return a.dias_disfrutados - b.dias_disfrutados;
+      if (a.antiguedad_centro !== b.antiguedad_centro) return b.antiguedad_centro - a.antiguedad_centro;
+      return b.antiguedad_cuerpo - a.antiguedad_cuerpo;
+    });
+
+    return lista;
   }
 
   async function aprobar(id) {
