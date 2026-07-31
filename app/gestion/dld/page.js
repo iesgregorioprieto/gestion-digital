@@ -371,24 +371,37 @@ export default function PanelDirector() {
       s.estado !== 'rechazada' && s.estado !== 'cancelada'
     );
 
-    // === LÍMITE DE PROFESORES POR DÍA (normativa 07/07/2026) ===
-    // Centro >60 prof: máximo 4 por día en periodo lectivo
-    const maxPermitidos = TOTAL_PROFESORES > 60 ? 4 : TOTAL_PROFESORES > 40 ? 3 : TOTAL_PROFESORES > 20 ? 2 : 1;
+    // === LÍMITE DE PROFESORES POR DÍA (Resolución 18/07/2024 — punto 9) ===
+    const esNoLectivo = solicitud.tipo_dld === 'no_lectivo';
+    
+    // Lectivos: según tamaño del centro
+    // Hasta 20 prof → 1 | 21-40 → 2 | 41-60 → 3 | +60 → 4
+    const maxLectivo = TOTAL_PROFESORES > 60 ? 4 : TOTAL_PROFESORES > 40 ? 3 : TOTAL_PROFESORES > 20 ? 2 : 1;
+    
+    // No lectivos: no más de 1/3 de la plantilla
+    const maxNoLectivo = Math.floor(TOTAL_PROFESORES / 3);
+    
+    const maxPermitidos = esNoLectivo ? maxNoLectivo : maxLectivo;
+    
     const aprobadosEseDia = todasSolicitudes.filter(s =>
       s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
     ).length;
     const porcentajeOcupacion = Math.round(((aprobadosEseDia + 1) / TOTAL_PROFESORES) * 100);
 
+    if (esNoLectivo) {
+      alertas.push({ tipo: 'info', texto: `ℹ️ Período NO LECTIVO — límite: 1/3 de plantilla = ${maxNoLectivo} prof. (${aprobadosEseDia} aprobados hoy)` });
+    } else {
+      alertas.push({ tipo: 'info', texto: `ℹ️ Período LECTIVO — límite: ${maxLectivo} prof/día para centro de ${TOTAL_PROFESORES} prof. (${aprobadosEseDia} aprobados hoy)` });
+    }
+
     if (aprobadosEseDia >= maxPermitidos) {
-      alertas.push({ tipo: 'rojo', texto: `🔴 LÍMITE ALCANZADO: ya hay ${aprobadosEseDia} aprobados ese día (máx ${maxPermitidos} para centro de ${TOTAL_PROFESORES} prof). Solo por causas excepcionales.` });
+      alertas.push({ tipo: 'rojo', texto: `🔴 LÍMITE ALCANZADO: ${aprobadosEseDia}/${maxPermitidos} ese día. Solo conceder por causas excepcionales (punto 9 resolución).` });
     } else if (aprobadosEseDia === maxPermitidos - 1) {
-      alertas.push({ tipo: 'amarillo', texto: `🟡 CUPO CASI LLENO: ${aprobadosEseDia}/${maxPermitidos} aprobados ese día. Si se aprueba esta, se llena el cupo.` });
+      alertas.push({ tipo: 'amarillo', texto: `🟡 CUPO CASI LLENO: ${aprobadosEseDia}/${maxPermitidos} aprobados ese día. Si se aprueba esta solicitud, se alcanza el límite.` });
     }
 
     // % de profesores ese día
-    if (porcentajeOcupacion > 0) {
-      alertas.push({ tipo: 'info', texto: `📊 Con esta solicitud: ${aprobadosEseDia + 1} prof. ese día (${porcentajeOcupacion}% del claustro)` });
-    }
+    alertas.push({ tipo: 'info', texto: `📊 Con esta solicitud: ${aprobadosEseDia + 1} prof. ausentes ese día (${porcentajeOcupacion}% del claustro)` });
 
     // Otras solicitudes pendientes ese día
     if (mismaFecha.filter(s => s.estado === 'pendiente').length > 0) {
