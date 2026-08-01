@@ -48,6 +48,11 @@ export default function PanelSecretario() {
   const [comentarioSecretario, setComentarioSecretario] = useState('');
   const [procesandoCompra, setProcesandoCompra] = useState(false);
   const [mostrarPreAutorizados, setMostrarPreAutorizados] = useState(false);
+  const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
+  const [gestionandoBaja, setGestionandoBaja] = useState(false);
+  const [busquedaSustituto, setBusquedaSustituto] = useState('');
+  const [tipoBajaSeleccionada, setTipoBajaSeleccionada] = useState('parcial');
+  const [fechaBaja, setFechaBaja] = useState(new Date().toISOString().split('T')[0]);
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [seleccionados, setSeleccionados] = useState(new Set());
@@ -247,6 +252,16 @@ export default function PanelSecretario() {
             <span style={{ fontSize: 12, backgroundColor: badge.bg, color: badge.color, padding: '3px 10px', borderRadius: 20, fontWeight: 600 }}>
               {badge.texto}
             </span>
+            {p.en_baja && (
+              <span style={{ fontSize: 12, backgroundColor: '#fef2f2', color: '#b91c1c', padding: '3px 10px', borderRadius: 20, fontWeight: 700, border: '1px solid #fca5a5' }}>
+                🏥 {p.tipo_baja === 'total' ? 'Baja total' : 'Baja parcial'}
+              </span>
+            )}
+            {p.titular_id && (
+              <span style={{ fontSize: 12, backgroundColor: '#fef3c7', color: '#78350f', padding: '3px 10px', borderRadius: 20, fontWeight: 700, border: '1px solid #fbbf24' }}>
+                🔄 Sustituto
+              </span>
+            )}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
               <button onClick={() => abrirFicha(p)} style={btnEstilo('#e8f5e9', verde, verde)}>👁️ Ficha</button>
               <button onClick={() => abrirEdicion(p)} style={btnEstilo('#e8f0fe', '#1a56db', '#1a56db')}>✏️ Editar</button>
@@ -299,6 +314,109 @@ export default function PanelSecretario() {
       setSeleccionados(new Set());
     } else {
       setSeleccionados(new Set(pendientes.map(p => p.id)));
+    }
+  }
+
+
+  // ── GESTIÓN DE BAJAS ──────────────────────────────────────
+
+  async function registrarBaja(profesor) {
+    if (!confirm(`¿Registrar baja de ${profesor.nombre} ${profesor.apellidos}? El horario quedará pendiente de asignar al sustituto.`)) return;
+    setGestionandoBaja(true);
+    const { error } = await getSupabase()
+      .from('profesores')
+      .update({ en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja })
+      .eq('id', profesor.id);
+    if (error) { mostrarMensaje('❌ Error registrando baja: ' + error.message, 'error'); setGestionandoBaja(false); return; }
+    mostrarMensaje('✅ Baja registrada correctamente', 'ok');
+    setGestionandoBaja(false);
+    cargarProfesores();
+    setProfesorSeleccionado(prev => ({ ...prev, en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja }));
+  }
+
+  async function asignarSustituto(titular, sustituto) {
+    if (!confirm(`¿Asignar a ${sustituto.nombre} ${sustituto.apellidos} como sustituto de ${titular.nombre} ${titular.apellidos}? Se copiará el horario completo.`)) return;
+    setGestionandoBaja(true);
+
+    try {
+      // 1. Marcar relación titular-sustituto en profesores
+      await getSupabase().from('profesores').update({ sustituto_id: sustituto.id }).eq('id', titular.id);
+      await getSupabase().from('profesores').update({ titular_id: titular.id }).eq('id', sustituto.id);
+
+      // 2. Borrar horario previo del sustituto (por si tenía algo)
+      await getSupabase().from('horarios_profesores')
+        .delete()
+        .eq('profesor_id', sustituto.id);
+
+      // 3. Copiar horario del titular al sustituto
+      // Primero obtenemos el nombre PDF del titular para buscar su horario
+      const { data: horariosTitular } = await getSupabase()
+        .from('horarios_profesores')
+        .select('*')
+        .eq('curso_academico', '2025-2026')
+        .ilike('profesor_nombre_pdf', `%${titular.apellidos.split(' ')[0]}%`);
+
+      if (horariosTitular && horariosTitular.length > 0) {
+        // Construir nombre PDF del sustituto (formato Delphos: "Ape. N, IN")
+        const ape = sustituto.apellidos.split(' ')[0].substring(0, 3) + '.';
+        const ape2 = sustituto.apellidos.split(' ')[1] ? sustituto.apellidos.split(' ')[1][0] : '';
+        const nom = sustituto.nombre.split(' ').map(n => n[0]).join('');
+        const nombrePdfSust = `${ape} ${ape2 ? ape2 + ', ' : ', '}${nom}`;
+
+        const copias = horariosTitular.map(h => ({
+          ...h,
+          id: undefined, // Nuevo ID
+          profesor_id: sustituto.id,
+          profesor_nombre_pdf: nombrePdfSust,
+        }));
+
+        // Insertar en batches de 50
+        for (let i = 0; i < copias.length; i += 50) {
+          await getSupabase().from('horarios_profesores').insert(copias.slice(i, i + 50));
+        }
+      }
+
+      mostrarMensaje(`✅ ${sustituto.nombre} ${sustituto.apellidos} asignado como sustituto. Horario copiado (${horariosTitular?.length || 0} registros)`, 'ok');
+      setGestionandoBaja(false);
+      setBusquedaSustituto('');
+      cargarProfesores();
+      setProfesorSeleccionado(prev => ({ ...prev, sustituto_id: sustituto.id }));
+    } catch(e) {
+      mostrarMensaje('❌ Error: ' + e.message, 'error');
+      setGestionandoBaja(false);
+    }
+  }
+
+  async function altaTitular(titular) {
+    const sustitutoId = titular.sustituto_id;
+    if (!sustitutoId) {
+      // Solo quitar la baja
+      await getSupabase().from('profesores').update({ en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null }).eq('id', titular.id);
+      mostrarMensaje('✅ Titular dado de alta', 'ok');
+      cargarProfesores();
+      return;
+    }
+
+    if (!confirm(`¿Dar de alta a ${titular.nombre} ${titular.apellidos}? El sustituto perderá el horario y quedará desactivado.`)) return;
+    setGestionandoBaja(true);
+
+    try {
+      // 1. Borrar horario del sustituto
+      await getSupabase().from('horarios_profesores').delete().eq('profesor_id', sustitutoId);
+
+      // 2. Desactivar sustituto y limpiar relación
+      await getSupabase().from('profesores').update({ estado: 'inactivo', titular_id: null }).eq('id', sustitutoId);
+
+      // 3. Dar de alta al titular
+      await getSupabase().from('profesores').update({ en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null }).eq('id', titular.id);
+
+      mostrarMensaje('✅ Titular de vuelta. Sustituto desactivado y horario restaurado.', 'ok');
+      setGestionandoBaja(false);
+      cargarProfesores();
+      setProfesorSeleccionado(prev => ({ ...prev, en_baja: false, sustituto_id: null }));
+    } catch(e) {
+      mostrarMensaje('❌ Error: ' + e.message, 'error');
+      setGestionandoBaja(false);
     }
   }
 
@@ -476,22 +594,196 @@ export default function PanelSecretario() {
 
       {/* MODAL FICHA */}
       {modoVista === 'ficha' && profesorSeleccionado && (
-        <Modal onClose={cerrarModal} titulo="📋 Ficha del Profesor">
-          <FilaInfo label="Nombre" valor={`${profesorSeleccionado.nombre} ${profesorSeleccionado.apellidos}`} />
-          <FilaInfo label="Email" valor={profesorSeleccionado.email} />
-          <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento} />
-          <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento || '—'} />
-          <FilaInfo label="Tipo contrato" valor={profesorSeleccionado.tipo_contrato} />
-          <FilaInfo label="Roles" valor={etiquetaRoles(profesorSeleccionado)} />
-          <FilaInfo label="Rol gestión" valor={profesorSeleccionado.rol_gestion || '—'} />
-          <FilaInfo label="Antigüedad centro" valor={profesorSeleccionado.antiguedad_centro ? `${profesorSeleccionado.antiguedad_centro} años` : '—'} />
-          <FilaInfo label="Antigüedad cuerpo" valor={profesorSeleccionado.antiguedad_cuerpo ? `${profesorSeleccionado.antiguedad_cuerpo} años` : '—'} />
-          <FilaInfo label="Estado" valor={badgeEstado(profesorSeleccionado.estado).texto} />
-          <FilaInfo label="Registrado" valor={new Date(profesorSeleccionado.created_at).toLocaleDateString('es-ES')} />
-          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button onClick={() => abrirEdicion(profesorSeleccionado)} style={{ ...btnEstilo('#e8f0fe', '#1a56db', '#1a56db'), padding: '10px 20px' }}>✏️ Editar datos</button>
-            <button onClick={cerrarModal} style={{ ...btnEstilo('#f5f5f5', '#555', '#ddd'), padding: '10px 20px' }}>Cerrar</button>
+        <Modal onClose={() => { cerrarModal(); setPestanaFicha('datos'); }} titulo={`📋 ${profesorSeleccionado.nombre} ${profesorSeleccionado.apellidos}${profesorSeleccionado.en_baja ? ' 🏥 DE BAJA' : ''}`}>
+          
+          {/* PESTAÑAS */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
+            {['datos', 'baja'].map(tab => (
+              <button key={tab} onClick={() => setPestanaFicha(tab)} style={{
+                padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                fontWeight: 700, fontSize: 13,
+                backgroundColor: pestanaFicha === tab ? (tab === 'baja' ? '#b91c1c' : '#1a56db') : '#f3f4f6',
+                color: pestanaFicha === tab ? 'white' : '#555',
+              }}>
+                {tab === 'datos' ? '📋 Datos' : '🏥 Baja / Sustitución'}
+              </button>
+            ))}
           </div>
+
+          {/* PESTAÑA DATOS */}
+          {pestanaFicha === 'datos' && (<>
+            <FilaInfo label="Nombre" valor={`${profesorSeleccionado.nombre} ${profesorSeleccionado.apellidos}`} />
+            <FilaInfo label="Email" valor={profesorSeleccionado.email} />
+            <FilaInfo label="Departamento" valor={profesorSeleccionado.departamento || '—'} />
+            <FilaInfo label="Tipo contrato" valor={profesorSeleccionado.tipo_contrato} />
+            <FilaInfo label="Roles" valor={etiquetaRoles(profesorSeleccionado)} />
+            <FilaInfo label="Rol gestión" valor={profesorSeleccionado.rol_gestion || '—'} />
+            <FilaInfo label="Antigüedad centro" valor={profesorSeleccionado.antiguedad_centro ? `${profesorSeleccionado.antiguedad_centro} años` : '—'} />
+            <FilaInfo label="Antigüedad cuerpo" valor={profesorSeleccionado.antiguedad_cuerpo ? `${profesorSeleccionado.antiguedad_cuerpo} años` : '—'} />
+            <FilaInfo label="Estado" valor={badgeEstado(profesorSeleccionado.estado).texto} />
+            <FilaInfo label="Registrado" valor={new Date(profesorSeleccionado.created_at).toLocaleDateString('es-ES')} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+              <button onClick={() => abrirEdicion(profesorSeleccionado)} style={{ ...btnEstilo('#e8f0fe', '#1a56db', '#1a56db'), padding: '10px 20px' }}>✏️ Editar datos</button>
+              <button onClick={cerrarModal} style={{ ...btnEstilo('#f5f5f5', '#555', '#ddd'), padding: '10px 20px' }}>Cerrar</button>
+            </div>
+          </>)}
+
+          {/* PESTAÑA BAJA */}
+          {pestanaFicha === 'baja' && (() => {
+            const p = profesorSeleccionado;
+            const sustituto = p.sustituto_id ? profesores.find(x => x.id === p.sustituto_id) : null;
+            const candidatos = profesores.filter(x =>
+              x.id !== p.id &&
+              !x.en_baja &&
+              !x.titular_id && // No es ya sustituto de alguien
+              x.estado === 'activo' &&
+              (busquedaSustituto === '' ||
+                `${x.nombre} ${x.apellidos}`.toLowerCase().includes(busquedaSustituto.toLowerCase()) ||
+                x.email.toLowerCase().includes(busquedaSustituto.toLowerCase()))
+            );
+
+            return (
+              <div>
+                {/* ESTADO ACTUAL */}
+                {p.en_baja ? (
+                  <div style={{ backgroundColor: '#fef2f2', border: '2px solid #fca5a5', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                    <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: 15, marginBottom: 6 }}>
+                      🏥 EN BAJA — {p.tipo_baja === 'total' ? 'Baja total (no vuelve este curso)' : 'Baja parcial (temporal)'}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#7f1d1d' }}>
+                      Desde: {p.fecha_baja ? new Date(p.fecha_baja + 'T12:00:00').toLocaleDateString('es-ES') : '—'}
+                    </div>
+                    {sustituto && (
+                      <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#dcfce7', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
+                        ✅ Sustituto asignado: {sustituto.nombre} {sustituto.apellidos}
+                      </div>
+                    )}
+                    {!sustituto && (
+                      <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#fef3c7', borderRadius: 8, fontSize: 13, color: '#78350f' }}>
+                        ⚠️ Sin sustituto asignado aún
+                      </div>
+                    )}
+                    {/* BOTÓN ALTA TITULAR */}
+                    {p.tipo_baja === 'parcial' && (
+                      <button
+                        onClick={() => altaTitular(p)}
+                        disabled={gestionandoBaja}
+                        style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
+                      >
+                        {gestionandoBaja ? '⏳ Procesando...' : '✅ TITULAR SE INCORPORA — Dar de alta y desactivar sustituto'}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, color: '#166534', fontSize: 14, marginBottom: 4 }}>✅ Activo — Sin baja registrada</div>
+                    <div style={{ fontSize: 13, color: '#555' }}>Usa este panel para registrar una baja y asignar un sustituto.</div>
+                  </div>
+                )}
+
+                {/* REGISTRAR NUEVA BAJA */}
+                {!p.en_baja && (
+                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 12 }}>📝 Registrar baja</div>
+                    
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>Tipo de baja:</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {[['parcial', '⏳ Parcial (temporal — volverá)'], ['total', '🔴 Total (no vuelve este curso)']].map(([val, label]) => (
+                          <button key={val} onClick={() => setTipoBajaSeleccionada(val)} style={{
+                            flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
+                            backgroundColor: tipoBajaSeleccionada === val ? (val === 'total' ? '#b91c1c' : '#f59e0b') : '#f3f4f6',
+                            color: tipoBajaSeleccionada === val ? 'white' : '#555',
+                          }}>{label}</button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>Fecha de inicio de baja:</div>
+                      <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)}
+                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                    </div>
+
+                    <button
+                      onClick={() => registrarBaja(p)}
+                      disabled={gestionandoBaja}
+                      style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#b91c1c', color: 'white', fontWeight: 800, fontSize: 14 }}
+                    >
+                      {gestionandoBaja ? '⏳ Procesando...' : '🏥 Registrar baja'}
+                    </button>
+                  </div>
+                )}
+
+                {/* ASIGNAR SUSTITUTO */}
+                {p.en_baja && !sustituto && (
+                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 10 }}>🔍 Asignar sustituto</div>
+                    <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
+                      El sustituto debe haberse registrado ya en la app y estar activado.
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Buscar por nombre o email..."
+                      value={busquedaSustituto}
+                      onChange={e => setBusquedaSustituto(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' }}
+                    />
+                    <div style={{ maxHeight: 250, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {candidatos.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 20, color: '#999', fontSize: 13 }}>
+                          {busquedaSustituto ? 'Sin resultados' : 'Escribe un nombre para buscar'}
+                        </div>
+                      ) : candidatos.map(c => (
+                        <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, fontSize: 13 }}>{c.apellidos}, {c.nombre}</div>
+                            <div style={{ fontSize: 11, color: '#666' }}>{c.email} · {c.departamento || '—'}</div>
+                          </div>
+                          <button
+                            onClick={() => asignarSustituto(p, c)}
+                            disabled={gestionandoBaja}
+                            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 12 }}
+                          >Asignar</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CAMBIAR SUSTITUTO */}
+                {p.en_baja && sustituto && (
+                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', marginBottom: 8 }}>🔄 Cambiar sustituto</div>
+                    <input
+                      type="text"
+                      placeholder="Buscar otro sustituto..."
+                      value={busquedaSustituto}
+                      onChange={e => setBusquedaSustituto(e.target.value)}
+                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }}
+                    />
+                    {busquedaSustituto && (
+                      <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {candidatos.map(c => (
+                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13 }}>{c.apellidos}, {c.nombre}</div>
+                              <div style={{ fontSize: 11, color: '#666' }}>{c.departamento || '—'}</div>
+                            </div>
+                            <button
+                              onClick={() => asignarSustituto(p, c)}
+                              disabled={gestionandoBaja}
+                              style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12 }}
+                            >Cambiar</button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </Modal>
       )}
 
