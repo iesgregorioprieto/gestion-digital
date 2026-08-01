@@ -66,6 +66,7 @@ export default function GestionAusencias() {
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [bajaProlongada, setBajaProlongada] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -177,7 +178,7 @@ export default function GestionAusencias() {
       profesor_nombre: `${prof.nombre} ${prof.apellidos}`,
       departamento: prof.departamento || '',
       fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin || fechaInicio,
+      fecha_fin: bajaProlongada ? null : (fechaFin || fechaInicio),
       motivo: motivo.trim(),
       tipo,
       horas: horasConDatos,
@@ -188,7 +189,7 @@ export default function GestionAusencias() {
     if (error) { mostrarMensaje('Error: ' + error.message, 'error'); return; }
 
     mostrarMensaje(`✅ Ausencia de ${prof.nombre} ${prof.apellidos} registrada correctamente`, 'ok');
-    setProfesorSeleccionado(''); setFechaInicio(''); setFechaFin('');
+    setBajaProlongada(false); setProfesorSeleccionado(''); setFechaInicio(''); setFechaFin('');
     setMotivo(''); setTipo('imprevista'); setHorario({});
     setVista('lista');
     cargarTodo();
@@ -581,7 +582,17 @@ ${a.observaciones_directivo ? `
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin</label>
-                <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                {!bajaProlongada ? (
+                  <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                ) : (
+                  <div style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>
+                    🏥 Sin fecha fin — Baja prolongada
+                  </div>
+                )}
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, cursor: 'pointer', fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>
+                  <input type="checkbox" checked={bajaProlongada} onChange={e => setBajaProlongada(e.target.checked)} style={{ width: 16, height: 16 }} />
+                  🏥 Baja prolongada (sin fecha fin — hasta que vuelva o llegue sustituto)
+                </label>
               </div>
             </div>
 
