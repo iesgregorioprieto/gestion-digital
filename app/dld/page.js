@@ -372,12 +372,15 @@ export default function DLD() {
         </div>
 
         {/* TABS */}
-        <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-          <button onClick={() => setVista('historial')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'historial' ? verde : '#ddd'}`, backgroundColor: vista === 'historial' ? verde : 'white', color: vista === 'historial' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+          <button onClick={() => setVista('historial')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'historial' ? verde : '#ddd'}`, backgroundColor: vista === 'historial' ? verde : 'white', color: vista === 'historial' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             📋 Mis solicitudes
           </button>
-          <button onClick={() => !sinDias && setVista('nueva')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'nueva' ? verde : sinDias ? '#ddd' : '#ddd'}`, backgroundColor: vista === 'nueva' ? verde : sinDias ? '#f5f5f5' : 'white', color: vista === 'nueva' ? 'white' : sinDias ? '#bbb' : '#555', cursor: sinDias ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 14 }}>
-            {sinDias ? '🚫 Sin días disponibles' : '+ Nueva solicitud'}
+          <button onClick={() => !sinDias && setVista('nueva')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'nueva' ? verde : sinDias ? '#ddd' : '#ddd'}`, backgroundColor: vista === 'nueva' ? verde : sinDias ? '#f5f5f5' : 'white', color: vista === 'nueva' ? 'white' : sinDias ? '#bbb' : '#555', cursor: sinDias ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}>
+            {sinDias ? '🚫 Sin días' : '+ Nueva solicitud'}
+          </button>
+          <button onClick={() => setVista('normativa')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'normativa' ? '#1d4ed8' : '#ddd'}`, backgroundColor: vista === 'normativa' ? '#1d4ed8' : 'white', color: vista === 'normativa' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            📖 Normativa
           </button>
         </div>
 
@@ -609,6 +612,187 @@ export default function DLD() {
             <div style={{ fontSize: 12, color: '#aaa', textAlign: 'center', marginTop: 10 }}>Mínimo 2 días hábiles de antelación · Resolución en máximo 3 días hábiles</div>
           </div>
         )}
+      {/* ═══ NORMATIVA ═══ */}
+        {vista === 'normativa' && (
+          <div style={{ fontSize: 14, lineHeight: 1.7, color: '#333' }}>
+
+            {/* FUENTES */}
+            <div style={{ backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 12 }}>
+              <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>📌 Fuentes oficiales</div>
+              <div>• <strong>Resolución de 07/07/2026</strong>, DGRH — Regulación DLD personal docente no universitario (curso 26/27)</div>
+              <div>• <strong>Resolución de 18/07/2024</strong>, DGRH — Regulación DLD (base)</div>
+              <div style={{ marginTop: 4 }}>
+                <a href="https://docm.jccm.es/docm/verArchivoHtml.do?ruta=2026/07/14/html/2026_5281.html&tipo=rutaDocm" target="_blank" rel="noreferrer" style={{ color: '#1d4ed8', fontSize: 11 }}>
+                  → Ver Resolución 07/07/2026 en DOCM
+                </a>
+              </div>
+            </div>
+
+            {/* DÍAS A LOS QUE TIENES DERECHO */}
+            <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: verde, fontSize: 15, marginBottom: 12 }}>🗓️ ¿A cuántos días tienes derecho? (curso 26/27)</div>
+              
+              {[
+                {
+                  tipo: 'Funcionario de carrera / Interino con vacante',
+                  moscosos: 3, canoso: true,
+                  nota: 'Un moscoso obligatoriamente en periodo no lectivo (1-5 sept. o 18-30 jun.). Los otros dos y el canoso pueden ser en cualquier momento.',
+                  color: '#166534', bg: '#dcfce7', border: '#86efac',
+                },
+                {
+                  tipo: 'Interino sin vacante (≥ 8 meses trabajados)',
+                  moscosos: 2, canoso: true,
+                  nota: 'Para el cómputo de 8 meses cuentan todos los contratos del curso (incluso parciales, festivos y fines de semana).',
+                  color: '#1e40af', bg: '#dbeafe', border: '#93c5fd',
+                },
+                {
+                  tipo: 'Interino sin vacante (≥ 87 días trabajados)',
+                  moscosos: 1, canoso: true,
+                  nota: 'Solo 1 moscoso, pero con derecho a canoso si cumples los requisitos.',
+                  color: '#78350f', bg: '#fef3c7', border: '#fcd34d',
+                },
+                {
+                  tipo: 'Interino sin vacante (< 87 días)',
+                  moscosos: 0, canoso: true,
+                  nota: 'Sin moscosos, pero con derecho a canoso si tienes +55 años o +18 años de servicio.',
+                  color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db',
+                },
+              ].map((t, i) => (
+                <div key={i} style={{ backgroundColor: t.bg, border: `1.5px solid ${t.border}`, borderRadius: 8, padding: '10px 14px', marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700, color: t.color, fontSize: 13, marginBottom: 6 }}>{t.tipo}</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                    {t.moscosos > 0 && (
+                      <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 20, backgroundColor: 'white', border: `1px solid ${t.border}`, fontWeight: 700, color: t.color }}>
+                        🌙 {t.moscosos} moscoso{t.moscosos > 1 ? 's' : ''}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 20, backgroundColor: 'white', border: '1px solid #c4b5fd', fontWeight: 700, color: '#6d28d9' }}>
+                      🦳 + 1 canoso (si +55 años o +18 años servicio)
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: t.color, opacity: 0.8 }}>ℹ️ {t.nota}</div>
+                </div>
+              ))}
+
+              <div style={{ backgroundColor: '#faf5ff', border: '1.5px solid #c4b5fd', borderRadius: 8, padding: '10px 14px', marginTop: 4 }}>
+                <div style={{ fontWeight: 700, color: '#6d28d9', fontSize: 13, marginBottom: 4 }}>🦳 ¿Qué es el CANOSO? (novedad curso 26/27)</div>
+                <div style={{ fontSize: 12, color: '#5b21b6' }}>
+                  Un día adicional de libre disposición para quien cumpla <strong>al menos uno</strong> de estos requisitos:<br/>
+                  • Tener <strong>más de 55 años</strong>, O<br/>
+                  • Acreditar <strong>más de 18 años de servicio efectivo</strong> como funcionario docente no universitario.<br/>
+                  <strong>Se puede disfrutar desde el momento en que se genera el derecho</strong> (no hay que esperar al curso siguiente).
+                </div>
+              </div>
+            </div>
+
+            {/* CUÁNDO SE PUEDE DISFRUTAR */}
+            <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: verde, fontSize: 15, marginBottom: 10 }}>📅 ¿Cuándo se pueden disfrutar?</div>
+              <div style={{ marginBottom: 8 }}>
+                <span style={{ fontWeight: 700, color: '#166534' }}>✅ SÍ se puede:</span>
+                <ul style={{ margin: '6px 0 0 16px', fontSize: 13 }}>
+                  <li>Lunes, viernes, vísperas de festivos o después de festivos</li>
+                  <li>En el mismo semestre (dos seguidos si quieres)</li>
+                  <li>Prolongar fines de semana, vacaciones o constituir puentes</li>
+                  <li>Varios moscosos en periodo no lectivo (novedad 26/27)</li>
+                </ul>
+              </div>
+              <div>
+                <span style={{ fontWeight: 700, color: '#b91c1c' }}>❌ NO se puede:</span>
+                <ul style={{ margin: '6px 0 0 16px', fontSize: 13 }}>
+                  <li>En periodo no lectivo cuando haya jornada de asistencia obligatoria (claustro, evaluaciones...)</li>
+                  <li>Acumular días de un curso para el siguiente</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* PLAZOS */}
+            <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: verde, fontSize: 15, marginBottom: 10 }}>⏱️ Plazos</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {[
+                  { emoji: '📤', label: 'Solicitud', texto: 'Con antelación mínima de 2 días hábiles y máxima de 30 días hábiles.' },
+                  { emoji: '📋', label: 'Plan de actividades', texto: 'Debes entregar a Jefatura las tareas para tus grupos con la debida antelación.' },
+                  { emoji: '✅', label: 'Resolución del director', texto: 'Máximo 3 días hábiles desde la solicitud. Si es denegado, debe ser por escrito y motivado.' },
+                  { emoji: '⚠️', label: 'Causas sobrevenidas', texto: 'En caso de enfermedad, hospitalización o fallecimiento de familiar (hasta 2º grado consanguinidad, 1º afinidad), los plazos se flexibilizan.' },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: 8 }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>{item.emoji}</span>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{item.label}</div>
+                      <div style={{ fontSize: 12, color: '#555' }}>{item.texto}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* LÍMITES Y CONCESIÓN */}
+            <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: verde, fontSize: 15, marginBottom: 10 }}>🏫 Límites de concesión en el centro</div>
+              <div style={{ fontSize: 13, marginBottom: 10 }}>
+                El director puede conceder como máximo al mismo tiempo:
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
+                {[
+                  ['Días lectivos — Centro hasta 20 prof.', '1 permiso/día'],
+                  ['Días lectivos — Centro 21-40 prof.', '2 permisos/día'],
+                  ['Días lectivos — Centro 41-60 prof.', '3 permisos/día'],
+                  ['Días lectivos — Centro +60 prof. (el nuestro)', '4 permisos/día'],
+                  ['Días no lectivos (cualquier centro)', '1/3 de la plantilla'],
+                ].map(([tipo, limite], i) => (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '8px 12px', borderRadius: 8,
+                    backgroundColor: i === 3 ? '#dcfce7' : '#f9fafb',
+                    border: i === 3 ? '1.5px solid #86efac' : '1px solid #e5e7eb',
+                  }}>
+                    <span style={{ fontSize: 12, color: i === 3 ? '#166534' : '#555', fontWeight: i === 3 ? 700 : 400 }}>{tipo}</span>
+                    <span style={{ fontSize: 12, fontWeight: 800, color: i === 3 ? '#166534' : '#374151' }}>{limite}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ backgroundColor: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#78350f' }}>
+                ⚠️ Estos límites <strong>pueden superarse de forma excepcional</strong> si el director aprecia que no afecta a la atención del alumnado. Y aunque no se superen los límites, <strong>el director puede denegar si hay causas organizativas excepcionales</strong>.
+              </div>
+            </div>
+
+            {/* CRITERIOS DE DESEMPATE */}
+            <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: verde, fontSize: 15, marginBottom: 10 }}>⚖️ Criterios de desempate (orden de prioridad)</div>
+              <div style={{ fontSize: 13, color: '#555', marginBottom: 10 }}>
+                Si hay más solicitudes de las permitidas para un día, el director aplica este orden:
+              </div>
+              {[
+                { orden: 'a)', texto: 'Causas sobrevenidas (enfermedad, hospitalización, fallecimiento de familiar)', color: '#b91c1c', bg: '#fef2f2' },
+                { orden: 'b)', texto: 'Haber disfrutado de menos días de permiso con anterioridad en el curso escolar', color: '#78350f', bg: '#fffbeb' },
+                { orden: 'c)', texto: 'Mayor antigüedad en el centro del solicitante', color: '#065f46', bg: '#ecfdf5' },
+                { orden: 'd)', texto: 'Mayor antigüedad en el cuerpo del solicitante', color: '#1e40af', bg: '#eff6ff' },
+              ].map((c, i) => (
+                <div key={i} style={{ display: 'flex', gap: 10, padding: '10px 12px', backgroundColor: c.bg, borderRadius: 8, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 900, color: c.color, fontSize: 16, flexShrink: 0 }}>{c.orden}</span>
+                  <span style={{ fontSize: 13, color: c.color }}>{c.texto}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* REVOCACIÓN */}
+            <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+              <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: 14, marginBottom: 6 }}>⚠️ El director puede revocar un permiso ya concedido</div>
+              <div style={{ fontSize: 13, color: '#7f1d1d' }}>
+                Si surgen causas organizativas excepcionales y sobrevenidas relacionadas con el derecho a la educación del alumnado o las necesidades del centro, el permiso puede ser denegado o revocado aunque ya estuviera aprobado.
+              </div>
+            </div>
+
+            {/* FOOTER LEGAL */}
+            <div style={{ textAlign: 'center', fontSize: 11, color: '#aaa', padding: '12px 0', borderTop: '1px solid #e5e7eb' }}>
+              Información basada en la <strong>Resolución 07/07/2026</strong> y <strong>Resolución 18/07/2024</strong> de la DGRH de Castilla-La Mancha.<br/>
+              Fuente: <a href="https://educacion.fespugtclm.es/moscosos-y-canoso/" target="_blank" rel="noreferrer" style={{ color: '#1d4ed8' }}>UGT Enseñanza CLM</a> · En caso de duda, consulta con la dirección del centro.
+            </div>
+
+          </div>
+        )}
+
       </div>
     </div>
   );
