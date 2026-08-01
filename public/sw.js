@@ -1,4 +1,5 @@
 // Service Worker con auto-actualización
+// Cache bust: 20260801_135355
 // - Versión por timestamp: cada deploy genera un nuevo cache
 // - HTML/rutas: network-first (siempre datos frescos)
 // - Assets estáticos con hash: cache-first (son inmutables)
