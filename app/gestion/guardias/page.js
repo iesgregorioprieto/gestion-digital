@@ -95,6 +95,7 @@ export default function GestionGuardias() {
   const [ausenciasDia, setAusDia] = useState([]);
   const [apoyosAsignados, setApAsig] = useState([]);
   const [contadorApoyos, setContApoyos] = useState({});
+  const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
   const [modalActivar, setModalActivar] = useState(null);
@@ -150,15 +151,18 @@ export default function GestionGuardias() {
     // Contador de apoyos por sector del curso
     const { data: apoyos } = await getSupabase()
       .from('apoyos_asignados')
-      .select('sector_apoyo,estado')
+      .select('sector_apoyo,profesor_id,estado')
       .eq('curso_academico', '2025-2026');
     const cont = {};
+    const contProf = {};
     (apoyos || []).forEach(a => {
       if (a.estado === 'confirmado' || a.estado === 'realizado') {
         cont[a.sector_apoyo] = (cont[a.sector_apoyo] || 0) + 1;
+        if (a.profesor_id) contProf[a.profesor_id] = (contProf[a.profesor_id] || 0) + 1;
       }
     });
     setContApoyos(cont);
+    setApoyosPorProfesor(contProf);
 
     // Sectores del cuadrante
     const guardias = horarios.filter(h => h.tipo === 'guardia');
@@ -290,13 +294,17 @@ export default function GestionGuardias() {
             sectorOriginal: sector.toUpperCase(),
             nombre: mapaProfesores[key] || p,
             profesorId: profCompleto?.id || null,
-            apoyosPrevios: contadorApoyos[sector.toUpperCase()] || 0,
+            apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
+            apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
           });
         }
       });
     }
+    // Rotación justa: primero quien menos apoyos ha hecho personalmente,
+    // luego el sector con menos apoyos acumulados, luego alfabético
     libres.sort((a, b) => {
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
+      if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
       return a.nombre.localeCompare(b.nombre);
     });
     return libres;
@@ -413,11 +421,17 @@ export default function GestionGuardias() {
     if (error) { alert('Error: ' + error.message); return; }
     if (data) {
       setApAsig(prev => [...prev, ...data]);
-      // Actualizar contador local para que la lista se reordene
+      // Actualizar contadores locales para que la lista se reordene
       setContApoyos(prev => ({
         ...prev,
         [profesorSeleccionado.sectorOriginal]: (prev[profesorSeleccionado.sectorOriginal] || 0) + 1
       }));
+      if (profesorSeleccionado.profesorId) {
+        setApoyosPorProfesor(prev => ({
+          ...prev,
+          [profesorSeleccionado.profesorId]: (prev[profesorSeleccionado.profesorId] || 0) + 1
+        }));
+      }
     }
     setModalActivar(null);
   }
@@ -447,6 +461,12 @@ export default function GestionGuardias() {
     setApAsig(prev => prev.filter(a => a.id !== apoyoId));
     // Decrementar contador local si era confirmado o realizado
     if (apoyo && (apoyo.estado === 'confirmado' || apoyo.estado === 'realizado')) {
+      if (apoyo.profesor_id) {
+        setApoyosPorProfesor(prev => ({
+          ...prev,
+          [apoyo.profesor_id]: Math.max(0, (prev[apoyo.profesor_id] || 0) - 1)
+        }));
+      }
       setContApoyos(prev => ({
         ...prev,
         [apoyo.sector_apoyo]: Math.max(0, (prev[apoyo.sector_apoyo] || 0) - 1)
