@@ -681,37 +681,19 @@ export default function PanelSecretario() {
                   </div>
                 )}
 
-                {/* REGISTRAR NUEVA BAJA */}
+                {/* INSTRUCCIÓN CUANDO NO HAY BAJA */}
                 {!p.en_baja && (
-                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 12 }}>📝 Registrar baja</div>
-                    
-                    <div style={{ marginBottom: 10 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>Tipo de baja:</div>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        {[['parcial', '⏳ Parcial (temporal — volverá)'], ['total', '🔴 Total (no vuelve este curso)']].map(([val, label]) => (
-                          <button key={val} onClick={() => setTipoBajaSeleccionada(val)} style={{
-                            flex: 1, padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 12,
-                            backgroundColor: tipoBajaSeleccionada === val ? (val === 'total' ? '#b91c1c' : '#f59e0b') : '#f3f4f6',
-                            color: tipoBajaSeleccionada === val ? 'white' : '#555',
-                          }}>{label}</button>
-                        ))}
-                      </div>
+                  <div style={{ backgroundColor: '#eff6ff', border: '1px solid #93c5fd', borderRadius: 10, padding: 14, marginBottom: 16 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#1e40af', marginBottom: 6 }}>ℹ️ ¿Cómo registrar una baja?</div>
+                    <div style={{ fontSize: 13, color: '#1e3a8a', lineHeight: 1.6 }}>
+                      1. Ve a <strong>Gestión → Ausencias</strong><br/>
+                      2. Crea una nueva ausencia para este profesor<br/>
+                      3. Marca <strong>"🏥 Baja prolongada"</strong> si no tiene fecha fin<br/>
+                      4. Cuando llegue el sustituto, vuelve aquí para asignarlo
                     </div>
-
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#555', marginBottom: 6 }}>Fecha de inicio de baja:</div>
-                      <input type="date" value={fechaBaja} onChange={e => setFechaBaja(e.target.value)}
-                        style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-                    </div>
-
-                    <button
-                      onClick={() => registrarBaja(p)}
-                      disabled={gestionandoBaja}
-                      style={{ width: '100%', padding: '10px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#b91c1c', color: 'white', fontWeight: 800, fontSize: 14 }}
-                    >
-                      {gestionandoBaja ? '⏳ Procesando...' : '🏥 Registrar baja'}
-                    </button>
+                    <a href="/gestion/ausencias" style={{ display: 'inline-block', marginTop: 10, padding: '8px 16px', borderRadius: 8, backgroundColor: '#1d4ed8', color: 'white', textDecoration: 'none', fontSize: 13, fontWeight: 700 }}>
+                      → Ir a Ausencias
+                    </a>
                   </div>
                 )}
 
