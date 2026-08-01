@@ -50,6 +50,8 @@ export default function GestionAusencias() {
   const [filtroProfesor, setFiltroProfesor] = useState('');
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
+  const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
+  const [filtroCategoria, setFiltroCategoria] = useState('todos');
 
   // Modal justificación
   const [ausenciaGestion, setAusenciaGestion] = useState(null);
@@ -107,6 +109,23 @@ export default function GestionAusencias() {
     pendiente:      ausencias.filter(a => a.estado === 'pendiente').length,
     justificada:    ausencias.filter(a => a.estado === 'justificada').length,
     sin_justificar: ausencias.filter(a => a.estado === 'sin_justificar').length,
+  };
+
+  // ===== MÉTRICAS DEL DASHBOARD =====
+  const hoyStr = new Date().toISOString().split('T')[0];
+  const dashboard = {
+    ausentesHoy: ausencias.filter(a => {
+      const ini = a.fecha_inicio;
+      const fin = a.fecha_fin || a.fecha_inicio;
+      return ini <= hoyStr && hoyStr <= fin;
+    }).length,
+    bajasActivas: ausencias.filter(a => {
+      const esBaja = a.categoria === 'baja_sin_sustituto' || a.categoria === 'baja_indefinida';
+      const fin = a.fecha_fin;
+      // Activa: es baja y (no tiene fecha fin O la fecha fin es futura)
+      return esBaja && (!fin || fin >= hoyStr);
+    }).length,
+    pendientesJustificar: ausencias.filter(a => !a.justificado && a.estado !== 'justificada').length,
   };
 
   // ===== GESTIÓN JUSTIFICACIÓN =====
@@ -380,7 +399,27 @@ ${a.observaciones_directivo ? `
         {/* ===== LISTA ===== */}
         {vista === 'lista' && (
           <div>
-            {/* CONTADORES */}
+            {/* DASHBOARD PRINCIPAL */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
+              <div style={{ backgroundColor: '#dbeafe', borderRadius: 12, padding: '16px 14px', textAlign: 'center', border: '2px solid #93c5fd' }}>
+                <div style={{ fontSize: 24 }}>🟢</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: '#1e40af' }}>{dashboard.ausentesHoy}</div>
+                <div style={{ fontSize: 12, color: '#1e40af', fontWeight: 700 }}>Ausentes hoy</div>
+              </div>
+              <div style={{ backgroundColor: '#fef2f2', borderRadius: 12, padding: '16px 14px', textAlign: 'center', border: '2px solid #fca5a5' }}>
+                <div style={{ fontSize: 24 }}>🏥</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: '#b91c1c' }}>{dashboard.bajasActivas}</div>
+                <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>Bajas activas</div>
+              </div>
+              <div style={{ backgroundColor: '#fffbeb', borderRadius: 12, padding: '16px 14px', textAlign: 'center', border: '2px solid #fcd34d', cursor: 'pointer' }}
+                onClick={() => setFiltroJustificado(filtroJustificado === 'pendiente' ? 'todos' : 'pendiente')}>
+                <div style={{ fontSize: 24 }}>⚠️</div>
+                <div style={{ fontSize: 30, fontWeight: 800, color: '#b45309' }}>{dashboard.pendientesJustificar}</div>
+                <div style={{ fontSize: 12, color: '#b45309', fontWeight: 700 }}>Sin justificar</div>
+              </div>
+            </div>
+
+            {/* CONTADORES POR ESTADO */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
               {Object.entries(contadores).map(([est, num]) => {
                 const e = ESTADOS[est];
@@ -406,6 +445,24 @@ ${a.observaciones_directivo ? `
                   </select>
                 </div>
                 <div>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Tipo</label>
+                  <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
+                    <option value="todos">Todos</option>
+                    <option value="ausencia_1dia">📅 Ausencia 1 día</option>
+                    <option value="ausencia_varios">📆 Ausencia varios días</option>
+                    <option value="baja_sin_sustituto">🏥 Baja sin sustituto</option>
+                    <option value="baja_indefinida">🔄 Baja con sustituto</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Justificación</label>
+                  <select value={filtroJustificado} onChange={e => setFiltroJustificado(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
+                    <option value="todos">Todos</option>
+                    <option value="justificado">✅ Justificado</option>
+                    <option value="pendiente">⚠️ Sin justificar</option>
+                  </select>
+                </div>
+                <div>
                   <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Profesor</label>
                   <input value={filtroProfesor} onChange={e => setFiltroProfesor(e.target.value)} placeholder="Buscar..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
                 </div>
@@ -418,7 +475,7 @@ ${a.observaciones_directivo ? `
                   <input type="date" value={filtroFechaHasta} onChange={e => setFiltroFechaHasta(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                  <button onClick={() => { setFiltroEstado('todos'); setFiltroProfesor(''); setFiltroFechaDesde(''); setFiltroFechaHasta(''); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
+                  <button onClick={() => { setFiltroEstado('todos'); setFiltroProfesor(''); setFiltroFechaDesde(''); setFiltroFechaHasta(''); setFiltroJustificado('todos'); setFiltroCategoria('todos'); }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
                   <button onClick={() => {
                     const filas = ausenciasFiltradas.map(a => {
                       const horas = Array.isArray(a.horas) ? a.horas : [];
