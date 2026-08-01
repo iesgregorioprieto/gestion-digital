@@ -83,6 +83,7 @@ export default function DLD() {
   const [tipoContrato, setTipoContrato] = useState('');
   const [antiguedadCentro, setAntiguedadCentro] = useState(0);
   const [antiguedadCuerpo, setAntiguedadCuerpo] = useState(0);
+  const [departamento, setDepartamento] = useState('');
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [esDirectivo, setEsDirectivo] = useState(false); // 🔑 aviso panel dirección
@@ -117,9 +118,9 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo').eq('id', id);
+    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo,departamento').eq('id', id);
     const prof = profRows?.[0];
-    if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); }
+    if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); setDepartamento(prof.departamento || ''); }
     const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
     setMisSolicitudes(sols || []);
     setCargando(false);
@@ -292,6 +293,7 @@ export default function DLD() {
         estado: 'pendiente',
         antiguedad_centro: antiguedadCentro,
         antiguedad_cuerpo: antiguedadCuerpo,
+        departamento: departamento,
       }]);
       if (err) { setError('Error al enviar: ' + err.message); }
       else {
@@ -404,7 +406,11 @@ export default function DLD() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, color: '#222', marginBottom: 4 }}>
-                      {s.tipo_dld === 'no_lectivo' ? '🌙' : '📚'} {s.tipo_dld === 'no_lectivo' ? 'No lectivo' : s.tipo_dld === '1_lectivo' ? '1º Lectivo' : '2º Lectivo'}
+                      {s.tipo_dld === 'canoso' ? '🦳 CANOSO' :
+                       s.tipo_dld === 'no_lectivo' ? '🌙 Moscoso no lectivo' :
+                       s.tipo_dld === '1_lectivo' ? '📚 1º Moscoso lectivo' :
+                       s.tipo_dld === '2_lectivo' ? '📖 2º Moscoso lectivo' :
+                       s.tipo_dld === '3_lectivo' ? '📗 3º Moscoso lectivo' : s.tipo_dld}
                     </div>
                     <div style={{ fontSize: 13, color: '#555' }}>📅 {new Date(s.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
                     {grupos.length > 0 && (
@@ -417,8 +423,35 @@ export default function DLD() {
                       </div>
                     )}
                     {s.estado === 'rechazada' && s.motivo_rechazo && (
-                      <div style={{ marginTop: 6, fontSize: 12, backgroundColor: '#fee2e2', color: '#b91c1c', padding: '6px 10px', borderRadius: 8 }}>
-                        Motivo: {s.motivo_rechazo}
+                      <div style={{ marginTop: 10, backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#b91c1c', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          📋 RESOLUCIÓN DENEGATORIA
+                        </div>
+                        <div style={{ fontSize: 12, color: '#7f1d1d', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                          {s.motivo_rechazo}
+                        </div>
+                        {s.resuelto_por && (
+                          <div style={{ fontSize: 10, color: '#991b1b', marginTop: 8, fontStyle: 'italic' }}>
+                            Resuelto por {s.resuelto_por}
+                            {s.resuelto_at && ' el ' + new Date(s.resuelto_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {s.estado === 'aprobada' && (
+                      <div style={{ marginTop: 10, backgroundColor: '#dcfce7', border: '1.5px solid #86efac', borderRadius: 10, padding: '10px 14px' }}>
+                        <div style={{ fontSize: 12, fontWeight: 800, color: '#166534', display: 'flex', alignItems: 'center', gap: 6 }}>
+                          ✅ PERMISO CONCEDIDO
+                        </div>
+                        {s.resuelto_por && (
+                          <div style={{ fontSize: 10, color: '#166534', marginTop: 4, fontStyle: 'italic' }}>
+                            Autorizado por {s.resuelto_por}
+                            {s.resuelto_at && ' el ' + new Date(s.resuelto_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 11, color: '#166534', marginTop: 6 }}>
+                          ℹ️ Recuerda entregar el plan de actividades a Jefatura de Estudios con antelación.
+                        </div>
                       </div>
                     )}
                     <div style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>Solicitado: {new Date(s.created_at).toLocaleDateString('es-ES')}</div>
