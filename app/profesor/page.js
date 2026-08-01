@@ -111,33 +111,47 @@ export default function PanelProfesor() {
     window.location.href = '/login';
   }
 
+  const [actualizando, setActualizando] = useState(false);
+
   async function forzarActualizacion() {
+    setActualizando(true);
     try {
-      // 1. Desregistrar todos los Service Workers
+      // 1. Guardar sesión antes de limpiar
+      const claves = ['profesor_id', 'profesor_nombre', 'profesor_email', 'profesor_rol_gestion', 'profesor_roles', 'guardias_origen'];
+      const backup = {};
+      claves.forEach(k => { backup[k] = sessionStorage.getItem(k); });
+
+      // 2. Desregistrar TODOS los Service Workers y esperar a que terminen
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const reg of registrations) {
-          await reg.unregister();
-        }
+        await Promise.all(registrations.map(reg => reg.unregister()));
       }
-      // 2. Borrar todas las caches
+
+      // 3. Borrar TODAS las caches del navegador
       if ('caches' in window) {
         const nombres = await caches.keys();
         await Promise.all(nombres.map(n => caches.delete(n)));
       }
-      // 3. Limpiar localStorage/sessionStorage relacionados con la app
-      // (mantener las claves de sesión del usuario)
-      const claves = ['profesor_id', 'profesor_nombre', 'profesor_rol_gestion', 'profesor_roles', 'guardias_origen'];
-      const backup = {};
-      claves.forEach(k => { backup[k] = sessionStorage.getItem(k); });
+
+      // 4. Limpiar storages
+      try { localStorage.clear(); } catch(e) {}
       sessionStorage.clear();
+
+      // 5. Restaurar la sesión del usuario
       claves.forEach(k => { if (backup[k]) sessionStorage.setItem(k, backup[k]); });
-      
-      // 4. Redirigir con un cache-buster (URL con timestamp único)
-      const url = window.location.origin + window.location.pathname + '?_refresh=' + Date.now();
-      window.location.replace(url);
+
+      // 6. Esperar un momento para que se completen las operaciones async
+      await new Promise(r => setTimeout(r, 400));
+
+      // 7. Recarga dura: reemplaza la URL con cache-buster Y fuerza bypass de caché HTTP
+      const base = window.location.origin + window.location.pathname;
+      const nueva = base + '?v=' + Date.now();
+      // location.replace evita que quede en el historial
+      window.location.replace(nueva);
     } catch (e) {
-      window.location.reload();
+      console.error('Error actualizando:', e);
+      // Fallback: recarga forzada clásica
+      window.location.href = window.location.pathname + '?v=' + Date.now();
     }
   }
 
@@ -279,12 +293,16 @@ export default function PanelProfesor() {
               🔐 {(panelDirectivo || panelTutor).titulo}
             </a>
           )}
-          <button onClick={forzarActualizacion} style={{
+          <button onClick={forzarActualizacion} disabled={actualizando} style={{
             padding: '7px 12px', borderRadius: 8,
             border: '1.5px solid rgba(255,255,255,0.4)',
-            backgroundColor: 'transparent', color: 'white',
-            cursor: 'pointer', fontSize: 13,
-          }} title="Fuerza descargar la última versión">🔄</button>
+            backgroundColor: actualizando ? 'rgba(255,255,255,0.25)' : 'transparent',
+            color: 'white',
+            cursor: actualizando ? 'wait' : 'pointer', fontSize: 13,
+            minWidth: 40,
+          }} title="Borra la caché y descarga la última versión">
+            {actualizando ? '⏳' : '🔄'}
+          </button>
           <button onClick={cerrarSesion} style={{
             padding: '7px 14px', borderRadius: 8,
             border: '1.5px solid rgba(255,255,255,0.4)',
