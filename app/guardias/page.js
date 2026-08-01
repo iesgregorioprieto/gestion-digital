@@ -97,6 +97,7 @@ export default function Guardias() {
   const [mapaProfesores, setMapaProf]   = useState({});
   const [profesoresList, setProfsList]  = useState([]);
   const [contadorApoyos, setContApoyos] = useState({});
+  const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
 
@@ -149,6 +150,22 @@ export default function Guardias() {
     });
     setMapaProf(mapa);
     setProfsList(profes || []);
+
+    // Contador de apoyos por sector del curso (necesario para la rotación)
+    const { data: apoyosCurso } = await getSupabase()
+      .from('apoyos_asignados')
+      .select('sector_apoyo,profesor_id,estado')
+      .eq('curso_academico', '2025-2026');
+    const contSector = {};
+    const contProfesor = {};
+    (apoyosCurso || []).forEach(a => {
+      if (a.estado === 'confirmado' || a.estado === 'realizado') {
+        contSector[a.sector_apoyo] = (contSector[a.sector_apoyo] || 0) + 1;
+        if (a.profesor_id) contProfesor[a.profesor_id] = (contProfesor[a.profesor_id] || 0) + 1;
+      }
+    });
+    setContApoyos(contSector);
+    setApoyosPorProfesor(contProfesor);
 
     // Mi especialidad
     const yo = (profes||[]).find(p => p.id === id);
@@ -393,13 +410,17 @@ export default function Guardias() {
             sectorOriginal: sector.toUpperCase(),
             nombre: mapaProfesores[key] || p,
             profesorId: profCompleto?.id || null,
-            apoyosPrevios: contadorApoyos[sector.toUpperCase()] || 0,
+            apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
+            apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
           });
         }
       });
     }
+    // Rotación justa: primero quien menos apoyos ha hecho personalmente,
+    // luego el sector con menos apoyos acumulados, luego alfabético
     libres.sort((a, b) => {
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
+      if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
       return a.nombre.localeCompare(b.nombre);
     });
     return libres;
