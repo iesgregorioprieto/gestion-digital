@@ -451,7 +451,7 @@ export default function PanelDirector() {
     ).length;
 
     if (esCanoso && maxCanosos === 0) {
-      alertas.push({ tipo: 'rojo', texto: `🔴 NO tiene derecho al CANOSO (<18 años de servicio)` });
+      alertas.push({ tipo: 'rojo', texto: '🔴 NO tiene derecho al CANOSO (menos de 18 años de servicio)' });
     } else if (esCanoso && canososDisfrutados >= maxCanosos) {
       alertas.push({ tipo: 'rojo', texto: `🔴 Ya ha disfrutado el CANOSO este curso` });
     } else if (diasDisfrutados >= totalMax) {
