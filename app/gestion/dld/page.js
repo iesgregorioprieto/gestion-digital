@@ -303,27 +303,41 @@ export default function PanelDirector() {
       alertas.push({ tipo: 'amarillo', texto: `🟡 Hay ${mismaFecha.filter(s => s.estado === 'pendiente').length} solicitud(es) más pendientes ese mismo día` });
     }
 
-    // Conflictos por grupo
+    // === CONFLICTO POR GRUPO (lo más importante: mismo grupo sin profesores) ===
     grupos.forEach(g => {
       const nombreGrupo = typeof g === 'object' ? g.grupo : g;
       const nombreNorm = normalizarGrupo(nombreGrupo);
       if (!nombreNorm) return;
       const horasEste = horasDeGrupo(g);
+
       mismaFecha.forEach(s => {
         const otrosGrupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
+        const yaAprobada = s.estado === 'aprobada';
+
         otrosGrupos.forEach(og => {
           const otroNombre = typeof og === 'object' ? og.grupo : og;
           if (normalizarGrupo(otroNombre) !== nombreNorm) return;
           const otrasHoras = horasDeGrupo(og);
+
           if (!horasEste.length || !otrasHoras.length) {
-            alertas.push({ tipo: 'amarillo', texto: `🟡 ${nombreGrupo}: también solicitado por ${s.profesor_nombre}` });
+            alertas.push({
+              tipo: yaAprobada ? 'rojo' : 'amarillo',
+              texto: `${yaAprobada ? '🔴' : '🟡'} GRUPO ${nombreGrupo}: ${yaAprobada ? 'ya hay otro profesor APROBADO' : 'otro profesor también lo solicita'} ese día. El grupo quedaría con menos docentes.`
+            });
             return;
           }
+
           const horasComunes = horasEste.filter(h => otrasHoras.includes(h));
           if (horasComunes.length > 0) {
-            alertas.push({ tipo: 'rojo', texto: `🔴 ${nombreGrupo}: choca con ${s.profesor_nombre} en ${horasComunes.join(', ')}` });
+            alertas.push({
+              tipo: 'rojo',
+              texto: `🔴 CHOQUE EN ${nombreGrupo}: coincide en ${horasComunes.join(', ')} con ${yaAprobada ? 'un permiso YA APROBADO' : 'otra solicitud pendiente'}. El grupo se quedaría sin cobertura en esas horas.`
+            });
           } else {
-            alertas.push({ tipo: 'amarillo', texto: `🟡 ${nombreGrupo}: también lo solicita ${s.profesor_nombre} (otras horas)` });
+            alertas.push({
+              tipo: 'amarillo',
+              texto: `🟡 GRUPO ${nombreGrupo}: ${yaAprobada ? 'otro profesor tiene permiso aprobado' : 'otra solicitud pendiente'} ese día, pero en horas distintas (${otrasHoras.join(', ')} vs ${horasEste.join(', ')}).`
+            });
           }
         });
       });
@@ -358,18 +372,11 @@ export default function PanelDirector() {
     if (mismoDepto.length > 0) {
       const aprobadosDepto = mismoDepto.filter(s => s.estado === 'aprobada').length;
       const pendientesDepto = mismoDepto.filter(s => s.estado === 'pendiente').length;
-      if (aprobadosDepto > 0) {
-        alertas.push({
-          tipo: 'rojo',
-          texto: `🔴 CONFLICTO DE DEPARTAMENTO: ya hay ${aprobadosDepto} profesor(es) de ${solicitud.departamento} aprobado(s) ese día. Riesgo de dejar grupos sin cobertura especializada.`
-        });
-      }
-      if (pendientesDepto > 0) {
-        alertas.push({
-          tipo: 'amarillo',
-          texto: `🟡 ATENCIÓN: hay ${pendientesDepto} solicitud(es) más de ${solicitud.departamento} pendientes ese día. Valora conceder solo una para no dejar el departamento descubierto.`
-        });
-      }
+      const total = aprobadosDepto + pendientesDepto;
+      alertas.push({
+        tipo: 'info',
+        texto: `ℹ️ Departamento ${solicitud.departamento}: ${total} docente(s) más con solicitud ese día (${aprobadosDepto} aprobada(s), ${pendientesDepto} pendiente(s)). Revisa arriba si afecta a los mismos grupos.`
+      });
     }
 
     // Causa sobrevenida
@@ -392,11 +399,22 @@ export default function PanelDirector() {
       s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
     ).length;
 
-    const mismoDeptoAprobados = todasSolicitudes.filter(s =>
-      s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada' &&
-      s.departamento && solicitud.departamento &&
-      s.departamento.toUpperCase().trim() === solicitud.departamento.toUpperCase().trim()
-    ).length;
+    // Detectar grupos en conflicto (mismo grupo con permiso ya aprobado ese día)
+    const gruposEste = Array.isArray(solicitud.grupos_afectados) ? solicitud.grupos_afectados : [];
+    const gruposEnConflicto = [];
+    gruposEste.forEach(g => {
+      const nombreGrupo = typeof g === 'object' ? g.grupo : g;
+      const nombreNorm = normalizarGrupo(nombreGrupo);
+      if (!nombreNorm) return;
+      const hayConflicto = todasSolicitudes.some(s =>
+        s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada' &&
+        (Array.isArray(s.grupos_afectados) ? s.grupos_afectados : []).some(og => {
+          const otroNombre = typeof og === 'object' ? og.grupo : og;
+          return normalizarGrupo(otroNombre) === nombreNorm;
+        })
+      );
+      if (hayConflicto && !gruposEnConflicto.includes(nombreGrupo)) gruposEnConflicto.push(nombreGrupo);
+    });
 
     const motivos = [];
 
@@ -404,8 +422,8 @@ export default function PanelDirector() {
       motivos.push(`Se ha alcanzado el número máximo de permisos concedidos para ese día (${aprobadosEseDia} de ${maxPermitidos} permitidos según el punto 9 de la Resolución de 18/07/2024 para centros de más de 60 docentes).`);
     }
 
-    if (mismoDeptoAprobados > 0) {
-      motivos.push(`Ya se ha concedido permiso a otro docente del mismo departamento para esa fecha, lo que comprometería la atención especializada del alumnado.`);
+    if (gruposEnConflicto.length > 0) {
+      motivos.push(`Ya se ha concedido permiso para esa fecha a otro docente que imparte en ${gruposEnConflicto.length === 1 ? 'el mismo grupo' : 'los mismos grupos'} (${gruposEnConflicto.join(', ')}), lo que dejaría al alumnado sin la atención docente adecuada.`);
     }
 
     const diasDisfrutados = todasSolicitudes.filter(s =>
