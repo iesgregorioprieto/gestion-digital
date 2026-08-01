@@ -303,44 +303,53 @@ export default function PanelDirector() {
       alertas.push({ tipo: 'amarillo', texto: `🟡 Hay ${mismaFecha.filter(s => s.estado === 'pendiente').length} solicitud(es) más pendientes ese mismo día` });
     }
 
-    // === CONFLICTO POR GRUPO (lo más importante: mismo grupo sin profesores) ===
+    // === CONFLICTO POR GRUPO ===
+    // Dos profesores nunca coinciden a la misma hora en el mismo grupo.
+    // El problema real es ACUMULATIVO: si entre varios permisos el grupo
+    // se queda sin profesor en muchas o todas sus horas del día.
     grupos.forEach(g => {
       const nombreGrupo = typeof g === 'object' ? g.grupo : g;
       const nombreNorm = normalizarGrupo(nombreGrupo);
       if (!nombreNorm) return;
       const horasEste = horasDeGrupo(g);
 
+      // Recopilar TODAS las horas que ese grupo perdería ese día (esta solicitud + las demás)
+      const horasPerdidasAprobadas = [];
+      const horasPerdidasPendientes = [];
+
       mismaFecha.forEach(s => {
         const otrosGrupos = Array.isArray(s.grupos_afectados) ? s.grupos_afectados : [];
-        const yaAprobada = s.estado === 'aprobada';
-
         otrosGrupos.forEach(og => {
           const otroNombre = typeof og === 'object' ? og.grupo : og;
           if (normalizarGrupo(otroNombre) !== nombreNorm) return;
           const otrasHoras = horasDeGrupo(og);
-
-          if (!horasEste.length || !otrasHoras.length) {
-            alertas.push({
-              tipo: yaAprobada ? 'rojo' : 'amarillo',
-              texto: `${yaAprobada ? '🔴' : '🟡'} GRUPO ${nombreGrupo}: ${yaAprobada ? 'ya hay otro profesor APROBADO' : 'otro profesor también lo solicita'} ese día. El grupo quedaría con menos docentes.`
-            });
-            return;
-          }
-
-          const horasComunes = horasEste.filter(h => otrasHoras.includes(h));
-          if (horasComunes.length > 0) {
-            alertas.push({
-              tipo: 'rojo',
-              texto: `🔴 CHOQUE EN ${nombreGrupo}: coincide en ${horasComunes.join(', ')} con ${yaAprobada ? 'un permiso YA APROBADO' : 'otra solicitud pendiente'}. El grupo se quedaría sin cobertura en esas horas.`
-            });
-          } else {
-            alertas.push({
-              tipo: 'amarillo',
-              texto: `🟡 GRUPO ${nombreGrupo}: ${yaAprobada ? 'otro profesor tiene permiso aprobado' : 'otra solicitud pendiente'} ese día, pero en horas distintas (${otrasHoras.join(', ')} vs ${horasEste.join(', ')}).`
-            });
+          if (s.estado === 'aprobada') {
+            otrasHoras.forEach(h => { if (!horasPerdidasAprobadas.includes(h)) horasPerdidasAprobadas.push(h); });
+          } else if (s.estado === 'pendiente') {
+            otrasHoras.forEach(h => { if (!horasPerdidasPendientes.includes(h)) horasPerdidasPendientes.push(h); });
           }
         });
       });
+
+      const ordenarHoras = arr => arr.slice().sort((a, b) => String(a).localeCompare(String(b), 'es', { numeric: true }));
+
+      // Total de horas sin profesor si se aprueba esta solicitud
+      const totalSinProfesor = [...new Set([...horasEste, ...horasPerdidasAprobadas])];
+
+      if (horasPerdidasAprobadas.length > 0) {
+        alertas.push({
+          tipo: 'rojo',
+          texto: `🔴 GRUPO ${nombreGrupo} SE QUEDA SIN CLASE: ya hay otro permiso aprobado que cubre ${ordenarHoras(horasPerdidasAprobadas).join(', ')}. Si apruebas esta (${ordenarHoras(horasEste).join(', ')}), el grupo perdería ${totalSinProfesor.length} hora(s) del día: ${ordenarHoras(totalSinProfesor).join(', ')}.`
+        });
+      }
+
+      if (horasPerdidasPendientes.length > 0) {
+        const totalPotencial = [...new Set([...horasEste, ...horasPerdidasAprobadas, ...horasPerdidasPendientes])];
+        alertas.push({
+          tipo: 'amarillo',
+          texto: `🟡 GRUPO ${nombreGrupo}: hay otra(s) solicitud(es) pendiente(s) que afectan a ${ordenarHoras(horasPerdidasPendientes).join(', ')}. Si se aprobaran todas, el grupo perdería ${totalPotencial.length} hora(s): ${ordenarHoras(totalPotencial).join(', ')}. Valora conceder solo una.`
+        });
+      }
     });
 
     // Días disfrutados vs derecho
@@ -423,7 +432,7 @@ export default function PanelDirector() {
     }
 
     if (gruposEnConflicto.length > 0) {
-      motivos.push(`Ya se ha concedido permiso para esa fecha a otro docente que imparte en ${gruposEnConflicto.length === 1 ? 'el mismo grupo' : 'los mismos grupos'} (${gruposEnConflicto.join(', ')}), lo que dejaría al alumnado sin la atención docente adecuada.`);
+      motivos.push(`Ya se ha concedido permiso para esa fecha a otro docente que imparte en ${gruposEnConflicto.length === 1 ? 'el mismo grupo' : 'los mismos grupos'} (${gruposEnConflicto.join(', ')}). De autorizarse esta solicitud, dicho alumnado quedaría sin actividad lectiva durante la mayor parte o la totalidad de la jornada.`);
     }
 
     const diasDisfrutados = todasSolicitudes.filter(s =>
