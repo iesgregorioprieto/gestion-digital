@@ -15,9 +15,6 @@ export default function PanelProfesor() {
   const [confirmDemo, setConfirmDemo] = useState(false);
   const [msgDemo, setMsgDemo] = useState('');
 
-  const esModoDemo = typeof window !== 'undefined' && sessionStorage.getItem('profesor_id') &&
-    profesoresDemo.some(p => p.email === sessionStorage.getItem('profesor_email'));
-
   const profesoresDemo = [
     { email: 'ana.martinez.test@educastillalamancha.es', nombre: 'Ana Martinez Ruiz', dept: 'TMV/Carrocería', emoji: '🚗' },
     { email: 'carlos.lopez.test@educastillalamancha.es', nombre: 'Carlos Lopez Fernandez', dept: 'Comercio', emoji: '🛍️' },
