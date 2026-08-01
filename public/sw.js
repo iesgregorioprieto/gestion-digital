@@ -1,12 +1,12 @@
 // Service Worker con auto-actualización
-// Cache bust: 20260801_135355
+// Cache bust: v20260801-185611
 // - Versión por timestamp: cada deploy genera un nuevo cache
 // - HTML/rutas: network-first (siempre datos frescos)
 // - Assets estáticos con hash: cache-first (son inmutables)
 // - Supabase: nunca cachear (datos dinámicos)
 // - Envía mensaje al cliente cuando hay nueva versión
 
-const VERSION = 'v2026-07-17-r1';
+const VERSION = 'v20260801-185611';
 const CACHE_NAME = `ies-prieto-${VERSION}`;
 
 // Assets que siempre queremos cachear al instalar
