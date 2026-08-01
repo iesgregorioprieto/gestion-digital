@@ -350,12 +350,81 @@ export default function PanelDirector() {
       alertas.push({ tipo: 'info', texto: `ℹ️ Ha usado ${diasDisfrutados} de ${totalMax} días este curso` });
     }
 
+    // === CONFLICTO POR DEPARTAMENTO (mismo día, mismo departamento) ===
+    const mismoDepto = mismaFecha.filter(s =>
+      s.departamento && solicitud.departamento &&
+      s.departamento.toUpperCase().trim() === solicitud.departamento.toUpperCase().trim()
+    );
+    if (mismoDepto.length > 0) {
+      const aprobadosDepto = mismoDepto.filter(s => s.estado === 'aprobada').length;
+      const pendientesDepto = mismoDepto.filter(s => s.estado === 'pendiente').length;
+      if (aprobadosDepto > 0) {
+        alertas.push({
+          tipo: 'rojo',
+          texto: `🔴 CONFLICTO DE DEPARTAMENTO: ya hay ${aprobadosDepto} profesor(es) de ${solicitud.departamento} aprobado(s) ese día. Riesgo de dejar grupos sin cobertura especializada.`
+        });
+      }
+      if (pendientesDepto > 0) {
+        alertas.push({
+          tipo: 'amarillo',
+          texto: `🟡 ATENCIÓN: hay ${pendientesDepto} solicitud(es) más de ${solicitud.departamento} pendientes ese día. Valora conceder solo una para no dejar el departamento descubierto.`
+        });
+      }
+    }
+
     // Causa sobrevenida
     if (solicitud.causa_sobrevenida) {
-      alertas.push({ tipo: 'verde', texto: `✅ CAUSA SOBREVENIDA: tiene prioridad máxima en prelación` });
+      alertas.push({ tipo: 'verde', texto: `✅ CAUSA SOBREVENIDA: tiene prioridad máxima en prelación (art. 12 Resolución)` });
     }
 
     return alertas;
+  }
+
+  // Genera el texto de motivación del rechazo según normativa (anonimizado)
+  function generarMotivoAutomatico(solicitud) {
+    const fecha = solicitud.fecha_solicitada;
+    const maxLectivo = TOTAL_PROFESORES > 60 ? 4 : TOTAL_PROFESORES > 40 ? 3 : TOTAL_PROFESORES > 20 ? 2 : 1;
+    const esNoLectivo = solicitud.tipo_dld === 'no_lectivo';
+    const maxNoLectivo = Math.floor(TOTAL_PROFESORES / 3);
+    const maxPermitidos = esNoLectivo ? maxNoLectivo : maxLectivo;
+
+    const aprobadosEseDia = todasSolicitudes.filter(s =>
+      s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
+    ).length;
+
+    const mismoDeptoAprobados = todasSolicitudes.filter(s =>
+      s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada' &&
+      s.departamento && solicitud.departamento &&
+      s.departamento.toUpperCase().trim() === solicitud.departamento.toUpperCase().trim()
+    ).length;
+
+    const motivos = [];
+
+    if (aprobadosEseDia >= maxPermitidos) {
+      motivos.push(`Se ha alcanzado el número máximo de permisos concedidos para ese día (${aprobadosEseDia} de ${maxPermitidos} permitidos según el punto 9 de la Resolución de 18/07/2024 para centros de más de 60 docentes).`);
+    }
+
+    if (mismoDeptoAprobados > 0) {
+      motivos.push(`Ya se ha concedido permiso a otro docente del mismo departamento para esa fecha, lo que comprometería la atención especializada del alumnado.`);
+    }
+
+    const diasDisfrutados = todasSolicitudes.filter(s =>
+      s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada'
+    ).length;
+    const { moscosos, canosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo);
+    if (diasDisfrutados >= moscosos + canosos) {
+      motivos.push(`Ha agotado los días de libre disposición que le corresponden en el presente curso escolar (${diasDisfrutados} de ${moscosos + canosos}).`);
+    }
+
+    if (solicitud.tipo_dld === 'canoso' && canosos === 0) {
+      motivos.push(`No reúne los requisitos para el día adicional (CANOSO): se requiere tener más de 55 años o acreditar más de 18 años de servicio como funcionario docente.`);
+    }
+
+    if (motivos.length === 0) {
+      motivos.push('Por causas organizativas excepcionales relacionadas con las necesidades del centro y la atención al alumnado.');
+    }
+
+    return motivos.join('\n\n') + '\n\nEsta resolución se dicta conforme a la Resolución de 07/07/2026 y la Resolución de 18/07/2024 de la Dirección General de Recursos Humanos.';
   }
 
   function calcularPrelacion(solicitud) {
@@ -714,8 +783,19 @@ export default function PanelDirector() {
             <HorarioCompleto grupos={solicitudAbierta.grupos_afectados} guardias={solicitudAbierta.guardias_horario} />
             <AlertasPanel alertas={calcularAlertas(solicitudAbierta)} prelacion={calcularPrelacion(solicitudAbierta)} />
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Motivo de rechazo (obligatorio si rechazas)</label>
-              <textarea value={motivoRechazo} onChange={e => setMotivoRechazo(e.target.value)} placeholder="Indica el motivo del rechazo según la normativa..." rows={3} style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Motivo de rechazo (obligatorio si rechazas)</label>
+                <button
+                  onClick={() => setMotivoRechazo(generarMotivoAutomatico(solicitudAbierta))}
+                  style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1d4ed8', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  ✨ Generar motivo según normativa
+                </button>
+              </div>
+              <textarea value={motivoRechazo} onChange={e => setMotivoRechazo(e.target.value)} placeholder="Indica el motivo del rechazo según la normativa, o pulsa el botón para generarlo automáticamente..." rows={5} style={{ width: '100%', padding: '10px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 }} />
+              <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                ℹ️ El motivo se le mostrará al profesor. No se incluyen nombres de otros compañeros (anonimizado).
+              </div>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button onClick={() => aprobar(solicitudAbierta.id)} disabled={procesando} style={{ flex: 1, padding: 13, borderRadius: 10, border: 'none', backgroundColor: '#065f46', color: 'white', fontWeight: 700, cursor: procesando ? 'not-allowed' : 'pointer', fontSize: 15 }}>✅ Aprobar</button>
