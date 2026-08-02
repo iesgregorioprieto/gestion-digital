@@ -500,6 +500,22 @@ export default function PanelDirector() {
     setProcesando(true);
     await getSupabase().from('dld').update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario }).eq('id', id);
     mostrarMensaje('✅ Solicitud aprobada', 'ok');
+    // Email al profesor
+    try {
+      const rows = await getSupabase().from('dld').select('profesor_id,fecha_solicitada,tipo_dld').eq('id', id);
+      const sol = (rows.data || [])[0];
+      if (sol) {
+        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
+        const prof = (pRows.data || [])[0];
+        if (prof?.email) {
+          await fetch('/api/enviar-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'dld_aprobada', datos: { nombre: prof.nombre + ' ' + prof.apellidos, email: prof.email, fecha_solicitada: sol.fecha_solicitada, tipo_dld: sol.tipo_dld } })
+          });
+        }
+      }
+    } catch(e) { console.error('Email DLD aprobada:', e); }
     setSolicitudAbierta(null);
     cargarSolicitudes();
     setProcesando(false);
@@ -510,6 +526,22 @@ export default function PanelDirector() {
     setProcesando(true);
     await getSupabase().from('dld').update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo }).eq('id', id);
     mostrarMensaje('❌ Solicitud rechazada', 'error');
+    // Email al profesor
+    try {
+      const rows = await getSupabase().from('dld').select('profesor_id,fecha_solicitada').eq('id', id);
+      const sol = (rows.data || [])[0];
+      if (sol) {
+        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
+        const prof = (pRows.data || [])[0];
+        if (prof?.email) {
+          await fetch('/api/enviar-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'dld_rechazada', datos: { nombre: prof.nombre + ' ' + prof.apellidos, email: prof.email, fecha_solicitada: sol.fecha_solicitada, motivo_rechazo: motivoRechazo } })
+          });
+        }
+      }
+    } catch(e) { console.error('Email DLD rechazada:', e); }
     setSolicitudAbierta(null);
     setMotivoRechazo('');
     cargarSolicitudes();
