@@ -524,28 +524,78 @@ export default function GestionGuardias() {
         <a href="/gestion" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>← Volver</a>
       </div>
 
-      {/* CONTADOR DE APOYOS DEL CURSO */}
-      <div style={{ backgroundColor:'#f3f4f6', padding:'12px 16px', borderBottom:'1px solid #e5e7eb' }}>
-        <div style={{ fontSize:11, fontWeight:800, color:'#555', marginBottom:6, textTransform:'uppercase', letterSpacing:0.5 }}>
-          📊 Contador de apoyos del curso
-        </div>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-          {SECTORES_FP.map((s, i) => {
-            const cnt = contadorApoyos[s] || 0;
-            // Ordenar visualmente: mostrar menos apoyos con estrella
+      {/* CONTADOR ROTATORIO DE APOYOS DEL CURSO */}
+      <details open style={{ backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb' }}>
+        <summary style={{ padding:'12px 16px', cursor:'pointer', fontSize:11, fontWeight:800, color:'#555', textTransform:'uppercase', letterSpacing:0.5, userSelect:'none' }}>
+          🔄 Rotación de apoyos al cuadrante general — curso 2025/26
+        </summary>
+        <div style={{ padding:'0 16px 14px' }}>
+          <div style={{ fontSize:11, color:'#6b7280', marginBottom:10 }}>
+            Ordenados de menos a más apoyos prestados. El primero de la lista es el siguiente al que le toca.
+          </div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+            {SECTORES_FP
+              .map(s => ({ sector: s, cnt: contadorApoyos[s] || 0 }))
+              .sort((a, b) => a.cnt - b.cnt || a.sector.localeCompare(b.sector))
+              .map((item, i, arr) => {
+                const esSiguiente = i === 0 || item.cnt === arr[0].cnt;
+                return (
+                  <span key={item.sector} style={{
+                    padding:'5px 12px', borderRadius:20, fontSize:11, fontWeight:700,
+                    backgroundColor: esSiguiente ? '#dcfce7' : 'white',
+                    color: esSiguiente ? verde : '#64748b',
+                    border:'1.5px solid ' + (esSiguiente ? verde : '#d1d5db'),
+                    display:'inline-flex', alignItems:'center', gap:5,
+                  }}>
+                    {esSiguiente && <span title="Le toca antes">⭐</span>}
+                    {emojiSector(item.sector)} {item.sector}
+                    <strong style={{
+                      backgroundColor: esSiguiente ? verde : '#e5e7eb',
+                      color: esSiguiente ? 'white' : '#475569',
+                      borderRadius:10, padding:'1px 7px', fontSize:10,
+                    }}>{item.cnt}</strong>
+                  </span>
+                );
+              })}
+          </div>
+          {(() => {
+            const total = SECTORES_FP.reduce((s, sec) => s + (contadorApoyos[sec] || 0), 0);
+            // Desglose por profesor: quién ha apoyado y cuántas veces
+            const porProfesor = Object.entries(apoyosPorProfesor)
+              .map(([id, n]) => {
+                const p = profesoresList.find(x => x.id === id);
+                return p ? { nombre: `${p.apellidos}, ${p.nombre}`, n } : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
+
             return (
-              <span key={s} style={{
-                padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                backgroundColor: cnt === 0 ? '#dcfce7' : (cnt <= 2 ? '#fef3c7' : '#fee2e2'),
-                color: cnt === 0 ? verde : (cnt <= 2 ? '#78350f' : rojo),
-                border:'1px solid ' + (cnt === 0 ? '#86efac' : (cnt <= 2 ? '#fbbf24' : '#fca5a5')),
-              }}>
-                {emojiSector(s)} {s}: <strong>{cnt}</strong>
-              </span>
+              <div style={{ marginTop:10, paddingTop:8, borderTop:'1px solid #e5e7eb' }}>
+                <div style={{ fontSize:11, color:'#6b7280', marginBottom: porProfesor.length ? 8 : 0 }}>
+                  Total de apoyos prestados al cuadrante general este curso: <strong style={{ color:azul }}>{total}</strong>
+                </div>
+                {porProfesor.length > 0 && (
+                  <details>
+                    <summary style={{ fontSize:11, color:'#64748b', cursor:'pointer', fontWeight:700, userSelect:'none' }}>
+                      Ver desglose por profesor ({porProfesor.length})
+                    </summary>
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginTop:8 }}>
+                      {porProfesor.map((p, i) => (
+                        <span key={i} style={{
+                          padding:'3px 9px', borderRadius:20, fontSize:10, fontWeight:600,
+                          backgroundColor:'white', color:'#475569', border:'1px solid #d1d5db',
+                        }}>
+                          {p.nombre} <strong style={{ color:azul }}>{p.n}</strong>
+                        </span>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
             );
-          })}
+          })()}
         </div>
-      </div>
+      </details>
 
       {/* AVISO GLOBAL: GUARDIAS PERDIDAS HOY */}
       {(() => {
