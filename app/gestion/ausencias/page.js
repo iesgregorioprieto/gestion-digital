@@ -126,6 +126,13 @@ export default function GestionAusencias() {
       return esBaja && (!fin || fin >= hoyStr);
     }).length,
     pendientesJustificar: ausencias.filter(a => !a.justificado && a.estado !== 'justificada').length,
+    fueraDePlazo: ausencias.filter(a => {
+      if (a.justificado || a.estado === 'justificada') return false;
+      if (!a.created_at) return false;
+      const limite = new Date(a.created_at);
+      limite.setDate(limite.getDate() + 3);
+      return new Date() > limite;
+    }).length,
   };
 
   // ===== GESTIÓN JUSTIFICACIÓN =====
@@ -412,10 +419,15 @@ ${a.observaciones_directivo ? `
                 <div style={{ fontSize: 12, color: '#b91c1c', fontWeight: 700 }}>Bajas activas</div>
               </div>
               <div style={{ backgroundColor: '#fffbeb', borderRadius: 12, padding: '16px 14px', textAlign: 'center', border: '2px solid #fcd34d', cursor: 'pointer' }}
-                onClick={() => setFiltroJustificado(filtroJustificado === 'pendiente' ? 'todos' : 'pendiente')}>
+                onClick={() => setFiltroJustificado(filtroJustificado === 'pendiente' ? 'vencido' : filtroJustificado === 'vencido' ? 'todos' : 'pendiente')}>
                 <div style={{ fontSize: 24 }}>⚠️</div>
                 <div style={{ fontSize: 30, fontWeight: 800, color: '#b45309' }}>{dashboard.pendientesJustificar}</div>
                 <div style={{ fontSize: 12, color: '#b45309', fontWeight: 700 }}>Sin justificar</div>
+                {dashboard.fueraDePlazo > 0 && (
+                  <div style={{ fontSize: 11, color: '#b91c1c', fontWeight: 800, marginTop: 4, backgroundColor: '#fee2e2', borderRadius: 6, padding: '2px 6px' }}>
+                    {dashboard.fueraDePlazo} fuera de plazo
+                  </div>
+                )}
               </div>
             </div>
 
@@ -460,6 +472,7 @@ ${a.observaciones_directivo ? `
                     <option value="todos">Todos</option>
                     <option value="justificado">✅ Justificado</option>
                     <option value="pendiente">⚠️ Sin justificar</option>
+                    <option value="vencido">⏰ Fuera de plazo</option>
                   </select>
                 </div>
                 <div>
@@ -517,8 +530,14 @@ ${a.observaciones_directivo ? `
               const est = ESTADOS[a.estado] || ESTADOS.pendiente;
               const horas = Array.isArray(a.horas) ? a.horas : [];
               const dias = diasParaJustificar(a.created_at);
+              const vencida = !a.justificado && a.estado !== 'justificada' && dias < 0;
               return (
-                <div key={a.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
+                <div key={a.id} style={{ backgroundColor: vencida ? '#fffbfb' : 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${vencida ? '#b91c1c' : est.color}` }}>
+                  {vencida && (
+                    <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, padding: '6px 12px', marginBottom: 10, fontSize: 12, fontWeight: 700, color: '#b91c1c' }}>
+                      ⏰ FUERA DE PLAZO — han pasado {Math.abs(dias)} día{Math.abs(dias) !== 1 ? 's' : ''} desde que venció el plazo de justificación
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{a.profesor_nombre}</div>
