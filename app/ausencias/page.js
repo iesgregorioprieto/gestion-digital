@@ -248,27 +248,34 @@ export default function Ausencias() {
     const diasAusencia = calcularDiasAusencia(fechaInicio, fechaFin);
     const esAusenciaLarga = diasAusencia >= 3;
 
+    // Aviso (no bloqueante) si faltan tareas: la ausencia puede ser imprevista
+    let labelsSinTarea = '';
     if (esAusenciaLarga) {
-      // Validar que todos los grupos tienen tarea
       const sinTarea = gruposUnicos.filter(u => {
         const key = `${u.grupo}|${u.materia}`;
         const t = tareasBloque[key];
         return !t?.instrucciones?.trim() && !t?.archivoNombre;
       });
       if (sinTarea.length > 0) {
-        const labels = sinTarea.map(u => `${u.grupo}${u.materia ? ` (${u.materia})` : ''}`).join(', ');
-        mostrarMensaje(`⚠️ Faltan tareas en: ${labels}.`, 'error');
-        return;
+        labelsSinTarea = sinTarea.map(u => `${u.grupo}${u.materia ? ` (${u.materia})` : ''}`).join(', ');
       }
     } else {
-      // Validar horas de clase con tarea
       const horasClase = Object.entries(horario).filter(([_, v]) => v.tipo === 'clase');
       const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
       if (sinTarea.length > 0) {
-        const labels = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
-        mostrarMensaje(`⚠️ Faltan tareas en: ${labels}. Añade instrucciones o adjunta un archivo.`, 'error');
-        return;
+        labelsSinTarea = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
       }
+    }
+
+    if (labelsSinTarea) {
+      const seguir = confirm(
+        `Vas a enviar la ausencia sin tareas en: ${labelsSinTarea}.\n\n` +
+        `Tu ausencia aparecerá igualmente en el cuadrante de guardias, pero el profesorado de guardia ` +
+        `no tendrá trabajo que dar a tus grupos.\n\n` +
+        `Si te es posible, añade las tareas ahora. Si no, puedes enviarla y editarla más tarde.\n\n` +
+        `¿Enviar de todos modos?`
+      );
+      if (!seguir) return;
     }
 
     setEnviando(true);
@@ -411,7 +418,7 @@ export default function Ausencias() {
 
             {/* AVISO */}
             <div style={{ backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
-              ⚠️ <strong>Importante:</strong> Tienes <strong>3 días</strong> para justificar tu ausencia tras notificarla. Las horas de clase requieren tarea obligatoria.
+              ⚠️ <strong>Importante:</strong> Tienes <strong>3 días</strong> para justificar tu ausencia tras notificarla.
             </div>
 
             {/* FECHAS */}
@@ -512,8 +519,16 @@ export default function Ausencias() {
               {/* ===== AUSENCIA LARGA: grupos en bloque ===== */}
               {gruposUnicos.length > 0 && (
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400e' }}>
+                  <div style={{ backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#92400e' }}>
                     📅 Ausencia de varios días — indica las tareas por módulo/grupo:
+                  </div>
+                  <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, marginBottom: 14, border: '1px solid #bfdbfe' }}>
+                    <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.5 }}>
+                      📋 <strong>Tu ausencia pasa directamente al cuadrante de guardias.</strong> Es muy aconsejable dejar tarea
+                      para cada grupo, así el profesorado de guardia sabrá qué hacer con tus alumnos.
+                      <br />
+                      <span style={{ color: '#3b82f6' }}>Si la ausencia es imprevista y no te da tiempo, puedes enviarla igualmente y añadir las tareas después.</span>
+                    </div>
                   </div>
                   {gruposUnicos.map(u => {
                     const key = `${u.grupo}|${u.materia}`;
@@ -524,7 +539,7 @@ export default function Ausencias() {
                           <span style={{ fontSize: 13, fontWeight: 800, color: '#3730a3', backgroundColor: '#e0e7ff', padding: '4px 12px', borderRadius: 20 }}>{u.grupo}</span>
                           {u.materia && <span style={{ fontSize: 12, fontWeight: 600, color: '#92400e', backgroundColor: '#fef3c7', padding: '3px 10px', borderRadius: 20 }}>{u.materia}</span>}
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: rojo, marginBottom: 6 }}>📝 Tarea * (obligatoria)</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📝 Tarea (recomendada)</div>
                         <textarea
                           value={tarea.instrucciones || ''}
                           onChange={e => setTareasBloque(t => ({ ...t, [key]: { ...t[key], instrucciones: e.target.value } }))}
@@ -644,7 +659,14 @@ export default function Ausencias() {
               )}
 
               {(modoManual || Object.values(horario).some(h => h.precargado)) && (
-                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Las horas de clase requieren tarea obligatoria.</div>
+                <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, marginBottom: 12, border: '1px solid #bfdbfe' }}>
+                  <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.5 }}>
+                    📋 <strong>Tu ausencia pasa directamente al cuadrante de guardias.</strong> Es muy aconsejable dejar tarea
+                    para cada grupo, así el profesorado de guardia sabrá qué hacer con tus alumnos.
+                    <br />
+                    <span style={{ color: '#3b82f6' }}>Si la ausencia es imprevista y no te da tiempo, puedes enviarla igualmente y añadir las tareas después.</span>
+                  </div>
+                </div>
               )}
 
               {(modoManual || Object.values(horario).some(h => h.precargado)) && HORAS.map(hora => {
@@ -676,7 +698,7 @@ export default function Ausencias() {
                       </div>
                       {val.tipo === 'clase' && (
                         <div style={{ padding: '10px 14px', borderTop: '1px solid #eee', backgroundColor: '#fffbeb' }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>📝 Tarea para {val.grupo}{val.materia ? ` (${val.materia})` : ''} * (obligatoria)</div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📝 Tarea para {val.grupo}{val.materia ? ` (${val.materia})` : ''} (recomendada)</div>
                           <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
                           {!val.archivoNombre ? (
                             <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -762,7 +784,7 @@ export default function Ausencias() {
                         {/* TAREA (solo para clase) */}
                         {val.tipo === 'clase' && (
                           <div>
-                            <div style={{ fontSize: 11, fontWeight: 700, color: rojo, marginBottom: 6 }}>📝 Tarea para el alumnado * (obligatoria)</div>
+                            <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📝 Tarea para el alumnado (recomendada)</div>
                             <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5. Copiar en el cuaderno..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
                             {!val.archivoNombre ? (
                               <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
