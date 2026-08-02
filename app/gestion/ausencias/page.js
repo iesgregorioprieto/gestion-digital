@@ -135,6 +135,108 @@ export default function GestionAusencias() {
     }).length,
   };
 
+  // ===== INFORME INDIVIDUAL PARA LA DELEGACIÓN =====
+  function generarInformeAusencia(a) {
+    const horas = Array.isArray(a.horas) ? a.horas : [];
+    const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
+    const esImagen = url => /\.(jpe?g|png|gif|webp|heic)$/i.test(url || '');
+    const esPdf = url => /\.pdf$/i.test(url || '');
+    const just = a.justificacion_url;
+
+    const filasHoras = horas.map(h => `
+      <tr>
+        <td>${h.hora || ''}</td>
+        <td>${h.tipo === 'clase' ? 'Clase' : h.tipo === 'guardia' ? 'Guardia' : 'Complementaria'}</td>
+        <td>${h.grupo || '—'}</td>
+        <td>${h.materia || '—'}</td>
+        <td>${h.instrucciones || '—'}</td>
+      </tr>`).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Ausencia ${a.profesor_nombre} ${fmt(a.fecha_inicio)}</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  body { font-family: Georgia, 'Times New Roman', serif; color: #1a1a1a; line-height: 1.5; font-size: 11pt; }
+  .cabecera { border-bottom: 2px solid #1e3a5f; padding-bottom: 12px; margin-bottom: 22px; }
+  .centro { font-size: 15pt; font-weight: bold; color: #1e3a5f; }
+  .sub { font-size: 9pt; color: #666; margin-top: 2px; }
+  h1 { font-size: 13pt; margin: 22px 0 14px; color: #1e3a5f; text-transform: uppercase; letter-spacing: .5px; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 18px; }
+  .datos td { padding: 6px 0; vertical-align: top; }
+  .datos td:first-child { width: 170px; font-weight: bold; color: #444; }
+  .horario { font-size: 9.5pt; }
+  .horario th { background: #f0f4f0; text-align: left; padding: 7px 9px; border: 1px solid #ccc; font-size: 9pt; }
+  .horario td { padding: 6px 9px; border: 1px solid #ddd; }
+  .pie { margin-top: 36px; font-size: 9pt; color: #666; border-top: 1px solid #ddd; padding-top: 10px; }
+  .firma { margin-top: 48px; }
+  .salto { page-break-before: always; }
+  .justif img { max-width: 100%; max-height: 235mm; display: block; margin: 0 auto; }
+  .justif embed, .justif iframe { width: 100%; height: 235mm; border: 1px solid #ccc; }
+  .aviso { background: #fff8e1; border: 1px solid #e6c65c; padding: 12px 14px; font-size: 10pt; }
+  @media print { .noprint { display: none; } }
+  .noprint { position: fixed; top: 12px; right: 12px; }
+  .noprint button { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 7px; border: none; background: #1e3a5f; color: #fff; cursor: pointer; }
+</style></head><body>
+
+<div class="noprint"><button onclick="window.print()">Imprimir o guardar como PDF</button></div>
+
+<div class="cabecera">
+  <div class="centro">IES Gregorio Prieto</div>
+  <div class="sub">Valdepeñas · Ciudad Real · Consejería de Educación, Cultura y Deportes</div>
+</div>
+
+<h1>Comunicación de ausencia del profesorado</h1>
+
+<table class="datos">
+  <tr><td>Docente</td><td>${a.profesor_nombre || '—'}</td></tr>
+  <tr><td>Departamento</td><td>${a.departamento || '—'}</td></tr>
+  <tr><td>Tipo de ausencia</td><td>${a.tipo === 'prevista' ? 'Prevista' : 'Imprevista'}${a.subtipo ? ' — ' + a.subtipo : ''}</td></tr>
+  <tr><td>Fecha de inicio</td><td>${fmt(a.fecha_inicio)}</td></tr>
+  <tr><td>Fecha de fin</td><td>${a.fecha_fin ? fmt(a.fecha_fin) : 'Sin determinar (baja prolongada)'}</td></tr>
+  <tr><td>Motivo declarado</td><td>${a.motivo || '—'}</td></tr>
+  <tr><td>Fecha de notificación</td><td>${a.created_at ? new Date(a.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—'}</td></tr>
+  <tr><td>Estado</td><td>${a.estado === 'justificada' ? 'Justificada' : 'Pendiente de justificar'}</td></tr>
+</table>
+
+${horas.length ? `
+<h1>Horario afectado</h1>
+<table class="horario">
+  <thead><tr><th>Hora</th><th>Tipo</th><th>Grupo</th><th>Materia</th><th>Tarea encomendada</th></tr></thead>
+  <tbody>${filasHoras}</tbody>
+</table>` : ''}
+
+${a.justificacion_texto ? `<h1>Justificación aportada</h1><p>${a.justificacion_texto}</p>` : ''}
+
+<div class="firma">
+  <table style="width:100%"><tr>
+    <td style="width:50%">Valdepeñas, a ${new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}<br><br><br>Fdo.: La Dirección del centro</td>
+    <td style="width:50%">Sello del centro</td>
+  </tr></table>
+</div>
+
+<div class="pie">Documento generado desde el portal de gestión del IES Gregorio Prieto.</div>
+
+${just ? `
+<div class="salto"></div>
+<h1>Documento justificativo aportado</h1>
+<div class="justif">
+  ${esImagen(just) ? `<img src="${just}" alt="Justificante">`
+    : esPdf(just) ? `<embed src="${just}" type="application/pdf">`
+    : `<div class="aviso">El justificante está disponible en el siguiente enlace:<br><br><a href="${just}">${just}</a></div>`}
+</div>` : `
+<div class="salto"></div>
+<h1>Documento justificativo</h1>
+<div class="aviso">No consta documento justificativo adjunto a esta ausencia en el momento de generar el informe.</div>`}
+
+</body></html>`;
+
+    const ventana = window.open('', '_blank');
+    if (!ventana) { alert('El navegador ha bloqueado la ventana emergente. Permite las ventanas emergentes para este sitio.'); return; }
+    ventana.document.write(html);
+    ventana.document.close();
+  }
+
   // ===== GESTIÓN JUSTIFICACIÓN =====
   async function aprobarJustificacion(id) {
     setProcesando(true);
@@ -431,31 +533,10 @@ ${a.observaciones_directivo ? `
               </div>
             </div>
 
-            {/* CONTADORES POR ESTADO */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 16 }}>
-              {Object.entries(contadores).map(([est, num]) => {
-                const e = ESTADOS[est];
-                return (
-                  <div key={est} onClick={() => setFiltroEstado(filtroEstado === est ? 'todos' : est)}
-                    style={{ backgroundColor: e.bg, borderRadius: 10, padding: '12px 14px', textAlign: 'center', cursor: 'pointer', border: `2px solid ${filtroEstado === est ? e.color : 'transparent'}` }}>
-                    <div style={{ fontSize: 20 }}>{e.emoji}</div>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: e.color }}>{num}</div>
-                    <div style={{ fontSize: 11, color: e.color, fontWeight: 600 }}>{e.label}</div>
-                  </div>
-                );
-              })}
-            </div>
 
             {/* FILTROS */}
             <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px,1fr))', gap: 10 }}>
-                <div>
-                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Estado</label>
-                  <select value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
-                    <option value="todos">Todos</option>
-                    {Object.entries(ESTADOS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}
-                  </select>
-                </div>
                 <div>
                   <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Tipo</label>
                   <select value={filtroCategoria} onChange={e => setFiltroCategoria(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
@@ -467,11 +548,11 @@ ${a.observaciones_directivo ? `
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Justificación</label>
+                  <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 3 }}>Estado</label>
                   <select value={filtroJustificado} onChange={e => setFiltroJustificado(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
-                    <option value="todos">Todos</option>
-                    <option value="justificado">✅ Justificado</option>
-                    <option value="pendiente">⚠️ Sin justificar</option>
+                    <option value="todos">Todas</option>
+                    <option value="justificado">✅ Justificadas</option>
+                    <option value="pendiente">⏳ Pendientes de justificar</option>
                     <option value="vencido">⏰ Fuera de plazo</option>
                   </select>
                 </div>
@@ -612,6 +693,22 @@ ${a.observaciones_directivo ? `
                       )}
                     </div>
                   )}
+
+                  {/* Informe para la Delegación */}
+                  <div style={{ marginTop: 10 }}>
+                    <button
+                      onClick={() => generarInformeAusencia(a)}
+                      style={{
+                        padding: '7px 14px', borderRadius: 7,
+                        border: '1.5px solid #1e3a5f', backgroundColor: 'white',
+                        color: '#1e3a5f', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 6,
+                      }}
+                      title="Abre un documento imprimible con los datos de la ausencia y el justificante en la segunda página"
+                    >
+                      🖨️ Informe para la Delegación
+                    </button>
+                  </div>
 
                   {/* Aviso plazo */}
                   {a.estado === 'pendiente' && !a.justificacion_texto && (
