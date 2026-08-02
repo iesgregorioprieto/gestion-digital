@@ -48,6 +48,7 @@ export default function Ausencias() {
   const [enviando, setEnviando] = useState(false);
   const [cargandoHorario, setCargandoHorario] = useState(false);
   const [modoManual, setModoManual] = useState(false);
+  const [editandoId, setEditandoId] = useState(null);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -320,7 +321,7 @@ export default function Ausencias() {
       );
     }
 
-    const { error } = await getSupabase().from('ausencias').insert([{
+    const datosAusencia = {
       profesor_id: profesorId,
       profesor_nombre: profesorNombre,
       departamento,
@@ -330,16 +331,96 @@ export default function Ausencias() {
       tipo,
       subtipo: tipo === 'prevista' ? subtipo : null,
       horas: horasConUrl,
-    }]);
+    };
+
+    let error;
+    if (editandoId) {
+      // Actualizar ausencia existente (no tocamos estado ni justificación)
+      const res = await getSupabase().from('ausencias').update(datosAusencia).eq('id', editandoId);
+      error = res.error;
+    } else {
+      const res = await getSupabase().from('ausencias').insert([datosAusencia]);
+      error = res.error;
+    }
 
     setEnviando(false);
     if (error) { mostrarMensaje(`Error: ${error.message} (${error.code || ''} ${error.details || ''})`, 'error'); return; }
 
-    mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
+    mostrarMensaje(
+      editandoId
+        ? '✅ Ausencia actualizada correctamente.'
+        : '✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.',
+      'ok'
+    );
+    setEditandoId(null);
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setHorario({}); setModoManual(false);
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
+  }
+
+  // ===== EDITAR AUSENCIA EXISTENTE =====
+  function editarAusencia(a) {
+    setEditandoId(a.id);
+    setFechaInicio(a.fecha_inicio || '');
+    setFechaFin(a.fecha_fin || a.fecha_inicio || '');
+    setMotivo(a.motivo || '');
+    setTipo(a.tipo || '');
+    setSubtipo(a.subtipo || '');
+    setModoManual(false);
+    setGruposUnicos([]);
+    setTareasBloque({});
+
+    // Reconstruir el horario desde las horas guardadas
+    const horas = Array.isArray(a.horas) ? a.horas : [];
+    const esLarga = horas.length > 0 && horas[0].hora === 'Ausencia larga';
+
+    if (esLarga) {
+      // Ausencia de varios días: reconstruir bloques por grupo
+      const unicos = [];
+      const tareas = {};
+      horas.forEach(h => {
+        const key = `${h.grupo}|${h.materia || ''}`;
+        if (!unicos.some(u => `${u.grupo}|${u.materia || ''}` === key)) {
+          unicos.push({ grupo: h.grupo, materia: h.materia || '' });
+        }
+        tareas[key] = {
+          instrucciones: h.instrucciones || '',
+          archivoNombre: h.archivo_url ? 'Archivo ya subido' : '',
+          archivoUrl: h.archivo_url || null,
+        };
+      });
+      setGruposUnicos(unicos);
+      setTareasBloque(tareas);
+      setHorario({});
+    } else {
+      // Ausencia corta: reconstruir hora por hora
+      const nuevoHorario = {};
+      horas.forEach(h => {
+        const horaObj = HORAS.find(hh => hh.label === h.hora || hh.id === h.hora);
+        if (!horaObj) return;
+        nuevoHorario[horaObj.id] = {
+          tipo: h.tipo,
+          grupo: h.grupo || '',
+          materia: h.materia || '',
+          aula: h.aula || '',
+          instrucciones: h.instrucciones || '',
+          archivoUrl: h.archivo_url || null,
+          precargado: true,
+        };
+      });
+      setHorario(nuevoHorario);
+    }
+
+    setVista('formulario');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function cancelarEdicion() {
+    setEditandoId(null);
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo('');
+    setHorario({}); setModoManual(false); setGruposUnicos([]); setTareasBloque({});
+    setVista('historial');
   }
 
   // ===== JUSTIFICAR =====
@@ -416,10 +497,32 @@ export default function Ausencias() {
         {vista === 'formulario' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
 
+            {/* BANNER MODO EDICIÓN */}
+            {editandoId && (
+              <div style={{ backgroundColor: '#eff6ff', border: '2px solid #3b82f6', borderRadius: 10, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#1e40af', marginBottom: 2 }}>
+                    ✏️ Editando una ausencia ya enviada
+                  </div>
+                  <div style={{ fontSize: 12, color: '#1e3a8a' }}>
+                    Los cambios sustituirán lo que enviaste. La justificación no se ve afectada.
+                  </div>
+                </div>
+                <button
+                  onClick={cancelarEdicion}
+                  style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  ✕ Cancelar edición
+                </button>
+              </div>
+            )}
+
             {/* AVISO */}
-            <div style={{ backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
-              ⚠️ <strong>Importante:</strong> Tienes <strong>3 días</strong> para justificar tu ausencia tras notificarla.
-            </div>
+            {!editandoId && (
+              <div style={{ backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
+                ⚠️ <strong>Importante:</strong> Tienes <strong>3 días</strong> para justificar tu ausencia tras notificarla.
+              </div>
+            )}
 
             {/* FECHAS */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
@@ -427,6 +530,11 @@ export default function Ausencias() {
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
                 <input type="date" value={fechaInicio} onChange={async e => {
                 const nuevaFechaInicio = e.target.value;
+                // En modo edición, avisar antes de recargar el horario (se perderían las tareas)
+                if (editandoId) {
+                  const ok = confirm('Al cambiar la fecha se recargará el horario de ese día y se perderán las tareas que ya tenías escritas.\n\n¿Continuar?');
+                  if (!ok) return;
+                }
                 setFechaInicio(nuevaFechaInicio);
                 setModoManual(false);
                 if (!fechaFin) setFechaFin(nuevaFechaInicio);
@@ -835,8 +943,8 @@ export default function Ausencias() {
             )}
 
             {/* BOTÓN ENVIAR */}
-            <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
-              {enviando ? '⏳ Enviando...' : '🏥 Notificar ausencia'}
+            <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: editandoId ? '#1e40af' : '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
+              {enviando ? '⏳ Guardando...' : (editandoId ? '💾 Guardar cambios' : '🏥 Notificar ausencia')}
             </button>
           </div>
         )}
@@ -898,6 +1006,29 @@ export default function Ausencias() {
                       ))}
                     </div>
                   )}
+
+                  {/* Botón editar tareas — solo si aún no ha pasado la fecha o está pendiente */}
+                  {(() => {
+                    const hoyStr = new Date().toISOString().split('T')[0];
+                    const finAusencia = a.fecha_fin || a.fecha_inicio;
+                    const puedeEditar = a.estado === 'pendiente' || finAusencia >= hoyStr;
+                    if (!puedeEditar) return null;
+                    return (
+                      <div style={{ marginTop: 10 }}>
+                        <button
+                          onClick={() => editarAusencia(a)}
+                          style={{
+                            padding: '8px 16px', borderRadius: 8,
+                            border: '1.5px solid #1e40af', backgroundColor: '#eff6ff',
+                            color: '#1e40af', fontWeight: 700, fontSize: 13, cursor: 'pointer',
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                          }}
+                        >
+                          ✏️ Editar tareas y horario
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {/* Aviso justificación */}
                   {a.estado === 'pendiente' && (
