@@ -205,15 +205,15 @@ export default function Home() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 14, color: '#555', display: 'flex', gap: 10 }}>
               <span>📍</span>
-              <span>Calle Prieto, s/n — Valdepeñas, Ciudad Real</span>
+              <span>Avda. de los Estudiantes, s/n — 13300 Valdepeñas, Ciudad Real</span>
             </div>
             <div style={{ fontSize: 14, color: '#555', display: 'flex', gap: 10 }}>
               <span>📞</span>
-              <span>926 31 25 00</span>
+              <span>926 32 19 03</span>
             </div>
             <div style={{ fontSize: 14, color: '#555', display: 'flex', gap: 10 }}>
               <span>✉️</span>
-              <span>13004958@educastillalamancha.es</span>
+              <span>13003336.ies@educastillalamancha.es</span>
             </div>
             <div style={{ fontSize: 14, color: '#555', display: 'flex', gap: 10 }}>
               <span>🌐</span>
