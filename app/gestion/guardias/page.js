@@ -195,8 +195,39 @@ export default function GestionGuardias() {
       aus = r.data || [];
     } catch(e) {}
     try {
-      const r = await getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada', f).eq('estado','aprobada');
-      dlds = r.data || [];
+      const r = await getSupabase().from('dld')
+        .select('profesor_id,profesor_nombre,horas,grupos_afectados,guardias_horario')
+        .eq('fecha_solicitada', f).eq('estado','aprobada');
+      dlds = (r.data || []).map(d => {
+        // Si el DLD ya trae 'horas' (formato nuevo) se usa tal cual.
+        if (Array.isArray(d.horas) && d.horas.length > 0) return d;
+        // Compatibilidad con DLD antiguos: reconstruir 'horas' desde los campos separados
+        const reconstruidas = [];
+        (Array.isArray(d.grupos_afectados) ? d.grupos_afectados : []).forEach(g => {
+          const horasGrupo = Array.isArray(g.horas) ? g.horas : (g.hora ? [g.hora] : []);
+          horasGrupo.forEach(h => {
+            reconstruidas.push({
+              hora: typeof h === 'object' ? h.hora : h,
+              tipo: 'clase',
+              grupo: g.grupo || null,
+              materia: g.materia || null,
+              aula: g.aula || null,
+              instrucciones: g.instrucciones || (typeof h === 'object' ? h.instrucciones : null) || null,
+            });
+          });
+        });
+        (Array.isArray(d.guardias_horario) ? d.guardias_horario : []).forEach(g => {
+          reconstruidas.push({
+            hora: g.hora,
+            tipo: 'guardia',
+            grupo: g.tipo_guardia || null,
+            materia: null,
+            aula: null,
+            instrucciones: null,
+          });
+        });
+        return { ...d, horas: reconstruidas };
+      });
     } catch(e) {}
 
     const todas = [
@@ -516,6 +547,47 @@ export default function GestionGuardias() {
         </div>
       </div>
 
+      {/* AVISO GLOBAL: GUARDIAS PERDIDAS HOY */}
+      {(() => {
+        const perdidas = [];
+        ausenciasDia.forEach(a => {
+          (a.horas || []).forEach(h => {
+            if (h.tipo === 'guardia') {
+              perdidas.push({ profesor: a.profesor, hora: h.hora, sector: a.sector, tipo: a.tipo });
+            }
+          });
+        });
+        if (perdidas.length === 0) return null;
+        return (
+          <div style={{ padding:'12px 16px', backgroundColor:'#fef2f2', borderBottom:'2px solid #fca5a5' }}>
+            <div style={{ fontSize:13, fontWeight:800, color:rojo, marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
+              🛡️ Guardias sin cubrir hoy ({perdidas.length})
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {perdidas.map((p, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    const idH = HORAS.find(h => horaCoincide(p.hora, h.id))?.id;
+                    if (idH) setHoraActiva(idH);
+                  }}
+                  style={{
+                    padding:'5px 10px', borderRadius:20, fontSize:11, fontWeight:700,
+                    backgroundColor:'white', color:'#7f1d1d', border:'1.5px solid #fca5a5', cursor:'pointer',
+                  }}
+                  title="Ir a esa hora"
+                >
+                  {p.tipo === 'dld' ? '📄' : '🏥'} {p.profesor.split(',')[0]} · {p.hora} · {p.sector}
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize:11, color:'#991b1b', marginTop:6, fontStyle:'italic' }}>
+              Pulsa cualquiera para ir a esa hora y asignar un apoyo de la rotación.
+            </div>
+          </div>
+        );
+      })()}
+
       {/* NAV FECHA */}
       <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
         <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>←</button>
@@ -674,6 +746,23 @@ export default function GestionGuardias() {
                   </div>
 
                   <div style={{ backgroundColor:'white', border:'1.5px solid ' + borderCabecera, borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
+                    {/* AVISO DE GUARDIA PERDIDA — siempre visible, tenga o no clases huérfanas */}
+                    {ausentes.some(a => a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')) && asignaciones.length > 0 && (
+                      <div style={{ backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:8, padding:'10px 12px', marginBottom:12 }}>
+                        <div style={{ fontSize:12, fontWeight:800, color:rojo, marginBottom:4 }}>
+                          ⚠️ Además, este sector pierde profesorado de guardia esta hora
+                        </div>
+                        {ausentes.filter(a => a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')).map((a, i) => (
+                          <div key={i} style={{ fontSize:12, color:'#7f1d1d' }}>
+                            · <strong>{a.profesor}</strong> tenía guardia en {sectorSup}
+                          </div>
+                        ))}
+                        <div style={{ fontSize:11, color:'#991b1b', marginTop:6, fontStyle:'italic' }}>
+                          Revisa si hace falta asignar apoyo adicional para cubrir esa guardia.
+                        </div>
+                      </div>
+                    )}
+
                     {asignaciones.length === 0 ? (
                       <>
                         {/* Mostrar profesores ausentes con guardia (aunque no dejen clases huérfanas) */}
