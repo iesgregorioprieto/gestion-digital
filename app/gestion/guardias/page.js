@@ -464,6 +464,28 @@ export default function GestionGuardias() {
         }));
       }
     }
+    // Email al profesor avisando de la guardia asignada
+    if (data && data[0] && profesorSeleccionado.profesorId) {
+      try {
+        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', profesorSeleccionado.profesorId);
+        const prof = (pRows.data || [])[0];
+        if (prof?.email) {
+          const HORAS_LABEL = { '1': '1ª (8:30–9:25)', '2': '2ª (9:25–10:20)', '3': '3ª (10:20–11:15)', 'recreo': 'Recreo (11:15–11:45)', '4': '4ª (11:45–12:40)', '5': '5ª (12:40–13:35)', '6': '6ª (13:35–14:30)' };
+          await fetch('/api/enviar-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tipo: 'guardia_asignada', datos: {
+              nombre: prof.nombre + ' ' + prof.apellidos,
+              email: prof.email,
+              fecha,
+              hora: HORAS_LABEL[horaActiva] || horaActiva,
+              grupo: data[0].grupo || null,
+              aula: data[0].aula || null,
+            }})
+          });
+        }
+      } catch(e) { console.error('Email guardia asignada:', e); }
+    }
     setModalActivar(null);
   }
 
