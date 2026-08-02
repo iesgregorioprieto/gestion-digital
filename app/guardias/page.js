@@ -217,8 +217,34 @@ export default function Guardias() {
       aus = r.data || [];
     } catch(e) { console.warn('Error ausencias:', e); }
     try {
-      const r = await getSupabase().from('dld').select('profesor_id,profesor_nombre,horas').eq('fecha_solicitada', f).eq('estado','aprobada');
-      dlds = r.data || [];
+      const r = await getSupabase().from('dld')
+        .select('profesor_id,profesor_nombre,horas,grupos_afectados,guardias_horario')
+        .eq('fecha_solicitada', f).eq('estado','aprobada');
+      dlds = (r.data || []).map(d => {
+        if (Array.isArray(d.horas) && d.horas.length > 0) return d;
+        // Compatibilidad con DLD antiguos sin campo 'horas'
+        const reconstruidas = [];
+        (Array.isArray(d.grupos_afectados) ? d.grupos_afectados : []).forEach(g => {
+          const horasGrupo = Array.isArray(g.horas) ? g.horas : (g.hora ? [g.hora] : []);
+          horasGrupo.forEach(h => {
+            reconstruidas.push({
+              hora: typeof h === 'object' ? h.hora : h,
+              tipo: 'clase',
+              grupo: g.grupo || null,
+              materia: g.materia || null,
+              aula: g.aula || null,
+              instrucciones: g.instrucciones || (typeof h === 'object' ? h.instrucciones : null) || null,
+            });
+          });
+        });
+        (Array.isArray(d.guardias_horario) ? d.guardias_horario : []).forEach(g => {
+          reconstruidas.push({
+            hora: g.hora, tipo: 'guardia', grupo: g.tipo_guardia || null,
+            materia: null, aula: null, instrucciones: null,
+          });
+        });
+        return { ...d, horas: reconstruidas };
+      });
     } catch(e) { console.warn('Error dld:', e); }
 
     const todas = [
