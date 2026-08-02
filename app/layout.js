@@ -1,13 +1,13 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Portal IES Gregorio Prieto",
+  title: "APrieto · IES Gregorio Prieto",
   description: "Portal digital de gestión del IES Gregorio Prieto - Valdepeñas",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "IES Prieto",
+    title: "APrieto",
   },
 };
 
@@ -26,7 +26,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta name="apple-mobile-web-app-title" content="IES Prieto" />
+        <meta name="apple-mobile-web-app-title" content="APrieto" />
         <meta name="theme-color" content="#1e3a5f" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
