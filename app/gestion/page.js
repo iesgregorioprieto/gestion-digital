@@ -9,11 +9,22 @@ const verde = '#1e6b2e';
 export default function PanelGestion() {
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [rolUsuario, setRolUsuario] = useState('');
+  const [avisoCopia, setAvisoCopia] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const nombre = sessionStorage.getItem('profesor_nombre');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
+    // Comprobar antigüedad de la última copia de seguridad
+    try {
+      const ultima = localStorage.getItem('ies_ultima_copia');
+      if (!ultima) {
+        setAvisoCopia(true);
+      } else {
+        const dias = Math.floor((Date.now() - new Date(ultima).getTime()) / 86400000);
+        setAvisoCopia(dias >= 30);
+      }
+    } catch (e) {}
     
     if (!id) { window.location.href = '/login'; return; }
     
@@ -104,6 +115,17 @@ export default function PanelGestion() {
       color: '#92400e',
     },
     {
+      id: 'copia',
+      emoji: '💾',
+      titulo: 'Copia de seguridad',
+      descripcion: 'Descarga todos los datos del portal para guardarlos a salvo',
+      href: '/gestion/copia',
+      bg: avisoCopia ? '#fffbeb' : '#f8fafc',
+      border: avisoCopia ? '#fbbf24' : '#e2e8f0',
+      color: avisoCopia ? '#b45309' : '#475569',
+      aviso: avisoCopia,
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones del Alumnado',
@@ -163,6 +185,7 @@ export default function PanelGestion() {
                 border: `2px solid ${mod.border}`,
                 transition: 'all 0.3s ease',
                 cursor: 'pointer',
+                position: 'relative',
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-4px)';
@@ -173,6 +196,16 @@ export default function PanelGestion() {
                 e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
               }}
             >
+              {mod.aviso && (
+                <span style={{
+                  position: 'absolute', top: 12, right: 12,
+                  backgroundColor: '#b45309', color: 'white',
+                  fontSize: 10, fontWeight: 800, padding: '3px 9px',
+                  borderRadius: 20, letterSpacing: 0.3,
+                }}>
+                  PENDIENTE
+                </span>
+              )}
               {/* ICONO Y FONDO COLOR */}
               <div style={{ 
                 display: 'flex', 
