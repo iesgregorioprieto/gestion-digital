@@ -92,6 +92,18 @@ export default function PanelSecretario() {
   async function aprobar(id) {
     await getSupabase().from('profesores').update({ estado: 'activo' }).eq('id', id);
     mostrarMensaje('✅ Profesor aprobado', 'ok');
+    // Enviar email de activación de cuenta
+    try {
+      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', id);
+      const prof = (rows.data || [])[0];
+      if (prof?.email) {
+        await fetch('/api/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'activacion_cuenta', datos: prof })
+        });
+      }
+    } catch(e) { console.error('Email activación:', e); }
     cargarProfesores();
     cerrarModal();
   }
