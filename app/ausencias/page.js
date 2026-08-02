@@ -47,6 +47,7 @@ export default function Ausencias() {
   const [mensaje, setMensaje] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [cargandoHorario, setCargandoHorario] = useState(false);
+  const [modoManual, setModoManual] = useState(false);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
@@ -328,7 +329,7 @@ export default function Ausencias() {
     if (error) { mostrarMensaje(`Error: ${error.message} (${error.code || ''} ${error.details || ''})`, 'error'); return; }
 
     mostrarMensaje('✅ Ausencia notificada correctamente. Recuerda justificarla en un plazo de 3 días.', 'ok');
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setHorario({});
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setHorario({}); setModoManual(false);
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -420,6 +421,7 @@ export default function Ausencias() {
                 <input type="date" value={fechaInicio} onChange={async e => {
                 const nuevaFechaInicio = e.target.value;
                 setFechaInicio(nuevaFechaInicio);
+                setModoManual(false);
                 if (!fechaFin) setFechaFin(nuevaFechaInicio);
                 const dias = calcularDiasAusencia(nuevaFechaInicio, fechaFin || nuevaFechaInicio);
                 if (dias >= 3) {
@@ -563,19 +565,93 @@ export default function Ausencias() {
                     </div>
                   )}
 
-              {!cargandoHorario && Object.values(horario).some(h => h.precargado) && (
-                <div style={{ padding: '10px 14px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, color: '#065f46', marginBottom: 10 }}>
-                  ✅ Horario cargado automáticamente. Revisa y añade las tareas.
+              {!cargandoHorario && Object.values(horario).some(h => h.precargado) && !modoManual && (
+                <div style={{ padding: '12px 14px', backgroundColor: '#d1fae5', borderRadius: 10, marginBottom: 10, border: '1.5px solid #6ee7b7' }}>
+                  <div style={{ fontSize: 13, color: '#065f46', fontWeight: 700, marginBottom: 4 }}>
+                    ✅ Horario cargado automáticamente
+                  </div>
+                  <div style={{ fontSize: 12, color: '#047857', marginBottom: 10 }}>
+                    Revisa que sea correcto y añade las tareas para tus grupos.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm('¿Rellenar el horario manualmente?\n\nSe borrará el horario cargado automáticamente y tendrás que indicar hora por hora lo que tenías.')) {
+                        setHorario({});
+                        setModoManual(true);
+                      }
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px', borderRadius: 8,
+                      border: '1.5px solid #059669', backgroundColor: 'white',
+                      color: '#047857', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    ✏️ ¿No es correcto? Rellenar a mano
+                  </button>
                 </div>
               )}
 
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Las horas de clase requieren tarea obligatoria.</div>
+              {!cargandoHorario && modoManual && (
+                <div style={{ padding: '12px 14px', backgroundColor: '#fffbeb', borderRadius: 10, marginBottom: 10, border: '1.5px solid #fbbf24' }}>
+                  <div style={{ fontSize: 13, color: '#92400e', fontWeight: 700, marginBottom: 4 }}>
+                    ✏️ Modo manual activado
+                  </div>
+                  <div style={{ fontSize: 12, color: '#b45309', marginBottom: 10 }}>
+                    Indica hora por hora qué tenías ese día: clase, guardia o complementaria.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModoManual(false);
+                      setHorario({});
+                      if (fechaInicio) cargarHorarioDelDia(fechaInicio);
+                    }}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px', borderRadius: 8,
+                      border: '1.5px solid #d97706', backgroundColor: 'white',
+                      color: '#b45309', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    🔄 Volver al horario automático
+                  </button>
+                </div>
+              )}
 
-              {HORAS.map(hora => {
+              {!cargandoHorario && !modoManual && !Object.values(horario).some(h => h.precargado) && fechaInicio && (
+                <div style={{ padding: '12px 14px', backgroundColor: '#fef2f2', borderRadius: 10, marginBottom: 10, border: '1.5px solid #fca5a5' }}>
+                  <div style={{ fontSize: 13, color: '#b91c1c', fontWeight: 700, marginBottom: 4 }}>
+                    ⚠️ No se ha encontrado tu horario para ese día
+                  </div>
+                  <div style={{ fontSize: 12, color: '#7f1d1d', marginBottom: 10 }}>
+                    Puede que sea festivo o que aún no se haya cargado el horario del curso. Indícalo manualmente.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModoManual(true)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '8px 14px', borderRadius: 8,
+                      border: 'none', backgroundColor: '#b91c1c',
+                      color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}
+                  >
+                    ✏️ Rellenar horario a mano
+                  </button>
+                </div>
+              )}
+
+              {(modoManual || Object.values(horario).some(h => h.precargado)) && (
+                <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Las horas de clase requieren tarea obligatoria.</div>
+              )}
+
+              {(modoManual || Object.values(horario).some(h => h.precargado)) && HORAS.map(hora => {
                 const val = horario[hora.id];
                 const esRecreo = hora.id === 'recreo';
                 const esEditando = horaEditando === hora.id;
-                const hayPrecarga = Object.values(horario).some(h => h.precargado);
+                const hayPrecarga = !modoManual && Object.values(horario).some(h => h.precargado);
 
                 // ===== VISTA PRECARGADA =====
                 if (hayPrecarga) {
