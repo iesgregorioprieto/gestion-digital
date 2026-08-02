@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.iesgregorioprieto.app.twa",
+    "sha256_cert_fingerprints": ["4A:5D:0D:B1:B8:9B:ED:DA:47:D2:02:F8:2B:FC:A0:21:BF:3B:A4:A0:0D:EC:30:F4:5E:AF:EC:79:5A:CE:6F:CD"]
+  }
+}]
