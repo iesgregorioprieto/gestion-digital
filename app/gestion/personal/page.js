@@ -305,7 +305,21 @@ export default function PanelSecretario() {
         .from('profesores')
         .update({ estado: 'activo', auth_: true })
         .eq('id', id);
-      if (!error) ok++;
+      if (!error) {
+        ok++;
+        // Email de activación de cuenta
+        try {
+          const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', id);
+          const prof = (pRows.data || [])[0];
+          if (prof?.email) {
+            await fetch('/api/enviar-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: prof })
+            });
+          }
+        } catch(e) { console.error('Email activación masiva:', e); }
+      }
     }
     setSeleccionados(new Set());
     mostrarMensaje(`✅ ${ok} profesor${ok !== 1 ? 'es' : ''} activado${ok !== 1 ? 's' : ''} correctamente`, 'ok');
