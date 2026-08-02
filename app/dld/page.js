@@ -226,6 +226,29 @@ export default function DLD() {
     return Object.entries(grupos).map(([grupo, horas]) => ({ grupo, horas }));
   }
 
+  // Construye el campo 'horas' con el mismo formato que usa el módulo de ausencias,
+  // para que el cuadrante de guardias pueda leer los DLD igual que las ausencias.
+  function construirHorasCuadrante(horarioParam) {
+    const h = horarioParam || horario;
+    const filas = [];
+    Object.entries(h).forEach(([horaId, val]) => {
+      if (!val || !val.tipo) return;
+      const hora = HORAS.find(x => x.id === horaId);
+      if (!hora) return;
+      filas.push({
+        hora: hora.label,
+        tipo: val.tipo,
+        grupo: val.grupo || null,
+        materia: val.materia || null,
+        aula: val.aula || null,
+        instrucciones: val.instrucciones?.trim() || null,
+        archivo_url: val.archivoUrl || null,
+        archivo_nombre: val.archivoNombre || null,
+      });
+    });
+    return filas;
+  }
+
   function construirGuardiasHorario(horarioParam) {
     const h = horarioParam || horario;
     const guardias = [];
@@ -279,6 +302,7 @@ export default function DLD() {
       }
       const gruposAfectados = construirGruposAfectados(horarioConUrls);
       const guardiasHorario = construirGuardiasHorario(horarioConUrls);
+      const horasCuadrante = construirHorasCuadrante(horarioConUrls);
       const { error: err } = await getSupabase().from('dld').insert([{
         profesor_id: profesorId,
         profesor_nombre: profesorNombre,
@@ -287,6 +311,7 @@ export default function DLD() {
         fecha_solicitada: form.fecha_solicitada,
         grupos_afectados: gruposAfectados,
         guardias_horario: guardiasHorario,
+        horas: horasCuadrante,
         tipo_guardia: form.tipo_guardia,
         causa_sobrevenida: form.causa_sobrevenida,
         descripcion_causa: form.descripcion_causa.trim(),
