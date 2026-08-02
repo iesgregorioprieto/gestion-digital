@@ -191,7 +191,7 @@ export default function GestionGuardias() {
 
     let aus = [], dlds = [];
     try {
-      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio', f).gte('fecha_fin', f);
+      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas,fecha_fin').lte('fecha_inicio', f).or(`fecha_fin.gte.${f},fecha_fin.is.null`);
       aus = r.data || [];
     } catch(e) {}
     try {
@@ -597,6 +597,26 @@ export default function GestionGuardias() {
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
         <button onClick={() => setFecha(new Date().toISOString().split('T')[0])} style={{ ...btnNav, backgroundColor:azul, color:'white', border:'none' }}>Hoy</button>
+      </div>
+
+      {/* ACCESO RÁPIDO: registrar ausencia que falta */}
+      <div style={{ padding:'10px 16px', backgroundColor:'#f8fafc', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+        <span style={{ fontSize:12, color:'#64748b' }}>
+          ¿Falta alguien que no aparece aquí?
+        </span>
+        <a
+          href="/gestion/ausencias"
+          style={{
+            padding:'6px 14px', borderRadius:7, fontSize:12, fontWeight:700,
+            backgroundColor:'white', color:azul, border:'1.5px solid ' + azul,
+            textDecoration:'none', display:'inline-flex', alignItems:'center', gap:6,
+          }}
+        >
+          🏥 Registrar ausencia
+        </a>
+        <span style={{ fontSize:11, color:'#94a3b8' }}>
+          El profesor podrá luego añadir tareas y justificarla desde su panel.
+        </span>
       </div>
 
       {/* HORAS */}
