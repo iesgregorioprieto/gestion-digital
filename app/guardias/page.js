@@ -213,7 +213,7 @@ export default function Guardias() {
 
     let aus = [], dlds = [];
     try {
-      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas').lte('fecha_inicio', f).gte('fecha_fin', f);
+      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas,fecha_fin').lte('fecha_inicio', f).or(`fecha_fin.gte.${f},fecha_fin.is.null`);
       aus = r.data || [];
     } catch(e) { console.warn('Error ausencias:', e); }
     try {
