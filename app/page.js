@@ -86,7 +86,7 @@ export default function Home() {
 
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
           <div style={{ fontSize: 18, fontWeight: 700, color: verde }}>
-            Portal de gestión del centro
+            APrieto · Portal de gestión del centro
           </div>
           <div style={{ fontSize: 14, color: '#888', marginTop: 6 }}>
             ¿Quién eres?
