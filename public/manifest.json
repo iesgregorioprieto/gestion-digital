@@ -1,6 +1,6 @@
 {
-  "name": "Portal IES Gregorio Prieto",
-  "short_name": "IES Prieto",
+  "name": "APrieto · IES Gregorio Prieto",
+  "short_name": "APrieto",
   "description": "Portal digital de gestión del IES Gregorio Prieto - Valdepeñas",
   "start_url": "/",
   "display": "standalone",
