@@ -46,26 +46,43 @@ export default function Login() {
     setCargando(true);
 
     const supabase = getSupabase();
+    const emailBuscado = email.trim().toLowerCase();
+
+    // Búsqueda tolerante: ilike ignora mayúsculas y cubre emails guardados con formato distinto
     const { data: rows, error: err } = await supabase
       .from('profesores')
-      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash')
-      .eq('email', email.trim().toLowerCase());
+      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email')
+      .ilike('email', emailBuscado);
 
     setCargando(false);
 
-    if (err || !rows || rows.length === 0) {
-      setError('Email o contraseña incorrectos.');
+    if (err) {
+      setError('No se pudo conectar con el servidor. Inténtalo de nuevo.');
       return;
     }
+
+    if (!rows || rows.length === 0) {
+      setError('No existe ninguna cuenta con ese email. Revisa que esté bien escrito o regístrate.');
+      return;
+    }
+
     const data = rows[0];
 
-    if (data.estado !== 'activo') {
-      setError('Tu cuenta aún no está activada. Contacta con el secretario.');
+    // Estado: aceptar variantes por si en BD quedó con mayúsculas o espacios
+    const estadoNorm = (data.estado || '').toString().trim().toLowerCase();
+    if (estadoNorm !== 'activo') {
+      setError(
+        estadoNorm === 'pendiente'
+          ? 'Tu cuenta está pendiente de activación. Contacta con el secretario.'
+          : 'Tu cuenta no está activa. Contacta con el secretario.'
+      );
       return;
     }
 
-    if (data.password_hash !== password) {
-      setError('Email o contraseña incorrectos.');
+    // Contraseña: comparar sin espacios accidentales
+    const passGuardada = (data.password_hash || '').toString().trim();
+    if (passGuardada !== password.trim()) {
+      setError('Contraseña incorrecta.');
       return;
     }
 
