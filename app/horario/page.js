@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { getSupabase } from "../../lib/supabase";
 
 const DIAS = ['lunes','martes','miercoles','jueves','viernes'];
@@ -14,18 +16,34 @@ const HORAS = [
   { id: '6', label: '6ª', rango: '13:35–14:30' },
 ];
 
-export default function HorarioProfesor() {
+function horaActual() {
+  const t = new Date().getHours() * 60 + new Date().getMinutes();
+  if (t < 565) return '1';
+  if (t < 615) return '2';
+  if (t < 675) return '3';
+  if (t < 705) return 'R';
+  if (t < 760) return '4';
+  if (t < 815) return '5';
+  return '6';
+}
+
+function HorarioContenido() {
+  const searchParams = useSearchParams();
+  const vistaParam = searchParams.get('vista');
+
   const [horario, setHorario] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [nombre, setNombre] = useState('');
   const [error, setError] = useState('');
+  const [vista, setVista] = useState(vistaParam === 'hoy' ? 'hoy' : 'semana');
 
   const verde = '#0f766e';
   const azul = '#1e3a5f';
+  const hoyIdx = new Date().getDay();
+  const hoyDia = DIAS[hoyIdx - 1] || '';
+  const horaAct = horaActual();
 
-  useEffect(() => {
-    cargarHorario();
-  }, []);
+  useEffect(() => { cargarHorario(); }, []);
 
   async function cargarHorario() {
     setCargando(true);
@@ -40,14 +58,11 @@ export default function HorarioProfesor() {
     }
 
     try {
-      // Paso 1: buscar nombre en horarios usando RPC (igual que DLD)
       const { data: matches } = await getSupabase()
         .rpc('buscar_profesor_horario', { p_nombre: n.split(' ')[0], p_apellido: (apellidos || n).split(' ')[0] });
-
       const nombrePdf = matches?.[0]?.profesor_nombre_pdf || '';
 
       if (nombrePdf) {
-        // Paso 2: cargar horario completo por nombre PDF
         const { data } = await getSupabase()
           .from('horarios_profesores')
           .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
@@ -55,7 +70,6 @@ export default function HorarioProfesor() {
           .eq('curso_academico', '2025-2026');
         setHorario(data || []);
       } else {
-        // Fallback: buscar por coincidencia parcial
         const { data } = await getSupabase()
           .from('horarios_profesores')
           .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
@@ -70,7 +84,7 @@ export default function HorarioProfesor() {
     setCargando(false);
   }
 
-  // Organizar horario en grid
+  // Organizar en grid
   const grid = {};
   for (const h of horario) {
     const dia = (h.dia || '').toLowerCase();
@@ -80,34 +94,51 @@ export default function HorarioProfesor() {
     grid[key].push(h);
   }
 
-  // Detectar día actual
-  const hoyIdx = new Date().getDay();
-  const hoyDia = DIAS[hoyIdx - 1] || '';
-
-  // Hora actual
-  function horaActual() {
-    const now = new Date();
-    const t = now.getHours() * 60 + now.getMinutes();
-    if (t < 565) return '1';
-    if (t < 615) return '2';
-    if (t < 675) return '3';
-    if (t < 705) return 'R';
-    if (t < 760) return '4';
-    if (t < 815) return '5';
-    return '6';
+  function renderCelda(celdas, esAhora) {
+    if (celdas.length === 0) return <span style={{ fontSize: 10, color: '#ccc' }}>—</span>;
+    return celdas.map((c, i) => {
+      const esGuardia = (c.tipo || '').toLowerCase().includes('guardia') || (c.actividad || '').toLowerCase().includes('guardia');
+      return (
+        <div key={i} style={{
+          padding: '6px 8px', borderRadius: 8, marginBottom: i < celdas.length - 1 ? 4 : 0,
+          backgroundColor: esGuardia ? '#fef3c7' : '#eff6ff',
+          border: `1px solid ${esGuardia ? '#fcd34d' : '#bfdbfe'}`,
+        }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: esGuardia ? '#92400e' : '#1e40af' }}>
+            {c.actividad || c.materia || c.tipo || '—'}
+          </div>
+          {c.grupo && <div style={{ fontSize: 11, color: '#555' }}>{c.grupo}</div>}
+          {c.aula && <div style={{ fontSize: 10, color: '#888' }}>📍 {c.aula}</div>}
+        </div>
+      );
+    });
   }
-  const horaAct = horaActual();
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0fdfa', fontFamily: 'system-ui, sans-serif' }}>
 
       {/* HEADER */}
-      <div style={{ backgroundColor: verde, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => window.history.back()} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
-        <span style={{ fontSize: 22 }}>🕐</span>
-        <div>
-          <div style={{ fontWeight: 800, fontSize: 17 }}>Mi Horario</div>
-          <div style={{ fontSize: 12, opacity: 0.85 }}>{nombre}</div>
+      <div style={{ backgroundColor: verde, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={() => window.location.href = '/profesor'} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+          <span style={{ fontSize: 22 }}>🕐</span>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>Mi Horario</div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>{nombre}</div>
+          </div>
+        </div>
+        {/* SELECTOR HOY / SEMANA */}
+        <div style={{ display: 'flex', borderRadius: 8, overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.4)' }}>
+          <button onClick={() => setVista('hoy')} style={{
+            padding: '7px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+            backgroundColor: vista === 'hoy' ? 'white' : 'transparent',
+            color: vista === 'hoy' ? verde : 'white',
+          }}>📅 Hoy</button>
+          <button onClick={() => setVista('semana')} style={{
+            padding: '7px 14px', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700,
+            backgroundColor: vista === 'semana' ? 'white' : 'transparent',
+            color: vista === 'semana' ? verde : 'white',
+          }}>📋 Semana</button>
         </div>
       </div>
 
@@ -122,12 +153,70 @@ export default function HorarioProfesor() {
       ) : horario.length === 0 && !error ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
           <div style={{ fontSize: 40 }}>📭</div>
-          <p>No se ha encontrado tu horario. Contacta con secretaría.</p>
+          <p>No se ha encontrado tu horario.</p>
         </div>
-      ) : (
-        <div style={{ padding: 12, overflowX: 'auto' }}>
+      ) : vista === 'hoy' ? (
 
-          {/* TABLA HORARIO */}
+        /* ═══ VISTA HOY ═══ */
+        <div style={{ padding: 16, maxWidth: 500, margin: '0 auto' }}>
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: verde, textTransform: 'capitalize' }}>
+              {DIAS_LABEL[hoyDia] || 'Fin de semana'}
+            </div>
+            <div style={{ fontSize: 12, color: '#888' }}>
+              {new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+
+          {!hoyDia ? (
+            <div style={{ textAlign: 'center', padding: 30, color: '#888' }}>
+              <div style={{ fontSize: 50 }}>🏖️</div>
+              <p style={{ fontSize: 15 }}>¡Es fin de semana!</p>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {HORAS.map(h => {
+                const celdas = grid[`${hoyDia}-${h.id}`] || [];
+                const esAhora = h.id === horaAct;
+                const esRecreo = h.id === 'R';
+
+                return (
+                  <div key={h.id} style={{
+                    backgroundColor: 'white', borderRadius: 12, padding: '12px 14px',
+                    border: esAhora ? `2.5px solid ${verde}` : '1.5px solid #e2e8f0',
+                    boxShadow: esAhora ? `0 2px 12px rgba(15,118,110,0.15)` : '0 1px 4px rgba(0,0,0,0.04)',
+                    display: 'flex', alignItems: 'center', gap: 12,
+                  }}>
+                    {/* HORA */}
+                    <div style={{
+                      width: 50, textAlign: 'center', flexShrink: 0,
+                    }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: esAhora ? verde : '#374151' }}>{h.label}</div>
+                      <div style={{ fontSize: 9, color: '#94a3b8' }}>{h.rango}</div>
+                      {esAhora && <div style={{ fontSize: 8, color: verde, fontWeight: 700, marginTop: 2 }}>AHORA</div>}
+                    </div>
+
+                    {/* CONTENIDO */}
+                    <div style={{ flex: 1 }}>
+                      {esRecreo && celdas.length === 0 ? (
+                        <div style={{ fontSize: 13, color: '#94a3b8' }}>☕ Recreo</div>
+                      ) : celdas.length === 0 ? (
+                        <div style={{ fontSize: 12, color: '#cbd5e1' }}>Libre</div>
+                      ) : (
+                        renderCelda(celdas, esAhora)
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+      ) : (
+
+        /* ═══ VISTA SEMANAL ═══ */
+        <div style={{ padding: 12, overflowX: 'auto' }}>
           <div style={{ minWidth: 700 }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
               <thead>
@@ -136,12 +225,10 @@ export default function HorarioProfesor() {
                   {DIAS.map(d => (
                     <th key={d} style={{
                       padding: '10px 8px',
-                      backgroundColor: d === hoyDia ? '#0f766e' : azul,
+                      backgroundColor: d === hoyDia ? verde : azul,
                       color: 'white', fontSize: 12, fontWeight: 700, textAlign: 'center',
-                      border: d === hoyDia ? '2px solid #5eead4' : 'none',
                     }}>
-                      {DIAS_LABEL[d]}
-                      {d === hoyDia && ' 📍'}
+                      {DIAS_LABEL[d]}{d === hoyDia ? ' 📍' : ''}
                     </th>
                   ))}
                 </tr>
@@ -162,45 +249,17 @@ export default function HorarioProfesor() {
                       const esAhora = d === hoyDia && h.id === horaAct;
                       const esRecreo = h.id === 'R';
 
-                      if (esRecreo && celdas.length === 0) {
-                        return (
-                          <td key={d} style={{
-                            padding: 6, textAlign: 'center', borderBottom: '1px solid #e2e8f0',
-                            backgroundColor: '#f0f9ff', fontSize: 11, color: '#94a3b8',
-                          }}>
-                            ☕
-                          </td>
-                        );
-                      }
-
                       return (
                         <td key={d} style={{
                           padding: 4, textAlign: 'center', borderBottom: '1px solid #e2e8f0',
                           backgroundColor: esAhora ? '#ccfbf1' : (celdas.length > 0 ? 'white' : '#f8fafc'),
-                          border: esAhora ? '2px solid #14b8a6' : '1px solid #e2e8f0',
+                          border: esAhora ? `2px solid ${verde}` : '1px solid #e2e8f0',
                           verticalAlign: 'top',
                         }}>
-                          {celdas.length > 0 ? (
-                            <div style={{ padding: 2 }}>
-                              {celdas.map((c, i) => {
-                                const esGuardia = (c.tipo || '').toLowerCase().includes('guardia') || (c.actividad || '').toLowerCase().includes('guardia');
-                                return (
-                                  <div key={i} style={{
-                                    padding: '4px 6px', borderRadius: 6, marginBottom: i < celdas.length - 1 ? 3 : 0,
-                                    backgroundColor: esGuardia ? '#fef3c7' : '#eff6ff',
-                                    border: `1px solid ${esGuardia ? '#fcd34d' : '#bfdbfe'}`,
-                                  }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, color: esGuardia ? '#92400e' : '#1e40af' }}>
-                                      {c.actividad || c.materia || c.tipo || '—'}
-                                    </div>
-                                    {c.grupo && <div style={{ fontSize: 10, color: '#555' }}>{c.grupo}</div>}
-                                    {c.aula && <div style={{ fontSize: 9, color: '#888' }}>📍 {c.aula}</div>}
-                                  </div>
-                                );
-                              })}
-                            </div>
+                          {esRecreo && celdas.length === 0 ? (
+                            <span style={{ fontSize: 11, color: '#94a3b8' }}>☕</span>
                           ) : (
-                            <span style={{ fontSize: 10, color: '#ccc' }}>—</span>
+                            <div style={{ padding: 2 }}>{renderCelda(celdas, esAhora)}</div>
                           )}
                         </td>
                       );
@@ -213,21 +272,27 @@ export default function HorarioProfesor() {
 
           {/* LEYENDA */}
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 12, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-              <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }} />
-              <span>Clase</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-              <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: '#fef3c7', border: '1px solid #fcd34d' }} />
-              <span>Guardia</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
-              <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: '#ccfbf1', border: '1px solid #14b8a6' }} />
-              <span>Hora actual</span>
-            </div>
+            {[
+              { bg: '#eff6ff', border: '#bfdbfe', label: 'Clase' },
+              { bg: '#fef3c7', border: '#fcd34d', label: 'Guardia' },
+              { bg: '#ccfbf1', border: '#14b8a6', label: 'Ahora' },
+            ].map(l => (
+              <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                <div style={{ width: 14, height: 14, borderRadius: 3, backgroundColor: l.bg, border: `1px solid ${l.border}` }} />
+                <span>{l.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function HorarioPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>⏳ Cargando...</div>}>
+      <HorarioContenido />
+    </Suspense>
   );
 }
