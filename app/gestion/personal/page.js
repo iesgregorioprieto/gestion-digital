@@ -94,7 +94,7 @@ export default function PanelSecretario() {
     mostrarMensaje('✅ Profesor aprobado', 'ok');
     // Enviar email de activación de cuenta
     try {
-      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', id);
+      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
       const prof = (rows.data || [])[0];
       if (prof?.email) {
         await fetch('/api/enviar-email', {
