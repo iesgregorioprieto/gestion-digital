@@ -159,6 +159,16 @@ export default function PanelProfesor() {
 
   const MODULOS = [
     {
+      id: 'horario',
+      emoji: '🕐',
+      titulo: 'Mi Horario',
+      descripcion: 'Consulta tu horario semanal completo',
+      href: '/horario',
+      disponible: true,
+      roles: ['todos'],
+      color: '#0f766e', bg: '#f0fdfa', border: '#5eead4',
+    },
+    {
       id: 'guardias',
       emoji: '🛡️',
       titulo: 'Guardias',
