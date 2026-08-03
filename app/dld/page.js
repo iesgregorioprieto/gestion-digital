@@ -283,8 +283,8 @@ export default function DLD() {
           .eq('fecha_solicitada', form.fecha_solicitada)
           .eq('estado', 'aprobada');
         const { data: profActivos } = await getSupabase().from('profesores')
-          .select('id, sustituye_a').eq('estado', 'activo');
-        const sustitutos = (profActivos || []).filter(p => p.sustituye_a).length;
+          .select('id, titular_id').eq('estado', 'activo');
+        const sustitutos = (profActivos || []).filter(p => p.titular_id).length;
         const totalReal = (profActivos || []).length - sustitutos;
         const maxPermitidos = Math.floor(totalReal / 3);
         const numAprobados = (aprobados || []).length;
