@@ -625,16 +625,25 @@ export default function PanelSecretario() {
           
           {/* PESTAÑAS */}
           <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-            {['datos', 'baja'].map(tab => (
-              <button key={tab} onClick={() => setPestanaFicha(tab)} style={{
-                padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                fontWeight: 700, fontSize: 13,
-                backgroundColor: pestanaFicha === tab ? (tab === 'baja' ? '#b91c1c' : '#1a56db') : '#f3f4f6',
-                color: pestanaFicha === tab ? 'white' : '#555',
-              }}>
-                {tab === 'datos' ? '📋 Datos' : '🏥 Baja / Sustitución'}
-              </button>
-            ))}
+            {['datos', 'baja'].map(tab => {
+              const enBaja = tab === 'baja' && profesorSeleccionado.en_baja;
+              return (
+                <button key={tab} onClick={() => setPestanaFicha(tab)} style={{
+                  padding: '8px 16px', borderRadius: 8, border: enBaja && pestanaFicha !== tab ? '1.5px solid #fca5a5' : 'none', cursor: 'pointer',
+                  fontWeight: 700, fontSize: 13, position: 'relative',
+                  backgroundColor: pestanaFicha === tab ? (tab === 'baja' ? '#b91c1c' : '#1a56db') : (enBaja ? '#fef2f2' : '#f3f4f6'),
+                  color: pestanaFicha === tab ? 'white' : (enBaja ? '#b91c1c' : '#555'),
+                }}>
+                  {tab === 'datos' ? '📋 Datos' : '🏥 Baja / Sustitución'}
+                  {enBaja && pestanaFicha !== tab && (
+                    <span style={{
+                      position: 'absolute', top: -4, right: -4, width: 10, height: 10, borderRadius: '50%',
+                      backgroundColor: '#dc2626', border: '2px solid white',
+                    }} />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* PESTAÑA DATOS */}
