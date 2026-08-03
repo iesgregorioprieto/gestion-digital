@@ -135,6 +135,16 @@ export default function PanelGestion() {
       border: '#fbcfe8',
       color: '#be185d',
     },
+    {
+      id: 'sala',
+      emoji: '🖥️',
+      titulo: 'Panel Sala de Profesores',
+      descripcion: 'Gestiona avisos y accede a la pantalla de la sala',
+      href: '/gestion/sala',
+      bg: '#f0f9ff',
+      border: '#bae6fd',
+      color: '#0369a1',
+    },
   ];
 
   return (
