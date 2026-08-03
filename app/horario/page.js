@@ -47,36 +47,51 @@ function HorarioContenido() {
 
   async function cargarHorario() {
     setCargando(true);
-    const n = sessionStorage.getItem('profesor_nombre');
-    const apellidos = sessionStorage.getItem('profesor_apellidos') || '';
-    setNombre(n ? (n + ' ' + apellidos) : '');
+    const nombreCompleto = sessionStorage.getItem('profesor_nombre') || '';
+    const profId = sessionStorage.getItem('profesor_id');
+    setNombre(nombreCompleto);
 
-    if (!n) {
+    if (!profId) {
       setError('No se ha identificado al profesor. Vuelve al panel e inicia sesión.');
       setCargando(false);
       return;
     }
 
     try {
-      const { data: matches } = await getSupabase()
-        .rpc('buscar_profesor_horario', { p_nombre: n.split(' ')[0], p_apellido: (apellidos || n).split(' ')[0] });
-      const nombrePdf = matches?.[0]?.profesor_nombre_pdf || '';
+      // Paso 1: obtener nombre y apellidos separados (igual que DLD)
+      const { data: profRows } = await getSupabase()
+        .from('profesores')
+        .select('nombre, apellidos')
+        .eq('id', profId);
+      const prof = (profRows || [])[0];
 
-      if (nombrePdf) {
-        const { data } = await getSupabase()
-          .from('horarios_profesores')
-          .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
-          .eq('profesor_nombre_pdf', nombrePdf)
-          .eq('curso_academico', '2025-2026');
-        setHorario(data || []);
-      } else {
-        const { data } = await getSupabase()
-          .from('horarios_profesores')
-          .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
-          .ilike('profesor_nombre_pdf', `%${(apellidos || n).split(' ')[0]}%`)
-          .eq('curso_academico', '2025-2026');
-        setHorario(data || []);
+      if (!prof) {
+        setError('No se encontró tu perfil. Contacta con secretaría.');
+        setCargando(false);
+        return;
       }
+
+      // Paso 2: buscar profesor_nombre_pdf con RPC (igual que DLD)
+      const { data: nPdf } = await getSupabase()
+        .rpc('buscar_profesor_horario', {
+          p_nombre: prof.nombre.split(' ')[0],
+          p_apellido: prof.apellidos.split(' ')[0]
+        });
+
+      if (!nPdf) {
+        setError('No se encontró tu horario. Contacta con secretaría.');
+        setCargando(false);
+        return;
+      }
+
+      // Paso 3: cargar horario completo con ese nombre (igual que DLD)
+      const { data } = await getSupabase()
+        .from('horarios_profesores')
+        .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
+        .eq('profesor_nombre_pdf', nPdf)
+        .eq('curso_academico', '2025-2026');
+
+      setHorario(data || []);
     } catch (e) {
       console.error('Error horario:', e);
       setError('Error al cargar el horario.');
