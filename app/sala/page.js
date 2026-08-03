@@ -28,6 +28,7 @@ function horaActual() {
 export default function SalaProfesores() {
   const [ausencias, setAusencias] = useState([]);
   const [dlds, setDlds] = useState([]);
+  const [apoyos, setApoyos] = useState([]);
   const [avisos, setAvisos] = useState([]);
   const [reloj, setReloj] = useState(new Date());
   const [ultimaCarga, setUltimaCarga] = useState(null);
@@ -57,6 +58,14 @@ export default function SalaProfesores() {
         .eq('estado', 'aprobada');
       setDlds(data || []);
     } catch(e) {}
+
+    // Apoyos de guardia asignados hoy
+    try {
+      const { data } = await sb.from('apoyos_asignados')
+        .select('*')
+        .eq('fecha', hoy);
+      setApoyos(data || []);
+    } catch(e) { setApoyos([]); }
 
     // Avisos del equipo directivo
     try {
@@ -213,7 +222,7 @@ export default function SalaProfesores() {
           </div>
         </div>
 
-        {/* COLUMNA DERECHA: HORARIO DEL DÍA + AVISOS */}
+        {/* COLUMNA DERECHA: GUARDIAS + AVISOS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
 
           {/* FRANJA HORARIA ACTUAL */}
@@ -242,13 +251,50 @@ export default function SalaProfesores() {
             </div>
           </div>
 
+          {/* GUARDIAS ASIGNADAS */}
+          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', flex: apoyos.length > 0 ? 1 : 'none', overflow: 'auto' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>🛡️ Guardias asignadas hoy</h2>
+            {apoyos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 16, opacity: 0.5, fontSize: 13 }}>
+                Sin guardias asignadas
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {HORAS.map(h => {
+                  const apoyosHora = apoyos.filter(a => {
+                    const horaId = (a.hora_id || '').toString().replace(/[aª]/g, '');
+                    return horaId === h.id;
+                  });
+                  if (apoyosHora.length === 0) return null;
+                  return (
+                    <div key={h.id} style={{
+                      backgroundColor: h.id === horaAct ? '#1e3a5f' : '#0f172a',
+                      borderRadius: 8, padding: '8px 12px',
+                      border: h.id === horaAct ? '1.5px solid #3b82f6' : '1px solid #334155',
+                    }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{h.label} ({h.rango})</div>
+                      {apoyosHora.map((a, i) => (
+                        <div key={i} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
+                          <span style={{ fontWeight: 600 }}>👤 {a.profesor_nombre || 'Profesor'}</span>
+                          <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                            {a.grupo ? `→ ${a.grupo}` : ''} {a.aula ? `(${a.aula})` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* AVISOS */}
           <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>📢 Avisos del equipo directivo</h2>
             {avisos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
-                <div style={{ fontSize: 40 }}>📌</div>
-                <p>Sin avisos hoy</p>
+              <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
+                <div style={{ fontSize: 30 }}>📌</div>
+                <p style={{ fontSize: 13 }}>Sin avisos</p>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
