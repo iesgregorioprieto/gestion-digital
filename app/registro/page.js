@@ -78,19 +78,27 @@ export default function Registro() {
 
       if (err) { setError('Error: ' + err.message); setVerificando(false); return; }
 
-      const prof = data?.[0];
+      let prof = data?.[0];
 
-      // Caso 1: email no autorizado
-      if (!prof) { setPantalla('no_autorizado'); setVerificando(false); return; }
+      // Si no está en la tabla → crear registro nuevo como pendiente
+      if (!prof) {
+        const { data: newData, error: insErr } = await getSupabase()
+          .from('profesores')
+          .insert({ email: emailLimpio, estado: 'pendiente', solicitud_acceso: false })
+          .select();
+        if (insErr) { setError('Error al crear registro: ' + insErr.message); setVerificando(false); return; }
+        prof = (newData || [])[0];
+      }
 
-      // Caso 2: ya tiene contraseña → ya está registrado
+      // Ya tiene contraseña → ya está registrado
       if (prof.password_hash && prof.password_hash.length > 0) {
         setPantalla('ya_registrado'); setVerificando(false); return;
       }
 
-      // Caso 3: activo pero sin contraseña → PUEDE COMPLETAR SU FICHA
+      // Activo pero sin contraseña → PUEDE COMPLETAR SU FICHA
       if (prof.estado === 'activo') {
         setProfesorId(prof.id);
+        setEmailVerificado(emailLimpio);
         setForm(f => ({
           ...f,
           nombre: prof.nombre || '',
@@ -108,23 +116,27 @@ export default function Registro() {
         return;
       }
 
-      // Caso 4: pendiente y ya ha solicitado acceso
+      // Pendiente y ya ha completado datos → esperando aprobación
       if (prof.estado === 'pendiente' && prof.solicitud_acceso) {
         setPantalla('pendiente_aprobacion'); setVerificando(false); return;
       }
 
-      // Caso 5: pendiente sin solicitar → MARCAR SOLICITUD
-      if (prof.estado === 'pendiente' && !prof.solicitud_acceso) {
-        const { error: err2 } = await getSupabase()
-          .from('profesores')
-          .update({ solicitud_acceso: true })
-          .eq('id', prof.id);
-        if (err2) { setError('Error: ' + err2.message); setVerificando(false); return; }
-        setPantalla('solicitud_enviada'); setVerificando(false); return;
-      }
-
-      // Caso 6: inactivo → rechazado
-      setError('Tu cuenta ha sido desactivada. Contacta con secretaría.');
+      // Pendiente sin completar datos → rellenar ficha
+      setProfesorId(prof.id);
+      setEmailVerificado(emailLimpio);
+      setForm(f => ({
+        ...f,
+        nombre: prof.nombre || '',
+        apellidos: prof.apellidos || '',
+        departamento: prof.departamento || '',
+        especialidad: prof.especialidad || '',
+        tipo_contrato: prof.tipo_contrato || 'Funcionario de carrera',
+        antiguedad_centro: prof.antiguedad_centro?.toString() || '',
+        antiguedad_cuerpo: prof.antiguedad_cuerpo?.toString() || '',
+        roles: Array.isArray(prof.rol) && prof.rol.length > 0 ? prof.rol : ['profesor'],
+        grupo_tutoria: prof.grupo_tutoria || '',
+      }));
+      setPantalla('completar_datos');
       setVerificando(false);
     } catch (e) {
       setError('Error inesperado: ' + e.message);
@@ -179,6 +191,8 @@ export default function Registro() {
           })
         });
       } catch(e) { console.error('Email registro pendiente:', e); }
+      // Marcar solicitud completada
+      await getSupabase().from('profesores').update({ solicitud_acceso: true }).eq('id', profesorId);
       setPantalla('listo');
     } catch (e) {
       setError('Error inesperado: ' + e.message);
