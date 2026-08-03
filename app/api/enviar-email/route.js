@@ -178,6 +178,31 @@ export async function POST(request) {
           </div>
         </div>`;
 
+    } else if (tipo === 'recuperar_password') {
+      subject = '🔑 Restablecer contraseña — APrieto';
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e3a5f;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#adc8e8;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:30px;background:#f9f9f9">
+            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <p>Has solicitado restablecer tu contraseña del portal.</p>
+            <p>Pulsa el botón para elegir una nueva contraseña:</p>
+            <div style="text-align:center;margin:30px 0">
+              <a href="${datos.enlace}"
+                 style="background:#1e3a5f;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+                Restablecer contraseña
+              </a>
+            </div>
+            <p style="color:#666;font-size:13px">Este enlace caduca en <strong>30 minutos</strong>. Si no has solicitado esto, ignora este correo.</p>
+          </div>
+          <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
     } else {
       return Response.json({ error: 'Tipo de email desconocido' }, { status: 400 });
     }
