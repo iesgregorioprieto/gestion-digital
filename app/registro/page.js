@@ -155,7 +155,15 @@ export default function Registro() {
           antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
           rol: form.roles,
           grupo_tutoria: form.roles.includes('tutor') ? (form.grupo_tutoria || null) : null,
-          password_hash: form.password,
+          password_hash: await (async () => {
+            const r = await fetch('/api/password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ accion: 'hash', password: form.password }),
+            });
+            const d = await r.json();
+            return d.hash;
+          })(),
         })
         .eq('id', profesorId);
 
