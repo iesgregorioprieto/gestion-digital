@@ -275,6 +275,31 @@ export default function DLD() {
       return;
     }
 
+    // Comprobar si se supera el tercio en día no lectivo
+    if (form.tipo_dld === 'no_lectivo') {
+      try {
+        const { data: aprobados } = await getSupabase().from('dld')
+          .select('id, profesor_nombre, antiguedad_cuerpo, antiguedad_centro')
+          .eq('fecha_solicitada', form.fecha_solicitada)
+          .eq('estado', 'aprobada');
+        const { data: profActivos } = await getSupabase().from('profesores')
+          .select('id, sustituye_a').eq('estado', 'activo');
+        const sustitutos = (profActivos || []).filter(p => p.sustituye_a).length;
+        const totalReal = (profActivos || []).length - sustitutos;
+        const maxPermitidos = Math.floor(totalReal / 3);
+        const numAprobados = (aprobados || []).length;
+
+        if (numAprobados >= maxPermitidos) {
+          const continuar = confirm(
+            `⚠️ AVISO: Ya hay ${numAprobados} DLD aprobados para esa fecha (límite: ${maxPermitidos}, que es 1/3 del claustro).\n\n` +
+            `Si envías esta solicitud y el director la aprueba, un compañero/a con menor prelación podría perder su DLD concedido.\n\n` +
+            `¿Quieres continuar con la solicitud?`
+          );
+          if (!continuar) { setEnviando(false); return; }
+        }
+      } catch(e) { console.error('Error comprobando cupo DLD:', e); }
+    }
+
     setEnviando(true);
     try {
       // 📎 SUBIR ARCHIVOS ADJUNTOS al Storage
