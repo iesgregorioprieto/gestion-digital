@@ -92,17 +92,22 @@ export default function GestionDatos() {
 
   async function cargarStats() {
     setCargando(true);
-    const [{ data: gs }, { data: als }, { data: hrs }] = await Promise.all([
+    const [{ data: gs }, { data: als }, { data: hrs }, { data: profs }, { data: guards }] = await Promise.all([
       getSupabase().from('grupos').select('codigo, curso_academico').order('codigo'),
       getSupabase().from('alumnos').select('id, grupo'),
-      getSupabase().from('horarios_profesores').select('id').limit(1),
+      getSupabase().from('horarios_profesores').select('id, curso_academico'),
+      getSupabase().from('profesores').select('id, estado'),
+      getSupabase().from('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
     ]);
     const curso = gs?.[0]?.curso_academico || '—';
     setGrupos(gs || []);
     setStats({
       grupos: gs?.length || 0,
       alumnos: als?.length || 0,
-      horarios: hrs?.length > 0 ? '✅' : '❌',
+      horarios: hrs?.length || 0,
+      profesores: profs?.filter(p => p.estado === 'activo').length || 0,
+      profesoresTotal: profs?.length || 0,
+      guardias: guards?.length > 0,
       cursoActual: curso,
     });
     setCargando(false);
@@ -759,47 +764,116 @@ export default function GestionDatos() {
 
       <div style={{ padding: 16 }}>
 
-        {/* STATS */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
-          {[
-            { label: 'Grupos', valor: stats.grupos, emoji: '📚', color: azul },
-            { label: 'Alumnos', valor: stats.alumnos, emoji: '👥', color: verde },
-            { label: 'Horarios', valor: stats.horarios, emoji: '🕐', color: '#7c2d12' },
-            { label: 'Curso', valor: stats.cursoActual, emoji: '📅', color: '#6d28d9' },
-          ].map(s => (
-            <div key={s.label} style={{ backgroundColor: 'white', borderRadius: 10, padding: '10px 12px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontSize: 18 }}>{s.emoji}</div>
-              <div style={{ fontSize: s.label === 'Curso' || s.label === 'Horarios' ? 14 : 20, fontWeight: 800, color: s.color }}>{s.valor || '—'}</div>
-              <div style={{ fontSize: 10, color: '#888' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* CURSO */}
-        <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-          <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>📅 Curso académico</label>
-          <input value={cursoNuevo} onChange={e => setCursoNuevo(e.target.value)} placeholder="2025-2026" style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
-          <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Asocia los datos importados a este curso. Al reimportar se borran los anteriores del mismo curso.</div>
-        </div>
-
-        {/* BANNER INICIO DE CURSO COLAPSABLE */}
-        {mostrarGuia && (
-          <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fbbf24', borderRadius: 12, padding: '12px 16px', marginBottom: 14, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 800, fontSize: 13, color: '#92400e', marginBottom: 4 }}>
-                ⚠️ Al inicio de cada curso sube estos archivos en orden:
-              </div>
-              <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.6 }}>
-                <strong>1.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('alumnos')}>👥 CSV de matrículas</span> (Delphos → Alumnado → Matrículas → Exportar CSV)
-                <br />
-                <strong>2.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('horarios')}>🕐 RAR de horarios HTML</span> (Delphos → Horarios → Exportar → HTML indexado)
-                <br />
-                <strong>3.</strong> <span style={{ cursor: 'pointer', textDecoration: 'underline' }} onClick={() => setVistaTab('profesorado')}>👨‍🏫 CSV de profesorado</span> (Delphos → Personal → Profesores → Exportar CSV)
-              </div>
-            </div>
-            <button onClick={() => setMostrarGuia(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#aaa', padding: 0, lineHeight: 1 }} title="Ocultar">✕</button>
+        {/* PANEL ARRANQUE DE CURSO */}
+        <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 18, marginBottom: 18, boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1.5px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h2 style={{ margin: 0, fontSize: 16, color: azul, fontWeight: 800 }}>🎓 Panel de arranque de curso</h2>
+            <button onClick={() => setMostrarGuia(!mostrarGuia)} style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', color: azul, fontWeight: 600 }}>
+              {mostrarGuia ? '▲ Ocultar' : '▼ Desplegar'}
+            </button>
           </div>
-        )}
+
+          {/* CURSO ACADÉMICO */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: mostrarGuia ? 16 : 0 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>📅 Curso:</label>
+            <input value={cursoNuevo} onChange={e => setCursoNuevo(e.target.value)} placeholder="2026-2027" style={{ padding: '7px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: 130 }} />
+            <span style={{ fontSize: 11, color: '#888' }}>Actual: <strong>{stats.cursoActual || '—'}</strong></span>
+          </div>
+
+          {mostrarGuia && (
+            <>
+              {/* PASOS */}
+              <div style={{ display: 'grid', gap: 10, marginBottom: 16 }}>
+                {[
+                  {
+                    paso: 1,
+                    titulo: 'CSV de matrículas',
+                    descripcion: 'Delphos → Alumnado → Matrículas → Exportar CSV',
+                    tab: 'alumnos',
+                    emoji: '👥',
+                    completado: stats.alumnos > 0,
+                    detalle: stats.alumnos > 0 ? `${stats.alumnos} alumnos en ${stats.grupos} grupos` : 'Sin cargar',
+                  },
+                  {
+                    paso: 2,
+                    titulo: 'Carpeta de horarios HTML',
+                    descripcion: 'Delphos → Horarios → Exportar → HTML indexado (descomprimir RAR)',
+                    tab: 'horarios',
+                    emoji: '🕐',
+                    completado: stats.horarios > 0,
+                    detalle: stats.horarios > 0 ? `${stats.horarios} registros de horarios` : 'Sin cargar',
+                  },
+                  {
+                    paso: 3,
+                    titulo: 'CSV de profesorado',
+                    descripcion: 'Delphos → Personal → Profesores → Exportar CSV',
+                    tab: 'profesorado',
+                    emoji: '👨‍🏫',
+                    completado: stats.profesoresTotal > 0,
+                    detalle: stats.profesoresTotal > 0 ? `${stats.profesoresTotal} profesores (${stats.profesores} activos)` : 'Sin cargar',
+                  },
+                  {
+                    paso: 4,
+                    titulo: 'Cuadrante de guardias',
+                    descripcion: 'Delphos → Complementarias → Exportar → Carpeta HTML',
+                    tab: 'guardias',
+                    emoji: '🛡️',
+                    completado: stats.guardias,
+                    detalle: stats.guardias ? 'Cuadrante cargado' : 'Sin cargar (opcional al inicio)',
+                  },
+                ].map(p => (
+                  <div key={p.paso} onClick={() => setVistaTab(p.tab)} style={{
+                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px',
+                    borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s',
+                    backgroundColor: p.completado ? '#f0fdf4' : '#fefce8',
+                    border: `1.5px solid ${p.completado ? '#86efac' : '#fde68a'}`,
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      backgroundColor: p.completado ? '#22c55e' : '#f59e0b', color: 'white', fontWeight: 800, fontSize: 14,
+                    }}>
+                      {p.completado ? '✓' : p.paso}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#1f2937' }}>{p.emoji} {p.titulo}</div>
+                      <div style={{ fontSize: 11, color: '#6b7280' }}>{p.descripcion}</div>
+                    </div>
+                    <div style={{
+                      fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                      backgroundColor: p.completado ? '#dcfce7' : '#fef9c3',
+                      color: p.completado ? '#166534' : '#854d0e',
+                    }}>
+                      {p.detalle}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* RESUMEN */}
+              {(() => {
+                const completados = [stats.alumnos > 0, stats.horarios > 0, stats.profesoresTotal > 0].filter(Boolean).length;
+                const total = 3;
+                const pct = Math.round((completados / total) * 100);
+                return (
+                  <div style={{ backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Progreso arranque de curso</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: pct === 100 ? '#16a34a' : '#d97706' }}>{completados}/{total} obligatorios</span>
+                    </div>
+                    <div style={{ height: 8, backgroundColor: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, backgroundColor: pct === 100 ? '#22c55e' : '#f59e0b', borderRadius: 4, transition: 'width 0.5s' }} />
+                    </div>
+                    {pct === 100 && (
+                      <div style={{ marginTop: 8, fontSize: 12, color: '#16a34a', fontWeight: 600, textAlign: 'center' }}>
+                        🎉 ¡Datos del curso listos! El portal está preparado para funcionar.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+            </>
+          )}
+        </div>
 
         {/* TABS */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
