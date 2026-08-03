@@ -30,7 +30,8 @@ export default function HorarioProfesor() {
   async function cargarHorario() {
     setCargando(true);
     const n = sessionStorage.getItem('profesor_nombre');
-    setNombre(n || '');
+    const apellidos = sessionStorage.getItem('profesor_apellidos') || '';
+    setNombre(n ? (n + ' ' + apellidos) : '');
 
     if (!n) {
       setError('No se ha identificado al profesor. Vuelve al panel e inicia sesión.');
@@ -39,23 +40,32 @@ export default function HorarioProfesor() {
     }
 
     try {
-      // Buscar horario usando la función de normalización
-      const { data, error: err } = await getSupabase()
-        .rpc('buscar_profesor_horario', { nombre_buscar: n });
+      // Paso 1: buscar nombre en horarios usando RPC (igual que DLD)
+      const { data: matches } = await getSupabase()
+        .rpc('buscar_profesor_horario', { p_nombre: n.split(' ')[0], p_apellido: (apellidos || n).split(' ')[0] });
 
-      if (err) throw err;
-      setHorario(data || []);
-    } catch (e) {
-      // Fallback: buscar directo
-      try {
+      const nombrePdf = matches?.[0]?.profesor_nombre_pdf || '';
+
+      if (nombrePdf) {
+        // Paso 2: cargar horario completo por nombre PDF
         const { data } = await getSupabase()
           .from('horarios_profesores')
-          .select('*')
-          .ilike('profesor', `%${n}%`);
+          .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
+          .eq('profesor_nombre_pdf', nombrePdf)
+          .eq('curso_academico', '2025-2026');
         setHorario(data || []);
-      } catch(e2) {
-        setError('Error al cargar horario');
+      } else {
+        // Fallback: buscar por coincidencia parcial
+        const { data } = await getSupabase()
+          .from('horarios_profesores')
+          .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
+          .ilike('profesor_nombre_pdf', `%${(apellidos || n).split(' ')[0]}%`)
+          .eq('curso_academico', '2025-2026');
+        setHorario(data || []);
       }
+    } catch (e) {
+      console.error('Error horario:', e);
+      setError('Error al cargar el horario.');
     }
     setCargando(false);
   }
