@@ -168,6 +168,17 @@ export default function Registro() {
         .eq('id', profesorId);
 
       if (err) { setError('Error: ' + err.message); setEnviando(false); return; }
+      // Email al profesor: registro pendiente de autorización
+      try {
+        await fetch('/api/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo: 'registro_pendiente',
+            datos: { nombre: form.nombre + ' ' + form.apellidos, email: emailVerificado }
+          })
+        });
+      } catch(e) { console.error('Email registro pendiente:', e); }
       setPantalla('listo');
     } catch (e) {
       setError('Error inesperado: ' + e.message);
