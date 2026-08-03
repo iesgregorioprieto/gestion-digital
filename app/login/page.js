@@ -214,7 +214,13 @@ export default function Login() {
           {cargando ? 'Comprobando...' : '→ Entrar'}
         </button>
 
-        <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#888' }}>
+        <div style={{ textAlign: 'center', marginTop: 14 }}>
+          <a href="/recuperar" style={{ color: '#888', fontSize: 12, textDecoration: 'none' }}>
+            🔑 ¿Has olvidado tu contraseña?
+          </a>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 10, fontSize: 13, color: '#888' }}>
           ¿Aún no tienes cuenta?{' '}
           <a href="/registro" style={{ color: verde, fontWeight: 600, textDecoration: 'none' }}>
             Regístrate aquí
