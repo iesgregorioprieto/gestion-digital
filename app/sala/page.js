@@ -1,0 +1,274 @@
+"use client";
+import { useState, useEffect, useCallback } from "react";
+import { getSupabase } from "../../lib/supabase";
+
+const HORAS = [
+  { id: '1', label: '1ª', rango: '8:30–9:25' },
+  { id: '2', label: '2ª', rango: '9:25–10:20' },
+  { id: '3', label: '3ª', rango: '10:20–11:15' },
+  { id: '4', label: '4ª', rango: '11:45–12:40' },
+  { id: '5', label: '5ª', rango: '12:40–13:35' },
+  { id: '6', label: '6ª', rango: '13:35–14:30' },
+];
+
+const DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+
+function horaActual() {
+  const h = new Date().getHours();
+  const m = new Date().getMinutes();
+  const t = h * 60 + m;
+  if (t < 565) return '1'; // antes 9:25
+  if (t < 615) return '2'; // antes 10:15... aprox
+  if (t < 675) return '3';
+  if (t < 760) return '4';
+  if (t < 815) return '5';
+  return '6';
+}
+
+export default function SalaProfesores() {
+  const [ausencias, setAusencias] = useState([]);
+  const [dlds, setDlds] = useState([]);
+  const [avisos, setAvisos] = useState([]);
+  const [reloj, setReloj] = useState(new Date());
+  const [ultimaCarga, setUltimaCarga] = useState(null);
+
+  const hoy = new Date().toISOString().split('T')[0];
+  const diaIdx = new Date().getDay();
+  const diaNombre = DIAS[diaIdx];
+  const horaAct = horaActual();
+
+  const cargarDatos = useCallback(async () => {
+    const sb = getSupabase();
+
+    // Ausencias de hoy
+    try {
+      const { data } = await sb.from('ausencias')
+        .select('profesor_nombre, horas, fecha_inicio, fecha_fin')
+        .lte('fecha_inicio', hoy)
+        .or(`fecha_fin.gte.${hoy},fecha_fin.is.null`);
+      setAusencias(data || []);
+    } catch(e) {}
+
+    // DLD aprobados de hoy
+    try {
+      const { data } = await sb.from('dld')
+        .select('profesor_nombre, horas, grupos_afectados, guardias_horario')
+        .eq('fecha_solicitada', hoy)
+        .eq('estado', 'aprobada');
+      setDlds(data || []);
+    } catch(e) {}
+
+    // Avisos del equipo directivo
+    try {
+      const { data } = await sb.from('avisos_sala')
+        .select('*')
+        .eq('activo', true)
+        .order('created_at', { ascending: false });
+      setAvisos(data || []);
+    } catch(e) { setAvisos([]); }
+
+    setUltimaCarga(new Date());
+  }, [hoy]);
+
+  useEffect(() => {
+    cargarDatos();
+    const intervalo = setInterval(cargarDatos, 120000); // cada 2 min
+    const relojInterval = setInterval(() => setReloj(new Date()), 1000);
+    return () => { clearInterval(intervalo); clearInterval(relojInterval); };
+  }, [cargarDatos]);
+
+  // Profesores ausentes con sus horas
+  const profesAusentes = {};
+  for (const a of ausencias) {
+    const nombre = a.profesor_nombre || '?';
+    if (!profesAusentes[nombre]) profesAusentes[nombre] = { horas: [], tipo: 'ausencia' };
+    if (Array.isArray(a.horas)) {
+      a.horas.forEach(h => {
+        const horaId = typeof h === 'object' ? (h.hora || '').toString().replace(/[aª]/g, '') : h.toString().replace(/[aª]/g, '');
+        if (horaId && !profesAusentes[nombre].horas.includes(horaId)) {
+          profesAusentes[nombre].horas.push(horaId);
+        }
+      });
+    } else {
+      // Ausencia prolongada sin horas específicas → todas las horas
+      HORAS.forEach(h => { if (!profesAusentes[nombre].horas.includes(h.id)) profesAusentes[nombre].horas.push(h.id); });
+    }
+  }
+  for (const d of dlds) {
+    const nombre = d.profesor_nombre || '?';
+    if (!profesAusentes[nombre]) profesAusentes[nombre] = { horas: [], tipo: 'dld' };
+    profesAusentes[nombre].tipo = 'dld';
+    const horasReconstruidas = [];
+    if (Array.isArray(d.horas)) {
+      d.horas.forEach(h => {
+        const horaId = typeof h === 'object' ? (h.hora || '').toString().replace(/[aª]/g, '') : h.toString().replace(/[aª]/g, '');
+        if (horaId) horasReconstruidas.push(horaId);
+      });
+    } else if (Array.isArray(d.grupos_afectados)) {
+      d.grupos_afectados.forEach(g => {
+        const hs = Array.isArray(g.horas) ? g.horas : (g.hora ? [g.hora] : []);
+        hs.forEach(h => {
+          const horaId = typeof h === 'object' ? (h.hora || '').toString().replace(/[aª]/g, '') : h.toString().replace(/[aª]/g, '');
+          if (horaId) horasReconstruidas.push(horaId);
+        });
+      });
+    }
+    horasReconstruidas.forEach(h => {
+      if (!profesAusentes[nombre].horas.includes(h)) profesAusentes[nombre].horas.push(h);
+    });
+  }
+
+  const totalAusentesAhora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(horaAct)).length;
+  const totalAusentesHoy = Object.keys(profesAusentes).length;
+
+  const formatFecha = () => {
+    const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    return new Date().toLocaleDateString('es-ES', opciones);
+  };
+
+  const azul = '#1e3a5f';
+  const verde = '#16a34a';
+
+  return (
+    <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
+
+      {/* HEADER */}
+      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 16, opacity: 0.8, textTransform: 'capitalize' }}>{formatFecha()}</p>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 48, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+            {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.6 }}>
+            Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, padding: 20, height: 'calc(100vh - 110px)' }}>
+
+        {/* COLUMNA IZQUIERDA: AUSENCIAS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+
+          {/* RESUMEN */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Ausentes hoy</div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
+              <div style={{ fontSize: 36, fontWeight: 800, color: '#ef4444' }}>{totalAusentesAhora}</div>
+              <div style={{ fontSize: 13, opacity: 0.7 }}>Ausentes ahora ({HORAS.find(h => h.id === horaAct)?.label || ''})</div>
+            </div>
+          </div>
+
+          {/* LISTA DE AUSENTES */}
+          <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>🏥 Profesores ausentes hoy</h2>
+            {totalAusentesHoy === 0 ? (
+              <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
+                <div style={{ fontSize: 40 }}>✅</div>
+                <p>Sin ausencias hoy</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {Object.entries(profesAusentes).sort((a,b) => a[0].localeCompare(b[0])).map(([nombre, info]) => (
+                  <div key={nombre} style={{
+                    backgroundColor: info.horas.includes(horaAct) ? '#7f1d1d' : '#0f172a',
+                    borderRadius: 8, padding: '10px 14px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    border: info.horas.includes(horaAct) ? '1px solid #ef4444' : '1px solid #334155',
+                  }}>
+                    <div>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{nombre}</span>
+                      <span style={{
+                        marginLeft: 8, fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                        backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
+                        color: 'white',
+                      }}>
+                        {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {HORAS.map(h => (
+                        <span key={h.id} style={{
+                          width: 26, height: 26, borderRadius: '50%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 11, fontWeight: 700,
+                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaAct ? '#ef4444' : '#475569') : 'transparent',
+                          color: info.horas.includes(h.id) ? 'white' : '#475569',
+                          border: h.id === horaAct ? '2px solid #ef4444' : '1px solid #475569',
+                        }}>
+                          {h.label.replace('ª','')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* COLUMNA DERECHA: HORARIO DEL DÍA + AVISOS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+
+          {/* FRANJA HORARIA ACTUAL */}
+          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>🕐 Franjas del día</h2>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {HORAS.map(h => (
+                <div key={h.id} style={{
+                  flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: 8,
+                  backgroundColor: h.id === horaAct ? '#1d4ed8' : '#0f172a',
+                  border: h.id === horaAct ? '2px solid #3b82f6' : '1px solid #334155',
+                  transition: 'all 0.3s',
+                }}>
+                  <div style={{ fontSize: 16, fontWeight: 800 }}>{h.label}</div>
+                  <div style={{ fontSize: 10, opacity: 0.6 }}>{h.rango}</div>
+                  {(() => {
+                    const ausEstaHora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(h.id)).length;
+                    return ausEstaHora > 0 ? (
+                      <div style={{ marginTop: 4, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>⚠️ {ausEstaHora}</div>
+                    ) : (
+                      <div style={{ marginTop: 4, fontSize: 12, color: '#22c55e' }}>✓</div>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* AVISOS */}
+          <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>📢 Avisos del equipo directivo</h2>
+            {avisos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
+                <div style={{ fontSize: 40 }}>📌</div>
+                <p>Sin avisos hoy</p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {avisos.map((a, i) => (
+                  <div key={a.id || i} style={{
+                    backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                    borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
+                  }}>
+                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                      {a.urgente ? '🔴' : '📌'} {a.titulo}
+                    </div>
+                    <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.4 }}>{a.mensaje}</div>
+                    <div style={{ fontSize: 10, opacity: 0.4, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
