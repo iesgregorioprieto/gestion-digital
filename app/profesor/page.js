@@ -159,16 +159,6 @@ export default function PanelProfesor() {
 
   const MODULOS = [
     {
-      id: 'horario',
-      emoji: '🕐',
-      titulo: 'Mi Horario',
-      descripcion: 'Consulta tu horario semanal completo',
-      href: '/horario',
-      disponible: true,
-      roles: ['todos'],
-      color: '#0f766e', bg: '#f0fdfa', border: '#5eead4',
-    },
-    {
       id: 'guardias',
       emoji: '🛡️',
       titulo: 'Guardias',
@@ -423,6 +413,37 @@ export default function PanelProfesor() {
                rolGestion === 'secretario' ? '📁 Secretario/a' : ''}
             </div>
           )}
+        </div>
+
+        {/* BARRA MI HORARIO */}
+        <div style={{
+          backgroundColor: 'white', borderRadius: 12, padding: '12px 16px',
+          marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          border: '1.5px solid #ccfbf1',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20 }}>🕐</span>
+            <span style={{ fontWeight: 700, fontSize: 14, color: '#0f766e' }}>Mi Horario</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <a href="/horario?vista=hoy" style={{
+              padding: '7px 14px', borderRadius: 8,
+              backgroundColor: '#f0fdfa', border: '1.5px solid #5eead4',
+              color: '#0f766e', textDecoration: 'none',
+              fontSize: 12, fontWeight: 700,
+            }}>
+              📅 Hoy
+            </a>
+            <a href="/horario" style={{
+              padding: '7px 14px', borderRadius: 8,
+              backgroundColor: '#0f766e', border: '1.5px solid #0f766e',
+              color: 'white', textDecoration: 'none',
+              fontSize: 12, fontWeight: 700,
+            }}>
+              📋 Semana
+            </a>
+          </div>
         </div>
 
         {/* MÓDULOS */}
