@@ -33,7 +33,7 @@ const verde = '#1e6b2e';
 const verdeClaro = '#e8f5e9';
 
 export default function Registro() {
-  // pantalla: 'email' | 'solicitud_enviada' | 'pendiente_aprobacion' | 'completar_datos' | 'ya_registrado' | 'no_autorizado' | 'listo'
+  // pantalla: 'email' | 'pendiente_aprobacion' | 'completar_datos' | 'ya_registrado' | 'listo'
   const [pantalla, setPantalla] = useState('email');
   const [email, setEmail] = useState('');
   const [verificando, setVerificando] = useState(false);
@@ -257,17 +257,7 @@ export default function Registro() {
     );
   }
 
-  if (pantalla === 'no_autorizado') {
-    return (
-      <Mensaje emoji="🚫" titulo="Email no autorizado" verde="#991b1b">
-        <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Este email no consta en la lista de profesorado del centro.<br />
-          Contacta con <strong>secretaría</strong> para solicitar el alta.
-        </p>
-        <button onClick={() => { setPantalla('email'); setEmail(''); setError(''); }} style={btnPrimario(verde)}>← Probar otro email</button>
-      </Mensaje>
-    );
-  }
+
 
   // ═══════════════════════════════════════════════════
   // PANTALLA: COMPLETAR DATOS
