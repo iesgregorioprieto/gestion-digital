@@ -115,10 +115,11 @@ export default function PanelSecretario() {
     cerrarModal();
   }
 
-  async function eliminarInterinos() {
-    if (!confirm('¿Eliminar TODOS los interinos? Esta acción no se puede deshacer.')) return;
-    await getSupabase().from('profesores').delete().like('tipo_contrato', 'Interino%');
-    mostrarMensaje('🗑️ Interinos eliminados', 'ok');
+  async function eliminarInactivos() {
+    if (!confirm('¿Eliminar todos los profesores INACTIVOS (dados de baja al importar el CSV del nuevo curso)? Esta acción no se puede deshacer.')) return;
+    const { error } = await getSupabase().from('profesores').delete().eq('estado', 'inactivo');
+    if (!error) mostrarMensaje('🗑️ Profesores inactivos eliminados', 'ok');
+    else mostrarMensaje('❌ Error al eliminar: ' + error.message, 'error');
     cargarProfesores();
   }
 
@@ -540,10 +541,10 @@ export default function PanelSecretario() {
                   </button>
                 ))}
               </div>
-              <button onClick={eliminarInterinos} style={{
+              <button onClick={eliminarInactivos} style={{
                 padding: '8px 16px', borderRadius: 8, border: '1.5px solid #fca5a5',
                 backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 13
-              }}>🗑️ Eliminar interinos</button>
+              }}>🗑️ Eliminar inactivos del curso anterior</button>
             </div>
 
             {/* CONTADOR */}
