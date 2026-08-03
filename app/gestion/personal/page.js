@@ -51,7 +51,7 @@ export default function PanelSecretario() {
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
   const [busquedaSustituto, setBusquedaSustituto] = useState('');
-  const [tipoBajaSeleccionada, setTipoBajaSeleccionada] = useState('parcial');
+  const [tipoBajaSeleccionada, setTipoBajaSeleccionada] = useState('temporal');
   const [fechaBaja, setFechaBaja] = useState(new Date().toISOString().split('T')[0]);
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
@@ -348,21 +348,73 @@ export default function PanelSecretario() {
   // ── GESTIÓN DE BAJAS ──────────────────────────────────────
 
   async function registrarBaja(profesor) {
-    if (!confirm(`¿Registrar baja de ${profesor.nombre} ${profesor.apellidos}? El horario quedará pendiente de asignar al sustituto.`)) return;
+    const mensajeConfirm = tipoBajaSeleccionada === 'temporal'
+      ? `¿Registrar baja TEMPORAL de ${profesor.nombre} ${profesor.apellidos}? Aparecerá en el cuadrante de guardias para que se cubran sus grupos.`
+      : `¿Registrar baja CON SUSTITUTO de ${profesor.nombre} ${profesor.apellidos}? A continuación podrás buscar y asignar al sustituto.`;
+    if (!confirm(mensajeConfirm)) return;
     setGestionandoBaja(true);
     const { error } = await getSupabase()
       .from('profesores')
       .update({ en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja })
       .eq('id', profesor.id);
     if (error) { mostrarMensaje('❌ Error registrando baja: ' + error.message, 'error'); setGestionandoBaja(false); return; }
+
+    // Si es baja TEMPORAL (sin sustituto): crear ausencia abierta para que aparezca en el cuadrante de guardias
+    if (tipoBajaSeleccionada === 'temporal') {
+      await getSupabase().from('ausencias').insert({
+        profesor_id: profesor.id,
+        profesor_nombre: `${profesor.nombre} ${profesor.apellidos}`,
+        fecha_inicio: fechaBaja,
+        fecha_fin: null,
+        horas: null,
+        categoria: 'baja_sin_sustituto',
+        estado: 'aprobada',
+      });
+    }
+
     mostrarMensaje('✅ Baja registrada correctamente', 'ok');
     setGestionandoBaja(false);
     cargarProfesores();
     setProfesorSeleccionado(prev => ({ ...prev, en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja }));
   }
 
+  async function pasarConSustituto(profesor) {
+    if (!confirm(`¿La baja de ${profesor.nombre} ${profesor.apellidos} se prolonga y llega un sustituto? Se cerrará su hueco en el cuadrante de guardias y podrás buscar al sustituto.`)) return;
+    setGestionandoBaja(true);
+    try {
+      // 1. Cambiar tipo de baja
+      await getSupabase().from('profesores').update({ tipo_baja: 'con_sustituto' }).eq('id', profesor.id);
+
+      // 2. Cerrar la ausencia abierta en el cuadrante (ya no hace falta guardia, viene sustituto)
+      const ayer = new Date();
+      ayer.setDate(ayer.getDate() - 1);
+      const fechaCierre = ayer.toISOString().split('T')[0];
+      await getSupabase()
+        .from('ausencias')
+        .update({ fecha_fin: fechaCierre })
+        .eq('profesor_id', profesor.id)
+        .eq('categoria', 'baja_sin_sustituto')
+        .is('fecha_fin', null);
+
+      mostrarMensaje('✅ Cambiado a "con sustituto". Ya puedes buscarlo abajo.', 'ok');
+      cargarProfesores();
+      setProfesorSeleccionado(prev => ({ ...prev, tipo_baja: 'con_sustituto' }));
+    } catch(e) {
+      mostrarMensaje('❌ Error: ' + e.message, 'error');
+    }
+    setGestionandoBaja(false);
+  }
+
   async function asignarSustituto(titular, sustituto) {
     if (!confirm(`¿Asignar a ${sustituto.nombre} ${sustituto.apellidos} como sustituto de ${titular.nombre} ${titular.apellidos}? Se copiará el horario completo.`)) return;
+    // Cerrar cualquier ausencia abierta del titular en el cuadrante (ya no hace falta cubrir, tiene sustituto)
+    const ayerCierre = new Date(); ayerCierre.setDate(ayerCierre.getDate() - 1);
+    await getSupabase()
+      .from('ausencias')
+      .update({ fecha_fin: ayerCierre.toISOString().split('T')[0] })
+      .eq('profesor_id', titular.id)
+      .eq('categoria', 'baja_sin_sustituto')
+      .is('fecha_fin', null);
     setGestionandoBaja(true);
 
     try {
