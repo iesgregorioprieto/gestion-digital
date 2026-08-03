@@ -805,15 +805,6 @@ export default function GestionDatos() {
                   },
                   {
                     paso: 3,
-                    titulo: 'CSV de profesorado',
-                    descripcion: 'Delphos → Personal → Profesores → Exportar CSV',
-                    tab: 'profesorado',
-                    emoji: '👨‍🏫',
-                    completado: stats.profesoresTotal > 0,
-                    detalle: stats.profesoresTotal > 0 ? `${stats.profesoresTotal} profesores (${stats.profesores} activos)` : 'Sin cargar',
-                  },
-                  {
-                    paso: 4,
                     titulo: 'Cuadrante de guardias',
                     descripcion: 'Delphos → Complementarias → Exportar → Carpeta HTML',
                     tab: 'guardias',
@@ -851,8 +842,8 @@ export default function GestionDatos() {
 
               {/* RESUMEN */}
               {(() => {
-                const completados = [stats.alumnos > 0, stats.horarios > 0, stats.profesoresTotal > 0].filter(Boolean).length;
-                const total = 3;
+                const completados = [stats.alumnos > 0, stats.horarios > 0].filter(Boolean).length;
+                const total = 2;
                 const pct = Math.round((completados / total) * 100);
                 return (
                   <div style={{ backgroundColor: '#f8fafc', borderRadius: 10, padding: 12, border: '1px solid #e2e8f0' }}>
@@ -880,7 +871,6 @@ export default function GestionDatos() {
           {[
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
-            { id: 'profesorado', label: '👨‍🏫 Profesorado' },
             { id: 'guardias', label: '🛡️ Guardias' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -1044,27 +1034,7 @@ export default function GestionDatos() {
           </div>
         )}
 
-        {/* ===== PROFESORADO ===== */}
-        {vistaTab === 'profesorado' && (
-          <div>
-            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>👨‍🏫 Carga de profesorado desde Delphos</div>
-              <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
-                Exporta el listado de profesores desde Delphos en formato CSV y súbelo aquí. El sistema creará las cuentas autorizadas para que cada profesor pueda registrarse con su email corporativo.
-              </div>
-              <div style={{ fontSize: 12, backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: 7, color: '#065f46', marginBottom: 20 }}>
-                🖥️ <strong>Delphos:</strong> Personal → Profesores → Exportar CSV
-              </div>
 
-              <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
-                <input ref={fileRefProfesores} type="file" accept=".csv,.txt" onChange={procesarCSVProfesores} style={{ display: 'none' }} disabled={procesando} />
-                <div style={{ padding: '16px', borderRadius: 10, backgroundColor: procesando ? '#f5f5f5' : azul, color: 'white', fontWeight: 700, fontSize: 14, textAlign: 'center', cursor: procesando ? 'not-allowed' : 'pointer' }}>
-                  {procesando ? '⏳ Procesando...' : '📤 Seleccionar CSV de profesores'}
-                </div>
-              </label>
-            </div>
-          </div>
-        )}
       {/* PESTAÑA GUARDIAS */}
       {vistaTab === 'guardias' && (
         <div style={{ padding: '0 16px 24px' }}>
