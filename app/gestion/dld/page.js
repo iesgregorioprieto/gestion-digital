@@ -228,12 +228,18 @@ export default function PanelDirector() {
 
   async function cargarSolicitudes() {
     setCargando(true);
-    const [{ data }, { count }] = await Promise.all([
+    const [{ data }, { data: profData, count }] = await Promise.all([
       getSupabase().from('dld').select('*').order('created_at', { ascending: false }),
-      getSupabase().from('profesores').select('*', { count: 'exact', head: true }).eq('estado', 'activo'),
+      getSupabase().from('profesores').select('id, sustituye_a', { count: 'exact' }).eq('estado', 'activo'),
     ]);
     setTodasSolicitudes(data || []);
-    if (count) setTotalProfesores(count);
+    // Contar profesores activos excluyendo sustitutos (sustituto + titular = 1)
+    if (profData) {
+      const sustitutos = profData.filter(p => p.sustituye_a).length;
+      setTotalProfesores(profData.length - sustitutos);
+    } else if (count) {
+      setTotalProfesores(count);
+    }
     setCargando(false);
   }
 
@@ -291,6 +297,20 @@ export default function PanelDirector() {
 
     if (aprobadosEseDia >= maxPermitidos) {
       alertas.push({ tipo: 'rojo', texto: `🔴 LÍMITE ALCANZADO: ${aprobadosEseDia}/${maxPermitidos} ese día. Solo conceder por causas excepcionales (punto 9 resolución).` });
+      // Detectar quién sería desplazado (el último aprobado por prelación)
+      if (esNoLectivo) {
+        const aprobadosOrdenados = todasSolicitudes
+          .filter(s => s.id !== solicitud.id && s.fecha_solicitada === fecha && s.estado === 'aprobada')
+          .sort((a, b) => {
+            // Prelación: mayor antigüedad cuerpo > mayor antigüedad centro
+            if ((a.antiguedad_cuerpo || 0) !== (b.antiguedad_cuerpo || 0)) return (a.antiguedad_cuerpo || 0) - (b.antiguedad_cuerpo || 0);
+            return (a.antiguedad_centro || 0) - (b.antiguedad_centro || 0);
+          });
+        if (aprobadosOrdenados.length > 0) {
+          const desplazable = aprobadosOrdenados[0];
+          alertas.push({ tipo: 'rojo', texto: `⚠️ DESPLAZAMIENTO: Si se aprueba, podría desplazar a ${desplazable.profesor_nombre} (antigüedad cuerpo: ${desplazable.antiguedad_cuerpo || '—'}, centro: ${desplazable.antiguedad_centro || '—'}).` });
+        }
+      }
     } else if (aprobadosEseDia === maxPermitidos - 1) {
       alertas.push({ tipo: 'amarillo', texto: `🟡 CUPO CASI LLENO: ${aprobadosEseDia}/${maxPermitidos} aprobados ese día. Si se aprueba esta solicitud, se alcanza el límite.` });
     }
@@ -500,7 +520,8 @@ export default function PanelDirector() {
     setProcesando(true);
     await getSupabase().from('dld').update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario }).eq('id', id);
     mostrarMensaje('✅ Solicitud aprobada', 'ok');
-    // Email al profesor
+
+    // Email al profesor aprobado
     try {
       const rows = await getSupabase().from('dld').select('profesor_id,fecha_solicitada,tipo_dld').eq('id', id);
       const sol = (rows.data || [])[0];
@@ -513,6 +534,49 @@ export default function PanelDirector() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ tipo: 'dld_aprobada', datos: { nombre: prof.nombre + ' ' + prof.apellidos, email: prof.email, fecha_solicitada: sol.fecha_solicitada, tipo_dld: sol.tipo_dld } })
           });
+        }
+
+        // Comprobar si esta aprobación desplaza a alguien (no lectivos, límite 1/3)
+        const fecha = sol.fecha_solicitada;
+        const aprobadosHoy = todasSolicitudes.filter(s =>
+          s.id !== id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
+        );
+        const maxNoLectivo = Math.floor(totalProfesores / 3);
+        if (sol.tipo_dld === 'no_lectivo' && aprobadosHoy.length >= maxNoLectivo) {
+          // Buscar al desplazable (menor prelación)
+          const ordenados = aprobadosHoy.sort((a, b) => {
+            if ((a.antiguedad_cuerpo || 0) !== (b.antiguedad_cuerpo || 0)) return (a.antiguedad_cuerpo || 0) - (b.antiguedad_cuerpo || 0);
+            return (a.antiguedad_centro || 0) - (b.antiguedad_centro || 0);
+          });
+          const desplazado = ordenados[0];
+          if (desplazado) {
+            // Revocar DLD del desplazado
+            await getSupabase().from('dld').update({
+              estado: 'rechazada',
+              resuelto_at: new Date().toISOString(),
+              resuelto_por: nombreUsuario,
+              motivo_rechazo: `Desplazado por ${prof.nombre} ${prof.apellidos} (mayor prelación según normativa).`
+            }).eq('id', desplazado.id);
+
+            // Email al desplazado
+            const dRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', desplazado.profesor_id);
+            const profDesplazado = (dRows.data || [])[0];
+            if (profDesplazado?.email) {
+              await fetch('/api/enviar-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  tipo: 'dld_rechazada',
+                  datos: {
+                    nombre: profDesplazado.nombre + ' ' + profDesplazado.apellidos,
+                    email: profDesplazado.email,
+                    fecha_solicitada: fecha,
+                    motivo_rechazo: 'Tu DLD ha sido revocado porque otro compañero/a con mayor prelación ha solicitado el mismo día. Puedes consultar los detalles en el portal.'
+                  }
+                })
+              });
+            }
+          }
         }
       }
     } catch(e) { console.error('Email DLD aprobada:', e); }
