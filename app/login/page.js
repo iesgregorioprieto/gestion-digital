@@ -79,10 +79,23 @@ export default function Login() {
       return;
     }
 
-    // Contraseña: comparar sin espacios accidentales
+    // Contraseña: verificar con API (soporta hash y texto plano legacy)
     const passGuardada = (data.password_hash || '').toString().trim();
-    if (passGuardada !== password.trim()) {
-      setError('Contraseña incorrecta.');
+    try {
+      const verifyRes = await fetch('/api/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'verify', password: password.trim(), hash: passGuardada }),
+      });
+      const verifyData = await verifyRes.json();
+      if (!verifyData.ok) {
+        setCargando(false);
+        setError('Contraseña incorrecta.');
+        return;
+      }
+    } catch (e) {
+      setCargando(false);
+      setError('Error al verificar la contraseña.');
       return;
     }
 
