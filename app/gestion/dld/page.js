@@ -230,12 +230,12 @@ export default function PanelDirector() {
     setCargando(true);
     const [{ data }, { data: profData, count }] = await Promise.all([
       getSupabase().from('dld').select('*').order('created_at', { ascending: false }),
-      getSupabase().from('profesores').select('id, sustituye_a', { count: 'exact' }).eq('estado', 'activo'),
+      getSupabase().from('profesores').select('id, titular_id', { count: 'exact' }).eq('estado', 'activo'),
     ]);
     setTodasSolicitudes(data || []);
-    // Contar profesores activos excluyendo sustitutos (sustituto + titular = 1)
+    // Contar profesores activos excluyendo sustitutos (sustituto + titular = 1, según petición del director)
     if (profData) {
-      const sustitutos = profData.filter(p => p.sustituye_a).length;
+      const sustitutos = profData.filter(p => p.titular_id).length;
       setTotalProfesores(profData.length - sustitutos);
     } else if (count) {
       setTotalProfesores(count);
