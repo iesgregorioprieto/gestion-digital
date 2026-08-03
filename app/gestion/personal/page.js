@@ -267,7 +267,7 @@ export default function PanelSecretario() {
             </span>
             {p.en_baja && (
               <span style={{ fontSize: 12, backgroundColor: '#fef2f2', color: '#b91c1c', padding: '3px 10px', borderRadius: 20, fontWeight: 700, border: '1px solid #fca5a5' }}>
-                🏥 {p.tipo_baja === 'total' ? 'Baja total' : 'Baja parcial'}
+                {p.tipo_baja === 'con_sustituto' ? '🔄 Baja con sustituto' : '🏥 Baja temporal'}
               </span>
             )}
             {p.titular_id && (
@@ -736,7 +736,7 @@ export default function PanelSecretario() {
                 {p.en_baja ? (
                   <div style={{ backgroundColor: '#fef2f2', border: '2px solid #fca5a5', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                     <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: 15, marginBottom: 6 }}>
-                      🏥 EN BAJA — {p.tipo_baja === 'total' ? 'Baja total (no vuelve este curso)' : 'Baja parcial (temporal)'}
+                      🏥 EN BAJA — {p.tipo_baja === 'con_sustituto' ? 'Con sustituto (horario cubierto)' : 'Temporal (cubren los de guardia)'}
                     </div>
                     <div style={{ fontSize: 13, color: '#7f1d1d' }}>
                       Desde: {p.fecha_baja ? new Date(p.fecha_baja + 'T12:00:00').toLocaleDateString('es-ES') : '—'}
@@ -751,14 +751,25 @@ export default function PanelSecretario() {
                         ⚠️ Sin sustituto asignado aún
                       </div>
                     )}
-                    {/* BOTÓN ALTA TITULAR */}
-                    {p.tipo_baja === 'parcial' && (
+                    {/* BOTÓN: PASAR DE TEMPORAL A CON SUSTITUTO */}
+                    {p.tipo_baja === 'temporal' && !sustituto && (
+                      <button
+                        onClick={() => pasarConSustituto(p)}
+                        disabled={gestionandoBaja}
+                        style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#0369a1', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
+                      >
+                        {gestionandoBaja ? '⏳ Procesando...' : '🔄 La baja se prolonga — Buscar sustituto'}
+                      </button>
+                    )}
+
+                    {/* BOTÓN ALTA TITULAR (cuando hay sustituto o baja temporal sin él) */}
+                    {(sustituto || p.tipo_baja === 'temporal') && (
                       <button
                         onClick={() => altaTitular(p)}
                         disabled={gestionandoBaja}
-                        style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
+                        style={{ marginTop: 8, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
                       >
-                        {gestionandoBaja ? '⏳ Procesando...' : '✅ TITULAR SE INCORPORA — Dar de alta y desactivar sustituto'}
+                        {gestionandoBaja ? '⏳ Procesando...' : '✅ TITULAR SE INCORPORA — Dar de alta' + (sustituto ? ' y desactivar sustituto' : '')}
                       </button>
                     )}
                   </div>
@@ -778,26 +789,26 @@ export default function PanelSecretario() {
                       <label style={{ fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Tipo de baja</label>
                       <div style={{ display: 'flex', gap: 8 }}>
                         <button
-                          onClick={() => setTipoBajaSeleccionada('parcial')}
+                          onClick={() => setTipoBajaSeleccionada('temporal')}
                           style={{
                             flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                            border: `2px solid ${tipoBajaSeleccionada === 'parcial' ? '#f59e0b' : '#e5e7eb'}`,
-                            backgroundColor: tipoBajaSeleccionada === 'parcial' ? '#fef3c7' : 'white',
-                            color: tipoBajaSeleccionada === 'parcial' ? '#78350f' : '#888',
+                            border: `2px solid ${tipoBajaSeleccionada === 'temporal' ? '#f59e0b' : '#e5e7eb'}`,
+                            backgroundColor: tipoBajaSeleccionada === 'temporal' ? '#fef3c7' : 'white',
+                            color: tipoBajaSeleccionada === 'temporal' ? '#78350f' : '#888',
                           }}
                         >
-                          🔄 Con sustituto<br/><span style={{ fontWeight: 400, fontSize: 11 }}>Temporal, volverá</span>
+                          🏥 Temporal<br/><span style={{ fontWeight: 400, fontSize: 11 }}>Corta, sin sustituto — cubren los de guardia</span>
                         </button>
                         <button
-                          onClick={() => setTipoBajaSeleccionada('total')}
+                          onClick={() => setTipoBajaSeleccionada('con_sustituto')}
                           style={{
                             flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                            border: `2px solid ${tipoBajaSeleccionada === 'total' ? '#b91c1c' : '#e5e7eb'}`,
-                            backgroundColor: tipoBajaSeleccionada === 'total' ? '#fef2f2' : 'white',
-                            color: tipoBajaSeleccionada === 'total' ? '#7f1d1d' : '#888',
+                            border: `2px solid ${tipoBajaSeleccionada === 'con_sustituto' ? '#0369a1' : '#e5e7eb'}`,
+                            backgroundColor: tipoBajaSeleccionada === 'con_sustituto' ? '#eff6ff' : 'white',
+                            color: tipoBajaSeleccionada === 'con_sustituto' ? '#1e3a8a' : '#888',
                           }}
                         >
-                          🏁 Sin sustituto<br/><span style={{ fontWeight: 400, fontSize: 11 }}>No vuelve este curso</span>
+                          🔄 Con sustituto<br/><span style={{ fontWeight: 400, fontSize: 11 }}>Larga — asigna a alguien su horario</span>
                         </button>
                       </div>
                     </div>
@@ -824,11 +835,11 @@ export default function PanelSecretario() {
                       {gestionandoBaja ? '⏳ Registrando...' : '🏥 Registrar baja'}
                     </button>
 
-                    {tipoBajaSeleccionada === 'parcial' && (
-                      <div style={{ marginTop: 10, fontSize: 12, color: '#888', textAlign: 'center' }}>
-                        Después de registrar la baja podrás asignar el sustituto aquí mismo.
-                      </div>
-                    )}
+                    <div style={{ marginTop: 10, fontSize: 12, color: '#888', textAlign: 'center' }}>
+                      {tipoBajaSeleccionada === 'temporal'
+                        ? 'Su nombre aparecerá en el cuadrante de guardias hasta que se resuelva.'
+                        : 'A continuación podrás buscar y asignar al sustituto, que recibirá su horario completo.'}
+                    </div>
                   </div>
                 )}
 
