@@ -303,6 +303,13 @@ export default function PanelProfesor() {
           }} title="Borra la caché y descarga la última versión">
             {actualizando ? '⏳' : '🔄'}
           </button>
+          <a href="/mis-datos" style={{
+            padding: '7px 12px', borderRadius: 8,
+            border: '1.5px solid rgba(255,255,255,0.4)',
+            backgroundColor: 'transparent', color: 'white',
+            cursor: 'pointer', fontSize: 13, textDecoration: 'none',
+            display: 'inline-flex', alignItems: 'center',
+          }} title="Editar mis datos y cambiar la contraseña">⚙️</a>
           <button onClick={cerrarSesion} style={{
             padding: '7px 14px', borderRadius: 8,
             border: '1.5px solid rgba(255,255,255,0.4)',
