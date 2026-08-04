@@ -3,196 +3,106 @@ export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
 import { getSupabase } from '@/lib/supabase';
-const DEPARTAMENTOS = [
-  'TMV/Carrocería','Hostelería','Informática','Electricidad','Comercio',
-  'Administración','Industrias Alimentarias','FOL','Física y Química',
-  'Ciencias Naturales/Biología','Matemáticas','Lengua y Literatura','Inglés',
-  'Educación Física','Dibujo/Plástica','Geografía e Historia','Filosofía',
-  'Música','Tecnología','Orientación','PT/AL'
-];
-
-const ESPECIALIDADES = [
-  { valor: 'TMV', emoji: '🚗', descripcion: 'Familia FP' },
-  { valor: 'COMERCIO', emoji: '🛍️', descripcion: 'Familia FP' },
-  { valor: 'ELECTRICIDAD', emoji: '⚡', descripcion: 'Familia FP' },
-  { valor: 'INFORMÁTICA', emoji: '💻', descripcion: 'Familia FP' },
-  { valor: 'HOSTELERÍA', emoji: '🍽️', descripcion: 'Familia FP' },
-  { valor: 'INDUSTRIAS ALIMENTARIAS', emoji: '🥖', descripcion: 'Familia FP' },
-  { valor: 'ADMINISTRACIÓN', emoji: '🏢', descripcion: 'Familia FP' },
-  { valor: 'ESO/BACHILLERATO', emoji: '🎓', descripcion: 'Guardias generales (incluye FOL)' },
-];
-
-const ROLES = [
-  { valor: 'profesor', emoji: '📚', etiqueta: 'Profesor/a', descripcion: 'Docente del centro' },
-  { valor: 'tutor', emoji: '🤝', etiqueta: 'Tutor/a', descripcion: 'Tutor/a de un grupo' },
-  { valor: 'jefe_departamento', emoji: '📂', etiqueta: 'Jefe/a de Departamento', descripcion: 'Responsable de departamento' },
-];
 
 const verde = '#1e6b2e';
-const verdeClaro = '#e8f5e9';
 
 export default function Registro() {
-  // pantalla: 'email' | 'completar_datos' | 'pendiente_aprobacion' | 'solicitud_enviada' | 'ya_registrado' | 'listo'
-  const [pantalla, setPantalla] = useState('email');
+  // pantallas: 'inicio' | 'pendiente_aprobacion' | 'ya_registrado' | 'solicitud_enviada'
+  const [pantalla, setPantalla] = useState('inicio');
   const [email, setEmail] = useState('');
-  const [emailVerificado, setEmailVerificado] = useState(''); // ← FIX: estado que faltaba
-  const [verificando, setVerificando] = useState(false);
+  const [password, setPassword] = useState('');
+  const [password2, setPassword2] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
-  const [profesorId, setProfesorId] = useState(null);
 
-  const [form, setForm] = useState({
-    nombre: '', apellidos: '', departamento: '', especialidad: '',
-    tipo_contrato: 'Funcionario de carrera',
-    antiguedad_centro: '', antiguedad_cuerpo: '',
-    roles: ['profesor'], grupo_tutoria: '',
-    password: '', password2: '',
-  });
-
-  function set(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); }
-
-  function toggleRol(valor) {
-    if (valor === 'profesor') return;
-    const actuales = form.roles;
-    if (actuales.includes(valor)) set('roles', actuales.filter(r => r !== valor));
-    else set('roles', [...actuales, valor]);
-  }
-
-  // ─── VERIFICAR EMAIL ───
-  async function verificarEmail() {
+  // ─── ENVIAR SOLICITUD ───
+  async function enviarSolicitud() {
     setError('');
     const emailLimpio = email.trim().toLowerCase();
 
-    if (!emailLimpio) { setError('Introduce tu email.'); return; }
+    if (!emailLimpio) { setError('Introduce tu email institucional.'); return; }
     if (!emailLimpio.endsWith('@educastillalamancha.es')) {
-      setError('Solo se permite el registro con email institucional (@educastillalamancha.es).');
+      setError('Solo se permite el registro con email @educastillalamancha.es');
+      return;
+    }
+    if (!password || password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (password !== password2) {
+      setError('Las contraseñas no coinciden.');
       return;
     }
 
-    setVerificando(true);
+    setEnviando(true);
     try {
-      const { data, error: err } = await getSupabase()
+      // Comprobar si ya existe
+      const { data: existente } = await getSupabase()
         .from('profesores')
-        .select('*')
+        .select('id, estado, password_hash, solicitud_acceso')
         .eq('email', emailLimpio);
 
-      if (err) { setError('Error: ' + err.message); setVerificando(false); return; }
+      const prof = (existente || [])[0];
 
-      let prof = data?.[0];
-
-      // Si no está en la tabla → crear registro nuevo como pendiente
-      if (!prof) {
-        const { data: newData, error: insErr } = await getSupabase()
-          .from('profesores')
-          .insert({ email: emailLimpio, estado: 'pendiente', solicitud_acceso: false })
-          .select();
-        if (insErr) { setError('Error al crear registro: ' + insErr.message); setVerificando(false); return; }
-        prof = (newData || [])[0];
-      }
-
-      // Ya tiene contraseña → ya está registrado y activo
-      if (prof.password_hash && prof.password_hash.length > 0) {
-        setPantalla('ya_registrado'); setVerificando(false); return;
-      }
-
-      // Ya ha completado datos pero espera aprobación
-      if (prof.estado === 'pendiente' && prof.solicitud_acceso) {
-        setPantalla('pendiente_aprobacion'); setVerificando(false); return;
-      }
-
-      // Activo (aprobado por secretario) pero sin contraseña → completar ficha
-      if (prof.estado === 'activo') {
-        setProfesorId(prof.id);
-        setEmailVerificado(emailLimpio);
-        setForm(f => ({
-          ...f,
-          nombre: prof.nombre || '',
-          apellidos: prof.apellidos || '',
-          departamento: prof.departamento || '',
-          especialidad: prof.especialidad || '',
-          tipo_contrato: prof.tipo_contrato || 'Funcionario de carrera',
-          antiguedad_centro: prof.antiguedad_centro?.toString() || '',
-          antiguedad_cuerpo: prof.antiguedad_cuerpo?.toString() || '',
-          roles: Array.isArray(prof.rol) && prof.rol.length > 0 ? prof.rol : ['profesor'],
-          grupo_tutoria: prof.grupo_tutoria || '',
-        }));
-        setPantalla('completar_datos');
-        setVerificando(false);
+      // Ya tiene contraseña → ya está registrado
+      if (prof && prof.password_hash && prof.password_hash.length > 0) {
+        setPantalla('ya_registrado');
+        setEnviando(false);
         return;
       }
 
-      // Pendiente sin completar datos → rellenar ficha por primera vez
-      setProfesorId(prof.id);
-      setEmailVerificado(emailLimpio);
-      setForm(f => ({
-        ...f,
-        nombre: prof.nombre || '',
-        apellidos: prof.apellidos || '',
-        departamento: prof.departamento || '',
-        especialidad: prof.especialidad || '',
-        tipo_contrato: prof.tipo_contrato || 'Funcionario de carrera',
-        antiguedad_centro: prof.antiguedad_centro?.toString() || '',
-        antiguedad_cuerpo: prof.antiguedad_cuerpo?.toString() || '',
-        roles: Array.isArray(prof.rol) && prof.rol.length > 0 ? prof.rol : ['profesor'],
-        grupo_tutoria: prof.grupo_tutoria || '',
-      }));
-      setPantalla('completar_datos');
-      setVerificando(false);
-    } catch (e) {
-      setError('Error inesperado: ' + e.message);
-      setVerificando(false);
-    }
-  }
+      // Ya envió solicitud y espera aprobación
+      if (prof && prof.solicitud_acceso) {
+        setPantalla('pendiente_aprobacion');
+        setEnviando(false);
+        return;
+      }
 
-  // ─── COMPLETAR DATOS ───
-  async function completarRegistro() {
-    setError('');
-    if (!form.nombre.trim() || !form.apellidos.trim()) { setError('Nombre y apellidos son obligatorios.'); return; }
-    if (!form.departamento) { setError('Selecciona tu departamento.'); return; }
-    if (!form.especialidad) { setError('Selecciona tu especialidad (TMV, COMERCIO, ESO/BACHILLERATO, etc.).'); return; }
-    if (!form.password || form.password.length < 6) { setError('La contraseña debe tener al menos 6 caracteres.'); return; }
-    if (form.password !== form.password2) { setError('Las contraseñas no coinciden.'); return; }
-
-    setEnviando(true);
-    try {
-      // Calcular hash de contraseña
+      // Calcular hash de la contraseña
       const rHash = await fetch('/api/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'hash', password: form.password }),
+        body: JSON.stringify({ accion: 'hash', password }),
       });
       const dHash = await rHash.json();
+      if (!dHash.hash) { setError('Error al procesar la contraseña.'); setEnviando(false); return; }
 
-      const { error: err } = await getSupabase()
-        .from('profesores')
-        .update({
-          nombre: form.nombre.trim(),
-          apellidos: form.apellidos.trim(),
-          departamento: form.departamento,
-          especialidad: form.especialidad.trim(),
-          tipo_contrato: form.tipo_contrato,
-          antiguedad_centro: form.antiguedad_centro ? parseInt(form.antiguedad_centro) : null,
-          antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
-          rol: form.roles,
-          grupo_tutoria: form.roles.includes('tutor') ? (form.grupo_tutoria || null) : null,
-          password_hash: dHash.hash,
-          solicitud_acceso: true,
-        })
-        .eq('id', profesorId);
+      if (prof) {
+        // Ya existe en BD → actualizar con contraseña y marcar solicitud
+        await getSupabase()
+          .from('profesores')
+          .update({ password_hash: dHash.hash, solicitud_acceso: true, estado: 'pendiente' })
+          .eq('id', prof.id);
+      } else {
+        // No existe → crear registro nuevo
+        await getSupabase()
+          .from('profesores')
+          .insert({ email: emailLimpio, password_hash: dHash.hash, solicitud_acceso: true, estado: 'pendiente' });
+      }
 
-      if (err) { setError('Error: ' + err.message); setEnviando(false); return; }
-
-      // Email al profesor: registro recibido, pendiente de autorización
+      // Email al profesor: solicitud recibida
       try {
         await fetch('/api/enviar-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tipo: 'registro_pendiente',
-            datos: { nombre: form.nombre + ' ' + form.apellidos, email: emailVerificado }
+            datos: { nombre: 'Profesor/a', email: emailLimpio }
           })
         });
-      } catch(e) { console.error('Email registro pendiente (no crítico):', e); }
+      } catch(e) { console.error('Email profesor (no crítico):', e); }
+
+      // Email al secretario: nueva solicitud
+      try {
+        await fetch('/api/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo: 'nueva_solicitud_secretario',
+            datos: { nombre: emailLimpio, email: 'llcc12@educastillalamancha.es', departamento: '' }
+          })
+        });
+      } catch(e) { console.error('Email secretario (no crítico):', e); }
 
       setPantalla('solicitud_enviada');
     } catch (e) {
@@ -207,26 +117,16 @@ export default function Registro() {
 
   if (pantalla === 'solicitud_enviada') {
     return (
-      <Mensaje emoji="📨" titulo="Solicitud enviada" verde={verde}>
+      <Mensaje emoji="📨" titulo="¡Solicitud enviada!" verde={verde}>
         <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Hemos recibido tu solicitud de acceso.<br />
-          El <strong>secretario</strong> la revisará y activará tu cuenta en breve.
+          Hemos recibido tu solicitud de acceso al portal.<br />
+          El <strong>secretario</strong> la revisará y te activará la cuenta.
         </p>
-        <p style={{ color: '#888', fontSize: 13, marginTop: 12 }}>
-          Cuando tu cuenta esté activada, vuelve a entrar en <strong>/registro</strong> con el mismo email para establecer tu contraseña.
+        <p style={{ color: '#888', fontSize: 13, marginTop: 12, backgroundColor: '#f0fdf4', padding: '10px 14px', borderRadius: 8 }}>
+          📧 Recibirás un correo de confirmación en <strong>{email}</strong> cuando tu acceso esté activo.<br />
+          Entonces podrás entrar con tu email y la contraseña que acabas de crear.
         </p>
         <a href="/" style={btnPrimario(verde)}>← Volver al inicio</a>
-      </Mensaje>
-    );
-  }
-
-  if (pantalla === 'listo') {
-    return (
-      <Mensaje emoji="✅" titulo="¡Todo listo!" verde={verde}>
-        <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Tu contraseña ha quedado guardada. Ya puedes iniciar sesión con tu email y contraseña.
-        </p>
-        <a href="/login" style={btnPrimario(verde)}>🔓 Ir al login</a>
       </Mensaje>
     );
   }
@@ -239,7 +139,7 @@ export default function Registro() {
           Tu cuenta está <strong>pendiente de aprobación</strong> por el secretario.
         </p>
         <p style={{ color: '#888', fontSize: 13, marginTop: 12 }}>
-          Recibirás un correo cuando tu acceso haya sido activado.
+          Recibirás un correo en cuanto tu acceso esté activado.
         </p>
         <a href="/" style={btnPrimario(verde)}>← Volver al inicio</a>
       </Mensaje>
@@ -248,10 +148,10 @@ export default function Registro() {
 
   if (pantalla === 'ya_registrado') {
     return (
-      <Mensaje emoji="👋" titulo="Ya estás registrado" verde={verde}>
+      <Mensaje emoji="👋" titulo="Ya tienes cuenta" verde={verde}>
         <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Este email ya tiene una cuenta activa con contraseña.<br />
-          Puedes iniciar sesión directamente.
+          Este email ya tiene una cuenta activa.<br />
+          Inicia sesión con tu email y contraseña.
         </p>
         <a href="/login" style={btnPrimario(verde)}>🔓 Ir al login</a>
       </Mensaje>
@@ -259,146 +159,105 @@ export default function Registro() {
   }
 
   // ═══════════════════════════════════════════════════
-  // PANTALLA: COMPLETAR DATOS
-  // ═══════════════════════════════════════════════════
-
-  if (pantalla === 'completar_datos') {
-    return (
-      <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
-        <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
-            <div style={{ fontSize: 13, opacity: 0.85 }}>Solicitud de acceso</div>
-          </div>
-          <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
-        </div>
-
-        <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-          <div style={{ backgroundColor: '#dbeafe', color: '#1e40af', padding: '14px 18px', borderRadius: 10, marginBottom: 20, fontSize: 14 }}>
-            📝 <strong>Completa tu ficha.</strong> El secretario recibirá tu solicitud y te activará el acceso.
-          </div>
-
-          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-            {/* Email fijo */}
-            <div style={{ marginBottom: 20, padding: '12px 14px', backgroundColor: '#f5f5f5', borderRadius: 8, fontSize: 13 }}>
-              📧 <strong>{emailVerificado || email}</strong>
-            </div>
-
-            {/* DATOS PERSONALES */}
-            <SubTitulo>📝 Datos personales</SubTitulo>
-            <Campo label="Nombre *"><input value={form.nombre} onChange={e => set('nombre', e.target.value)} style={inputEstilo} /></Campo>
-            <Campo label="Apellidos *"><input value={form.apellidos} onChange={e => set('apellidos', e.target.value)} style={inputEstilo} /></Campo>
-
-            {/* DATOS LABORALES */}
-            <SubTitulo>💼 Datos laborales</SubTitulo>
-            <Campo label="Departamento *">
-              <select value={form.departamento} onChange={e => set('departamento', e.target.value)} style={inputEstilo}>
-                <option value="">— Selecciona —</option>
-                {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
-              </select>
-            </Campo>
-            <Campo label="🎓 Especialidad *">
-              <select value={form.especialidad} onChange={e => set('especialidad', e.target.value)} style={inputEstilo}>
-                <option value="">— Selecciona tu especialidad —</option>
-                {ESPECIALIDADES.map(e => (
-                  <option key={e.valor} value={e.valor}>{e.emoji} {e.valor} — {e.descripcion}</option>
-                ))}
-              </select>
-              <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
-                💡 Si eres profesor/a de ESO, Bachillerato o FOL selecciona <strong>ESO/BACHILLERATO</strong>.
-              </div>
-            </Campo>
-            <Campo label="Tipo de contrato">
-              <select value={form.tipo_contrato} onChange={e => set('tipo_contrato', e.target.value)} style={inputEstilo}>
-                <option>Funcionario de carrera</option>
-                <option>Interino con vacante</option>
-                <option>Interino sin vacante</option>
-              </select>
-            </Campo>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Campo label="Antigüedad en el centro (años)"><input type="number" min="0" value={form.antiguedad_centro} onChange={e => set('antiguedad_centro', e.target.value)} style={inputEstilo} /></Campo>
-              <Campo label="Antigüedad en el cuerpo (años)"><input type="number" min="0" value={form.antiguedad_cuerpo} onChange={e => set('antiguedad_cuerpo', e.target.value)} style={inputEstilo} /></Campo>
-            </div>
-
-            {/* ROLES */}
-            <SubTitulo>👥 ¿Qué eres en el centro?</SubTitulo>
-            <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
-              {ROLES.map(r => {
-                const activo = form.roles.includes(r.valor);
-                return (
-                  <div key={r.valor} onClick={() => toggleRol(r.valor)}
-                    style={{ padding: 12, borderRadius: 10, border: `2px solid ${activo ? verde : '#e0e0e0'}`, backgroundColor: activo ? verdeClaro : 'white', cursor: r.valor === 'profesor' ? 'default' : 'pointer', opacity: r.valor === 'profesor' ? 0.85 : 1 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 22 }}>{r.emoji}</span>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 700, color: activo ? verde : '#333' }}>{r.etiqueta}</div>
-                        <div style={{ fontSize: 12, color: '#888' }}>{r.descripcion}</div>
-                      </div>
-                      {activo && <span style={{ color: verde, fontSize: 20 }}>✓</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {form.roles.includes('tutor') && (
-              <Campo label="Grupo de tutoría"><input value={form.grupo_tutoria} onChange={e => set('grupo_tutoria', e.target.value)} placeholder="Ej: GM-2CAR" style={inputEstilo} /></Campo>
-            )}
-
-            {/* CONTRASEÑA */}
-            <SubTitulo>🔑 Crea tu contraseña</SubTitulo>
-            <Campo label="Contraseña *"><input type="password" value={form.password} onChange={e => set('password', e.target.value)} style={inputEstilo} /></Campo>
-            <Campo label="Repite contraseña *"><input type="password" value={form.password2} onChange={e => set('password2', e.target.value)} style={inputEstilo} /></Campo>
-
-            {error && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>}
-
-            <button onClick={completarRegistro} disabled={enviando}
-              style={{ ...btnPrimario(verde), width: '100%', border: 'none', cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
-              {enviando ? '⏳ Enviando solicitud...' : '📨 Enviar solicitud de acceso'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════════
-  // PANTALLA INICIAL: pedir email
+  // PANTALLA INICIAL: email + contraseña
   // ═══════════════════════════════════════════════════
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
-          <div style={{ fontSize: 13, opacity: 0.85 }}>Registro de profesorado</div>
+          <div style={{ fontSize: 13, opacity: 0.85 }}>Solicitud de acceso al portal</div>
         </div>
         <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
       </div>
 
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '32px 16px' }}>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '32px 16px' }}>
+
+        {/* PASOS */}
+        <div style={{ display: 'flex', gap: 0, marginBottom: 28, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+          {[
+            { n: '1', texto: 'Solicitud', activo: true },
+            { n: '2', texto: 'Aprobación', activo: false },
+            { n: '3', texto: 'Completa tu ficha', activo: false },
+          ].map((paso, i) => (
+            <div key={i} style={{ flex: 1, padding: '12px 8px', textAlign: 'center', backgroundColor: paso.activo ? verde : 'white', borderRight: i < 2 ? '1px solid #e5e7eb' : 'none' }}>
+              <div style={{ fontSize: 18, fontWeight: 800, color: paso.activo ? 'white' : '#ccc' }}>{paso.n}</div>
+              <div style={{ fontSize: 11, color: paso.activo ? '#a7f3d0' : '#aaa', marginTop: 2 }}>{paso.texto}</div>
+            </div>
+          ))}
+        </div>
+
         <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 12 }}>📧</div>
-          <h2 style={{ color: verde, textAlign: 'center', margin: '0 0 8px', fontSize: 22 }}>Introduce tu email institucional</h2>
-          <p style={{ color: '#666', textAlign: 'center', fontSize: 14, lineHeight: 1.5, marginBottom: 24 }}>
-            Solicita el alta en el portal con tu email <strong>@educastillalamancha.es</strong>.<br />
-            El secretario verificará tu solicitud.
+          <div style={{ fontSize: 36, textAlign: 'center', marginBottom: 8 }}>📋</div>
+          <h2 style={{ color: verde, textAlign: 'center', margin: '0 0 6px', fontSize: 20 }}>Solicita el acceso</h2>
+          <p style={{ color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 1.5, marginBottom: 24 }}>
+            Introduce tu email institucional y crea tu contraseña.<br />
+            El secretario activará tu cuenta en breve.
           </p>
 
-          <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 6 }}>Email *</label>
-          <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="nombre.apellido@educastillalamancha.es"
-            onKeyDown={e => e.key === 'Enter' && verificarEmail()}
-            style={{ ...inputEstilo, marginBottom: 14 }} autoFocus />
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 5 }}>
+              📧 Email institucional *
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nombre.apellido@educastillalamancha.es"
+              style={inputEstilo}
+              autoFocus
+            />
+          </div>
 
-          {error && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 5 }}>
+              🔑 Contraseña *
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              style={inputEstilo}
+            />
+          </div>
 
-          <button onClick={verificarEmail} disabled={verificando}
-            style={{ width: '100%', padding: '13px 20px', backgroundColor: verde, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: verificando ? 'not-allowed' : 'pointer', opacity: verificando ? 0.7 : 1 }}>
-            {verificando ? '⏳ Verificando...' : 'Continuar →'}
+          <div style={{ marginBottom: 20 }}>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 5 }}>
+              🔑 Repite la contraseña *
+            </label>
+            <input
+              type="password"
+              value={password2}
+              onChange={e => setPassword2(e.target.value)}
+              placeholder="Repite la contraseña"
+              onKeyDown={e => e.key === 'Enter' && enviarSolicitud()}
+              style={inputEstilo}
+            />
+          </div>
+
+          {error && (
+            <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <button
+            onClick={enviarSolicitud}
+            disabled={enviando}
+            style={{ width: '100%', padding: '13px 20px', backgroundColor: verde, color: 'white', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}
+          >
+            {enviando ? '⏳ Enviando...' : '📨 Enviar solicitud de acceso'}
           </button>
 
           <div style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: '#888' }}>
-            ¿Ya tienes contraseña? <a href="/login" style={{ color: verde, fontWeight: 600 }}>Inicia sesión</a>
+            ¿Ya tienes cuenta activa? <a href="/login" style={{ color: verde, fontWeight: 600 }}>Inicia sesión</a>
           </div>
+        </div>
+
+        <div style={{ marginTop: 16, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#166534', lineHeight: 1.6 }}>
+          ℹ️ Cuando el secretario apruebe tu solicitud, <strong>recibirás un email</strong> y podrás entrar directamente con tu email y la contraseña que acabas de crear.
+          Después, completarás tu ficha de datos en el portal.
         </div>
       </div>
     </div>
@@ -421,21 +280,16 @@ function Mensaje({ emoji, titulo, verde, children }) {
   );
 }
 
-function SubTitulo({ children }) {
-  return <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #eee' }}>{children}</div>;
-}
-
-function Campo({ label, children }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#555', marginBottom: 5 }}>{label}</label>
-      {children}
-    </div>
-  );
-}
-
-const inputEstilo = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' };
+const inputEstilo = {
+  width: '100%', padding: '10px 12px', borderRadius: 8,
+  border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box',
+  fontFamily: 'system-ui, sans-serif'
+};
 
 function btnPrimario(color) {
-  return { display: 'inline-block', marginTop: 24, padding: '13px 28px', backgroundColor: color, color: 'white', borderRadius: 10, textDecoration: 'none', fontWeight: 700, fontSize: 15, border: 'none' };
+  return {
+    display: 'inline-block', marginTop: 20, padding: '13px 28px',
+    backgroundColor: color, color: 'white', borderRadius: 10,
+    textDecoration: 'none', fontWeight: 700, fontSize: 15, border: 'none'
+  };
 }
