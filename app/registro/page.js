@@ -11,7 +11,6 @@ const DEPARTAMENTOS = [
   'Música','Tecnología','Orientación','PT/AL'
 ];
 
-// Especialidades - lista fija que coincide con los sectores del cuadrante de guardias
 const ESPECIALIDADES = [
   { valor: 'TMV', emoji: '🚗', descripcion: 'Familia FP' },
   { valor: 'COMERCIO', emoji: '🛍️', descripcion: 'Familia FP' },
@@ -33,9 +32,10 @@ const verde = '#1e6b2e';
 const verdeClaro = '#e8f5e9';
 
 export default function Registro() {
-  // pantalla: 'email' | 'pendiente_aprobacion' | 'completar_datos' | 'ya_registrado' | 'listo'
+  // pantalla: 'email' | 'completar_datos' | 'pendiente_aprobacion' | 'solicitud_enviada' | 'ya_registrado' | 'listo'
   const [pantalla, setPantalla] = useState('email');
   const [email, setEmail] = useState('');
+  const [emailVerificado, setEmailVerificado] = useState(''); // ← FIX: estado que faltaba
   const [verificando, setVerificando] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
@@ -90,12 +90,17 @@ export default function Registro() {
         prof = (newData || [])[0];
       }
 
-      // Ya tiene contraseña → ya está registrado
+      // Ya tiene contraseña → ya está registrado y activo
       if (prof.password_hash && prof.password_hash.length > 0) {
         setPantalla('ya_registrado'); setVerificando(false); return;
       }
 
-      // Activo pero sin contraseña → PUEDE COMPLETAR SU FICHA
+      // Ya ha completado datos pero espera aprobación
+      if (prof.estado === 'pendiente' && prof.solicitud_acceso) {
+        setPantalla('pendiente_aprobacion'); setVerificando(false); return;
+      }
+
+      // Activo (aprobado por secretario) pero sin contraseña → completar ficha
       if (prof.estado === 'activo') {
         setProfesorId(prof.id);
         setEmailVerificado(emailLimpio);
@@ -116,12 +121,7 @@ export default function Registro() {
         return;
       }
 
-      // Pendiente y ya ha completado datos → esperando aprobación
-      if (prof.estado === 'pendiente' && prof.solicitud_acceso) {
-        setPantalla('pendiente_aprobacion'); setVerificando(false); return;
-      }
-
-      // Pendiente sin completar datos → rellenar ficha
+      // Pendiente sin completar datos → rellenar ficha por primera vez
       setProfesorId(prof.id);
       setEmailVerificado(emailLimpio);
       setForm(f => ({
@@ -155,6 +155,14 @@ export default function Registro() {
 
     setEnviando(true);
     try {
+      // Calcular hash de contraseña
+      const rHash = await fetch('/api/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'hash', password: form.password }),
+      });
+      const dHash = await rHash.json();
+
       const { error: err } = await getSupabase()
         .from('profesores')
         .update({
@@ -167,20 +175,14 @@ export default function Registro() {
           antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
           rol: form.roles,
           grupo_tutoria: form.roles.includes('tutor') ? (form.grupo_tutoria || null) : null,
-          password_hash: await (async () => {
-            const r = await fetch('/api/password', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ accion: 'hash', password: form.password }),
-            });
-            const d = await r.json();
-            return d.hash;
-          })(),
+          password_hash: dHash.hash,
+          solicitud_acceso: true,
         })
         .eq('id', profesorId);
 
       if (err) { setError('Error: ' + err.message); setEnviando(false); return; }
-      // Email al profesor: registro pendiente de autorización
+
+      // Email al profesor: registro recibido, pendiente de autorización
       try {
         await fetch('/api/enviar-email', {
           method: 'POST',
@@ -190,10 +192,25 @@ export default function Registro() {
             datos: { nombre: form.nombre + ' ' + form.apellidos, email: emailVerificado }
           })
         });
-      } catch(e) { console.error('Email registro pendiente:', e); }
-      // Marcar solicitud completada
-      await getSupabase().from('profesores').update({ solicitud_acceso: true }).eq('id', profesorId);
-      setPantalla('listo');
+      } catch(e) { console.error('Email registro pendiente (no crítico):', e); }
+
+      // Email al secretario: nueva solicitud de acceso
+      try {
+        await fetch('/api/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tipo: 'nueva_solicitud_secretario',
+            datos: {
+              nombre: form.nombre + ' ' + form.apellidos,
+              email: emailVerificado,
+              departamento: form.departamento,
+            }
+          })
+        });
+      } catch(e) { console.error('Email secretario (no crítico):', e); }
+
+      setPantalla('solicitud_enviada');
     } catch (e) {
       setError('Error inesperado: ' + e.message);
     }
@@ -201,19 +218,8 @@ export default function Registro() {
   }
 
   // ═══════════════════════════════════════════════════
-  // PANTALLAS DE RESPUESTA (ÉXITO / MENSAJES)
+  // PANTALLAS DE RESPUESTA
   // ═══════════════════════════════════════════════════
-
-  if (pantalla === 'listo') {
-    return (
-      <Mensaje emoji="✅" titulo="¡Cuenta activada!" verde={verde}>
-        <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Tu cuenta está lista para usarse. Ya puedes iniciar sesión con tu email y contraseña.
-        </p>
-        <a href="/login" style={btnPrimario(verde)}>🔓 Ir al login</a>
-      </Mensaje>
-    );
-  }
 
   if (pantalla === 'solicitud_enviada') {
     return (
@@ -223,9 +229,20 @@ export default function Registro() {
           El <strong>secretario</strong> la revisará y activará tu cuenta en breve.
         </p>
         <p style={{ color: '#888', fontSize: 13, marginTop: 12 }}>
-          Cuando tu cuenta esté activada, vuelve a entrar en <strong>/registro</strong> con el mismo email para crear tu contraseña.
+          Cuando tu cuenta esté activada, vuelve a entrar en <strong>/registro</strong> con el mismo email para establecer tu contraseña.
         </p>
         <a href="/" style={btnPrimario(verde)}>← Volver al inicio</a>
+      </Mensaje>
+    );
+  }
+
+  if (pantalla === 'listo') {
+    return (
+      <Mensaje emoji="✅" titulo="¡Todo listo!" verde={verde}>
+        <p style={{ color: '#555', lineHeight: 1.6 }}>
+          Tu contraseña ha quedado guardada. Ya puedes iniciar sesión con tu email y contraseña.
+        </p>
+        <a href="/login" style={btnPrimario(verde)}>🔓 Ir al login</a>
       </Mensaje>
     );
   }
@@ -234,11 +251,11 @@ export default function Registro() {
     return (
       <Mensaje emoji="⏳" titulo="Solicitud en revisión" verde="#92400e">
         <p style={{ color: '#555', lineHeight: 1.6 }}>
-          Ya has solicitado acceso con este email.<br />
+          Ya has enviado tu solicitud con este email.<br />
           Tu cuenta está <strong>pendiente de aprobación</strong> por el secretario.
         </p>
         <p style={{ color: '#888', fontSize: 13, marginTop: 12 }}>
-          Vuelve más tarde para activar tu contraseña.
+          Recibirás un correo cuando tu acceso haya sido activado.
         </p>
         <a href="/" style={btnPrimario(verde)}>← Volver al inicio</a>
       </Mensaje>
@@ -257,8 +274,6 @@ export default function Registro() {
     );
   }
 
-
-
   // ═══════════════════════════════════════════════════
   // PANTALLA: COMPLETAR DATOS
   // ═══════════════════════════════════════════════════
@@ -269,20 +284,20 @@ export default function Registro() {
         <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
-            <div style={{ fontSize: 13, opacity: 0.85 }}>Activa tu cuenta</div>
+            <div style={{ fontSize: 13, opacity: 0.85 }}>Solicitud de acceso</div>
           </div>
           <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
         </div>
 
         <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-          <div style={{ backgroundColor: '#d1fae5', color: '#065f46', padding: '14px 18px', borderRadius: 10, marginBottom: 20, fontSize: 14 }}>
-            ✅ <strong>Tu cuenta está activa.</strong> Completa los datos que falten y crea tu contraseña.
+          <div style={{ backgroundColor: '#dbeafe', color: '#1e40af', padding: '14px 18px', borderRadius: 10, marginBottom: 20, fontSize: 14 }}>
+            📝 <strong>Completa tu ficha.</strong> El secretario recibirá tu solicitud y te activará el acceso.
           </div>
 
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
             {/* Email fijo */}
             <div style={{ marginBottom: 20, padding: '12px 14px', backgroundColor: '#f5f5f5', borderRadius: 8, fontSize: 13 }}>
-              📧 <strong>{email}</strong>
+              📧 <strong>{emailVerificado || email}</strong>
             </div>
 
             {/* DATOS PERSONALES */}
@@ -306,7 +321,7 @@ export default function Registro() {
                 ))}
               </select>
               <div style={{ fontSize: 11, color: '#666', marginTop: 4, lineHeight: 1.4 }}>
-                💡 Selecciona la familia profesional a la que perteneces. Si eres profesor/a de ESO, Bachillerato o FOL selecciona <strong>ESO/BACHILLERATO</strong>.
+                💡 Si eres profesor/a de ESO, Bachillerato o FOL selecciona <strong>ESO/BACHILLERATO</strong>.
               </div>
             </Campo>
             <Campo label="Tipo de contrato">
@@ -353,8 +368,9 @@ export default function Registro() {
 
             {error && <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 14, fontSize: 13 }}>{error}</div>}
 
-            <button onClick={completarRegistro} disabled={enviando} style={{ ...btnPrimario(verde), width: '100%', border: 'none', cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
-              {enviando ? '⏳ Guardando...' : '✅ Activar mi cuenta'}
+            <button onClick={completarRegistro} disabled={enviando}
+              style={{ ...btnPrimario(verde), width: '100%', border: 'none', cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
+              {enviando ? '⏳ Enviando solicitud...' : '📨 Enviar solicitud de acceso'}
             </button>
           </div>
         </div>
