@@ -87,7 +87,7 @@ function HorarioContenido() {
       // Paso 3: cargar horario completo con ese nombre (igual que DLD)
       const { data } = await getSupabase()
         .from('horarios_profesores')
-        .select('dia, hora_id, tipo, grupo, materia, aula, actividad')
+        .select('dia, hora_id, tipo, grupo, materia, aula')
         .eq('profesor_nombre_pdf', nPdf)
         .eq('curso_academico', '2025-2026');
 
