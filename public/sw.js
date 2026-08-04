@@ -123,3 +123,48 @@ self.addEventListener('message', event => {
     self.skipWaiting();
   }
 });
+
+// ═════════════════════════════════════════════════════════════
+// PUSH — notificaciones al móvil
+// ═════════════════════════════════════════════════════════════
+self.addEventListener('push', event => {
+  let datos = { titulo: 'IES Gregorio Prieto', cuerpo: 'Tienes un aviso nuevo', url: '/profesor' };
+
+  if (event.data) {
+    try {
+      datos = { ...datos, ...event.data.json() };
+    } catch (e) {
+      datos.cuerpo = event.data.text();
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(datos.titulo, {
+      body:  datos.cuerpo,
+      icon:  '/icon-192x192.png',
+      badge: '/icon-96x96.png',
+      tag:   datos.tag || 'aviso-ies',
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data:  { url: datos.url || '/profesor' },
+    })
+  );
+});
+
+// Al pulsar la notificación: abrir o enfocar la app en la ruta indicada
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const destino = (event.notification.data && event.notification.data.url) || '/profesor';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(lista => {
+      for (const cliente of lista) {
+        if ('focus' in cliente) {
+          cliente.navigate(destino);
+          return cliente.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(destino);
+    })
+  );
+});
