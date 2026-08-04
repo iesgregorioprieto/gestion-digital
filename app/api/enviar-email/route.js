@@ -4,6 +4,18 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM = 'secretario@iesgregorioprieto.com';
 const REPLY_TO = 'llcc12@educastillalamancha.es';
 
+
+// Diagnóstico: abrir /api/enviar-email en el navegador para comprobar la configuración
+export async function GET() {
+  const key = process.env.RESEND_API_KEY || '';
+  return Response.json({
+    resend_api_key_existe: key.length > 0,
+    resend_api_key_longitud: key.length,
+    resend_api_key_empieza_por: key ? key.slice(0, 6) + '...' : '(vacía)',
+    from: FROM,
+  });
+}
+
 export async function POST(request) {
   try {
     const { tipo, datos } = await request.json();
