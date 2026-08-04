@@ -226,6 +226,43 @@ export async function POST(request) {
           </div>
         </div>`;
 
+    } else if (tipo === 'nueva_solicitud_secretario') {
+      subject = `📨 Nueva solicitud de acceso — ${datos.nombre}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e6b2e;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#a7f3d0;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:30px;background:#f9f9f9">
+            <h2 style="color:#1e6b2e">Nueva solicitud de acceso</h2>
+            <p>Un profesor ha completado su registro y espera tu aprobación:</p>
+            <table style="width:100%;border-collapse:collapse;margin:20px 0">
+              <tr style="background:#e8f5e9">
+                <td style="padding:10px;font-weight:bold">Nombre</td>
+                <td style="padding:10px">${datos.nombre}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Email</td>
+                <td style="padding:10px">${datos.email}</td>
+              </tr>
+              <tr style="background:#e8f5e9">
+                <td style="padding:10px;font-weight:bold">Departamento</td>
+                <td style="padding:10px">${datos.departamento || '—'}</td>
+              </tr>
+            </table>
+            <div style="text-align:center;margin:30px 0">
+              <a href="https://gestion-digital.vercel.app/gestion/personal"
+                 style="background:#1e6b2e;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+                Revisar solicitud
+              </a>
+            </div>
+          </div>
+          <div style="background:#e8f5e9;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
     } else {
       return Response.json({ error: 'Tipo de email desconocido' }, { status: 400 });
     }
