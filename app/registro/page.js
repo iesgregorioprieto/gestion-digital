@@ -6,13 +6,31 @@ import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 
+// Hash de contraseña directamente en el cliente con Web Crypto API
+// Igual que hace /api/password pero sin depender de una llamada fetch
+async function hashPassword(password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const encoder = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+    keyMaterial, 256
+  );
+  const hashArray = new Uint8Array(derivedBits);
+  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashHex  = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+  return saltHex + ':' + hashHex;
+}
+
 export default function Registro() {
   const [pantalla, setPantalla] = useState('inicio');
-  const [email, setEmail]       = useState('');
-  const [pass1, setPass1]       = useState('');
-  const [pass2, setPass2]       = useState('');
+  const [email,    setEmail]    = useState('');
+  const [pass1,    setPass1]    = useState('');
+  const [pass2,    setPass2]    = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [error, setError]       = useState('');
+  const [error,    setError]    = useState('');
 
   async function enviarSolicitud() {
     setError('');
@@ -49,29 +67,21 @@ export default function Registro() {
         return;
       }
 
-      // Hash de contraseña
-      const rh = await fetch('/api/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'hash', password: pass1 }),
-      });
-      const { hash } = await rh.json();
-      if (!hash) {
-        setError('Error al procesar la contraseña. Inténtalo de nuevo.');
-        setEnviando(false);
-        return;
-      }
+      // Hashear contraseña en cliente — sin llamadas fetch intermedias
+      const hash = await hashPassword(pass1);
 
       // Guardar en BD
       if (prof) {
-        await getSupabase()
+        const { error: err } = await getSupabase()
           .from('profesores')
           .update({ password_hash: hash, solicitud_acceso: true, estado: 'pendiente' })
           .eq('id', prof.id);
+        if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
       } else {
-        await getSupabase()
+        const { error: err } = await getSupabase()
           .from('profesores')
           .insert({ email: em, password_hash: hash, solicitud_acceso: true, estado: 'pendiente' });
+        if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
       }
 
       // Email al profesor informando que su solicitud ha llegado
@@ -106,9 +116,9 @@ export default function Registro() {
         </p>
         <div style={cajaInfo}>
           Te hemos enviado un correo a <strong>{email}</strong> para
-          confirmarte que tu solicitud ha llegado.{' '}
-          Cuando el secretario la apruebe, recibirás otro correo
-          y podrás entrar con tu email y la contraseña que acabas de crear.
+          confirmarte que tu solicitud ha llegado. Cuando el secretario
+          la apruebe, recibirás otro correo y podrás entrar con tu
+          email y la contraseña que acabas de crear.
         </div>
         <a href="/" style={btnEstilo(VERDE)}>← Volver al inicio</a>
       </Wrapper>
@@ -151,7 +161,6 @@ export default function Registro() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
-      {/* Cabecera */}
       <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
@@ -165,9 +174,9 @@ export default function Registro() {
         {/* Indicador de pasos */}
         <div style={{ display: 'flex', marginBottom: 24, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           {[
-            { n: '1', label: 'Solicitud',         activo: true  },
-            { n: '2', label: 'Aprobación',         activo: false },
-            { n: '3', label: 'Completa tu ficha',  activo: false },
+            { n: '1', label: 'Solicitud',        activo: true  },
+            { n: '2', label: 'Aprobación',        activo: false },
+            { n: '3', label: 'Completa tu ficha', activo: false },
           ].map((p, i, arr) => (
             <div key={i} style={{
               flex: 1, padding: '11px 6px', textAlign: 'center',
@@ -246,7 +255,6 @@ export default function Registro() {
           </p>
         </div>
 
-        {/* Nota informativa */}
         <div style={{ marginTop: 14, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#166534', lineHeight: 1.7 }}>
           ℹ️ Al enviar la solicitud recibirás un email de confirmación.
           Cuando el secretario la apruebe, recibirás otro email y podrás
