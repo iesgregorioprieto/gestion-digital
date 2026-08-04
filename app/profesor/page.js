@@ -513,8 +513,9 @@ export default function PanelProfesor() {
         </div>
 
         {/* ══════════════════════════════════════
-            PANEL DEMO — Solo para pruebas internas
+            PANEL DEMO — Solo equipo directivo
             ══════════════════════════════════════ */}
+        {rolGestion && (
         <div style={{ marginTop: 32, borderTop: '2px dashed #e5e7eb', paddingTop: 20 }}>
           <button
             onClick={() => { setMostrarDemo(!mostrarDemo); setMsgDemo(''); setConfirmDemo(false); }}
@@ -610,6 +611,7 @@ export default function PanelProfesor() {
             </div>
           )}
         </div>
+        )}
 
       </div>
     </div>
