@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 
 export default function PanelProfesor() {
   const [nombre, setNombre] = useState('');
@@ -320,6 +321,9 @@ export default function PanelProfesor() {
       </div>
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '28px 16px' }}>
+
+        {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
+        {profId && <AvisoNotificaciones profesorId={profId} />}
 
         {/* BANNER DE APOYOS PENDIENTES - LLAMATIVO */}
         {apoyosPendientes.length > 0 && (
