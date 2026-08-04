@@ -119,6 +119,7 @@ export default function Login() {
 
     sessionStorage.setItem('profesor_id', data.id);
     sessionStorage.setItem('profesor_nombre', `${data.nombre} ${data.apellidos}`);
+    sessionStorage.setItem('profesor_email', data.email || '');
     sessionStorage.setItem('profesor_rol_gestion', rolFinal);
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
