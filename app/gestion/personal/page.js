@@ -47,7 +47,6 @@ export default function PanelSecretario() {
   const [compraAbierta, setCompraAbierta] = useState(null);
   const [comentarioSecretario, setComentarioSecretario] = useState('');
   const [procesandoCompra, setProcesandoCompra] = useState(false);
-  const [mostrarPreAutorizados, setMostrarPreAutorizados] = useState(false);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
   const [busquedaSustituto, setBusquedaSustituto] = useState('');
@@ -614,7 +613,6 @@ export default function PanelSecretario() {
             ) : filtroEstado === 'pendiente' ? (
               (() => {
                 const solicitantes = profesoresFiltrados.filter(p => p.solicitud_acceso === true);
-                const preAutorizados = profesoresFiltrados.filter(p => !p.solicitud_acceso);
 
                 return (
                   <>
@@ -631,7 +629,7 @@ export default function PanelSecretario() {
                               Solicitudes de acceso ({solicitantes.length})
                             </div>
                             <div style={{ fontSize: 12, color: '#92400e' }}>
-                              Estos profesores ya han solicitado activar su cuenta. Aprobar para que puedan crear su contraseña.
+                              Estos profesores han completado su registro. Apruébalos para que puedan acceder al portal.
                             </div>
                           </div>
                         </div>
@@ -639,28 +637,6 @@ export default function PanelSecretario() {
                       </div>
                     )}
 
-                    {/* ═════════ PRE-AUTORIZADOS DEL CSV ═════════ */}
-                    {preAutorizados.length > 0 && (
-                      <div>
-                        <button onClick={() => setMostrarPreAutorizados(v => !v)} style={{
-                          width: '100%', padding: '12px 16px', backgroundColor: '#f5f5f5',
-                          border: '1.5px solid #ddd', borderRadius: 10, cursor: 'pointer',
-                          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', marginBottom: 12
-                        }}>
-                          <span style={{ fontSize: 20 }}>{mostrarPreAutorizados ? '▼' : '▶'}</span>
-                          <span style={{ fontSize: 22 }}>📋</span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, color: '#555', fontSize: 14 }}>
-                              Pre-autorizados del CSV ({preAutorizados.length})
-                            </div>
-                            <div style={{ fontSize: 12, color: '#888' }}>
-                              Profesores del listado Delphos que aún no han solicitado acceso.
-                            </div>
-                          </div>
-                        </button>
-                        {mostrarPreAutorizados && preAutorizados.map(p => renderProfesor(p))}
-                      </div>
-                    )}
                   </>
                 );
               })()
