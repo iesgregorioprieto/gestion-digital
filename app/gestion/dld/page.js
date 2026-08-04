@@ -887,24 +887,24 @@ export default function PanelDirector() {
               <h2 style={{ margin: 0, fontSize: 20, color: azul }}>📋 Revisión de solicitud</h2>
               <button onClick={() => setSolicitudAbierta(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
             </div>
-            <div style={{ backgroundColor: '#f0f4ff', borderRadius: 10, padding: 16, marginBottom: 16 }}>
-              <div style={{ fontWeight: 700, color: azul, marginBottom: 10, fontSize: 15 }}>👤 Datos del solicitante</div>
-              <Fila label="Nombre" valor={solicitudAbierta.profesor_nombre} />
-              <Fila label="Contrato" valor={solicitudAbierta.tipo_contrato} />
-              <Fila label="Tipo DLD" valor={etiquetaTipoDLD(solicitudAbierta.tipo_dld)} />
-              <Fila label="Fecha" valor={new Date(solicitudAbierta.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} />
-              <Fila label="Antigüedad centro" valor={`${solicitudAbierta.antiguedad_centro || 0} años`} />
-              <Fila label="Antigüedad cuerpo" valor={`${solicitudAbierta.antiguedad_cuerpo || 0} años`} />
-              {solicitudAbierta.causa_sobrevenida && (
-                <div style={{ marginTop: 8, padding: 10, backgroundColor: '#fffbeb', borderRadius: 8, fontSize: 13, color: '#92400e' }}>
-                  ⚠️ <strong>Causa sobrevenida:</strong> {solicitudAbierta.descripcion_causa || 'Sin descripción'}
-                </div>
-              )}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 16 }}>{solicitudAbierta.profesor_nombre} ha solicitado el {new Date(solicitudAbierta.fecha_solicitada).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} como {etiquetaTipoDLD(solicitudAbierta.tipo_dld)}.</div>
             </div>
-            <GruposAfectados grupos={solicitudAbierta.grupos_afectados} />
-            <GuardiasHorario guardias={solicitudAbierta.guardias_horario} />
-            <HorarioCompleto grupos={solicitudAbierta.grupos_afectados} guardias={solicitudAbierta.guardias_horario} />
+            
             <AlertasPanel alertas={calcularAlertas(solicitudAbierta)} prelacion={calcularPrelacion(solicitudAbierta)} />
+            
+            <details style={{ marginBottom: 20 }}>
+              <summary style={{ fontSize: 14, color: '#3b82f6', cursor: 'pointer' }}>Ver detalles</summary>
+              <div style={{ marginTop: 10, fontSize: 13, color: '#374151' }}>
+                <div><strong>Tipo de DLD:</strong> {etiquetaTipoDLD(solicitudAbierta.tipo_dld)}</div>
+                <div><strong>Fecha:</strong> {new Date(solicitudAbierta.fecha_solicitada).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
+                {solicitudAbierta.causa_sobrevenida && (
+                  <div style={{ marginTop: 8, padding: 10, backgroundColor: '#fffbeb', borderRadius: 8 }}>
+                    ⚠️ <strong>Causa sobrevenida:</strong> {solicitudAbierta.descripcion_causa || 'Sin descripción'}
+                  </div>  
+                )}
+              </div>
+            </details>
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
                 <label style={{ fontSize: 13, fontWeight: 600, color: '#555' }}>Motivo de rechazo (obligatorio si rechazas)</label>
