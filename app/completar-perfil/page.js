@@ -6,77 +6,87 @@ import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 
-const DEPARTAMENTOS = [
-  'TMV/Carrocería', 'Hostelería', 'Informática', 'Electricidad', 'Comercio',
-  'Administración', 'Industrias Alimentarias', 'FOL', 'Física y Química',
-  'Ciencias Naturales/Biología', 'Matemáticas', 'Lengua y Literatura', 'Inglés',
-  'Educación Física', 'Dibujo/Plástica', 'Geografía e Historia', 'Filosofía',
-  'Música', 'Tecnología', 'Orientación', 'PT/AL',
-];
-
 const ESPECIALIDADES = [
-  { valor: 'TMV',                    emoji: '🚗' },
-  { valor: 'COMERCIO',               emoji: '🛍️' },
-  { valor: 'ELECTRICIDAD',           emoji: '⚡' },
-  { valor: 'INFORMÁTICA',            emoji: '💻' },
-  { valor: 'HOSTELERÍA',             emoji: '🍽️' },
+  { valor: 'TMV',                     emoji: '🚗' },
+  { valor: 'COMERCIO',                emoji: '🛍️' },
+  { valor: 'ELECTRICIDAD',            emoji: '⚡' },
+  { valor: 'INFORMÁTICA',             emoji: '💻' },
+  { valor: 'HOSTELERÍA',              emoji: '🍽️' },
   { valor: 'INDUSTRIAS ALIMENTARIAS', emoji: '🥖' },
-  { valor: 'ADMINISTRACIÓN',         emoji: '🏢' },
-  { valor: 'ESO/BACHILLERATO',       emoji: '🎓' },
+  { valor: 'ADMINISTRACIÓN',          emoji: '🏢' },
+  { valor: 'ESO/BACHILLERATO',        emoji: '🎓' },
 ];
 
 export default function CompletarPerfil() {
   const [profId,   setProfId]   = useState(null);
-  const [email,    setEmail]    = useState('');
+  const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error,    setError]    = useState('');
   const [listo,    setListo]    = useState(false);
 
+  // Datos que ya puso en el registro (solo lectura)
+  const [ficha, setFicha] = useState({ nombre: '', apellidos: '', email: '', departamento: '', grupo_tutoria: '' });
+
   const [form, setForm] = useState({
-    nombre:            '',
-    apellidos:         '',
-    departamento:      '',
     especialidad:      '',
     tipo_contrato:     'Funcionario de carrera',
     antiguedad_centro: '',
     antiguedad_cuerpo: '',
+    telefono:          '',
   });
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   useEffect(() => {
-    const id = sessionStorage.getItem('profesor_id');
-    const em = sessionStorage.getItem('profesor_email') || '';
-    if (!id) { window.location.href = '/login'; return; }
-    setProfId(id);
-    setEmail(em);
+    (async () => {
+      const id = sessionStorage.getItem('profesor_id');
+      if (!id) { window.location.href = '/login'; return; }
+      setProfId(id);
+
+      const { data: rows } = await getSupabase()
+        .from('profesores')
+        .select('nombre, apellidos, email, departamento, grupo_tutoria, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+        .eq('id', id);
+
+      const p = (rows || [])[0];
+      if (p) {
+        setFicha({
+          nombre:        p.nombre        || '',
+          apellidos:     p.apellidos     || '',
+          email:         p.email         || '',
+          departamento:  p.departamento  || '',
+          grupo_tutoria: p.grupo_tutoria || '',
+        });
+        setForm(f => ({
+          ...f,
+          especialidad:      p.especialidad  || '',
+          tipo_contrato:     p.tipo_contrato || 'Funcionario de carrera',
+          antiguedad_centro: p.antiguedad_centro?.toString() || '',
+          antiguedad_cuerpo: p.antiguedad_cuerpo?.toString() || '',
+        }));
+      }
+      setCargando(false);
+    })();
   }, []);
 
   async function guardar() {
     setError('');
-    if (!form.nombre.trim())    return setError('El nombre es obligatorio.');
-    if (!form.apellidos.trim()) return setError('Los apellidos son obligatorios.');
-    if (!form.departamento)     return setError('Selecciona tu departamento.');
-    if (!form.especialidad)     return setError('Selecciona tu especialidad.');
+    if (!form.especialidad) return setError('Selecciona tu especialidad.');
 
     setEnviando(true);
     try {
       const { error: err } = await getSupabase()
         .from('profesores')
         .update({
-          nombre:            form.nombre.trim(),
-          apellidos:         form.apellidos.trim(),
-          departamento:      form.departamento,
           especialidad:      form.especialidad,
           tipo_contrato:     form.tipo_contrato,
           antiguedad_centro: form.antiguedad_centro ? parseInt(form.antiguedad_centro) : null,
           antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
+          telefono:          form.telefono.trim() || null,
         })
         .eq('id', profId);
 
       if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
-
-      sessionStorage.setItem('profesor_nombre', form.nombre.trim() + ' ' + form.apellidos.trim());
       setListo(true);
     } catch (e) {
       setError('Error inesperado: ' + e.message);
@@ -84,17 +94,22 @@ export default function CompletarPerfil() {
     setEnviando(false);
   }
 
-  // ── Pantalla de éxito ──────────────────────────────
+  if (cargando) {
+    return (
+      <div style={estiloCenter}>
+        <div style={{ color: '#888', fontSize: 15 }}>⏳ Cargando tu ficha...</div>
+      </div>
+    );
+  }
 
   if (listo) {
     return (
       <div style={estiloCenter}>
         <div style={tarjeta}>
           <div style={{ fontSize: 60, marginBottom: 12 }}>✅</div>
-          <h2 style={{ color: VERDE, margin: '0 0 10px' }}>¡Ficha guardada!</h2>
+          <h2 style={{ color: VERDE, margin: '0 0 10px' }}>¡Ficha completada!</h2>
           <p style={{ color: '#555', lineHeight: 1.6, margin: '0 0 24px' }}>
-            Ya puedes usar el portal. El secretario te asignará
-            los roles que correspondan (tutor, jefe de departamento…).
+            Ya puedes usar el portal con normalidad.
           </p>
           <a href="/profesor" style={btnEstilo(VERDE)}>Ir al portal →</a>
         </div>
@@ -102,26 +117,22 @@ export default function CompletarPerfil() {
     );
   }
 
-  // ── Formulario ─────────────────────────────────────
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
-      {/* Cabecera */}
-      <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
-          <div style={{ fontSize: 13, opacity: 0.8 }}>Completa tu ficha</div>
-        </div>
+      <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 24px' }}>
+        <div style={{ fontSize: 18, fontWeight: 700 }}>🏫 IES Gregorio Prieto</div>
+        <div style={{ fontSize: 13, opacity: 0.8 }}>Completa tu ficha</div>
       </div>
 
-      {/* Indicador de pasos */}
-      <div style={{ maxWidth: 540, margin: '0 auto', padding: '20px 16px 0' }}>
-        <div style={{ display: 'flex', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 20 }}>
+      <div style={{ maxWidth: 540, margin: '0 auto', padding: '20px 16px 40px' }}>
+
+        {/* Pasos */}
+        <div style={{ display: 'flex', backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)', marginBottom: 18 }}>
           {[
             { n: '1', label: 'Solicitud',        hecho: true,  activo: false },
             { n: '2', label: 'Aprobación',        hecho: true,  activo: false },
-            { n: '3', label: 'Completa tu ficha', hecho: false, activo: true  },
+            { n: '3', label: 'Resto de tu ficha', hecho: false, activo: true  },
           ].map((p, i, arr) => (
             <div key={i} style={{
               flex: 1, padding: '11px 6px', textAlign: 'center',
@@ -137,52 +148,29 @@ export default function CompletarPerfil() {
             </div>
           ))}
         </div>
-      </div>
 
-      <div style={{ maxWidth: 540, margin: '0 auto', padding: '0 16px 32px' }}>
-
-        {/* Aviso */}
         <div style={{ backgroundColor: '#dbeafe', color: '#1e40af', padding: '13px 16px', borderRadius: 10, marginBottom: 18, fontSize: 14, lineHeight: 1.5 }}>
-          👋 <strong>¡Bienvenido/a!</strong> Tu acceso ha sido aprobado.
-          Completa tus datos para que el sistema te identifique correctamente.
+          👋 <strong>¡Bienvenido/a, {ficha.nombre}!</strong> Tu acceso ha sido aprobado.
+          Solo faltan unos datos para terminar.
         </div>
 
         <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
 
-          {/* Email (solo lectura) */}
-          <div style={{ marginBottom: 18, padding: '10px 14px', backgroundColor: '#f5f5f5', borderRadius: 8, fontSize: 13, color: '#555' }}>
-            📧 {email}
+          {/* Resumen de lo ya registrado */}
+          <div style={{ backgroundColor: '#f9fafb', border: '1px solid #eee', borderRadius: 10, padding: '14px 16px', marginBottom: 20, fontSize: 13, color: '#555', lineHeight: 1.9 }}>
+            <div style={{ fontWeight: 700, color: '#333', marginBottom: 6, fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.4 }}>
+              Datos de tu solicitud
+            </div>
+            👤 {ficha.nombre} {ficha.apellidos}<br />
+            📧 {ficha.email}<br />
+            🏢 {ficha.departamento}
+            {ficha.grupo_tutoria && <><br />🤝 Tutor/a de {ficha.grupo_tutoria}</>}
+            <div style={{ fontSize: 11, color: '#999', marginTop: 8 }}>
+              Si algo no es correcto, avisa al secretario.
+            </div>
           </div>
 
-          <Seccion>👤 Datos personales</Seccion>
-
-          <Campo label="Nombre *">
-            <input
-              value={form.nombre}
-              onChange={e => set('nombre', e.target.value)}
-              placeholder="Tu nombre"
-              style={inputEstilo}
-              autoFocus
-            />
-          </Campo>
-
-          <Campo label="Apellidos *">
-            <input
-              value={form.apellidos}
-              onChange={e => set('apellidos', e.target.value)}
-              placeholder="Tus apellidos"
-              style={inputEstilo}
-            />
-          </Campo>
-
           <Seccion>💼 Datos laborales</Seccion>
-
-          <Campo label="Departamento *">
-            <select value={form.departamento} onChange={e => set('departamento', e.target.value)} style={inputEstilo}>
-              <option value="">— Selecciona —</option>
-              {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </Campo>
 
           <Campo label="Especialidad (cuadrante de guardias) *">
             <select value={form.especialidad} onChange={e => set('especialidad', e.target.value)} style={inputEstilo}>
@@ -215,9 +203,10 @@ export default function CompletarPerfil() {
             </Campo>
           </div>
 
-          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', margin: '16px 0 8px', lineHeight: 1.6 }}>
-            ℹ️ Los roles (tutor, jefe de departamento…) los asignará el secretario desde el panel de gestión.
-          </div>
+          <Campo label="Teléfono de contacto (opcional)">
+            <input type="tel" value={form.telefono} onChange={e => set('telefono', e.target.value)}
+              placeholder="Para avisos urgentes" style={inputEstilo} />
+          </Campo>
 
           {error && (
             <div style={{ backgroundColor: '#fee2e2', color: '#991b1b', padding: '10px 14px', borderRadius: 8, marginBottom: 12, fontSize: 13 }}>
@@ -248,7 +237,7 @@ export default function CompletarPerfil() {
 
 function Seccion({ children }) {
   return (
-    <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginTop: 20, marginBottom: 10, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
+    <div style={{ fontSize: 14, fontWeight: 700, color: '#333', marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
       {children}
     </div>
   );
