@@ -92,18 +92,6 @@ export default function Registro() {
         });
       } catch(e) { console.error('Email profesor (no crítico):', e); }
 
-      // Email al secretario: nueva solicitud
-      try {
-        await fetch('/api/enviar-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: 'nueva_solicitud_secretario',
-            datos: { nombre: emailLimpio, email: 'llcc12@educastillalamancha.es', departamento: '' }
-          })
-        });
-      } catch(e) { console.error('Email secretario (no crítico):', e); }
-
       setPantalla('solicitud_enviada');
     } catch (e) {
       setError('Error inesperado: ' + e.message);
