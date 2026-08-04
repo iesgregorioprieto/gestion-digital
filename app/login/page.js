@@ -122,7 +122,12 @@ export default function Login() {
     sessionStorage.setItem('profesor_rol_gestion', rolFinal);
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
-    window.location.href = '/profesor';
+    // Si el profesor no ha rellenado su ficha todavía → a completar perfil
+    if (!data.nombre || !data.nombre.trim()) {
+      window.location.href = '/completar-perfil';
+    } else {
+      window.location.href = '/profesor';
+    }
   }
 
   return (
