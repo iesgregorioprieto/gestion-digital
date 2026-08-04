@@ -5,15 +5,33 @@ const FROM = 'secretario@iesgregorioprieto.com';
 const REPLY_TO = 'llcc12@educastillalamancha.es';
 
 
-// Diagnóstico: abrir /api/enviar-email en el navegador para comprobar la configuración
-export async function GET() {
+// Diagnóstico: abrir /api/enviar-email?to=tu@correo.es para enviar un email de prueba
+export async function GET(request) {
   const key = process.env.RESEND_API_KEY || '';
-  return Response.json({
+  const { searchParams } = new URL(request.url);
+  const to = searchParams.get('to');
+
+  const info = {
     resend_api_key_existe: key.length > 0,
     resend_api_key_longitud: key.length,
-    resend_api_key_empieza_por: key ? key.slice(0, 6) + '...' : '(vacía)',
     from: FROM,
-  });
+  };
+
+  if (!to) {
+    return Response.json({ ...info, aviso: 'Añade ?to=tu@correo.es para enviar un email de prueba' });
+  }
+
+  try {
+    const resultado = await resend.emails.send({
+      from: FROM,
+      to: [to],
+      subject: 'Prueba de envío — Portal IES Gregorio Prieto',
+      html: '<p>Si lees esto, el envío de correos funciona correctamente.</p>',
+    });
+    return Response.json({ ...info, resultado });
+  } catch (err) {
+    return Response.json({ ...info, excepcion: err.message, detalle: String(err) });
+  }
 }
 
 export async function POST(request) {
