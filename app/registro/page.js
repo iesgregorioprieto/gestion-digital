@@ -194,22 +194,6 @@ export default function Registro() {
         });
       } catch(e) { console.error('Email registro pendiente (no crítico):', e); }
 
-      // Email al secretario: nueva solicitud de acceso
-      try {
-        await fetch('/api/enviar-email', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            tipo: 'nueva_solicitud_secretario',
-            datos: {
-              nombre: form.nombre + ' ' + form.apellidos,
-              email: emailVerificado,
-              departamento: form.departamento,
-            }
-          })
-        });
-      } catch(e) { console.error('Email secretario (no crítico):', e); }
-
       setPantalla('solicitud_enviada');
     } catch (e) {
       setError('Error inesperado: ' + e.message);
