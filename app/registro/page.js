@@ -6,8 +6,15 @@ import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 
-// Hash de contraseña directamente en el cliente con Web Crypto API
-// Igual que hace /api/password pero sin depender de una llamada fetch
+const DEPARTAMENTOS = [
+  'TMV/Carrocería', 'Hostelería', 'Informática', 'Electricidad', 'Comercio',
+  'Administración', 'Industrias Alimentarias', 'FOL', 'Física y Química',
+  'Ciencias Naturales/Biología', 'Matemáticas', 'Lengua y Literatura', 'Inglés',
+  'Educación Física', 'Dibujo/Plástica', 'Geografía e Historia', 'Filosofía',
+  'Música', 'Tecnología', 'Orientación', 'PT/AL',
+];
+
+// Hash de contraseña en el cliente (PBKDF2, mismo formato que /api/password)
 async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const encoder = new TextEncoder();
@@ -20,34 +27,47 @@ async function hashPassword(password) {
   );
   const hashArray = new Uint8Array(derivedBits);
   const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
-  const hashHex  = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
+  const hashHex = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
   return saltHex + ':' + hashHex;
 }
 
 export default function Registro() {
   const [pantalla, setPantalla] = useState('inicio');
-  const [email,    setEmail]    = useState('');
-  const [pass1,    setPass1]    = useState('');
-  const [pass2,    setPass2]    = useState('');
   const [enviando, setEnviando] = useState(false);
-  const [error,    setError]    = useState('');
+  const [error, setError]       = useState('');
+
+  const [form, setForm] = useState({
+    nombre:        '',
+    apellidos:     '',
+    departamento:  '',
+    email:         '',
+    esTutor:       false,
+    grupoTutoria:  '',
+    pass1:         '',
+    pass2:         '',
+  });
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   async function enviarSolicitud() {
     setError('');
-    const em = email.trim().toLowerCase();
+    const em = form.email.trim().toLowerCase();
 
-    if (!em)
-      return setError('Introduce tu email institucional.');
+    if (!form.nombre.trim())    return setError('Introduce tu nombre.');
+    if (!form.apellidos.trim()) return setError('Introduce tus apellidos.');
+    if (!form.departamento)     return setError('Selecciona tu departamento.');
+    if (!em)                    return setError('Introduce tu email institucional.');
     if (!em.endsWith('@educastillalamancha.es'))
       return setError('Solo se admite email @educastillalamancha.es');
-    if (pass1.length < 6)
+    if (form.esTutor && !form.grupoTutoria.trim())
+      return setError('Indica de qué grupo eres tutor/a.');
+    if (form.pass1.length < 6)
       return setError('La contraseña debe tener al menos 6 caracteres.');
-    if (pass1 !== pass2)
+    if (form.pass1 !== form.pass2)
       return setError('Las contraseñas no coinciden.');
 
     setEnviando(true);
     try {
-      // ¿Ya existe este email?
       const { data: rows } = await getSupabase()
         .from('profesores')
         .select('id, password_hash, solicitud_acceso')
@@ -56,42 +76,43 @@ export default function Registro() {
       const prof = (rows || [])[0];
 
       if (prof?.password_hash?.length > 0) {
-        setPantalla('ya_registrado');
-        setEnviando(false);
-        return;
+        setPantalla('ya_registrado'); setEnviando(false); return;
       }
-
       if (prof?.solicitud_acceso) {
-        setPantalla('pendiente_aprobacion');
-        setEnviando(false);
-        return;
+        setPantalla('pendiente_aprobacion'); setEnviando(false); return;
       }
 
-      // Hashear contraseña en cliente — sin llamadas fetch intermedias
-      const hash = await hashPassword(pass1);
+      const hash = await hashPassword(form.pass1);
 
-      // Guardar en BD
+      const datos = {
+        nombre:        form.nombre.trim(),
+        apellidos:     form.apellidos.trim(),
+        departamento:  form.departamento,
+        rol:           form.esTutor ? ['profesor', 'tutor'] : ['profesor'],
+        grupo_tutoria: form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
+        password_hash: hash,
+        solicitud_acceso: true,
+        estado:        'pendiente',
+      };
+
       if (prof) {
         const { error: err } = await getSupabase()
-          .from('profesores')
-          .update({ password_hash: hash, solicitud_acceso: true, estado: 'pendiente' })
-          .eq('id', prof.id);
+          .from('profesores').update(datos).eq('id', prof.id);
         if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
       } else {
         const { error: err } = await getSupabase()
-          .from('profesores')
-          .insert({ email: em, password_hash: hash, solicitud_acceso: true, estado: 'pendiente' });
+          .from('profesores').insert({ ...datos, email: em });
         if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
       }
 
-      // Email al profesor informando que su solicitud ha llegado
+      // Email de confirmación al profesor
       try {
         await fetch('/api/enviar-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tipo: 'registro_pendiente',
-            datos: { nombre: 'Profesor/a', email: em },
+            datos: { nombre: form.nombre.trim(), email: em },
           }),
         });
       } catch (_) {}
@@ -111,14 +132,13 @@ export default function Registro() {
         <div style={{ fontSize: 64, marginBottom: 12 }}>📨</div>
         <h2 style={{ color: VERDE, margin: '0 0 12px' }}>¡Solicitud enviada!</h2>
         <p style={{ color: '#555', lineHeight: 1.6, margin: '0 0 12px' }}>
-          Hemos recibido tu solicitud. El secretario la revisará
+          Hemos recibido tu solicitud, {form.nombre}. El secretario la revisará
           y activará tu cuenta en breve.
         </p>
         <div style={cajaInfo}>
-          Te hemos enviado un correo a <strong>{email}</strong> para
-          confirmarte que tu solicitud ha llegado. Cuando el secretario
-          la apruebe, recibirás otro correo y podrás entrar con tu
-          email y la contraseña que acabas de crear.
+          Te hemos enviado un correo a <strong>{form.email}</strong> confirmando
+          que tu solicitud ha llegado. Cuando el secretario la apruebe, recibirás
+          otro correo y podrás entrar con tu email y la contraseña que acabas de crear.
         </div>
         <a href="/" style={btnEstilo(VERDE)}>← Volver al inicio</a>
       </Wrapper>
@@ -156,7 +176,7 @@ export default function Registro() {
     );
   }
 
-  // ── Pantalla principal ──────────────────────────────
+  // ── Formulario ──────────────────────────────────────
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -169,14 +189,14 @@ export default function Registro() {
         <a href="/" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
       </div>
 
-      <div style={{ maxWidth: 460, margin: '0 auto', padding: '28px 16px' }}>
+      <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 16px 40px' }}>
 
-        {/* Indicador de pasos */}
-        <div style={{ display: 'flex', marginBottom: 24, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+        {/* Pasos */}
+        <div style={{ display: 'flex', marginBottom: 20, backgroundColor: 'white', borderRadius: 12, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
           {[
-            { n: '1', label: 'Solicitud',        activo: true  },
-            { n: '2', label: 'Aprobación',        activo: false },
-            { n: '3', label: 'Completa tu ficha', activo: false },
+            { n: '1', label: 'Solicitud',       activo: true  },
+            { n: '2', label: 'Aprobación',       activo: false },
+            { n: '3', label: 'Resto de tu ficha', activo: false },
           ].map((p, i, arr) => (
             <div key={i} style={{
               flex: 1, padding: '11px 6px', textAlign: 'center',
@@ -189,44 +209,81 @@ export default function Registro() {
           ))}
         </div>
 
-        {/* Formulario */}
         <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 26, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
           <div style={{ fontSize: 34, textAlign: 'center', marginBottom: 6 }}>📋</div>
           <h2 style={{ color: VERDE, textAlign: 'center', margin: '0 0 6px', fontSize: 20 }}>Solicita el acceso</h2>
-          <p style={{ color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 1.5, margin: '0 0 22px' }}>
-            Usa tu email <strong>@educastillalamancha.es</strong> y elige una contraseña.
+          <p style={{ color: '#888', textAlign: 'center', fontSize: 13, lineHeight: 1.5, margin: '0 0 20px' }}>
+            Rellena estos datos para que el secretario pueda identificarte.
           </p>
 
+          <Seccion>👤 ¿Quién eres?</Seccion>
+
+          <Campo label="Nombre *">
+            <input value={form.nombre} onChange={e => set('nombre', e.target.value)}
+              placeholder="Tu nombre" style={inputEstilo} autoFocus />
+          </Campo>
+
+          <Campo label="Apellidos *">
+            <input value={form.apellidos} onChange={e => set('apellidos', e.target.value)}
+              placeholder="Tus apellidos" style={inputEstilo} />
+          </Campo>
+
+          <Campo label="Departamento *">
+            <select value={form.departamento} onChange={e => set('departamento', e.target.value)} style={inputEstilo}>
+              <option value="">— Selecciona —</option>
+              {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </Campo>
+
+          {/* Tutoría */}
+          <div
+            onClick={() => set('esTutor', !form.esTutor)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '11px 14px', borderRadius: 10, cursor: 'pointer',
+              border: `1.5px solid ${form.esTutor ? VERDE : '#ddd'}`,
+              backgroundColor: form.esTutor ? '#f0fdf4' : 'white',
+              marginBottom: form.esTutor ? 10 : 14,
+            }}
+          >
+            <div style={{
+              width: 20, height: 20, borderRadius: 5, flexShrink: 0,
+              border: `2px solid ${form.esTutor ? VERDE : '#ccc'}`,
+              backgroundColor: form.esTutor ? VERDE : 'white',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'white', fontSize: 13, fontWeight: 700,
+            }}>
+              {form.esTutor ? '✓' : ''}
+            </div>
+            <div style={{ fontSize: 14, color: form.esTutor ? VERDE : '#555', fontWeight: form.esTutor ? 600 : 400 }}>
+              🤝 Soy tutor/a de un grupo
+            </div>
+          </div>
+
+          {form.esTutor && (
+            <Campo label="¿De qué grupo? *">
+              <input value={form.grupoTutoria} onChange={e => set('grupoTutoria', e.target.value)}
+                placeholder="Ej: 2ESO-A, GM-2CAR, 1BACH-B" style={inputEstilo} />
+            </Campo>
+          )}
+
+          <Seccion>🔐 Datos de acceso</Seccion>
+
           <Campo label="📧 Email institucional *">
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="nombre.apellido@educastillalamancha.es"
-              style={inputEstilo}
-              autoFocus
-            />
+            <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+              placeholder="nombre.apellido@educastillalamancha.es" style={inputEstilo} />
           </Campo>
 
           <Campo label="🔑 Contraseña *">
-            <input
-              type="password"
-              value={pass1}
-              onChange={e => setPass1(e.target.value)}
-              placeholder="Mínimo 6 caracteres"
-              style={inputEstilo}
-            />
+            <input type="password" value={form.pass1} onChange={e => set('pass1', e.target.value)}
+              placeholder="Mínimo 6 caracteres" style={inputEstilo} />
           </Campo>
 
           <Campo label="🔑 Repite la contraseña *">
-            <input
-              type="password"
-              value={pass2}
-              onChange={e => setPass2(e.target.value)}
+            <input type="password" value={form.pass2} onChange={e => set('pass2', e.target.value)}
               placeholder="Repite la contraseña"
               onKeyDown={e => e.key === 'Enter' && enviarSolicitud()}
-              style={inputEstilo}
-            />
+              style={inputEstilo} />
           </Campo>
 
           {error && (
@@ -239,7 +296,7 @@ export default function Registro() {
             onClick={enviarSolicitud}
             disabled={enviando}
             style={{
-              width: '100%', marginTop: 4, padding: '13px',
+              width: '100%', marginTop: 6, padding: '13px',
               backgroundColor: VERDE, color: 'white', border: 'none',
               borderRadius: 10, fontSize: 15, fontWeight: 700,
               cursor: enviando ? 'not-allowed' : 'pointer',
@@ -256,9 +313,9 @@ export default function Registro() {
         </div>
 
         <div style={{ marginTop: 14, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '12px 16px', fontSize: 12, color: '#166534', lineHeight: 1.7 }}>
-          ℹ️ Al enviar la solicitud recibirás un email de confirmación.
-          Cuando el secretario la apruebe, recibirás otro email y podrás
-          entrar directamente con tu email y contraseña.
+          ℹ️ Recibirás un email de confirmación. Cuando el secretario apruebe tu
+          solicitud, recibirás otro y podrás entrar con tu email y contraseña
+          para completar el resto de tu ficha.
         </div>
 
       </div>
@@ -266,7 +323,7 @@ export default function Registro() {
   );
 }
 
-// ── Componentes auxiliares ──────────────────────────
+// ── Auxiliares ──────────────────────────────────────
 
 function Wrapper({ children }) {
   return (
@@ -274,6 +331,14 @@ function Wrapper({ children }) {
       <div style={{ backgroundColor: 'white', borderRadius: 16, padding: 40, maxWidth: 460, width: '100%', textAlign: 'center', boxShadow: '0 4px 20px rgba(0,0,0,0.1)' }}>
         {children}
       </div>
+    </div>
+  );
+}
+
+function Seccion({ children }) {
+  return (
+    <div style={{ fontSize: 13, fontWeight: 700, color: '#333', marginTop: 4, marginBottom: 12, paddingBottom: 6, borderBottom: '1px solid #eee' }}>
+      {children}
     </div>
   );
 }
