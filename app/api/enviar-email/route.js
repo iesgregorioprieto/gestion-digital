@@ -18,7 +18,7 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre} ${datos.apellidos}</h2>
+            <h2 style="color:#1e3a5f">Hola${datos.nombre ? ', ' + datos.nombre + ' ' + (datos.apellidos || '') : ''}</h2>
             <p>Tu solicitud de acceso al portal ha sido <strong style="color:green">aprobada</strong>.</p>
             <p>Ya puedes iniciar sesión con tu correo: <strong>${datos.email}</strong></p>
             ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${datos.rol_gestion}</strong></p>` : ''}
