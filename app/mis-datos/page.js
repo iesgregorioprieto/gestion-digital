@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import GestionNotificaciones from '@/components/GestionNotificaciones';
+import TamanoLetra from '@/components/TamanoLetra';
 
 const VERDE = '#1e6b2e';
 
@@ -203,8 +204,9 @@ export default function MisDatos() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {[
             { id: 'datos',    label: '👤 Datos' },
-            { id: 'password', label: '🔑 Contraseña' },
+            { id: 'password', label: '🔑 Clave' },
             { id: 'avisos',   label: '🔔 Avisos' },
+            { id: 'letra',    label: '🔠 Letra' },
           ].map(t => (
             <button key={t.id} onClick={() => setPestana(t.id)} style={{
               flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
@@ -315,6 +317,13 @@ export default function MisDatos() {
             }}>
               {guardando ? '⏳ Guardando...' : '💾 Guardar cambios'}
             </button>
+          </div>
+        )}
+
+        {/* ── PESTAÑA TAMAÑO DE LETRA ── */}
+        {pestana === 'letra' && (
+          <div style={tarjeta}>
+            <TamanoLetra />
           </div>
         )}
 
