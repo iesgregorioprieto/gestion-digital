@@ -75,10 +75,12 @@ export default function Registro() {
 
       const prof = (rows || [])[0];
 
+      // Ya tiene contraseña → cuenta activa, ir al login
       if (prof?.password_hash?.length > 0) {
         setPantalla('ya_registrado'); setEnviando(false); return;
       }
-      if (prof?.solicitud_acceso) {
+      // Ya envió solicitud y espera aprobación
+      if (prof?.solicitud_acceso && prof?.estado === 'pendiente') {
         setPantalla('pendiente_aprobacion'); setEnviando(false); return;
       }
 
