@@ -632,6 +632,20 @@ export default function PanelDirector() {
             body: JSON.stringify({ tipo: 'dld_rechazada', datos: { nombre: prof.nombre + ' ' + prof.apellidos, email: prof.email, fecha_solicitada: sol.fecha_solicitada, motivo_rechazo: motivoRechazo } })
           });
         }
+        // Push al profesor
+        try {
+          await fetch('/api/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accion: 'enviar',
+              profesor_id: sol.profesor_id,
+              titulo: '❌ DLD denegado',
+              cuerpo: `Tu solicitud para el ${sol.fecha_solicitada} no ha sido aprobada. Consulta el motivo en el portal.`,
+              url: '/dld',
+            }),
+          });
+        } catch(e) { console.error('Push DLD rechazada:', e); }
       }
     } catch(e) { console.error('Email DLD rechazada:', e); }
     setSolicitudAbierta(null);
