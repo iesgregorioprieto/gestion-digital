@@ -428,7 +428,27 @@ export default function GestionGuardias() {
 
     if (apoyosNuevos.length > 0) {
       const { data } = await getSupabase().from('apoyos_asignados').insert(apoyosNuevos).select();
-      if (data) setApAsig(prev => [...prev, ...data]);
+      if (data) {
+        setApAsig(prev => [...prev, ...data]);
+        // Push a cada profesor asignado
+        const HORAS_LABEL = { '1': '1ª (8:30–9:25)', '2': '2ª (9:25–10:20)', '3': '3ª (10:20–11:15)', 'recreo': 'Recreo (11:15–11:45)', '4': '4ª (11:45–12:40)', '5': '5ª (12:40–13:35)', '6': '6ª (13:35–14:30)' };
+        for (const ap of data) {
+          if (!ap.profesor_id) continue;
+          try {
+            await fetch('/api/push', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                accion: 'enviar',
+                profesor_id: ap.profesor_id,
+                titulo: '🛡️ Apoyo de guardia asignado',
+                cuerpo: `Tienes un apoyo el ${fecha} a las ${HORAS_LABEL[horaActiva] || horaActiva}${ap.grupo ? ' — ' + ap.grupo : ''}`,
+                url: '/guardias',
+              }),
+            });
+          } catch(e) { console.error('Push apoyo automático:', e); }
+        }
+      }
     }
   }
 
