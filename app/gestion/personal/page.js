@@ -89,8 +89,13 @@ export default function PanelSecretario() {
   }
 
   async function aprobar(id) {
-    await getSupabase().from('profesores').update({ estado: 'activo' }).eq('id', id);
-    mostrarMensaje('✅ Profesor aprobado', 'ok');
+    // Token único para verificar que el correo es suyo
+    const token = crypto.randomUUID();
+    await getSupabase()
+      .from('profesores')
+      .update({ estado: 'activo', token_activacion: token })
+      .eq('id', id);
+    mostrarMensaje('✅ Aprobado — se le ha enviado el enlace de activación', 'ok');
     // Enviar email de activación de cuenta
     try {
       const rows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
@@ -99,7 +104,7 @@ export default function PanelSecretario() {
         await fetch('/api/enviar-email', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tipo: 'activacion_cuenta', datos: prof })
+          body: JSON.stringify({ tipo: 'activacion_cuenta', datos: { ...prof, token } })
         });
       }
     } catch(e) { console.error('Email activación:', e); }
