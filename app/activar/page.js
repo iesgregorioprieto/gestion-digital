@@ -95,20 +95,21 @@ export default function Activar() {
 
         {estado === 'invalido' && (
           <>
-            <div style={{ fontSize: 64, marginBottom: 14 }}>🔗</div>
-            <h2 style={{ color: '#92400e', margin: '0 0 12px' }}>Enlace no válido</h2>
+            <div style={{ fontSize: 64, marginBottom: 14 }}>✅</div>
+            <h2 style={{ color: VERDE, margin: '0 0 12px' }}>Tu cuenta ya está activa</h2>
             <p style={{ color: '#555', lineHeight: 1.6, margin: '0 0 12px' }}>
-              Este enlace ya se ha usado o no es correcto.
+              Este enlace ya se usó, así que tu cuenta está lista.
+              Entra con tu email y contraseña.
             </p>
             <div style={{
               backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0',
               borderRadius: 10, padding: '12px 16px', fontSize: 13,
               color: '#166534', lineHeight: 1.6, marginBottom: 20, textAlign: 'left',
             }}>
-              Si ya activaste tu cuenta antes, entra directamente.
-              Si no, escribe al secretario para que te reenvíe el correo.
+              Si al entrar te dice que la cuenta no está activada,
+              avisa al secretario para que te reenvíe el correo.
             </div>
-            <a href="/login" style={boton}>🔓 Ir al portal</a>
+            <a href="/login" style={boton}>🔓 Entrar al portal</a>
           </>
         )}
 
