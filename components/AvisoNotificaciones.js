@@ -157,25 +157,57 @@ export default function AvisoNotificaciones({ profesorId }) {
   }
 
   return (
-    <Caja fondo="#dbeafe" borde="#93c5fd" color="#1e40af">
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 28 }}>🔔</div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontWeight: 800, marginBottom: 3 }}>Activa las notificaciones</div>
-          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-            Recibe avisos en el móvil cuando te asignen un apoyo de guardia,
-            se resuelva un DLD o tengas una justificación pendiente.
+    <div style={{
+      background: 'linear-gradient(135deg, #1e40af 0%, #2563eb 100%)',
+      borderRadius: 14, padding: '18px 20px', marginBottom: 20,
+      boxShadow: '0 4px 16px rgba(37, 99, 235, 0.25)',
+      color: 'white',
+    }}>
+      <div style={{
+        display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.2)',
+        padding: '3px 10px', borderRadius: 20, fontSize: 11,
+        fontWeight: 800, letterSpacing: 0.5, marginBottom: 10,
+      }}>
+        ⚡ NOVEDAD
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 36, lineHeight: 1 }}>🔔</div>
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 6 }}>
+            Recibe los avisos en tu móvil
+          </div>
+          <div style={{ fontSize: 13.5, lineHeight: 1.6, opacity: 0.95, marginBottom: 12 }}>
+            Ya no hace falta entrar a mirar. El portal te avisará al instante cuando:
+          </div>
+          <div style={{ fontSize: 13.5, lineHeight: 2, opacity: 0.95, marginBottom: 14 }}>
+            🛡️ Te asignen un <strong>apoyo de guardia</strong><br />
+            ✅ Se resuelva tu <strong>solicitud de DLD</strong><br />
+            📋 Tengas una <strong>justificación pendiente</strong>
+          </div>
+
+          <button
+            onClick={activar}
+            disabled={estado === 'activando'}
+            style={{
+              padding: '12px 26px', borderRadius: 10, border: 'none',
+              backgroundColor: 'white', color: '#1e40af',
+              fontWeight: 800, fontSize: 15, cursor: 'pointer',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              opacity: estado === 'activando' ? 0.7 : 1,
+            }}
+          >
+            {estado === 'activando' ? '⏳ Activando...' : '🔔 Activar ahora'}
+          </button>
+
+          <div style={{ fontSize: 11.5, opacity: 0.85, marginTop: 10, lineHeight: 1.5 }}>
+            Solo se hace una vez. Si estás en la WiFi del centro, desactívala
+            un momento y usa datos.
           </div>
         </div>
-        <button
-          onClick={activar}
-          disabled={estado === 'activando'}
-          style={{ ...botonEstilo(VERDE), opacity: estado === 'activando' ? 0.7 : 1 }}
-        >
-          {estado === 'activando' ? '⏳ Activando...' : '🔔 Activar'}
-        </button>
       </div>
-    </Caja>
+    </div>
   );
 }
 
