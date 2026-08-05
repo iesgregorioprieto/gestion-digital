@@ -505,6 +505,21 @@ export default function GestionGuardias() {
           });
         }
       } catch(e) { console.error('Email guardia asignada:', e); }
+      // Push al profesor
+      try {
+        const HORAS_LABEL = { '1': '1ª (8:30–9:25)', '2': '2ª (9:25–10:20)', '3': '3ª (10:20–11:15)', 'recreo': 'Recreo (11:15–11:45)', '4': '4ª (11:45–12:40)', '5': '5ª (12:40–13:35)', '6': '6ª (13:35–14:30)' };
+        await fetch('/api/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'enviar',
+            profesor_id: profesorSeleccionado.profesorId,
+            titulo: '🛡️ Apoyo de guardia asignado',
+            cuerpo: `Tienes un apoyo el ${fecha} a las ${HORAS_LABEL[horaActiva] || horaActiva}${data[0]?.grupo ? ' — ' + data[0].grupo : ''}`,
+            url: '/guardias',
+          }),
+        });
+      } catch(e) { console.error('Push guardia urgente:', e); }
     }
     setModalActivar(null);
   }
