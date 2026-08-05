@@ -535,6 +535,20 @@ export default function PanelDirector() {
             body: JSON.stringify({ tipo: 'dld_aprobada', datos: { nombre: prof.nombre + ' ' + prof.apellidos, email: prof.email, fecha_solicitada: sol.fecha_solicitada, tipo_dld: sol.tipo_dld } })
           });
         }
+        // Push al profesor
+        try {
+          await fetch('/api/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              accion: 'enviar',
+              profesor_id: sol.profesor_id,
+              titulo: '✅ DLD aprobado',
+              cuerpo: `Tu solicitud para el ${sol.fecha_solicitada} ha sido aprobada.`,
+              url: '/dld',
+            }),
+          });
+        } catch(e) { console.error('Push DLD aprobada:', e); }
 
         // Comprobar si esta aprobación desplaza a alguien (no lectivos, límite 1/3)
         const fecha = sol.fecha_solicitada;
@@ -576,6 +590,20 @@ export default function PanelDirector() {
                 })
               });
             }
+            // Push al desplazado
+            try {
+              await fetch('/api/push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  accion: 'enviar',
+                  profesor_id: desplazado.profesor_id,
+                  titulo: '⚠️ DLD revocado',
+                  cuerpo: `Tu DLD del ${fecha} ha sido revocado por prelación. Consulta el portal.`,
+                  url: '/dld',
+                }),
+              });
+            } catch(e) { console.error('Push DLD revocada:', e); }
           }
         }
       }
