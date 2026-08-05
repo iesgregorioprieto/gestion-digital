@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import GestionNotificaciones from '@/components/GestionNotificaciones';
 
 const VERDE = '#1e6b2e';
 
@@ -201,8 +202,9 @@ export default function MisDatos() {
         {/* Pestañas */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
           {[
-            { id: 'datos',    label: '👤 Mis datos' },
+            { id: 'datos',    label: '👤 Datos' },
             { id: 'password', label: '🔑 Contraseña' },
+            { id: 'avisos',   label: '🔔 Avisos' },
           ].map(t => (
             <button key={t.id} onClick={() => setPestana(t.id)} style={{
               flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
@@ -313,6 +315,13 @@ export default function MisDatos() {
             }}>
               {guardando ? '⏳ Guardando...' : '💾 Guardar cambios'}
             </button>
+          </div>
+        )}
+
+        {/* ── PESTAÑA NOTIFICACIONES ── */}
+        {pestana === 'avisos' && profId && (
+          <div style={tarjeta}>
+            <GestionNotificaciones profesorId={profId} />
           </div>
         )}
 
