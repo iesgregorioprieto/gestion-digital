@@ -74,11 +74,14 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
         disfrutados[h.profesor_id] = (disfrutados[h.profesor_id] || 0) + 1;
       }
 
-      // Límite del día: manda el tipo mayoritario de las solicitudes
-      const hayNoLectivo = lista.some(s => s.tipo_dld === 'no_lectivo');
+      // Límite del día según el tipo MAYORITARIO (un error puntual no debe
+      // disparar el límite de todo el día)
+      const nNoLectivo = lista.filter(s => s.tipo_dld === 'no_lectivo').length;
+      const hayNoLectivo = nNoLectivo > lista.length / 2;
       const maxLectivo = totalProfesores > 60 ? 4 : totalProfesores > 40 ? 3 : totalProfesores > 20 ? 2 : 1;
       const maxNoLectivo = Math.floor(totalProfesores / 3);
       const limite = hayNoLectivo ? maxNoLectivo : maxLectivo;
+      const tiposMezclados = nNoLectivo > 0 && nNoLectivo < lista.length;
 
       // Ordenar por prelación (art. 2.3 y 12 de la normativa)
       const ordenadas = lista.map(s => ({
@@ -109,7 +112,7 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
         return { ...s, posicion: i + 1, dentro, accion, motivo };
       });
 
-      setPropuesta({ limite, hayNoLectivo, lista: conAccion });
+      setPropuesta({ limite, hayNoLectivo, tiposMezclados, lista: conAccion });
     } catch (e) {
       setResultado({ error: e.message });
     }
@@ -149,7 +152,6 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
         if (a === 'mantener') continue;
 
         if (a === 'aprobar') {
-          const token = crypto.randomUUID();
           await getSupabase().from('dld').update({
             estado: 'aprobada',
             resuelto_at: new Date().toISOString(),
@@ -294,6 +296,17 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
             Límite del centro: <strong>{propuesta.limite} profesores</strong> ese día ·
             Solicitudes analizadas: <strong>{propuesta.lista.length}</strong>
           </div>
+
+          {propuesta.tiposMezclados && (
+            <div style={{
+              backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', color: '#78350f',
+              borderRadius: 10, padding: '12px 16px', fontSize: 13, lineHeight: 1.6, marginBottom: 16,
+            }}>
+              ⚠️ <strong>Atención:</strong> ese día hay solicitudes de tipo lectivo y no lectivo
+              mezcladas. Se ha aplicado el límite del tipo mayoritario. Revisa que el tipo
+              de cada solicitud sea correcto antes de resolver.
+            </div>
+          )}
 
           <div style={{ display: 'grid', gap: 8, marginBottom: 16 }}>
             {propuesta.lista.map(s => {
