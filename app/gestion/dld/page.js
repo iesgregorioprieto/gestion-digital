@@ -200,6 +200,8 @@ function AlertasPanel({ alertas, prelacion }) {
 }
 export default function PanelDirector() {
   const [nombreUsuario, setNombreUsuario] = useState('');
+  const [revocando, setRevocando] = useState(null);   // solicitud a revocar
+  const [motivoRevoca, setMotivoRevoca] = useState('');
   const [todasSolicitudes, setTodasSolicitudes] = useState([]);
   const [totalProfesores, setTotalProfesores] = useState(150); // Se carga dinámicamente de la BD
   const [cargando, setCargando] = useState(true);
@@ -655,6 +657,67 @@ export default function PanelDirector() {
     setProcesando(false);
   }
 
+  // Revocar un DLD ya concedido, dejando constancia del motivo
+  async function revocar() {
+    if (!revocando) return;
+    if (!motivoRevoca.trim()) { mostrarMensaje('Indica el motivo de la revocación', 'error'); return; }
+
+    setProcesando(true);
+    const s = revocando;
+
+    const motivoCompleto =
+      `REVOCACIÓN DE PERMISO YA CONCEDIDO. ${motivoRevoca.trim()}` +
+      `\n\nConforme al punto 11 de la Resolución de 18/07/2024, la Dirección puede revocar ` +
+      `un permiso concedido cuando concurran necesidades sobrevenidas del servicio.`;
+
+    await getSupabase().from('dld').update({
+      estado: 'rechazada',
+      motivo_rechazo: motivoCompleto,
+      resuelto_at: new Date().toISOString(),
+      resuelto_por: nombreUsuario,
+    }).eq('id', s.id);
+
+    mostrarMensaje('⚠️ Permiso revocado', 'ok');
+
+    // Avisar al profesor por email
+    try {
+      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', s.profesor_id);
+      const prof = (rows.data || [])[0];
+      if (prof?.email) {
+        await fetch('/api/enviar-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo: 'dld_rechazada', datos: {
+            nombre: prof.nombre + ' ' + prof.apellidos,
+            email: prof.email,
+            fecha_solicitada: s.fecha_solicitada,
+            motivo_rechazo: motivoCompleto,
+          }})
+        });
+      }
+    } catch(e) { console.error('Email revocacion:', e); }
+
+    // Notificación push
+    try {
+      await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'enviar',
+          profesor_id: s.profesor_id,
+          titulo: '⚠️ DLD revocado',
+          cuerpo: `Tu permiso del ${s.fecha_solicitada} ha sido revocado. Consulta el motivo en el portal.`,
+          url: '/dld',
+        }),
+      });
+    } catch(e) { console.error('Push revocacion:', e); }
+
+    setRevocando(null);
+    setMotivoRevoca('');
+    cargarSolicitudes();
+    setProcesando(false);
+  }
+
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
     setProcesando(true);
@@ -866,6 +929,9 @@ export default function PanelDirector() {
                           {s.estado === 'pendiente' && (
                             <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>📋 Revisar</button>
                           )}
+                          {s.estado === 'aprobada' && (
+                            <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar</button>
+                          )}
                           <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
                         </div>
                       </div>
@@ -921,6 +987,9 @@ export default function PanelDirector() {
                       <div style={{ fontSize: 12, color: '#888' }}>{new Date(s.created_at).toLocaleDateString('es-ES')}</div>
                       {filtroEstado === 'pendiente' && (
                         <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>📋 Revisar</button>
+                      )}
+                      {s.estado === 'aprobada' && (
+                        <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar permiso</button>
                       )}
                       <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
                       {filtroEstado === 'rechazada' && s.motivo_rechazo && <div style={{ fontSize: 12, color: '#888', maxWidth: 200, textAlign: 'right' }}>{s.motivo_rechazo}</div>}
