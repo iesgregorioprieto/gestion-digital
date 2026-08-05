@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import ResolverDiaDLD from '@/components/ResolverDiaDLD';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS_SEMANA = ['L','M','X','J','V','S','D'];
 const azul = '#1a3a6b';
@@ -755,7 +756,19 @@ export default function PanelDirector() {
         <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
           <button onClick={() => setVista('calendario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'calendario' ? azul : '#ddd'}`, backgroundColor: vista === 'calendario' ? azul : 'white', color: vista === 'calendario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Calendario</button>
           <button onClick={() => setVista('lista')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'lista' ? azul : '#ddd'}`, backgroundColor: vista === 'lista' ? azul : 'white', color: vista === 'lista' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📋 Lista</button>
+          <button onClick={() => setVista('resolver')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'resolver' ? verde : '#ddd'}`, backgroundColor: vista === 'resolver' ? verde : 'white', color: vista === 'resolver' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>⚖️ Resolver día</button>
         </div>
+
+        {/* RESOLVER DÍA COMPLETO */}
+        {vista === 'resolver' && (
+          <div style={{ marginBottom: 24 }}>
+            <ResolverDiaDLD
+              totalProfesores={totalProfesores}
+              nombreUsuario={nombreUsuario}
+              onTerminado={cargarSolicitudes}
+            />
+          </div>
+        )}
 
         {/* CALENDARIO */}
         {vista === 'calendario' && (
