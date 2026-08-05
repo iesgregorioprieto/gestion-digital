@@ -51,7 +51,7 @@ export default function Login() {
     // Búsqueda tolerante: ilike ignora mayúsculas y cubre emails guardados con formato distinto
     const { data: rows, error: err } = await supabase
       .from('profesores')
-      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email')
+      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email, email_verificado')
       .ilike('email', emailBuscado);
 
     setCargando(false);
@@ -76,6 +76,12 @@ export default function Login() {
           ? 'Tu cuenta está pendiente de activación. Contacta con el secretario.'
           : 'Tu cuenta no está activa. Contacta con el secretario.'
       );
+      return;
+    }
+
+    // Debe haber pulsado el enlace de activación del correo
+    if (data.email_verificado === false) {
+      setError('CORREO_SIN_VERIFICAR');
       return;
     }
 
@@ -197,7 +203,25 @@ export default function Login() {
           />
         </div>
 
-        {error && (
+        {error === 'CORREO_SIN_VERIFICAR' && (
+          <div style={{
+            backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24',
+            borderRadius: 10, padding: '14px 16px', marginBottom: 16,
+            color: '#78350f', fontSize: 13.5, lineHeight: 1.6
+          }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>
+              📧 Falta activar tu cuenta
+            </div>
+            Te hemos enviado un correo con el asunto <strong>«Tu acceso ha sido
+            activado»</strong>. Ábrelo y pulsa el botón <strong>🔓 Activar mi cuenta</strong>.
+            <div style={{ marginTop: 8, fontSize: 12.5 }}>
+              Si no lo encuentras, mira en la carpeta de <strong>spam</strong> o
+              pide al secretario que te lo reenvíe.
+            </div>
+          </div>
+        )}
+
+        {error && error !== 'CORREO_SIN_VERIFICAR' && (
           <div style={{
             backgroundColor: '#fee2e2', border: '1px solid #fca5a5',
             borderRadius: 8, padding: 12, marginBottom: 16,
