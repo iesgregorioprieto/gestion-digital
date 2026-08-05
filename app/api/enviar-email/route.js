@@ -52,7 +52,7 @@ export async function POST(request) {
             <p>Tu solicitud de acceso al portal ha sido <strong style="color:green">aprobada</strong>.</p>
             <p>Pulsa el botón para <strong>activar tu cuenta</strong> y poder entrar:</p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/activar?t=${datos.token || ''}"
+              <a href="https://app.iesgregorioprieto.com/activar?t=${datos.token || ''}"
                  style="background:#1e6b2e;color:white;padding:16px 40px;border-radius:8px;text-decoration:none;font-size:17px;font-weight:bold;display:inline-block">
                 🔓 Activar mi cuenta
               </a>
@@ -94,7 +94,7 @@ export async function POST(request) {
               </tr>
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/dld"
+              <a href="https://app.iesgregorioprieto.com/dld"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis solicitudes
               </a>
@@ -128,7 +128,7 @@ export async function POST(request) {
             </table>
             <p style="color:#666;font-size:13px">Si tienes dudas, contacta con la jefatura de estudios.</p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/dld"
+              <a href="https://app.iesgregorioprieto.com/dld"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis solicitudes
               </a>
@@ -169,7 +169,7 @@ export async function POST(request) {
               </tr>` : ''}
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/guardias"
+              <a href="https://app.iesgregorioprieto.com/guardias"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis guardias
               </a>
@@ -205,7 +205,7 @@ export async function POST(request) {
               Recuerda que dispones de 3 días hábiles para adjuntar el justificante.
             </p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/ausencias"
+              <a href="https://app.iesgregorioprieto.com/ausencias"
                  style="background:#e67e22;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Justificar ahora
               </a>
@@ -289,7 +289,7 @@ export async function POST(request) {
               </tr>
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/gestion/personal"
+              <a href="https://app.iesgregorioprieto.com/gestion/personal"
                  style="background:#1e6b2e;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
                 Revisar solicitud
               </a>
