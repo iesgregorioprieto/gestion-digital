@@ -50,13 +50,20 @@ export async function POST(request) {
           <div style="padding:30px;background:#f9f9f9">
             <h2 style="color:#1e3a5f">Hola${datos.nombre ? ', ' + datos.nombre + ' ' + (datos.apellidos || '') : ''}</h2>
             <p>Tu solicitud de acceso al portal ha sido <strong style="color:green">aprobada</strong>.</p>
-            <p>Ya puedes iniciar sesión con tu correo: <strong>${datos.email}</strong></p>
-            ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${datos.rol_gestion}</strong></p>` : ''}
+            <p>Pulsa el botón para <strong>activar tu cuenta</strong> y poder entrar:</p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://gestion-digital.vercel.app/login"
-                 style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
-                Acceder al portal
+              <a href="https://gestion-digital.vercel.app/activar?t=${datos.token || ''}"
+                 style="background:#1e6b2e;color:white;padding:16px 40px;border-radius:8px;text-decoration:none;font-size:17px;font-weight:bold;display:inline-block">
+                🔓 Activar mi cuenta
               </a>
+            </div>
+            <p style="color:#555;font-size:14px;text-align:center">
+              Después entrarás con <strong>${datos.email}</strong> y la contraseña que creaste.
+            </p>
+            ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${datos.rol_gestion}</strong></p>` : ''}
+            <div style="background:#fff8e1;border-left:4px solid #f59e0b;padding:12px 16px;margin:24px 0;font-size:13px;color:#78350f">
+              <strong>Importante:</strong> hasta que no pulses el botón, tu cuenta no estará activa.
+              Solo hay que hacerlo una vez.
             </div>
             <p style="color:#666;font-size:13px">Si tienes algún problema para acceder, contacta con la secretaría del centro.</p>
           </div>
