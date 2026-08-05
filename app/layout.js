@@ -15,7 +15,8 @@ export const viewport = {
   themeColor: "#1e3a5f",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  maximumScale: 5,
+  userScalable: true,
 };
 
 export default function RootLayout({ children }) {
@@ -31,6 +32,16 @@ export default function RootLayout({ children }) {
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
       <body className="min-h-full flex flex-col">
+        <script dangerouslySetInnerHTML={{
+          __html: `
+            (function() {
+              try {
+                var z = localStorage.getItem('ies-tamano-letra');
+                if (z && z !== '1') document.documentElement.style.zoom = z;
+              } catch(e) {}
+            })();
+          `
+        }} />
         {children}
 
         <script dangerouslySetInnerHTML={{
