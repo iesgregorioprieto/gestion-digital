@@ -1052,6 +1052,82 @@ export default function PanelDirector() {
           </div>
         </div>
       )}
+
+      {/* ═════════ MODAL REVOCAR PERMISO CONCEDIDO ═════════ */}
+      {revocando && (
+        <div style={{
+          position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 16, zIndex: 10000,
+        }}>
+          <div style={{
+            backgroundColor: 'white', borderRadius: 14, padding: 26,
+            maxWidth: 500, width: '100%', maxHeight: '90vh', overflowY: 'auto',
+            boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+          }}>
+            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 10 }}>⚠️</div>
+            <h3 style={{ color: '#b45309', textAlign: 'center', margin: '0 0 8px', fontSize: 19 }}>
+              Revocar permiso concedido
+            </h3>
+            <p style={{ color: '#666', fontSize: 13.5, textAlign: 'center', lineHeight: 1.6, margin: '0 0 18px' }}>
+              Vas a revocar un DLD ya aprobado de<br />
+              <strong style={{ color: '#333' }}>{revocando.profesor_nombre}</strong> para el
+              <strong style={{ color: '#333' }}> {revocando.fecha_solicitada}</strong>.
+            </p>
+
+            <div style={{
+              backgroundColor: '#fffbeb', border: '1px solid #fde68a', color: '#78350f',
+              borderRadius: 10, padding: '12px 16px', fontSize: 12.5, lineHeight: 1.6, marginBottom: 16,
+            }}>
+              El profesor recibirá un correo y una notificación con el motivo que escribas.
+              La solicitud quedará registrada como rechazada, conservando el historial.
+            </div>
+
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 700, color: '#555', marginBottom: 6 }}>
+              Motivo de la revocación *
+            </label>
+            <textarea
+              value={motivoRevoca}
+              onChange={e => setMotivoRevoca(e.target.value)}
+              placeholder="Ej: Necesidades sobrevenidas del servicio por ausencia imprevista de otros compañeros ese día."
+              rows={4}
+              style={{
+                width: '100%', padding: '11px 13px', borderRadius: 8,
+                border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box',
+                fontFamily: 'system-ui, sans-serif', resize: 'vertical', marginBottom: 8,
+              }}
+            />
+
+            <div style={{ fontSize: 11.5, color: '#999', marginBottom: 16, lineHeight: 1.5 }}>
+              Se añadirá automáticamente la referencia al punto 11 de la Resolución de 18/07/2024.
+            </div>
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={revocar}
+                disabled={procesando}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10, border: 'none',
+                  backgroundColor: '#b45309', color: 'white', fontWeight: 700, fontSize: 14,
+                  cursor: procesando ? 'not-allowed' : 'pointer', opacity: procesando ? 0.7 : 1,
+                }}
+              >
+                {procesando ? '⏳ Revocando...' : '⚠️ Revocar permiso'}
+              </button>
+              <button
+                onClick={() => { setRevocando(null); setMotivoRevoca(''); }}
+                style={{
+                  flex: 1, padding: '12px', borderRadius: 10,
+                  border: '1.5px solid #ddd', backgroundColor: 'white',
+                  color: '#666', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
