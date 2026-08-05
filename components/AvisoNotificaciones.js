@@ -90,6 +90,12 @@ export default function AvisoNotificaciones({ profesorId }) {
       await guardarSuscripcion(sub);
       setEstado('activo');
     } catch (e) {
+      const msg = (e.message || '').toLowerCase();
+      // La WiFi del centro bloquea el servicio de push de Google
+      if (msg.includes('push service') || msg.includes('registration failed') || e.name === 'AbortError') {
+        setEstado('red_bloqueada');
+        return;
+      }
       setError(e.message || 'No se pudo activar');
       setEstado('error');
     }
@@ -106,6 +112,35 @@ export default function AvisoNotificaciones({ profesorId }) {
           Has denegado el permiso. Para recibir avisos de guardias y apoyos,
           actívalo en los ajustes de tu navegador o del móvil, en la sección
           de notificaciones de esta aplicación.
+        </div>
+      </Caja>
+    );
+  }
+
+  if (estado === 'red_bloqueada') {
+    return (
+      <Caja fondo="#fef3c7" borde="#fbbf24" color="#78350f">
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+          <div style={{ fontSize: 28, lineHeight: 1 }}>📶</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 15 }}>
+              Activa las notificaciones
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>
+              La WiFi del centro bloquea el servicio de notificaciones.
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.9, marginBottom: 10 }}>
+              <strong>Para activarlas:</strong><br />
+              1. Desactiva la WiFi del móvil (usa datos)<br />
+              2. Pulsa <strong>🔔 Activar</strong><br />
+              3. Vuelve a conectar la WiFi
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 12, fontWeight: 700 }}>
+              Solo hay que hacerlo una vez. Después te llegarán siempre,
+              también en el instituto.
+            </div>
+            <button onClick={activar} style={botonEstilo('#b45309')}>🔔 Activar</button>
+          </div>
         </div>
       </Caja>
     );
