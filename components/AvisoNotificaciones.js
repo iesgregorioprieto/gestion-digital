@@ -18,6 +18,7 @@ export default function AvisoNotificaciones({ profesorId }) {
   const [estado, setEstado] = useState('comprobando');
   // 'comprobando' | 'no_soportado' | 'pedir' | 'activando' | 'activo' | 'bloqueado' | 'error'
   const [error, setError] = useState('');
+  const [detalle, setDetalle] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -91,7 +92,14 @@ export default function AvisoNotificaciones({ profesorId }) {
       setEstado('activo');
     } catch (e) {
       const msg = (e.message || '').toLowerCase();
-      // La WiFi del centro bloquea el servicio de push de Google
+      // Guardar el detalle técnico para poder diagnosticar
+      let origen = '';
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        origen = `${window.location.origin} · SW:${reg ? 'sí' : 'NO'} · scope:${reg?.scope || '-'}`;
+      } catch (_) {}
+      setDetalle(`${e.name || 'Error'}: ${e.message || '-'} · ${origen}`);
+
       if (msg.includes('push service') || msg.includes('registration failed') || e.name === 'AbortError') {
         setEstado('red_bloqueada');
         return;
@@ -140,6 +148,11 @@ export default function AvisoNotificaciones({ profesorId }) {
               también en el instituto.
             </div>
             <button onClick={activar} style={botonEstilo('#b45309')}>🔔 Activar</button>
+            {detalle && (
+              <div style={{ marginTop: 12, fontSize: 10.5, color: '#a16207', wordBreak: 'break-all', lineHeight: 1.4 }}>
+                Detalle técnico: {detalle}
+              </div>
+            )}
           </div>
         </div>
       </Caja>
