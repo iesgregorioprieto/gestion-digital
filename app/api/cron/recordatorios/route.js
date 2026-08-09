@@ -15,29 +15,27 @@ export async function GET(request) {
   );
 
   try {
-    // Fecha límite: ausencias de hace 2 días (queda 1 día de plazo de los 3 hábiles)
     const hoy = new Date();
-    const hace2 = new Date(hoy);
-    hace2.setDate(hace2.getDate() - 2);
-    const fechaLimite = hace2.toISOString().split('T')[0];
+    const dia = f => f.toISOString().split('T')[0];
 
-    // Buscar ausencias sin justificar de esa fecha
+    // Aviso: ausencias de hace 2 días (queda 1 día del plazo de 3).
+    // Se usa un RANGO en vez de un día exacto: si el cron falla una jornada
+    // o cae en festivo, esas ausencias seguirían sin avisar.
+    const desde = new Date(hoy); desde.setDate(desde.getDate() - 10);
+    const hasta = new Date(hoy); hasta.setDate(hasta.getDate() - 2);
+
     const { data: ausencias, error } = await supabase
       .from('ausencias')
-      .select('id, profesor_id, fecha_inicio, motivo, estado, justificado, aviso_justificacion_enviado')
-      .eq('fecha_inicio', fechaLimite)
-      .neq('estado', 'justificada')
-      .or('justificado.is.null,justificado.eq.false');
+      .select('id, profesor_id, fecha_inicio, motivo, estado, aviso_justificacion_enviado')
+      .gte('fecha_inicio', dia(desde))
+      .lte('fecha_inicio', dia(hasta))
+      .neq('estado', 'justificada');
 
     if (error) throw error;
-    if (!ausencias || ausencias.length === 0) {
-      return Response.json({ ok: true, enviados: 0, mensaje: 'Sin ausencias pendientes' });
-    }
-
     let enviados = 0;
     const errores = [];
 
-    for (const a of ausencias) {
+    for (const a of (ausencias || [])) {
       // No repetir aviso si ya se envió
       if (a.aviso_justificacion_enviado) continue;
 
@@ -76,7 +74,32 @@ export async function GET(request) {
       }
     }
 
-    return Response.json({ ok: true, revisadas: ausencias.length, enviados, errores });
+    // Pasado el plazo de 3 días, las que sigan pendientes se marcan como
+    // "sin justificar". El profesor puede justificarlas igualmente después,
+    // pero queda constancia de que se pasó el plazo.
+    let marcadas = 0;
+    try {
+      const limite = new Date(hoy);
+      limite.setDate(limite.getDate() - 3);
+
+      const { data: vencidas } = await supabase
+        .from('ausencias')
+        .select('id')
+        .lt('fecha_inicio', dia(limite))
+        .eq('estado', 'pendiente');
+
+      if (vencidas && vencidas.length > 0) {
+        await supabase
+          .from('ausencias')
+          .update({ estado: 'sin_justificar' })
+          .in('id', vencidas.map(v => v.id));
+        marcadas = vencidas.length;
+      }
+    } catch (e) {
+      console.error('Error marcando ausencias vencidas:', e);
+    }
+
+    return Response.json({ ok: true, revisadas: (ausencias || []).length, enviados, marcadas, errores });
   } catch (err) {
     console.error('Error en cron recordatorios:', err);
     return Response.json({ error: err.message }, { status: 500 });
