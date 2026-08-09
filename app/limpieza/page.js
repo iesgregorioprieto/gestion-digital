@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { createClient } from '@supabase/supabase-js';
 import jsQR from 'jsqr';
 
@@ -516,7 +517,7 @@ export default function Limpieza() {
         reportado_por_tipo: 'profesor',
         reportado_por_nombre: nombreProfesor,
         descripcion: textoFinal,
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
       };
       if (fotoUrl) insertData.foto_url = fotoUrl;
       
