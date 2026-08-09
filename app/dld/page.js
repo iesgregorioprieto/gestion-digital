@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo, calcularAntiguedad } from '@/lib/curso';
+import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -441,10 +442,34 @@ export default function DLD() {
           <button onClick={() => !sinDias && setVista('nueva')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'nueva' ? verde : sinDias ? '#ddd' : '#ddd'}`, backgroundColor: vista === 'nueva' ? verde : sinDias ? '#f5f5f5' : 'white', color: vista === 'nueva' ? 'white' : sinDias ? '#bbb' : '#555', cursor: sinDias ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: 13 }}>
             {sinDias ? '🚫 Sin días' : '+ Nueva solicitud'}
           </button>
+          <button onClick={() => setVista('calendario')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'calendario' ? verde : '#ddd'}`, backgroundColor: vista === 'calendario' ? verde : 'white', color: vista === 'calendario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
+            📆 Calendario
+          </button>
           <button onClick={() => setVista('normativa')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'normativa' ? '#1d4ed8' : '#ddd'}`, backgroundColor: vista === 'normativa' ? '#1d4ed8' : 'white', color: vista === 'normativa' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             📖 Normativa
           </button>
         </div>
+
+        {/* ═══ CALENDARIO DE CARGA ═══ */}
+        {vista === 'calendario' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 1px 6px rgba(0,0,0,0.06)' }}>
+            <CalendarioDLD
+              profesorId={profesorId}
+              onElegirFecha={fecha => {
+                if (sinDias) return;
+                setVista('nueva');
+                setForm(f => ({ ...f, fecha_solicitada: fecha }));
+                setHorario({});
+                (async () => {
+                  const cfg = await getConfigCurso();
+                  const info = esDiaLectivo(fecha, cfg);
+                  setInfoDia(info);
+                  if (info.lectivo) cargarHorarioDelDia(fecha);
+                })();
+              }}
+            />
+          </div>
+        )}
 
         {/* ═══ HISTORIAL ═══ */}
         {vista === 'historial' && (
