@@ -23,6 +23,10 @@ const TABLAS = [
   { nombre: 'guardias_manuales',   label: 'Guardias manuales',      emoji: '✏️' },
   { nombre: 'mantenimiento',       label: 'Mantenimiento',          emoji: '🔧' },
   { nombre: 'compras',             label: 'Compras',                emoji: '🛒' },
+  { nombre: 'actividades',         label: 'Actividades complementarias', emoji: '🎒' },
+  { nombre: 'config_centro',       label: 'Datos del curso',        emoji: '📅' },
+  { nombre: 'periodos_no_lectivos',label: 'Vacaciones y festivos',  emoji: '🏖️' },
+  { nombre: 'avisos_sala',         label: 'Avisos de sala',         emoji: '📢' },
 ];
 
 const CLAVE_ULTIMA = 'ies_ultima_copia';
