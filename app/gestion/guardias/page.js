@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 // v3.0 - GESTIÓN COMPLETA CON CONTADOR Y APOYOS MANUALES
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { departamentoASector } from '@/lib/sectores';
 
@@ -85,7 +86,7 @@ function normAbrev(str) { return (str || '').toLowerCase().replace(/\s/g, ''); }
 
 export default function GestionGuardias() {
   const [usuario, setUsuario] = useState(null);
-  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha] = useState(hoyLocal());
   const [horaActiva, setHoraActiva] = useState('1');
   const [horariosClase, setHC] = useState([]);
   const [sectores, setSectores] = useState([]);
@@ -703,7 +704,7 @@ export default function GestionGuardias() {
           <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={{ padding:'2px 6px', borderRadius:6, border:'1px solid #ddd', fontSize:11, marginTop:4 }} />
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
-        <button onClick={() => setFecha(new Date().toISOString().split('T')[0])} style={{ ...btnNav, backgroundColor:azul, color:'white', border:'none' }}>Hoy</button>
+        <button onClick={() => setFecha(hoyLocal())} style={{ ...btnNav, backgroundColor:azul, color:'white', border:'none' }}>Hoy</button>
       </div>
 
       {/* ACCESO RÁPIDO: registrar ausencia que falta */}
