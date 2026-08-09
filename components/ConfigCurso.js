@@ -39,6 +39,14 @@ export default function ConfigCurso() {
   const maxLectivo   = () => n() > 60 ? 4 : n() > 40 ? 3 : n() > 20 ? 2 : n() > 0 ? 1 : 0;
   const maxNoLectivo = () => Math.floor(n() / 3);
   const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }) : '';
+  const mover = (f, n) => {
+    if (!f) return '';
+    const d = new Date(f + 'T12:00:00');
+    d.setDate(d.getDate() + n);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  };
+  const diaAnterior  = f => mover(f, -1);
+  const diaSiguiente = f => mover(f, 1);
 
   const set  = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setP = (k, v) => setNuevoPeriodo(p => ({ ...p, [k]: v }));
@@ -121,15 +129,14 @@ export default function ConfigCurso() {
         await getSupabase().from('config_centro').update({ activo: false }).neq('curso', form.curso);
       }
 
-      // Si no se indica el curso escolar, se asume del 1 de septiembre
-      // al 30 de junio: así los días de septiembre y junio sin clase
-      // cuentan como laborables sin alumnado y no como "fuera de curso".
+      // El curso escolar es siempre del 1 de septiembre al 30 de junio.
+      // Lo que varía cada año es el periodo de clase, que sí se pide.
       const anioIni = parseInt(form.curso.split('-')[0]);
       const datos = {
         curso: form.curso,
         num_profesores: parseInt(form.num_profesores),
-        fecha_inicio_curso: form.fecha_inicio_curso || `${anioIni}-09-01`,
-        fecha_fin_curso: form.fecha_fin_curso || `${anioIni + 1}-06-30`,
+        fecha_inicio_curso: `${anioIni}-09-01`,
+        fecha_fin_curso: `${anioIni + 1}-06-30`,
         fecha_inicio_lectivo: form.fecha_inicio_lectivo || null,
         fecha_fin_lectivo: form.fecha_fin_lectivo || null,
         activo: form.activo,
@@ -270,33 +277,18 @@ export default function ConfigCurso() {
             <strong>Con esas fechas, la aplicación entiende que:</strong><br />
             🟢 Del {fmt(form.fecha_inicio_lectivo)} al {fmt(form.fecha_fin_lectivo)} hay clase
             → cupo de <strong>{maxLectivo()}</strong> profesores al día<br />
-            🔵 Los días de septiembre anteriores y los de junio posteriores son
-            días de trabajo <strong>sin alumnado</strong>
-            → cupo de <strong>{maxNoLectivo()}</strong> profesores al día<br />
+            🔵 Del 1 de septiembre al {fmt(diaAnterior(form.fecha_inicio_lectivo))} y
+            del {fmt(diaSiguiente(form.fecha_fin_lectivo))} al 30 de junio se trabaja
+            <strong> sin alumnado</strong> → cupo de <strong>{maxNoLectivo()}</strong> al día<br />
             🟣 Navidad, Semana Santa y los festivos que añadas abajo son vacaciones
             → no se pide DLD
           </div>
         )}
 
-        <details style={{ marginBottom: 16 }}>
-          <summary style={{ cursor: 'pointer', fontSize: 12.5, color: '#888', padding: '6px 0' }}>
-            📆 Ajustar el curso escolar completo (opcional)
-          </summary>
-          <div style={{ fontSize: 12, color: '#888', lineHeight: 1.6, margin: '8px 0 12px' }}>
-            Si no pones nada, se toma del 1 de septiembre al 30 de junio.
-            Sirve para que la app sepa qué días quedan fuera del curso.
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-            <Campo label="Inicio del curso escolar">
-              <input type="date" value={form.fecha_inicio_curso}
-                onChange={e => set('fecha_inicio_curso', e.target.value)} style={inputEstilo} />
-            </Campo>
-            <Campo label="Fin del curso escolar">
-              <input type="date" value={form.fecha_fin_curso}
-                onChange={e => set('fecha_fin_curso', e.target.value)} style={inputEstilo} />
-            </Campo>
-          </div>
-        </details>
+        <div style={{ fontSize: 11.5, color: '#9ca3af', marginBottom: 16, lineHeight: 1.6 }}>
+          El curso escolar va siempre del 1 de septiembre al 30 de junio; eso no
+          hace falta indicarlo.
+        </div>
 
         <div onClick={() => set('activo', !form.activo)} style={{
           display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
