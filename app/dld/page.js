@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -90,6 +91,7 @@ export default function DLD() {
 
   // horario[horaId] = { tipo: 'clase'|'guardia'|'libre', grupo: '' }
   const [horario, setHorario] = useState({});
+  const [infoDia, setInfoDia] = useState({ lectivo: true, motivo: null });
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [textoOtro, setTextoOtro] = useState('');
@@ -266,8 +268,8 @@ export default function DLD() {
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
     if (!form.fecha_solicitada) { setError('Indica la fecha solicitada.'); return; }
 
-    // Validar tareas obligatorias en horas de clase
-    const horasClaseSinTarea = Object.entries(horario)
+    // Validar tareas obligatorias en horas de clase (solo en días lectivos)
+    const horasClaseSinTarea = !infoDia.lectivo ? [] : Object.entries(horario)
       .filter(([_, v]) => v.tipo === 'clase' && v.grupo && !v.instrucciones?.trim() && !v.archivoNombre);
     if (horasClaseSinTarea.length > 0) {
       const labels = horasClaseSinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
@@ -547,12 +549,34 @@ export default function DLD() {
                 const fecha = e.target.value;
                 setForm(f => ({ ...f, fecha_solicitada: fecha }));
                 setHorario({});
-                await new Promise(r => setTimeout(r, 50));
-                cargarHorarioDelDia(fecha);
+                if (!fecha) { setInfoDia({ lectivo: true, motivo: null }); return; }
+
+                // ¿Ese día hay clase? Si no, no hace falta horario ni tareas
+                const cfg = await getConfigCurso();
+                const info = esDiaLectivo(fecha, cfg);
+                setInfoDia(info);
+
+                if (info.lectivo) {
+                  await new Promise(r => setTimeout(r, 50));
+                  cargarHorarioDelDia(fecha);
+                }
               }} style={{ ...inputEstilo, marginTop: 8 }} />
+
+              {form.fecha_solicitada && !infoDia.lectivo && (
+                <div style={{
+                  marginTop: 10, padding: '12px 16px', borderRadius: 10,
+                  backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0',
+                  color: '#166534', fontSize: 13.5, lineHeight: 1.6,
+                }}>
+                  🌙 <strong>Día no lectivo{infoDia.motivo ? ` — ${infoDia.motivo}` : ''}.</strong><br />
+                  No hay clases que cubrir, así que no tienes que indicar
+                  horario ni dejar tareas.
+                </div>
+              )}
             </div>
 
-            {/* HORARIO DEL DÍA */}
+            {/* HORARIO DEL DÍA — solo si ese día hay clase */}
+            {infoDia.lectivo && (
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>🕐 ¿Qué tienes en cada hora ese día?</label>
 
