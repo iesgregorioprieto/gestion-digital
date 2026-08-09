@@ -30,6 +30,20 @@ export default function Demo() {
   const [limpiando, setLimpiando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [confirmLimpiar, setConfirmLimpiar] = useState(false);
+  const [autorizado, setAutorizado] = useState(null); // null = comprobando
+
+  // Esta pantalla permite entrar como cualquier profesor, así que solo
+  // puede usarla el equipo directivo.
+  useEffect(() => {
+    const id  = sessionStorage.getItem('profesor_id');
+    const rol = sessionStorage.getItem('profesor_rol_gestion');
+    const ok  = !!id && ['director', 'secretario', 'jefe_estudios'].includes(rol);
+    setAutorizado(ok);
+    if (!ok) {
+      // Guardamos de dónde venía para no dejarle en blanco
+      window.location.href = '/login';
+    }
+  }, []);
 
   async function entrarComo(prof) {
     setCargando(prof.email);
@@ -108,6 +122,14 @@ export default function Demo() {
 
   const profes = PROFESORES_DEMO.filter(p => !['director', 'secretario'].some(r => p.rol === r || p.email.includes('director') || p.email.includes('llcc12')));
   const directivos = PROFESORES_DEMO.filter(p => p.rol === 'director' || p.rol === 'secretario' || p.email.includes('director') || p.email.includes('llcc12'));
+
+  if (autorizado !== true) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui, sans-serif', color: '#888', backgroundColor: '#f0f4f0' }}>
+        Comprobando permisos...
+      </div>
+    );
+  }
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', padding: '24px 16px' }}>
