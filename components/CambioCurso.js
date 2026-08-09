@@ -86,13 +86,19 @@ export default function CambioCurso() {
     setProc(true);
     try {
       let bajas = 0;
+      const fallos = [];
 
       // 1. Los que no continúan → inactivos (nunca se borran)
       for (const p of salen) {
-        await getSupabase()
+        const { error } = await getSupabase()
           .from('profesores')
           .update({ estado: 'inactivo', baja_curso: cursoActual?.curso || null })
           .eq('id', p.id);
+
+        if (error) {
+          fallos.push(`${p.apellidos}, ${p.nombre} — ${error.message}`);
+          continue;
+        }
         bajas++;
       }
 
@@ -102,17 +108,22 @@ export default function CambioCurso() {
         .select('id')
         .is('curso_archivado', null);
 
+      let dldArchivados = 0;
       if (dldCurso && dldCurso.length > 0) {
-        await getSupabase()
+        const { error: errDld } = await getSupabase()
           .from('dld')
           .update({ curso_archivado: cursoActual?.curso || 'anterior' })
           .is('curso_archivado', null);
+
+        if (errDld) fallos.push(`Archivo de DLD — ${errDld.message}`);
+        else dldArchivados = dldCurso.length;
       }
 
       setResultado({
         bajas,
         continuan: nContinuan,
-        dldArchivados: dldCurso?.length || 0,
+        dldArchivados,
+        fallos,
       });
       setPaso(4);
     } catch (e) {
@@ -398,6 +409,22 @@ export default function CambioCurso() {
             📤 <strong>{resultado.bajas}</strong> pasaron a inactivos<br />
             📦 <strong>{resultado.dldArchivados}</strong> solicitudes de DLD archivadas
           </div>
+
+          {resultado.fallos?.length > 0 && (
+            <div style={{
+              backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', color: ROJO,
+              borderRadius: 12, padding: '14px 18px', margin: '0 0 20px',
+              fontSize: 13, lineHeight: 1.7, textAlign: 'left',
+            }}>
+              <strong>⚠️ {resultado.fallos.length} operación(es) no se completaron:</strong>
+              <div style={{ marginTop: 7 }}>
+                {resultado.fallos.map((f, i) => <div key={i}>· {f}</div>)}
+              </div>
+              <div style={{ marginTop: 8 }}>
+                Vuelve a ejecutar el cierre para reintentar solo lo que falta.
+              </div>
+            </div>
+          )}
 
           <div style={{ fontSize: 13, color: '#666', lineHeight: 1.7, marginBottom: 20 }}>
             Ahora crea el curso nuevo en <strong>📅 Datos del curso</strong> y
