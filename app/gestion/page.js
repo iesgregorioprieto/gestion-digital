@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import PanelDemo from '@/components/PanelDemo';
 const azul = '#1a3a6b';
 const verde = '#1e6b2e';
 
@@ -245,8 +246,11 @@ export default function PanelGestion() {
           ))}
         </div>
 
+        {/* PANEL DE PRUEBAS INTERNAS */}
+        <PanelDemo />
+
         {/* FOOTER */}
-        <div style={{ marginTop: 48, padding: '20px 24px', backgroundColor: '#f8fafb', borderRadius: 12, fontSize: 13, color: '#666', textAlign: 'center', border: '1px solid #e5e7eb' }}>
+        <div style={{ marginTop: 32, padding: '20px 24px', backgroundColor: '#f8fafb', borderRadius: 12, fontSize: 13, color: '#666', textAlign: 'center', border: '1px solid #e5e7eb' }}>
           💡 <strong>Consejo:</strong> Los profesores pueden acceder directamente a estos módulos desde sus paneles personales (solicitar compras, notificar ausencias, etc.). Este panel es solo para la gestión centralizada.
         </div>
 
