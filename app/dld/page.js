@@ -577,6 +577,7 @@ export default function DLD() {
 
             {/* HORARIO DEL DÍA — solo si ese día hay clase */}
             {infoDia.lectivo && (
+            <>
             <div style={{ marginBottom: 24 }}>
               <label style={{ ...labelEstilo, fontSize: 15 }}>🕐 ¿Qué tienes en cada hora ese día?</label>
 
@@ -698,6 +699,8 @@ export default function DLD() {
                   ¿Tu horario no es correcto? Rellenar manualmente
                 </button>
               </div>
+            )}
+            </>
             )}
 
             {/* CAUSA SOBREVENIDA */}
