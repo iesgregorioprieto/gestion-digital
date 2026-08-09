@@ -1143,22 +1143,3 @@ export default function PanelDirector() {
   );
 }
 
-  function generarMotivoAutomatico(solicitud) {
-    const alertas = calcularAlertas(solicitud);
-    const prelacion = calcularPrelacion(solicitud);
-
-    if (alertas.some(a => a.tipo === 'rojo')) {
-      return 'Tu solicitud no puede ser aprobada porque se supera el límite diario permitido por la normativa vigente.';
-    }
-    
-    if (prelacion.length > 1 && prelacion[0].esPrincipal === false) {
-      return 'Tu solicitud no puede ser aprobada porque hay compañeros con mayor prelación según los criterios de la normativa (art. 2.3): mayor antigüedad en el cuerpo, mayor antigüedad en el centro, y menor número de días disfrutados en lo que va de curso.';
-    }
-    
-    const mismoGrupo = alertas.find(a => a.texto.includes('mismo grupo'));
-    if (mismoGrupo) {
-      return 'Tu solicitud no puede ser aprobada porque ya hay una ausencia de otro profesor en uno de los grupos a los que das clase ese día, y la normativa no permite más de una ausencia simultánea por grupo (art. 3.5).';
-    }
-    
-    return 'Tu solicitud no puede ser aprobada en este momento por no cumplir con los requisitos de la normativa vigente sobre Días de Libre Disposición.';
-  }
