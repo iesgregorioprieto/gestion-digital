@@ -98,12 +98,20 @@ export default function PanelSecretario() {
 
     // Token único para verificar que el correo es suyo
     const token = crypto.randomUUID();
-    await getSupabase()
+    const { error } = await getSupabase()
       .from('profesores')
       .update({ estado: 'activo', token_activacion: token })
       .eq('id', id);
+
+    // Si la base de datos falla no se envía el correo: sería un enlace muerto
+    if (error) {
+      mostrarMensaje('No se pudo aprobar: ' + error.message, 'error');
+      setAprobandoId(null);
+      return;
+    }
+
     mostrarMensaje('✅ Aprobado — se le ha enviado el enlace de activación', 'ok');
-    // Enviar email de activación de cuenta
+
     try {
       const rows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
       const prof = (rows.data || [])[0];
@@ -115,6 +123,8 @@ export default function PanelSecretario() {
         });
       }
     } catch(e) { console.error('Email activación:', e); }
+
+    setAprobandoId(null);
     cargarProfesores();
     cerrarModal();
   }
