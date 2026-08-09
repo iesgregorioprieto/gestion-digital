@@ -30,8 +30,8 @@ export default function CompletarPerfil() {
   const [form, setForm] = useState({
     especialidad:      '',
     tipo_contrato:     'Funcionario de carrera',
-    antiguedad_centro: '',
-    antiguedad_cuerpo: '',
+    anio_centro:       '',
+    anio_cuerpo:       '',
     telefono:          '',
   });
 
@@ -45,7 +45,7 @@ export default function CompletarPerfil() {
 
       const { data: rows } = await getSupabase()
         .from('profesores')
-        .select('nombre, apellidos, email, departamento, grupo_tutoria, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+        .select('nombre, apellidos, email, departamento, grupo_tutoria, especialidad, tipo_contrato, anio_centro, anio_cuerpo')
         .eq('id', id);
 
       const p = (rows || [])[0];
@@ -61,8 +61,8 @@ export default function CompletarPerfil() {
           ...f,
           especialidad:      p.especialidad  || '',
           tipo_contrato:     p.tipo_contrato || 'Funcionario de carrera',
-          antiguedad_centro: p.antiguedad_centro?.toString() || '',
-          antiguedad_cuerpo: p.antiguedad_cuerpo?.toString() || '',
+          anio_centro:       p.anio_centro?.toString() || '',
+          anio_cuerpo:       p.anio_cuerpo?.toString() || '',
         }));
       }
       setCargando(false);
@@ -80,8 +80,10 @@ export default function CompletarPerfil() {
         .update({
           especialidad:      form.especialidad,
           tipo_contrato:     form.tipo_contrato,
-          antiguedad_centro: form.antiguedad_centro ? parseInt(form.antiguedad_centro) : null,
-          antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
+          anio_centro:       form.anio_centro ? parseInt(form.anio_centro) : null,
+          anio_cuerpo:       form.anio_cuerpo ? parseInt(form.anio_cuerpo) : null,
+          antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
+          antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
           telefono:          form.telefono.trim() || null,
         })
         .eq('id', profId);
@@ -193,14 +195,21 @@ export default function CompletarPerfil() {
           </Campo>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Campo label="Antigüedad en el centro (años)">
-              <input type="number" min="0" value={form.antiguedad_centro}
-                onChange={e => set('antiguedad_centro', e.target.value)} style={inputEstilo} />
+            <Campo label="Año de llegada al centro">
+              <input type="number" min="1970" max={new Date().getFullYear()}
+                value={form.anio_centro} placeholder="Ej: 2018"
+                onChange={e => set('anio_centro', e.target.value)} style={inputEstilo} />
             </Campo>
-            <Campo label="Antigüedad en el cuerpo (años)">
-              <input type="number" min="0" value={form.antiguedad_cuerpo}
-                onChange={e => set('antiguedad_cuerpo', e.target.value)} style={inputEstilo} />
+            <Campo label="Año de ingreso en el cuerpo">
+              <input type="number" min="1970" max={new Date().getFullYear()}
+                value={form.anio_cuerpo} placeholder="Ej: 2010"
+                onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo} />
             </Campo>
+          </div>
+
+          <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 13 }}>
+            💡 Indica el <strong>año</strong>, no los años que llevas. La antigüedad
+            se calcula sola cada curso.
           </div>
 
           <Campo label="Teléfono de contacto (opcional)">
