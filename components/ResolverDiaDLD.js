@@ -145,34 +145,44 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
 
     setAplicando(true);
     let aprobadas = 0, rechazadas = 0;
+    const fallos = [];
 
     try {
       for (const s of propuesta.lista) {
         const a = accionFinal(s);
         if (a === 'mantener') continue;
 
-        if (a === 'aprobar') {
-          await getSupabase().from('dld').update({
-            estado: 'aprobada',
-            resuelto_at: new Date().toISOString(),
-            resuelto_por: nombreUsuario,
-            motivo_rechazo: null,
-          }).eq('id', s.id);
-          aprobadas++;
-          await avisar(s, true);
-        } else {
-          await getSupabase().from('dld').update({
-            estado: 'rechazada',
-            resuelto_at: new Date().toISOString(),
-            resuelto_por: nombreUsuario,
-            motivo_rechazo: s.motivo || 'Resuelto por criterios de prelación.',
-          }).eq('id', s.id);
-          rechazadas++;
-          await avisar(s, false);
+        const esAprobar = (a === 'aprobar');
+
+        const { error } = await getSupabase().from('dld').update(
+          esAprobar
+            ? {
+                estado: 'aprobada',
+                resuelto_at: new Date().toISOString(),
+                resuelto_por: nombreUsuario,
+                motivo_rechazo: null,
+              }
+            : {
+                estado: 'rechazada',
+                resuelto_at: new Date().toISOString(),
+                resuelto_por: nombreUsuario,
+                motivo_rechazo: s.motivo || 'Resuelto por criterios de prelación.',
+              }
+        ).eq('id', s.id);
+
+        // Si la base de datos falla NO se avisa al profesor: mandarle un correo
+        // diciendo "aprobado" cuando en el sistema sigue pendiente sería peor
+        // que no mandar nada.
+        if (error) {
+          fallos.push({ nombre: s.profesor_nombre, motivo: error.message });
+          continue;
         }
+
+        if (esAprobar) aprobadas++; else rechazadas++;
+        await avisar(s, esAprobar);
       }
 
-      setResultado({ ok: true, aprobadas, rechazadas });
+      setResultado({ ok: true, aprobadas, rechazadas, fallos });
       setPropuesta(null);
       cargarFechas();
       if (onTerminado) onTerminado();
@@ -276,6 +286,20 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
         <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #86efac', color: '#166534', borderRadius: 10, padding: '13px 16px', fontSize: 14, fontWeight: 600, marginBottom: 14 }}>
           ✅ Resuelto: {resultado.aprobadas} aprobada(s), {resultado.rechazadas} denegada(s).
           Se han enviado los avisos por correo y notificación.
+        </div>
+      )}
+
+      {resultado?.fallos?.length > 0 && (
+        <div style={{ backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', color: ROJO, borderRadius: 10, padding: '13px 16px', fontSize: 13, marginBottom: 14, lineHeight: 1.6 }}>
+          <strong>⚠️ {resultado.fallos.length} solicitud(es) no se pudieron resolver:</strong>
+          <div style={{ marginTop: 7 }}>
+            {resultado.fallos.map((f, i) => (
+              <div key={i}>· {f.nombre} — {f.motivo}</div>
+            ))}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 12.5 }}>
+            Esos profesores <strong>no</strong> han recibido aviso. Vuelve a intentarlo.
+          </div>
         </div>
       )}
 
