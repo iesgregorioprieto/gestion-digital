@@ -339,11 +339,16 @@ export default function PanelSecretario() {
     if (seleccionados.size === 0) return;
 
     const ids = [...seleccionados];
-    const minutos = Math.ceil((ids.length * 0.7) / 60);
+    const segundos = Math.ceil(ids.length * 0.7);
+
+    // Con tandas pequeñas (lo habitual) no hace falta asustar a nadie
+    const avisoTiempo = segundos > 45
+      ? `Tardará alrededor de ${Math.ceil(segundos / 60)} minuto(s). No cierres esta página mientras tanto.\n\n`
+      : '';
 
     if (!confirm(
-      `Se van a activar ${ids.length} profesores y enviarles su enlace de acceso.\n\n` +
-      `Tardará alrededor de ${minutos} minuto(s). No cierres esta página mientras tanto.\n\n` +
+      `Se van a activar ${ids.length} profesor${ids.length !== 1 ? 'es' : ''} y enviarles su enlace de acceso.\n\n` +
+      avisoTiempo +
       `¿Continuar?`
     )) return;
 
@@ -1156,8 +1161,9 @@ export default function PanelSecretario() {
                         }} />
                       </div>
                       <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8 }}>
-                        Los correos se envían despacio para que no los rechace el servidor.
-                        No cierres esta página.
+                        {progresoMasivo.total > 60
+                          ? 'Los correos se envían despacio para que no los rechace el servidor. No cierres esta página.'
+                          : 'Enviando los enlaces de acceso...'}
                       </div>
                     </div>
                   )}
