@@ -129,28 +129,41 @@ export default function AvisoNotificaciones({ profesorId }) {
     return (
       <Caja fondo="#fef3c7" borde="#fbbf24" color="#78350f">
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ fontSize: 28, lineHeight: 1 }}>📶</div>
+          <div style={{ fontSize: 28, lineHeight: 1 }}>📲</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 15 }}>
-              Activa las notificaciones
+            <div style={{ fontWeight: 800, marginBottom: 8, fontSize: 15 }}>
+              Reinstala la app para recibir avisos
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 10 }}>
-              La WiFi del centro bloquea el servicio de notificaciones.
+            <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
+              La versión de la app que tienes instalada no admite notificaciones.
+              Hay que instalarla de otra forma — se ve exactamente igual, pero
+              sí recibe los avisos.
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.9, marginBottom: 10 }}>
-              <strong>Para activarlas:</strong><br />
-              1. Desactiva la WiFi del móvil (usa datos)<br />
-              2. Pulsa <strong>🔔 Activar</strong><br />
-              3. Vuelve a conectar la WiFi
+
+            <div style={{
+              backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 8,
+              padding: '12px 14px', marginBottom: 12,
+              fontSize: 13, lineHeight: 2,
+            }}>
+              <strong>Cómo hacerlo (2 minutos):</strong><br />
+              1. Desinstala esta app del móvil<br />
+              2. Abre <strong>Chrome</strong> y entra en<br />
+              <span style={{ fontSize: 12.5, wordBreak: 'break-all' }}>app.iesgregorioprieto.com</span><br />
+              3. Pulsa el menú <strong>⋮</strong> (arriba a la derecha)<br />
+              4. Elige <strong>Instalar aplicación</strong><br />
+              5. Ábrela y pulsa <strong>🔔 Activar</strong>
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.5, marginBottom: 12, fontWeight: 700 }}>
-              Solo hay que hacerlo una vez. Después te llegarán siempre,
-              también en el instituto.
+
+            <div style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
+              Si prefieres no reinstalar ahora, puedes usar el portal desde
+              Chrome y activar los avisos allí.
             </div>
-            <button onClick={activar} style={botonEstilo('#b45309')}>🔔 Activar</button>
+
+            <button onClick={activar} style={botonEstilo('#b45309')}>🔔 Intentar de nuevo</button>
+
             {detalle && (
-              <div style={{ marginTop: 12, fontSize: 10.5, color: '#a16207', wordBreak: 'break-all', lineHeight: 1.4 }}>
-                Detalle técnico: {detalle}
+              <div style={{ marginTop: 12, fontSize: 10, color: '#a16207', wordBreak: 'break-all', lineHeight: 1.4, opacity: 0.8 }}>
+                {detalle}
               </div>
             )}
           </div>
