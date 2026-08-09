@@ -431,15 +431,28 @@ export default function Ausencias() {
     setEnviandoJust(true);
     let url = null;
     if (justArchivo) url = await subirArchivo(justArchivo, 'justificantes');
+
+    // Dejar constancia si se entrega fuera de plazo
+    const fueraDePlazo = ausenciaJustificando.estado === 'sin_justificar'
+      || diasParaJustificar(ausenciaJustificando.created_at) <= 0;
+
     await getSupabase().from('ausencias').update({
       estado: 'justificada',
       justificacion_texto: justTexto.trim() || null,
       justificacion_url: url,
+      justificada_at: new Date().toISOString(),
+      justificada_fuera_plazo: fueraDePlazo,
     }).eq('id', ausenciaJustificando.id);
+
     setEnviandoJust(false);
     setAusenciaJustificando(null);
     setJustTexto(''); setJustArchivo(null); setJustArchNombre('');
-    mostrarMensaje('✅ Ausencia justificada correctamente.', 'ok');
+    mostrarMensaje(
+      fueraDePlazo
+        ? '✅ Justificación enviada. Se ha registrado que se entregó fuera de plazo.'
+        : '✅ Ausencia justificada correctamente.',
+      'ok'
+    );
     cargarHistorial(profesorId);
   }
 
