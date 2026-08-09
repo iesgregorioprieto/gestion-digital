@@ -410,15 +410,17 @@ export default function PanelProfesor() {
         )}
 
         {/* BIENVENIDA */}
-        <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, marginBottom: 24, boxShadow: '0 2px 10px rgba(0,0,0,0.07)', borderLeft: `5px solid ${verde}` }}>
-          <div style={{ fontSize: 22, fontWeight: 800, color: verde, marginBottom: 4 }}>
-            👋 Bienvenido/a, {nombre.split(' ')[0]}
-          </div>
-          <div style={{ fontSize: 14, color: '#666' }}>
-            Portal de gestión · IES Gregorio Prieto · Valdepeñas
+        <div style={{
+          backgroundColor: 'white', borderRadius: 12, padding: '12px 16px',
+          marginBottom: 16, boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+          borderLeft: `4px solid ${verde}`,
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: verde, flex: 1, minWidth: 140 }}>
+            👋 Hola, {nombre.split(' ')[0]}
           </div>
           {rolGestion && (
-            <div style={{ marginTop: 10, fontSize: 13, backgroundColor: '#e8f5e9', color: verde, padding: '4px 12px', borderRadius: 20, display: 'inline-block', fontWeight: 600 }}>
+            <div style={{ fontSize: 11.5, backgroundColor: '#e8f5e9', color: verde, padding: '3px 10px', borderRadius: 20, fontWeight: 700, whiteSpace: 'nowrap' }}>
               {rolGestion === 'director' ? '👔 Director/a' :
                rolGestion === 'jefe_estudios' ? '📋 Jefe/a de Estudios' :
                rolGestion === 'secretario' ? '📁 Secretario/a' : ''}
