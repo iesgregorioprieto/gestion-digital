@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from "../../lib/supabase";
 
 const HORAS = [
@@ -33,7 +34,7 @@ export default function SalaProfesores() {
   const [reloj, setReloj] = useState(new Date());
   const [ultimaCarga, setUltimaCarga] = useState(null);
 
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = hoyLocal();
   const diaIdx = new Date().getDay();
   const diaNombre = DIAS[diaIdx];
   const horaAct = horaActual();
