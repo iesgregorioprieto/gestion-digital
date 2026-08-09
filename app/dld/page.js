@@ -80,6 +80,7 @@ export default function DLD() {
   const [vista, setVista] = useState('historial'); // 'historial' | 'nueva'
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
+  const [msgOk, setMsgOk] = useState('');
   const [profesorNombre, setProfesorNombre] = useState('');
   const [profesorId, setProfesorId] = useState('');
   const [tipoContrato, setTipoContrato] = useState('');
@@ -388,9 +389,11 @@ export default function DLD() {
       })
       .eq('id', s.id);
 
-    if (error) { mostrarMensaje('No se pudo retirar: ' + error.message, 'error'); return; }
-    mostrarMensaje('Solicitud retirada', 'ok');
-    cargarSolicitudes();
+    if (error) { setError('No se pudo retirar la solicitud: ' + error.message); return; }
+    setError('');
+    setMsgOk('✅ Solicitud retirada. Ese día vuelve a estar libre.');
+    setTimeout(() => setMsgOk(''), 4000);
+    cargarDatos(profesorId);
   }
 
   return (
@@ -492,6 +495,13 @@ export default function DLD() {
               }}
             />
           </div>
+        )}
+
+        {msgOk && (
+          <div style={{
+            backgroundColor: '#dcfce7', border: '1.5px solid #86efac', color: '#166534',
+            borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13.5, fontWeight: 600,
+          }}>{msgOk}</div>
         )}
 
         {/* ═══ HISTORIAL ═══ */}
