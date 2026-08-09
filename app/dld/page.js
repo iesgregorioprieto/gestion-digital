@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, calcularAntiguedad } from '@/lib/curso';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -120,9 +120,17 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo,departamento').eq('id', id);
+    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, departamento').eq('id', id);
     const prof = profRows?.[0];
-    if (prof) { setTipoContrato(prof.tipo_contrato || ''); setAntiguedadCentro(prof.antiguedad_centro || 0); setAntiguedadCuerpo(prof.antiguedad_cuerpo || 0); setDepartamento(prof.departamento || ''); }
+    if (prof) {
+      setTipoContrato(prof.tipo_contrato || '');
+      setDepartamento(prof.departamento || '');
+      // La antigüedad se calcula desde el año de incorporación (si lo tiene);
+      // si no, se usa el valor antiguo en años.
+      const cfg = await getConfigCurso();
+      setAntiguedadCentro(calcularAntiguedad(prof.anio_centro, prof.antiguedad_centro, cfg));
+      setAntiguedadCuerpo(calcularAntiguedad(prof.anio_cuerpo, prof.antiguedad_cuerpo, cfg));
+    }
     const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
     setMisSolicitudes(sols || []);
     setCargando(false);
