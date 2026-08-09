@@ -370,6 +370,29 @@ export default function DLD() {
   const verde = '#1e6b2e';
   const verdeClaro = '#e8f5e9';
 
+
+  // El profesor puede retirar una solicitud que aún no se ha resuelto.
+  // Importante: una pendiente olvidada ocupa plaza en el cupo del día
+  // y puede impedir que un compañero pida ese día.
+  async function cancelarSolicitud(s) {
+    const fecha = new Date(s.fecha_solicitada + 'T12:00:00')
+      .toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
+    if (!confirm(`¿Retirar tu solicitud del ${fecha}?\n\nEl día volverá a quedar libre para ti y para tus compañeros.`)) return;
+
+    const { error } = await getSupabase()
+      .from('dld')
+      .update({
+        estado: 'cancelada',
+        resuelto_at: new Date().toISOString(),
+        resuelto_por: 'Retirada por el solicitante',
+      })
+      .eq('id', s.id);
+
+    if (error) { mostrarMensaje('No se pudo retirar: ' + error.message, 'error'); return; }
+    mostrarMensaje('Solicitud retirada', 'ok');
+    cargarSolicitudes();
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
@@ -522,6 +545,18 @@ export default function DLD() {
                           </div>
                         )}
                       </div>
+                    )}
+                    {s.estado === 'pendiente' && (
+                      <button
+                        onClick={() => cancelarSolicitud(s)}
+                        style={{
+                          marginTop: 12, padding: '8px 16px', borderRadius: 8,
+                          border: '1.5px solid #d1d5db', backgroundColor: 'white',
+                          color: '#6b7280', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+                        }}
+                      >
+                        🚫 Retirar solicitud
+                      </button>
                     )}
                     {s.estado === 'aprobada' && (
                       <div style={{ marginTop: 10, backgroundColor: '#dcfce7', border: '1.5px solid #86efac', borderRadius: 10, padding: '10px 14px' }}>
