@@ -163,17 +163,23 @@ export default function GestionNotificaciones({ profesorId }) {
 
       {estado === 'red_bloqueada' && (
         <Nota fondo="#fef3c7" borde="#fbbf24" color="#78350f">
-          <strong>📶 La WiFi del centro bloquea las notificaciones.</strong>
-          <div style={{ lineHeight: 1.9, marginTop: 8 }}>
-            1. Desactiva la WiFi del móvil (usa datos)<br />
-            2. Pulsa <strong>🔔 Activar</strong><br />
-            3. Vuelve a conectar la WiFi
+          <strong>📲 Esta versión de la app no admite notificaciones.</strong>
+          <div style={{ marginTop: 8, lineHeight: 1.6 }}>
+            Para recibir los avisos hay que instalar la app desde Chrome.
+            Se ve exactamente igual.
           </div>
-          <div style={{ marginTop: 8, fontWeight: 700 }}>
-            Solo hay que hacerlo una vez.
+          <div style={{ lineHeight: 2, marginTop: 10 }}>
+            1. Desinstala esta app del móvil<br />
+            2. Abre <strong>Chrome</strong> y entra en app.iesgregorioprieto.com<br />
+            3. Pulsa el menú <strong>⋮</strong> arriba a la derecha<br />
+            4. Elige <strong>Instalar aplicación</strong><br />
+            5. Ábrela y activa los avisos
+          </div>
+          <div style={{ marginTop: 10, fontSize: 12.5 }}>
+            Mientras tanto puedes usar el portal desde Chrome y activarlos allí.
           </div>
           <button onClick={activar} style={{ ...boton('#b45309'), marginTop: 12 }}>
-            🔔 Activar
+            🔔 Intentar de nuevo
           </button>
         </Nota>
       )}
