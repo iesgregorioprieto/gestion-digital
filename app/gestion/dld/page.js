@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ResolverDiaDLD from '@/components/ResolverDiaDLD';
+import { getConfigCurso, numProfesores } from '@/lib/curso';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS_SEMANA = ['L','M','X','J','V','S','D'];
 const azul = '#1a3a6b';
@@ -203,7 +204,8 @@ export default function PanelDirector() {
   const [revocando, setRevocando] = useState(null);   // solicitud a revocar
   const [motivoRevoca, setMotivoRevoca] = useState('');
   const [todasSolicitudes, setTodasSolicitudes] = useState([]);
-  const [totalProfesores, setTotalProfesores] = useState(150); // Se carga dinámicamente de la BD
+  const [totalProfesores, setTotalProfesores] = useState(150); // Se carga de config_centro
+  const [origenPlantilla, setOrigenPlantilla] = useState('registrados');
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState('calendario');
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
@@ -236,12 +238,21 @@ export default function PanelDirector() {
       getSupabase().from('profesores').select('id, titular_id', { count: 'exact' }).eq('estado', 'activo'),
     ]);
     setTodasSolicitudes(data || []);
-    // Contar profesores activos excluyendo sustitutos (sustituto + titular = 1, según petición del director)
-    if (profData) {
+
+    // El nº de profesores sale de los datos del curso (Gestión → Datos del centro).
+    // Es la plantilla real del centro, no solo los que se han registrado en la app.
+    const cfg = await getConfigCurso();
+    if (cfg.configurado && cfg.config.num_profesores) {
+      setTotalProfesores(cfg.config.num_profesores);
+      setOrigenPlantilla('configuracion');
+    } else if (profData) {
+      // Sin configuración: contar activos excluyendo sustitutos (sustituto + titular = 1)
       const sustitutos = profData.filter(p => p.titular_id).length;
       setTotalProfesores(profData.length - sustitutos);
+      setOrigenPlantilla('registrados');
     } else if (count) {
       setTotalProfesores(count);
+      setOrigenPlantilla('registrados');
     }
     setCargando(false);
   }
