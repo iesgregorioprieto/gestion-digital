@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 
@@ -29,24 +30,47 @@ export default function AvisoNotificaciones({ profesorId }) {
         return;
       }
 
+      // Si el profesor lo ha descartado, no volver a insistir
+      try {
+        if (localStorage.getItem('ies-aviso-notif-oculto') === '1') {
+          setEstado('activo');
+          return;
+        }
+      } catch (_) {}
+
       if (Notification.permission === 'denied') { setEstado('bloqueado'); return; }
 
       if (Notification.permission === 'granted') {
+        // a) ¿Hay suscripción en este navegador?
         try {
           const reg = await navigator.serviceWorker.ready;
           const sub = await reg.pushManager.getSubscription();
           if (sub) {
             setEstado('activo');
-            // Reasegurar que está guardada para este profesor
             await guardarSuscripcion(sub);
             return;
           }
+        } catch (_) {}
+
+        // b) ¿La tiene registrada en algún dispositivo?
+        try {
+          const { data } = await getSupabase()
+            .from('push_suscripciones')
+            .select('id')
+            .eq('profesor_id', profesorId)
+            .limit(1);
+          if (data && data.length > 0) { setEstado('activo'); return; }
         } catch (_) {}
       }
 
       setEstado('pedir');
     })();
   }, [profesorId]);
+
+  function ocultarParaSiempre() {
+    try { localStorage.setItem('ies-aviso-notif-oculto', '1'); } catch (_) {}
+    setEstado('activo'); // deja de renderizarse
+  }
 
   async function guardarSuscripcion(sub) {
     try {
@@ -89,6 +113,7 @@ export default function AvisoNotificaciones({ profesorId }) {
       }
 
       await guardarSuscripcion(sub);
+      try { localStorage.removeItem('ies-aviso-notif-oculto'); } catch (_) {}
       setEstado('activo');
     } catch (e) {
       const msg = (e.message || '').toLowerCase();
@@ -189,12 +214,23 @@ export default function AvisoNotificaciones({ profesorId }) {
       boxShadow: '0 4px 16px rgba(37, 99, 235, 0.25)',
       color: 'white',
     }}>
-      <div style={{
-        display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.2)',
-        padding: '3px 10px', borderRadius: 20, fontSize: 11,
-        fontWeight: 800, letterSpacing: 0.5, marginBottom: 10,
-      }}>
-        ⚡ NOVEDAD
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+        <div style={{
+          display: 'inline-block', backgroundColor: 'rgba(255,255,255,0.2)',
+          padding: '3px 10px', borderRadius: 20, fontSize: 11,
+          fontWeight: 800, letterSpacing: 0.5,
+        }}>
+          ⚡ NOVEDAD
+        </div>
+        <button
+          onClick={ocultarParaSiempre}
+          title="No volver a mostrar este aviso"
+          style={{
+            background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white',
+            width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
+            fontSize: 15, lineHeight: 1, flexShrink: 0,
+          }}
+        >✕</button>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap' }}>
