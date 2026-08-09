@@ -339,18 +339,6 @@ export default function PanelSecretario() {
     if (seleccionados.size === 0) return;
 
     const ids = [...seleccionados];
-    const segundos = Math.ceil(ids.length * 0.7);
-
-    // Con tandas pequeñas (lo habitual) no hace falta asustar a nadie
-    const avisoTiempo = segundos > 45
-      ? `Tardará alrededor de ${Math.ceil(segundos / 60)} minuto(s). No cierres esta página mientras tanto.\n\n`
-      : '';
-
-    if (!confirm(
-      `Se van a activar ${ids.length} profesor${ids.length !== 1 ? 'es' : ''} y enviarles su enlace de acceso.\n\n` +
-      avisoTiempo +
-      `¿Continuar?`
-    )) return;
 
     setActivandoMasivo(true);
     setProgresoMasivo({ hecho: 0, total: ids.length });
@@ -1138,33 +1126,40 @@ export default function PanelSecretario() {
                             opacity: activandoMasivo ? 0.7 : 1,
                           }}
                         >
-                          {activandoMasivo ? '⏳ Activando...' : '✅ Activar seleccionados (' + seleccionados.size + ')'}
+                          {activandoMasivo ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                width: 15, height: 15, display: 'inline-block',
+                                border: '2px solid rgba(255,255,255,0.35)',
+                                borderTopColor: 'white', borderRadius: '50%',
+                                animation: 'girar 0.8s linear infinite',
+                              }} />
+                              Activando
+                            </span>
+                          ) : '✅ Activar seleccionados (' + seleccionados.size + ')'}
                         </button>
                       )}
                     </div>
                   </div>
 
-                  {/* Progreso: con 150 profesores el proceso dura varios minutos */}
+                  {/* Rueda de carga mientras se activa */}
                   {progresoMasivo && (
                     <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14,
                       backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe',
-                      borderRadius: 10, padding: '14px 16px', marginBottom: 14,
+                      borderRadius: 10, padding: '18px 16px', marginBottom: 14,
                     }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>
-                        Activando {progresoMasivo.hecho} de {progresoMasivo.total}...
+                      <div style={{
+                        width: 26, height: 26, flexShrink: 0,
+                        border: '3px solid #bfdbfe',
+                        borderTopColor: '#1e6b2e',
+                        borderRadius: '50%',
+                        animation: 'girar 0.8s linear infinite',
+                      }} />
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1e40af' }}>
+                        {progresoMasivo.hecho} de {progresoMasivo.total}
                       </div>
-                      <div style={{ height: 8, backgroundColor: '#dbeafe', borderRadius: 20, overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${Math.round((progresoMasivo.hecho / progresoMasivo.total) * 100)}%`,
-                          backgroundColor: '#1e6b2e', transition: 'width .3s',
-                        }} />
-                      </div>
-                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8 }}>
-                        {progresoMasivo.total > 60
-                          ? 'Los correos se envían despacio para que no los rechace el servidor. No cierres esta página.'
-                          : 'Enviando los enlaces de acceso...'}
-                      </div>
+                      <style>{`@keyframes girar { to { transform: rotate(360deg); } }`}</style>
                     </div>
                   )}
 
