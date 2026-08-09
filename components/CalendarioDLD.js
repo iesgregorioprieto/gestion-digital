@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, limiteDLD } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, limiteDLD, dentroDelCurso } from '@/lib/curso';
 
 const VERDE = '#1e6b2e';
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -75,18 +75,37 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
     return limiteDLD(fecha, cfg).limite;
   }
 
-  function colorDia(info, esLectivo, esPasado, lim) {
-    if (!esLectivo) return { bg: '#f9fafb', color: '#d1d5db', borde: 'transparent' };
-    if (esPasado)   return { bg: '#fafafa', color: '#c7c7c7', borde: 'transparent' };
-    if (!info || (info.aprobadas + info.pendientes) === 0)
-      return { bg: '#f0fdf4', color: '#166534', borde: '#bbf7d0' };
+  /**
+   * Clasifica un día:
+   *   'fuera'      → fin de semana o fuera del curso escolar: no se puede pedir
+   *   'lectivo'    → hay clase (límite pequeño, normalmente 4)
+   *   'no_lectivo' → dentro del curso pero sin clase: SÍ se puede pedir,
+   *                  y además con el límite alto (1/3 de la plantilla).
+   *                  Son los días de septiembre y junio sin alumnado y los
+   *                  pegados a vacaciones: los más solicitados.
+   */
+  function tipoDia(fecha, d) {
+    const finde = d.getDay() === 0 || d.getDay() === 6;
+    if (finde) return 'fuera';
+    if (cfg && !dentroDelCurso(fecha, cfg)) return 'fuera';
+    if (!cfg) return 'lectivo';
+    return esDiaLectivo(fecha, cfg).lectivo ? 'lectivo' : 'no_lectivo';
+  }
 
-    const total = info.aprobadas + info.pendientes;
+  function colorDia(info, tipo, esPasado, lim) {
+    if (tipo === 'fuera') return { bg: '#f9fafb', color: '#d1d5db', borde: 'transparent' };
+    if (esPasado)         return { bg: '#fafafa', color: '#c7c7c7', borde: 'transparent' };
+
+    const total = info ? info.aprobadas + info.pendientes : 0;
     const ratio = lim > 0 ? total / lim : 0;
 
+    // Los no lectivos llevan un tinte azulado para distinguirlos de un vistazo
     if (ratio >= 1)   return { bg: '#fef2f2', color: '#991b1b', borde: '#fca5a5' };
     if (ratio >= 0.6) return { bg: '#fffbeb', color: '#92400e', borde: '#fcd34d' };
-    return { bg: '#f0fdf4', color: '#166534', borde: '#86efac' };
+
+    return tipo === 'no_lectivo'
+      ? { bg: '#eef2ff', color: '#3730a3', borde: '#c7d2fe' }
+      : { bg: '#f0fdf4', color: '#166534', borde: '#86efac' };
   }
 
   const info = diaAbierto ? porDia[diaAbierto] : null;
@@ -129,20 +148,21 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
 
           const f = ymd(d);
           const inf = porDia[f];
-          const lect = cfg ? esDiaLectivo(f, cfg).lectivo : (d.getDay() !== 0 && d.getDay() !== 6);
+          const tipo = tipoDia(f, d);
+          const pedible = tipo !== 'fuera';
           const pasado = f < hoy;
           const lim = limiteDia(f);
-          const c = colorDia(inf, lect, pasado, lim);
+          const c = colorDia(inf, tipo, pasado, lim);
           const total = inf ? inf.aprobadas + inf.pendientes : 0;
 
           return (
             <button
               key={i}
-              onClick={() => lect && !pasado && setDia(f)}
+              onClick={() => pedible && !pasado && setDia(f)}
               style={{
                 aspectRatio: '1', border: `1.5px solid ${c.borde}`,
                 borderRadius: 9, backgroundColor: c.bg, color: c.color,
-                cursor: (lect && !pasado) ? 'pointer' : 'default',
+                cursor: (pedible && !pasado) ? 'pointer' : 'default',
                 display: 'flex', flexDirection: 'column',
                 alignItems: 'center', justifyContent: 'center',
                 fontFamily: 'inherit', padding: 2, position: 'relative',
@@ -151,7 +171,7 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
               }}
             >
               <span style={{ fontSize: 14, fontWeight: 700, lineHeight: 1 }}>{d.getDate()}</span>
-              {lect && !pasado && total > 0 && (
+              {pedible && !pasado && total > 0 && (
                 <span style={{ fontSize: 9.5, fontWeight: 700, marginTop: 2 }}>
                   {total}
                 </span>
