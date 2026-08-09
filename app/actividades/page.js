@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
 
@@ -166,7 +167,7 @@ export default function Actividades() {
     setEnviando(false);
   }
 
-  const hoy = new Date().toISOString().split('T')[0];
+  const hoy = hoyLocal();
   const proximas = actividades.filter(a => a.fecha_inicio >= hoy && a.estado !== 'rechazada');
   const mias     = actividades.filter(a => a.profesor_id === profId);
 
