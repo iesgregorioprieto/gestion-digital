@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
@@ -112,7 +113,7 @@ export default function GestionAusencias() {
   };
 
   // ===== MÉTRICAS DEL DASHBOARD =====
-  const hoyStr = new Date().toISOString().split('T')[0];
+  const hoyStr = hoyLocal();
   const dashboard = {
     ausentesHoy: ausencias.filter(a => {
       const ini = a.fecha_inicio;
