@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { limpiarCacheCurso } from '@/lib/curso';
 
 const AZUL  = '#1e3a5f';
 const VERDE = '#1e6b2e';
@@ -130,6 +131,10 @@ export default function ConfigCurso() {
 
       if (error) { aviso('Error: ' + error.message, 'error'); setGuardando(false); return; }
 
+      // Sin esto, el resto de la app seguiría usando los datos antiguos
+      // hasta que caducase la caché (1 minuto).
+      limpiarCacheCurso();
+
       aviso('✅ Configuración guardada');
       await cargar();
       setCursoSel(form.curso);
@@ -153,6 +158,7 @@ export default function ConfigCurso() {
     });
 
     if (error) { aviso('Error: ' + error.message, 'error'); return; }
+    limpiarCacheCurso();
     setNuevoPeriodo({ nombre: '', fecha_inicio: '', fecha_fin: '' });
     cargarPeriodos(form.curso);
     aviso('✅ Periodo añadido');
@@ -161,6 +167,7 @@ export default function ConfigCurso() {
   async function borrarPeriodo(id) {
     if (!confirm('¿Eliminar este periodo?')) return;
     await getSupabase().from('periodos_no_lectivos').delete().eq('id', id);
+    limpiarCacheCurso();
     cargarPeriodos(form.curso);
   }
 
