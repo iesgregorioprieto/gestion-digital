@@ -49,6 +49,8 @@ export default function PanelSecretario() {
   const [comentarioSecretario, setComentarioSecretario] = useState('');
   const [procesandoCompra, setProcesandoCompra] = useState(false);
   const [aprobandoId, setAprobandoId] = useState(null);
+  const [progresoMasivo, setProgresoMasivo] = useState(null);
+  const [resumenMasivo, setResumenMasivo] = useState(null);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
   const [busquedaSustituto, setBusquedaSustituto] = useState('');
@@ -324,36 +326,88 @@ export default function PanelSecretario() {
   }
 
   // Función de activación masiva para el claustro
+  const esperar = ms => new Promise(r => setTimeout(r, ms));
+
+  /**
+   * Activación masiva pensada para el claustro entero en septiembre.
+   *
+   * Resend limita a 2 correos por segundo: si se envían 150 seguidos, la
+   * mayoría devuelve error 429 y los profesores nunca reciben su enlace.
+   * Por eso se espera entre envío y envío y se reintenta si hace falta.
+   */
   async function activarMasivos() {
     if (seleccionados.size === 0) return;
+
+    const ids = [...seleccionados];
+    const minutos = Math.ceil((ids.length * 0.7) / 60);
+
+    if (!confirm(
+      `Se van a activar ${ids.length} profesores y enviarles su enlace de acceso.\n\n` +
+      `Tardará alrededor de ${minutos} minuto(s). No cierres esta página mientras tanto.\n\n` +
+      `¿Continuar?`
+    )) return;
+
     setActivandoMasivo(true);
-    let ok = 0;
-    for (const id of seleccionados) {
-      // Cada profesor necesita su propio enlace de activación
+    setProgresoMasivo({ hecho: 0, total: ids.length });
+
+    // Traer todos los datos de una vez en lugar de uno por uno
+    const { data: fichas } = await getSupabase()
+      .from('profesores')
+      .select('id, nombre, apellidos, email, rol_gestion')
+      .in('id', ids);
+    const porId = Object.fromEntries((fichas || []).map(p => [p.id, p]));
+
+    let activados = 0;
+    const sinCorreo = [];
+    const fallidos  = [];
+
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      const prof = porId[id];
       const token = crypto.randomUUID();
+
       const { error } = await getSupabase()
         .from('profesores')
         .update({ estado: 'activo', auth_: true, token_activacion: token })
         .eq('id', id);
-      if (!error) {
-        ok++;
-        // Email con el enlace de activación
-        try {
-          const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
-          const prof = (pRows.data || [])[0];
-          if (prof?.email) {
-            await fetch('/api/enviar-email', {
+
+      if (error) {
+        fallidos.push(`${prof?.apellidos || '?'}, ${prof?.nombre || '?'}`);
+        setProgresoMasivo({ hecho: i + 1, total: ids.length });
+        continue;
+      }
+
+      activados++;
+
+      // Envío del correo, con un reintento si Resend responde 429
+      if (prof?.email) {
+        let enviado = false;
+        for (let intento = 0; intento < 2 && !enviado; intento++) {
+          try {
+            const r = await fetch('/api/enviar-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: { ...prof, token } })
+              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: { ...prof, token } }),
             });
+            if (r.ok) enviado = true;
+            else await esperar(1500); // probablemente límite de envío
+          } catch (e) {
+            await esperar(1500);
           }
-        } catch(e) { console.error('Email activación masiva:', e); }
+        }
+        if (!enviado) sinCorreo.push(`${prof.apellidos}, ${prof.nombre}`);
       }
+
+      setProgresoMasivo({ hecho: i + 1, total: ids.length });
+
+      // Respetar el límite de 2 correos por segundo
+      if (i < ids.length - 1) await esperar(600);
     }
+
     setSeleccionados(new Set());
-    mostrarMensaje(`✅ ${ok} profesor${ok !== 1 ? 'es' : ''} activado${ok !== 1 ? 's' : ''} correctamente`, 'ok');
     setActivandoMasivo(false);
+    setProgresoMasivo(null);
+    setResumenMasivo({ activados, sinCorreo, fallidos, total: ids.length });
     cargarProfesores();
   }
 
