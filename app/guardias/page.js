@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 
@@ -82,7 +83,7 @@ function normAbrev(str) {
 
 export default function Guardias() {
   const [cargando, setCargando]         = useState(true);
-  const [fecha, setFecha]               = useState(new Date().toISOString().split('T')[0]);
+  const [fecha, setFecha]               = useState(hoyLocal());
   const [horaActiva, setHoraActiva]     = useState('1');
   const [sectores, setSectores]         = useState([]);
   const [horarioGuardias, setHG]        = useState({});
@@ -511,7 +512,7 @@ export default function Guardias() {
           </div>
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
-        <button onClick={() => setFecha(new Date().toISOString().split('T')[0])}
+        <button onClick={() => setFecha(hoyLocal())}
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
