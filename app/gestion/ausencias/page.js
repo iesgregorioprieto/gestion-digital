@@ -192,11 +192,14 @@ export default function GestionAusencias() {
   .noprint button { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 7px; border: none; background: #1e3a5f; color: #fff; cursor: pointer; }
     .btn-descarga { display:inline-block; margin-left:10px; padding:10px 18px; background:#065f46; color:#fff;
       border-radius:6px; text-decoration:none; font-size:14px; font-weight:700; }
+    .noprint .btn-principal { background:#1e3a5f; font-size:14px; padding:10px 20px; }
+    .noprint .btn-secundario { background:#fff; color:#555; border:1.5px solid #ccc; margin-left:10px; }
 </style></head><body>
 
 <div class="noprint">
-  <button onclick="window.print()">🖨️ Imprimir o guardar como PDF</button>
+  <button class="btn-principal" onclick="descargarInforme()">💾 Descargar informe</button>
   ${just ? `<a class="btn-descarga" href="${justDescarga}">📎 Descargar justificante</a>` : ''}
+  <button class="btn-secundario" onclick="window.print()">🖨️ Imprimir</button>
 </div>
 
 <div class="cabecera">
@@ -253,6 +256,19 @@ ${just ? `
 <h1>Documento justificativo</h1>
 <div class="aviso">No consta documento justificativo adjunto a esta ausencia en el momento de generar el informe.</div>`}
 
+<script>
+function descargarInforme() {
+  var doc = document.documentElement.outerHTML;
+  var blob = new Blob(['<!DOCTYPE html>' + doc], { type: 'text/html;charset=utf-8' });
+  var enlace = document.createElement('a');
+  enlace.href = URL.createObjectURL(blob);
+  enlace.download = ${JSON.stringify(`Informe_ausencia_${(a.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${a.fecha_inicio || ''}.html`)};
+  document.body.appendChild(enlace);
+  enlace.click();
+  document.body.removeChild(enlace);
+  setTimeout(function() { URL.revokeObjectURL(enlace.href); }, 1000);
+}
+</script>
 </body></html>`;
 
     const ventana = window.open('', '_blank');
