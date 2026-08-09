@@ -31,7 +31,7 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       const [{ data }, config] = await Promise.all([
         getSupabase()
           .from('dld')
-          .select('fecha_solicitada, estado, profesor_id, tipo_dld')
+          .select('fecha_solicitada, estado, profesor_id, profesor_nombre, tipo_dld')
           .gte('fecha_solicitada', desde)
           .lte('fecha_solicitada', hasta)
           .in('estado', ['aprobada', 'pendiente']),
@@ -41,11 +41,16 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       const mapa = {};
       for (const s of (data || [])) {
         const f = s.fecha_solicitada;
-        if (!mapa[f]) mapa[f] = { aprobadas: 0, pendientes: 0, mia: null, noLectivo: false };
+        if (!mapa[f]) mapa[f] = { aprobadas: 0, pendientes: 0, mia: null, noLectivo: false, gente: [] };
         if (s.estado === 'aprobada')  mapa[f].aprobadas++;
         if (s.estado === 'pendiente') mapa[f].pendientes++;
         if (s.profesor_id === profesorId) mapa[f].mia = s.estado;
         if (s.tipo_dld === 'no_lectivo') mapa[f].noLectivo = true;
+        mapa[f].gente.push({
+          nombre: s.profesor_nombre || 'Sin nombre',
+          estado: s.estado,
+          soyYo: s.profesor_id === profesorId,
+        });
       }
 
       setPorDia(mapa);
@@ -215,6 +220,37 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
                 </div>
               )}
 
+              {info?.gente?.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 9 }}>
+                    Quién tiene el día
+                  </div>
+                  <div style={{ display: 'grid', gap: 6 }}>
+                    {info.gente
+                      .slice()
+                      .sort((a, b) => (a.estado === b.estado ? 0 : a.estado === 'aprobada' ? -1 : 1))
+                      .map((p, i) => (
+                        <div key={i} style={{
+                          display: 'flex', alignItems: 'center', gap: 9,
+                          padding: '8px 12px', borderRadius: 8, fontSize: 13,
+                          backgroundColor: p.soyYo ? '#eff6ff' : '#f9fafb',
+                          border: `1px solid ${p.soyYo ? '#bfdbfe' : '#f0f0f0'}`,
+                        }}>
+                          <span style={{ fontSize: 13 }}>
+                            {p.estado === 'aprobada' ? '✅' : '⏳'}
+                          </span>
+                          <span style={{ flex: 1, fontWeight: p.soyYo ? 700 : 500, color: p.soyYo ? '#1e40af' : '#374151' }}>
+                            {p.nombre}{p.soyYo ? ' (tú)' : ''}
+                          </span>
+                          <span style={{ fontSize: 11, color: '#9ca3af' }}>
+                            {p.estado === 'aprobada' ? 'concedido' : 'pendiente'}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {onElegirFecha && !info?.mia && (
                 <button
                   onClick={() => onElegirFecha(diaAbierto)}
@@ -233,8 +269,8 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       )}
 
       <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 14, lineHeight: 1.6 }}>
-        Por privacidad solo se muestra cuántos compañeros tienen el día pedido,
-        no quiénes. El límite de {limite} sale de la plantilla del centro.
+        El límite de {limite} por día sale de la plantilla del centro
+        configurada por el equipo directivo.
       </div>
     </div>
   );
