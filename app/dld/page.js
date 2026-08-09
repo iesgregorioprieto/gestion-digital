@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, calcularAntiguedad } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -286,30 +286,30 @@ export default function DLD() {
       return;
     }
 
-    // Comprobar si se supera el tercio en día no lectivo
-    if (form.tipo_dld === 'no_lectivo') {
-      try {
-        const { data: aprobados } = await getSupabase().from('dld')
-          .select('id, profesor_nombre, antiguedad_cuerpo, antiguedad_centro')
-          .eq('fecha_solicitada', form.fecha_solicitada)
-          .eq('estado', 'aprobada');
-        const { data: profActivos } = await getSupabase().from('profesores')
-          .select('id, titular_id').eq('estado', 'activo');
-        const sustitutos = (profActivos || []).filter(p => p.titular_id).length;
-        const totalReal = (profActivos || []).length - sustitutos;
-        const maxPermitidos = Math.floor(totalReal / 3);
-        const numAprobados = (aprobados || []).length;
+    // Avisar si ese día ya está al límite.
+    // El límite sale del mismo sitio que usa el equipo directivo (lib/curso),
+    // para que profesor y director vean siempre el mismo número.
+    try {
+      const { data: aprobados } = await getSupabase().from('dld')
+        .select('id')
+        .eq('fecha_solicitada', form.fecha_solicitada)
+        .eq('estado', 'aprobada');
 
-        if (numAprobados >= maxPermitidos) {
-          const continuar = confirm(
-            `⚠️ AVISO: Ya hay ${numAprobados} DLD aprobados para esa fecha (límite: ${maxPermitidos}, que es 1/3 del claustro).\n\n` +
-            `Si envías esta solicitud y el director la aprueba, un compañero/a con menor prelación podría perder su DLD concedido.\n\n` +
-            `¿Quieres continuar con la solicitud?`
-          );
-          if (!continuar) { setEnviando(false); return; }
-        }
-      } catch(e) { console.error('Error comprobando cupo DLD:', e); }
-    }
+      const cfg = await getConfigCurso();
+      const { limite, esLectivo } = limiteDLD(form.fecha_solicitada, cfg, form.tipo_dld);
+      const numAprobados = (aprobados || []).length;
+
+      if (numAprobados >= limite) {
+        const continuar = confirm(
+          `⚠️ AVISO: ya hay ${numAprobados} DLD concedidos para esa fecha.\n\n` +
+          `El límite del centro para un día ${esLectivo ? 'lectivo' : 'no lectivo'} es de ${limite} profesores.\n\n` +
+          `Puedes enviar la solicitud igualmente, pero es probable que se deniegue ` +
+          `salvo que tengas mayor prelación o causa sobrevenida.\n\n` +
+          `¿Quieres continuar?`
+        );
+        if (!continuar) return;
+      }
+    } catch(e) { console.error('Error comprobando cupo DLD:', e); }
 
     setEnviando(true);
     try {
