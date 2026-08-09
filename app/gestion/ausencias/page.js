@@ -177,9 +177,14 @@ export default function GestionAusencias() {
   @media print { .noprint { display: none; } }
   .noprint { position: fixed; top: 12px; right: 12px; }
   .noprint button { font-family: system-ui, sans-serif; font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 7px; border: none; background: #1e3a5f; color: #fff; cursor: pointer; }
+    .btn-descarga { display:inline-block; margin-left:10px; padding:10px 18px; background:#065f46; color:#fff;
+      border-radius:6px; text-decoration:none; font-size:14px; font-weight:700; }
 </style></head><body>
 
-<div class="noprint"><button onclick="window.print()">Imprimir o guardar como PDF</button></div>
+<div class="noprint">
+  <button onclick="window.print()">🖨️ Imprimir o guardar como PDF</button>
+  ${just ? `<a class="btn-descarga" href="${just}" download target="_blank" rel="noopener">📎 Descargar justificante</a>` : ''}
+</div>
 
 <div class="cabecera">
   <div class="centro">IES Gregorio Prieto</div>
@@ -220,10 +225,16 @@ ${a.justificacion_texto ? `<h1>Justificación aportada</h1><p>${a.justificacion_
 ${just ? `
 <div class="salto"></div>
 <h1>Documento justificativo aportado</h1>
+<div class="noprint" style="margin-bottom:14px">
+  <a class="btn-descarga" style="margin-left:0" href="${just}" download target="_blank" rel="noopener">📎 Descargar el archivo original</a>
+</div>
 <div class="justif">
   ${esImagen(just) ? `<img src="${just}" alt="Justificante">`
     : esPdf(just) ? `<embed src="${just}" type="application/pdf">`
     : `<div class="aviso">El justificante está disponible en el siguiente enlace:<br><br><a href="${just}">${just}</a></div>`}
+</div>
+<div class="aviso noprint" style="margin-top:10px;font-size:12px">
+  Si el documento no se ve aquí arriba, usa el botón de descarga.
 </div>` : `
 <div class="salto"></div>
 <h1>Documento justificativo</h1>
