@@ -48,6 +48,7 @@ export default function PanelSecretario() {
   const [compraAbierta, setCompraAbierta] = useState(null);
   const [comentarioSecretario, setComentarioSecretario] = useState('');
   const [procesandoCompra, setProcesandoCompra] = useState(false);
+  const [aprobandoId, setAprobandoId] = useState(null);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
   const [busquedaSustituto, setBusquedaSustituto] = useState('');
@@ -90,6 +91,11 @@ export default function PanelSecretario() {
   }
 
   async function aprobar(id) {
+    // Sin esto, un doble clic genera dos tokens y envía dos correos:
+    // el enlace del primero quedaría invalidado por el segundo.
+    if (aprobandoId) return;
+    setAprobandoId(id);
+
     // Token único para verificar que el correo es suyo
     const token = crypto.randomUUID();
     await getSupabase()
@@ -284,14 +290,20 @@ export default function PanelSecretario() {
               <button onClick={() => abrirFicha(p)} style={btnEstilo('#e8f5e9', verde, verde)}>👁️ Ficha</button>
               <button onClick={() => abrirEdicion(p)} style={btnEstilo('#e8f0fe', '#1a56db', '#1a56db')}>✏️ Editar</button>
               {p.estado === 'pendiente' && <>
-                <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>✅ Aprobar</button>
+                <button onClick={() => aprobar(p.id)} disabled={aprobandoId === p.id}
+                  style={{ ...btnEstilo('#d1fae5', '#065f46', '#065f46'), opacity: aprobandoId === p.id ? 0.5 : 1, cursor: aprobandoId === p.id ? 'wait' : 'pointer' }}>
+                  {aprobandoId === p.id ? '⏳ Aprobando...' : '✅ Aprobar'}
+                </button>
                 <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>❌ Rechazar</button>
               </>}
               {p.estado === 'activo' && (
                 <button onClick={() => rechazar(p.id)} style={btnEstilo('#fee2e2', '#b91c1c', '#b91c1c')}>🚫 Desactivar</button>
               )}
               {p.estado === 'inactivo' && (
-                <button onClick={() => aprobar(p.id)} style={btnEstilo('#d1fae5', '#065f46', '#065f46')}>↩️ Reactivar</button>
+                <button onClick={() => aprobar(p.id)} disabled={aprobandoId === p.id}
+                  style={{ ...btnEstilo('#d1fae5', '#065f46', '#065f46'), opacity: aprobandoId === p.id ? 0.5 : 1 }}>
+                  {aprobandoId === p.id ? '⏳...' : '↩️ Reactivar'}
+                </button>
               )}
               <button onClick={() => eliminarProfesor(p.id, `${p.nombre} ${p.apellidos}`)} style={btnEstilo('#fee2e2', '#7f1d1d', '#7f1d1d')}>🗑️ Eliminar</button>
             </div>
