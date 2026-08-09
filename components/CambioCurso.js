@@ -221,10 +221,24 @@ export default function CambioCurso() {
             style={{
               display: 'block', textAlign: 'center', padding: '14px',
               backgroundColor: VERDE, color: 'white', borderRadius: 10,
-              textDecoration: 'none', fontWeight: 700, fontSize: 14.5, marginBottom: 16,
+              textDecoration: 'none', fontWeight: 700, fontSize: 14.5, marginBottom: 10,
             }}
           >
-            💾 Abrir copia de seguridad
+            💾 Descargar la copia de seguridad
+          </a>
+
+          <a
+            href="https://drive.google.com/drive/folders/1eEYOlqW9KoKSVyYqXnz_hL6tyBQIcFv3"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block', textAlign: 'center', padding: '13px',
+              backgroundColor: 'white', color: AZUL, borderRadius: 10,
+              border: `1.5px solid ${AZUL}`,
+              textDecoration: 'none', fontWeight: 700, fontSize: 14, marginBottom: 16,
+            }}
+          >
+            📂 Guardarla en el Drive del centro
           </a>
 
           <div
