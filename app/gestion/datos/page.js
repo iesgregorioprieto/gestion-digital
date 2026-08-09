@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ConfigCurso from '@/components/ConfigCurso';
+import CambioCurso from '@/components/CambioCurso';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 
@@ -874,12 +875,20 @@ export default function GestionDatos() {
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'guardias', label: '🛡️ Guardias' },
+            { id: 'cambio', label: '🔄 Cambio de curso' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
               {t.label}
             </button>
           ))}
         </div>
+
+        {/* ===== CAMBIO DE CURSO ===== */}
+        {vistaTab === 'cambio' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 22, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <CambioCurso />
+          </div>
+        )}
 
         {/* ===== DATOS DEL CURSO ===== */}
         {vistaTab === 'curso' && (
