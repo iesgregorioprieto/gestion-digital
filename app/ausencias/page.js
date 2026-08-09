@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
@@ -1022,7 +1023,7 @@ export default function Ausencias() {
 
                   {/* Botón editar tareas — solo si aún no ha pasado la fecha o está pendiente */}
                   {(() => {
-                    const hoyStr = new Date().toISOString().split('T')[0];
+                    const hoyStr = hoyLocal();
                     const finAusencia = a.fecha_fin || a.fecha_inicio;
                     const puedeEditar = a.estado === 'pendiente' || finAusencia >= hoyStr;
                     if (!puedeEditar) return null;
