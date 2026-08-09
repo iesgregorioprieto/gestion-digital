@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, numProfesores } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, limiteDLD } from '@/lib/curso';
 
 const VERDE = '#1e6b2e';
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -17,7 +17,6 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
   const [cargando, setCargando] = useState(true);
   const [porDia, setPorDia]     = useState({});
   const [cfg, setCfg]           = useState(null);
-  const [limite, setLimite]     = useState(0);
   const [diaAbierto, setDia]    = useState(null);
 
   useEffect(() => { cargar(); }, [mes]);
@@ -55,7 +54,6 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
 
       setPorDia(mapa);
       setCfg(config);
-      setLimite(Math.floor(numProfesores(config) / 3));
     } catch (e) {
       // sin datos, calendario vacío
     }
@@ -72,14 +70,19 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
 
   const hoy = ymd(new Date());
 
-  function colorDia(info, esLectivo, esPasado) {
+  // El límite depende de si ese día concreto es lectivo o no
+  function limiteDia(fecha) {
+    return limiteDLD(fecha, cfg).limite;
+  }
+
+  function colorDia(info, esLectivo, esPasado, lim) {
     if (!esLectivo) return { bg: '#f9fafb', color: '#d1d5db', borde: 'transparent' };
     if (esPasado)   return { bg: '#fafafa', color: '#c7c7c7', borde: 'transparent' };
     if (!info || (info.aprobadas + info.pendientes) === 0)
       return { bg: '#f0fdf4', color: '#166534', borde: '#bbf7d0' };
 
     const total = info.aprobadas + info.pendientes;
-    const ratio = limite > 0 ? total / limite : 0;
+    const ratio = lim > 0 ? total / lim : 0;
 
     if (ratio >= 1)   return { bg: '#fef2f2', color: '#991b1b', borde: '#fca5a5' };
     if (ratio >= 0.6) return { bg: '#fffbeb', color: '#92400e', borde: '#fcd34d' };
@@ -89,6 +92,7 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
   const info = diaAbierto ? porDia[diaAbierto] : null;
   const infoLectivo = diaAbierto && cfg ? esDiaLectivo(diaAbierto, cfg) : null;
   const ocupados = info ? info.aprobadas + info.pendientes : 0;
+  const limite = diaAbierto ? limiteDLD(diaAbierto, cfg).limite : 0;
 
   return (
     <div>
@@ -127,7 +131,8 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
           const inf = porDia[f];
           const lect = cfg ? esDiaLectivo(f, cfg).lectivo : (d.getDay() !== 0 && d.getDay() !== 6);
           const pasado = f < hoy;
-          const c = colorDia(inf, lect, pasado);
+          const lim = limiteDia(f);
+          const c = colorDia(inf, lect, pasado, lim);
           const total = inf ? inf.aprobadas + inf.pendientes : 0;
 
           return (
@@ -269,8 +274,8 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       )}
 
       <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 14, lineHeight: 1.6 }}>
-        El límite de {limite} por día sale de la plantilla del centro
-        configurada por el equipo directivo.
+        El límite de cada día depende de si es lectivo o no, y sale de la
+        plantilla del centro configurada por el equipo directivo.
       </div>
     </div>
   );
