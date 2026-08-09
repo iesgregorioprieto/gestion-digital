@@ -119,8 +119,9 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
         backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1e40af',
         borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, lineHeight: 1.6,
       }}>
-        Antes de pedir un día, mira aquí la carga que tiene. Los días en verde
-        tienen sitio de sobra; los rojos están al límite y es probable que te lo denieguen.
+        Antes de pedir un día, mira aquí la carga que tiene. Los verdes tienen sitio;
+        los rojos están al límite y es probable que te lo denieguen. Los azules son
+        días sin clase dentro del curso: se pueden pedir y tienen mucho más cupo.
       </div>
 
       {/* Navegación de meses */}
@@ -190,9 +191,10 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       {/* Leyenda */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: '#6b7280', marginBottom: 16 }}>
         <Ley color="#f0fdf4" borde="#86efac">Con sitio</Ley>
+        <Ley color="#eef2ff" borde="#c7d2fe">Sin clase (más cupo)</Ley>
         <Ley color="#fffbeb" borde="#fcd34d">Se va llenando</Ley>
         <Ley color="#fef2f2" borde="#fca5a5">Al límite</Ley>
-        <Ley color="#f9fafb" borde="#e5e7eb">Sin clase</Ley>
+        <Ley color="#f9fafb" borde="#e5e7eb">No se puede pedir</Ley>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ color: '#16a34a', fontSize: 12 }}>●</span> Tu solicitud
         </span>
@@ -211,12 +213,18 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
             <button onClick={() => setDia(null)} style={{ background: 'none', border: 'none', fontSize: 19, cursor: 'pointer', color: '#aaa', lineHeight: 1 }}>✕</button>
           </div>
 
-          {infoLectivo && !infoLectivo.lectivo ? (
-            <div style={{ fontSize: 13.5, color: '#666', lineHeight: 1.6 }}>
-              🌙 Ese día no hay clase{infoLectivo.motivo ? ` — ${infoLectivo.motivo}` : ''}.
-            </div>
-          ) : (
-            <>
+          <>
+              {infoLectivo && !infoLectivo.lectivo && (
+                <div style={{
+                  backgroundColor: '#eef2ff', border: '1.5px solid #c7d2fe', color: '#3730a3',
+                  borderRadius: 9, padding: '11px 14px', fontSize: 13, lineHeight: 1.6, marginBottom: 14,
+                }}>
+                  🌙 <strong>Día sin clase{infoLectivo.motivo ? ` — ${infoLectivo.motivo}` : ''}.</strong><br />
+                  Puedes pedirlo igualmente, y además el cupo es mucho mayor
+                  ({limite} profesores) porque no hay clases que cubrir.
+                  Tampoco tendrás que indicar horario ni dejar tareas.
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 14 }}>
                 <Dato n={info?.aprobadas || 0} label="concedidos" color="#166534" />
                 <Dato n={info?.pendientes || 0} label="pendientes" color="#b45309" />
@@ -288,8 +296,7 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
                   📅 Solicitar este día
                 </button>
               )}
-            </>
-          )}
+          </>
         </div>
       )}
 
