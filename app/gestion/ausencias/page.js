@@ -142,6 +142,10 @@ export default function GestionAusencias() {
     const esImagen = url => /\.(jpe?g|png|gif|webp|heic)$/i.test(url || '');
     const esPdf = url => /\.pdf$/i.test(url || '');
     const just = a.justificacion_url;
+    // Supabase Storage fuerza la descarga con el parámetro ?download=
+    // (el atributo download del navegador se ignora entre dominios distintos)
+    const nombreArchivo = `justificante_${(a.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${a.fecha_inicio || ''}.${(just || '').split('.').pop().split('?')[0] || 'pdf'}`;
+    const justDescarga = just ? `${just}${just.includes('?') ? '&' : '?'}download=${encodeURIComponent(nombreArchivo)}` : '';
 
     const filasHoras = horas.map(h => `
       <tr>
@@ -183,7 +187,7 @@ export default function GestionAusencias() {
 
 <div class="noprint">
   <button onclick="window.print()">🖨️ Imprimir o guardar como PDF</button>
-  ${just ? `<a class="btn-descarga" href="${just}" download target="_blank" rel="noopener">📎 Descargar justificante</a>` : ''}
+  ${just ? `<a class="btn-descarga" href="${justDescarga}">📎 Descargar justificante</a>` : ''}
 </div>
 
 <div class="cabecera">
@@ -226,7 +230,7 @@ ${just ? `
 <div class="salto"></div>
 <h1>Documento justificativo aportado</h1>
 <div class="noprint" style="margin-bottom:14px">
-  <a class="btn-descarga" style="margin-left:0" href="${just}" download target="_blank" rel="noopener">📎 Descargar el archivo original</a>
+  <a class="btn-descarga" style="margin-left:0" href="${justDescarga}">📎 Descargar el archivo original</a>
 </div>
 <div class="justif">
   ${esImagen(just) ? `<img src="${just}" alt="Justificante">`
