@@ -1139,6 +1139,70 @@ export default function PanelSecretario() {
                     </div>
                   </div>
 
+                  {/* Progreso: con 150 profesores el proceso dura varios minutos */}
+                  {progresoMasivo && (
+                    <div style={{
+                      backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe',
+                      borderRadius: 10, padding: '14px 16px', marginBottom: 14,
+                    }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e40af', marginBottom: 8 }}>
+                        Activando {progresoMasivo.hecho} de {progresoMasivo.total}...
+                      </div>
+                      <div style={{ height: 8, backgroundColor: '#dbeafe', borderRadius: 20, overflow: 'hidden' }}>
+                        <div style={{
+                          height: '100%',
+                          width: `${Math.round((progresoMasivo.hecho / progresoMasivo.total) * 100)}%`,
+                          backgroundColor: '#1e6b2e', transition: 'width .3s',
+                        }} />
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8 }}>
+                        Los correos se envían despacio para que no los rechace el servidor.
+                        No cierres esta página.
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Resumen al terminar */}
+                  {resumenMasivo && (
+                    <div style={{
+                      backgroundColor: '#f9fafb', border: '1.5px solid #e5e7eb',
+                      borderRadius: 10, padding: '14px 16px', marginBottom: 14,
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: '#166534' }}>
+                          ✅ {resumenMasivo.activados} de {resumenMasivo.total} activados
+                        </div>
+                        <button onClick={() => setResumenMasivo(null)}
+                          style={{ background: 'none', border: 'none', fontSize: 17, cursor: 'pointer', color: '#aaa', lineHeight: 1 }}>✕</button>
+                      </div>
+
+                      {resumenMasivo.sinCorreo.length > 0 && (
+                        <div style={{ marginTop: 11, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 13px', fontSize: 12.5, color: '#78350f', lineHeight: 1.6 }}>
+                          <strong>⚠️ Activados pero sin recibir el correo ({resumenMasivo.sinCorreo.length}):</strong>
+                          <div style={{ marginTop: 5 }}>{resumenMasivo.sinCorreo.join(' · ')}</div>
+                          <div style={{ marginTop: 6 }}>
+                            Están activos, pero no tienen su enlace. Apruébalos de uno en uno
+                            para reenviárselo.
+                          </div>
+                        </div>
+                      )}
+
+                      {resumenMasivo.fallidos.length > 0 && (
+                        <div style={{ marginTop: 11, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 13px', fontSize: 12.5, color: '#991b1b', lineHeight: 1.6 }}>
+                          <strong>❌ No se pudieron activar ({resumenMasivo.fallidos.length}):</strong>
+                          <div style={{ marginTop: 5 }}>{resumenMasivo.fallidos.join(' · ')}</div>
+                          <div style={{ marginTop: 6 }}>Siguen pendientes. Vuelve a intentarlo con ellos.</div>
+                        </div>
+                      )}
+
+                      {resumenMasivo.sinCorreo.length === 0 && resumenMasivo.fallidos.length === 0 && (
+                        <div style={{ fontSize: 12.5, color: '#166534', marginTop: 6 }}>
+                          Todos han recibido su enlace de activación.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {pendientes.map(p => {
                       const sel = seleccionados.has(p.id);
