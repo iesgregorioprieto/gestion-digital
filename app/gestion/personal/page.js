@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 const DEPARTAMENTOS = [
   'TMV/Carrocería','Hostelería','Informática','Electricidad','Comercio',
@@ -51,7 +52,7 @@ export default function PanelSecretario() {
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
   const [busquedaSustituto, setBusquedaSustituto] = useState('');
   const [tipoBajaSeleccionada, setTipoBajaSeleccionada] = useState('temporal');
-  const [fechaBaja, setFechaBaja] = useState(new Date().toISOString().split('T')[0]);
+  const [fechaBaja, setFechaBaja] = useState(hoyLocal());
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [seleccionados, setSeleccionados] = useState(new Set());
