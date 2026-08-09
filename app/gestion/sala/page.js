@@ -18,8 +18,14 @@ export default function GestionSala() {
   const azul = '#1e3a5f';
 
   useEffect(() => {
-    const n = sessionStorage.getItem('profesor_nombre');
-    setNombre(n || '');
+    // Solo el equipo directivo puede publicar avisos en la sala de profesores
+    const id  = sessionStorage.getItem('profesor_id');
+    const rol = sessionStorage.getItem('profesor_rol_gestion');
+    if (!id || !['director', 'secretario', 'jefe_estudios'].includes(rol)) {
+      window.location.href = '/login';
+      return;
+    }
+    setNombre(sessionStorage.getItem('profesor_nombre') || '');
     cargarAvisos();
   }, []);
 
