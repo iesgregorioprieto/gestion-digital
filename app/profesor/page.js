@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 
@@ -36,7 +37,7 @@ export default function PanelProfesor() {
   
   async function cargarApoyosPendientes(id) {
     // Buscar apoyos pendientes de HOY y siguientes días (hasta 7)
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = hoyLocal();
     const dentroDe7 = new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0];
     const { data } = await getSupabase()
       .from('apoyos_asignados')
