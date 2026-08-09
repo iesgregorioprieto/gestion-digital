@@ -44,7 +44,7 @@ export default function MisDatos() {
   const [form, setForm] = useState({
     nombre: '', apellidos: '', departamento: '', especialidad: '',
     tipo_contrato: 'Funcionario de carrera',
-    antiguedad_centro: '', antiguedad_cuerpo: '', telefono: '',
+    anio_centro: '', anio_cuerpo: '', telefono: '',
     esTutor: false, grupoTutoria: '',
   });
   const [guardando, setGuardando] = useState(false);
@@ -67,7 +67,7 @@ export default function MisDatos() {
 
       const { data: rows } = await getSupabase()
         .from('profesores')
-        .select('nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, telefono, rol, grupo_tutoria')
+        .select('nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, telefono, rol, grupo_tutoria')
         .eq('id', id);
 
       const p = (rows || [])[0];
@@ -79,8 +79,10 @@ export default function MisDatos() {
           departamento:      p.departamento  || '',
           especialidad:      p.especialidad  || '',
           tipo_contrato:     p.tipo_contrato || 'Funcionario de carrera',
-          antiguedad_centro: p.antiguedad_centro?.toString() || '',
-          antiguedad_cuerpo: p.antiguedad_cuerpo?.toString() || '',
+          anio_centro: p.anio_centro?.toString()
+            || (p.antiguedad_centro ? (new Date().getFullYear() - p.antiguedad_centro).toString() : ''),
+          anio_cuerpo: p.anio_cuerpo?.toString()
+            || (p.antiguedad_cuerpo ? (new Date().getFullYear() - p.antiguedad_cuerpo).toString() : ''),
           telefono:          p.telefono      || '',
           esTutor:           Array.isArray(p.rol) && p.rol.includes('tutor'),
           grupoTutoria:      p.grupo_tutoria || '',
@@ -113,8 +115,11 @@ export default function MisDatos() {
           departamento:      form.departamento,
           especialidad:      form.especialidad || null,
           tipo_contrato:     form.tipo_contrato,
-          antiguedad_centro: form.antiguedad_centro ? parseInt(form.antiguedad_centro) : null,
-          antiguedad_cuerpo: form.antiguedad_cuerpo ? parseInt(form.antiguedad_cuerpo) : null,
+          anio_centro: form.anio_centro ? parseInt(form.anio_centro) : null,
+          anio_cuerpo: form.anio_cuerpo ? parseInt(form.anio_cuerpo) : null,
+          // Se guardan también los años calculados por compatibilidad
+          antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
+          antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
           telefono:          form.telefono.trim() || null,
           rol:               rolNuevo,
           grupo_tutoria:     form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
@@ -267,14 +272,27 @@ export default function MisDatos() {
             </Campo>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Campo label="Antigüedad centro (años)">
-                <input type="number" min="0" value={form.antiguedad_centro}
-                  onChange={e => set('antiguedad_centro', e.target.value)} style={inputEstilo} />
+              <Campo label="Año de llegada al centro">
+                <input type="number" min="1970" max={new Date().getFullYear()}
+                  value={form.anio_centro} placeholder="Ej: 2018"
+                  onChange={e => set('anio_centro', e.target.value)} style={inputEstilo} />
               </Campo>
-              <Campo label="Antigüedad cuerpo (años)">
-                <input type="number" min="0" value={form.antiguedad_cuerpo}
-                  onChange={e => set('antiguedad_cuerpo', e.target.value)} style={inputEstilo} />
+              <Campo label="Año de ingreso en el cuerpo">
+                <input type="number" min="1970" max={new Date().getFullYear()}
+                  value={form.anio_cuerpo} placeholder="Ej: 2010"
+                  onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo} />
               </Campo>
+            </div>
+
+            <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 13 }}>
+              💡 Indica el <strong>año</strong>, no los años que llevas. Así no hay que
+              actualizarlo cada curso: la antigüedad se calcula sola.
+              {form.anio_centro && (
+                <div style={{ marginTop: 6 }}>
+                  Actualmente: <strong>{Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro))} años</strong> en el centro
+                  {form.anio_cuerpo && <> · <strong>{Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo))} años</strong> en el cuerpo</>}
+                </div>
+              )}
             </div>
 
             <Seccion>🤝 Tutoría</Seccion>
