@@ -121,6 +121,16 @@ export default function PanelProfesor() {
       color: '#7c2d12', bg: '#fff7ed', border: '#fdba74',
     },
     {
+      id: 'actividades',
+      emoji: '🎒',
+      titulo: 'Actividades Complementarias',
+      descripcion: 'Propón y consulta las salidas y actividades del centro',
+      href: '/actividades',
+      disponible: true,
+      roles: ['todos'],
+      color: '#166534', bg: '#f0fdf4', border: '#86efac',
+    },
+    {
       id: 'ausencias',
       emoji: '🏥',
       titulo: 'Notifica una Ausencia',
