@@ -11,58 +11,9 @@ export default function PanelProfesor() {
   const [rolGestion, setRolGestion] = useState('');
   const [apoyosPendientes, setApoyosPendientes] = useState([]);
   const [profId, setProfId] = useState('');
-  const [mostrarDemo, setMostrarDemo] = useState(false);
-  const [limpiandoDemo, setLimpiandoDemo] = useState(false);
-  const [confirmDemo, setConfirmDemo] = useState(false);
-  const [msgDemo, setMsgDemo] = useState('');
 
-  const profesoresDemo = [
-    { email: 'ana.martinez.test@educastillalamancha.es', nombre: 'Ana Martinez Ruiz', dept: 'TMV/Carrocería', emoji: '🚗' },
-    { email: 'carlos.lopez.test@educastillalamancha.es', nombre: 'Carlos Lopez Fernandez', dept: 'Comercio', emoji: '🛍️' },
-    { email: 'maria.garcia.test@educastillalamancha.es', nombre: 'Maria Garcia Sanchez', dept: 'Informática', emoji: '💻' },
-    { email: 'pedro.rodriguez.test@educastillalamancha.es', nombre: 'Pedro Rodriguez Diaz', dept: 'Electricidad', emoji: '⚡' },
-    { email: 'laura.sanchez.test@educastillalamancha.es', nombre: 'Laura Sanchez Moreno', dept: 'Hostelería', emoji: '🍽️' },
-    { email: 'javier.perez.test@educastillalamancha.es', nombre: 'Javier Perez Gonzalez', dept: 'Industrias Alimentarias', emoji: '🥖' },
-    { email: 'elena.jimenez.test@educastillalamancha.es', nombre: 'Elena Jimenez Torres', dept: 'Administración', emoji: '🏢' },
-    { email: 'miguel.hernandez.test@educastillalamancha.es', nombre: 'Miguel Hernandez Romero', dept: 'FOL', emoji: '📚' },
-    { email: 'sofia.navarro.test@educastillalamancha.es', nombre: 'Sofia Navarro Castillo', dept: 'Matemáticas', emoji: '🌐' },
-    { email: 'antonio.ruiz.test@educastillalamancha.es', nombre: 'Antonio Ruiz Vega', dept: 'Lengua y Literatura', emoji: '📝' },
-    { email: 'director@iesgregorioprieto.es', nombre: 'Director — José María Díaz', dept: 'Dirección', emoji: '👑' },
-    { email: 'llcc12@educastillalamancha.es', nombre: 'Luis Javier Cárdenas (Secretario)', dept: 'Secretaría', emoji: '⚙️' },
-  ];
 
-  async function entrarComoDemo(prof) {
-    const { data } = await getSupabase().from('profesores').select('id,nombre,apellidos,rol,rol_gestion,estado').eq('email', prof.email);
-    const p = data?.[0];
-    if (!p) { setMsgDemo('No encontrado en BD: ' + prof.email); return; }
-    sessionStorage.setItem('profesor_id', p.id);
-    sessionStorage.setItem('profesor_nombre', p.nombre + ' ' + p.apellidos);
-    sessionStorage.setItem('profesor_email', prof.email);
-    sessionStorage.setItem('profesor_rol_gestion', p.rol_gestion || '');
-    sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(p.rol) ? p.rol : ['profesor']));
-    if (['director','secretario','jefe_estudios'].includes(p.rol_gestion)) {
-      window.location.href = '/gestion';
-    } else {
-      window.location.reload();
-    }
-  }
 
-  async function limpiarDemo() {
-    setLimpiandoDemo(true);
-    setConfirmDemo(false);
-    const supabase = getSupabase();
-    const { data: profs } = await supabase.from('profesores').select('id').like('email', '%test%');
-    const ids = (profs || []).map(p => p.id);
-    if (ids.length > 0) {
-      for (const tabla of ['ausencias','dld','apoyos_asignados','compras','horarios_profesores']) {
-        await supabase.from(tabla).delete().in('profesor_id', ids);
-      }
-      await supabase.from('profesores').delete().like('email', '%test%');
-    }
-    setMsgDemo('✅ Datos de demo eliminados. La app queda limpia.');
-    setLimpiandoDemo(false);
-    setMostrarDemo(false);
-  }
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -525,106 +476,6 @@ export default function PanelProfesor() {
           })}
         </div>
 
-        {/* ══════════════════════════════════════
-            PANEL DEMO — Solo equipo directivo
-            ══════════════════════════════════════ */}
-        {rolGestion && (
-        <div style={{ marginTop: 32, borderTop: '2px dashed #e5e7eb', paddingTop: 20 }}>
-          <button
-            onClick={() => { setMostrarDemo(!mostrarDemo); setMsgDemo(''); setConfirmDemo(false); }}
-            style={{
-              width: '100%', padding: '10px', borderRadius: 10,
-              border: '1.5px dashed #9ca3af', backgroundColor: mostrarDemo ? '#1e293b' : 'white',
-              color: mostrarDemo ? 'white' : '#6b7280', fontWeight: 700, fontSize: 13, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-            }}
-          >
-            🧪 {mostrarDemo ? 'Cerrar panel de pruebas' : 'Panel de pruebas internas (demo)'}
-          </button>
-
-          {mostrarDemo && (
-            <div style={{ marginTop: 12, backgroundColor: '#0f172a', borderRadius: 12, padding: 16 }}>
-              <div style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12, textAlign: 'center' }}>
-                Selecciona un usuario para probar sin contraseña
-              </div>
-
-              {msgDemo && (
-                <div style={{ backgroundColor: msgDemo.startsWith('✅') ? '#dcfce7' : '#fef2f2', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: msgDemo.startsWith('✅') ? '#166534' : '#b91c1c', fontWeight: 600 }}>
-                  {msgDemo}
-                  <button onClick={() => setMsgDemo('')} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#888' }}>✕</button>
-                </div>
-              )}
-
-              {/* DIRECTIVOS */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>👑 Directivos</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
-                {profesoresDemo.filter(p => p.email.includes('director') || p.email.includes('llcc12')).map(p => (
-                  <button key={p.email} onClick={() => entrarComoDemo(p)} style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                    borderRadius: 10, border: '1px solid #334155', backgroundColor: '#1e293b',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
-                    <span style={{ fontSize: 18 }}>{p.emoji}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, color: '#f1f5f9' }}>{p.nombre}</div>
-                      <div style={{ fontSize: 10, color: '#64748b' }}>{p.dept}</div>
-                    </div>
-                    <span style={{ fontSize: 10, color: '#64748b' }}>→</span>
-                  </button>
-                ))}
-              </div>
-
-              {/* PROFESORES */}
-              <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>👨‍🏫 Profesores de prueba</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 14 }}>
-                {profesoresDemo.filter(p => !p.email.includes('director') && !p.email.includes('llcc12')).map(p => (
-                  <button key={p.email} onClick={() => entrarComoDemo(p)} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                    borderRadius: 8, border: '1px solid #1e293b', backgroundColor: '#0f172a',
-                    cursor: 'pointer', textAlign: 'left',
-                  }}>
-                    <span style={{ fontSize: 16 }}>{p.emoji}</span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 600, color: '#e2e8f0', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre.split(' ')[0]} {p.nombre.split(' ')[1]}</div>
-                      <div style={{ fontSize: 10, color: '#475569', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.dept}</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {/* LIMPIAR DEMO */}
-              <div style={{ borderTop: '1px solid #1e293b', paddingTop: 12 }}>
-                {!confirmDemo ? (
-                  <button onClick={() => setConfirmDemo(true)} style={{
-                    width: '100%', padding: '8px', borderRadius: 8, border: '1px solid #dc2626',
-                    backgroundColor: 'transparent', color: '#dc2626', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                  }}>
-                    🗑️ Eliminar todos los datos de prueba
-                  </button>
-                ) : (
-                  <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 12, border: '1px solid #dc2626' }}>
-                    <div style={{ color: '#fca5a5', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-                      ⚠️ ¿Eliminar los 10 profesores de prueba y todos sus registros?
-                    </div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button onClick={limpiarDemo} disabled={limpiandoDemo} style={{
-                        flex: 1, padding: '8px', borderRadius: 6, border: 'none',
-                        backgroundColor: '#dc2626', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                      }}>
-                        {limpiandoDemo ? '⏳ Limpiando...' : '✅ Sí, eliminar todo'}
-                      </button>
-                      <button onClick={() => setConfirmDemo(false)} style={{
-                        flex: 1, padding: '8px', borderRadius: 6, border: '1px solid #334155',
-                        backgroundColor: 'transparent', color: '#94a3b8', fontWeight: 700, fontSize: 12, cursor: 'pointer',
-                      }}>Cancelar</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-        )}
 
       </div>
     </div>
