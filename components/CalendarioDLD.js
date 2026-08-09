@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, limiteDLD, dentroDelCurso } from '@/lib/curso';
+import { getConfigCurso, limiteDLD, clasificarDia } from '@/lib/curso';
 
 const VERDE = '#1e6b2e';
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
@@ -75,41 +75,29 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
     return limiteDLD(fecha, cfg).limite;
   }
 
-  /**
-   * Clasifica un día:
-   *   'fuera'      → fin de semana o fuera del curso escolar: no se puede pedir
-   *   'lectivo'    → hay clase (límite pequeño, normalmente 4)
-   *   'no_lectivo' → dentro del curso pero sin clase: SÍ se puede pedir,
-   *                  y además con el límite alto (1/3 de la plantilla).
-   *                  Son los días de septiembre y junio sin alumnado y los
-   *                  pegados a vacaciones: los más solicitados.
-   */
-  function tipoDia(fecha, d) {
-    const finde = d.getDay() === 0 || d.getDay() === 6;
-    if (finde) return 'fuera';
-    if (cfg && !dentroDelCurso(fecha, cfg)) return 'fuera';
-    if (!cfg) return 'lectivo';
-    return esDiaLectivo(fecha, cfg).lectivo ? 'lectivo' : 'no_lectivo';
-  }
-
   function colorDia(info, tipo, esPasado, lim) {
-    if (tipo === 'fuera') return { bg: '#f9fafb', color: '#d1d5db', borde: 'transparent' };
-    if (esPasado)         return { bg: '#fafafa', color: '#c7c7c7', borde: 'transparent' };
+    // Fin de semana, vacaciones o fuera del curso: no se pide DLD
+    if (tipo === 'finde' || tipo === 'fuera_curso')
+      return { bg: '#f9fafb', color: '#d1d5db', borde: 'transparent' };
+    if (tipo === 'vacaciones')
+      return { bg: '#f5f3ff', color: '#a78bfa', borde: '#ede9fe' };
+    if (esPasado)
+      return { bg: '#fafafa', color: '#c7c7c7', borde: 'transparent' };
 
     const total = info ? info.aprobadas + info.pendientes : 0;
     const ratio = lim > 0 ? total / lim : 0;
 
-    // Los no lectivos llevan un tinte azulado para distinguirlos de un vistazo
     if (ratio >= 1)   return { bg: '#fef2f2', color: '#991b1b', borde: '#fca5a5' };
     if (ratio >= 0.6) return { bg: '#fffbeb', color: '#92400e', borde: '#fcd34d' };
 
-    return tipo === 'no_lectivo'
+    // Laborable sin alumnado: tinte azul, tiene mucho más cupo
+    return tipo === 'sin_alumnado'
       ? { bg: '#eef2ff', color: '#3730a3', borde: '#c7d2fe' }
       : { bg: '#f0fdf4', color: '#166534', borde: '#86efac' };
   }
 
   const info = diaAbierto ? porDia[diaAbierto] : null;
-  const infoLectivo = diaAbierto && cfg ? esDiaLectivo(diaAbierto, cfg) : null;
+  const claseDia = diaAbierto ? clasificarDia(diaAbierto, cfg) : null;
   const ocupados = info ? info.aprobadas + info.pendientes : 0;
   const limite = diaAbierto ? limiteDLD(diaAbierto, cfg).limite : 0;
 
@@ -120,8 +108,8 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
         borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13, lineHeight: 1.6,
       }}>
         Antes de pedir un día, mira aquí la carga que tiene. Los verdes tienen sitio;
-        los rojos están al límite y es probable que te lo denieguen. Los azules son
-        días sin clase dentro del curso: se pueden pedir y tienen mucho más cupo.
+        los rojos están al límite. Los azules son días de trabajo sin alumnado
+        (principio de septiembre y final de junio): tienen mucho más cupo.
       </div>
 
       {/* Navegación de meses */}
@@ -149,8 +137,8 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
 
           const f = ymd(d);
           const inf = porDia[f];
-          const tipo = tipoDia(f, d);
-          const pedible = tipo !== 'fuera';
+          const tipo = clasificarDia(f, cfg).tipo;
+          const pedible = (tipo === 'lectivo' || tipo === 'sin_alumnado');
           const pasado = f < hoy;
           const lim = limiteDia(f);
           const c = colorDia(inf, tipo, pasado, lim);
@@ -191,10 +179,10 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       {/* Leyenda */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5, color: '#6b7280', marginBottom: 16 }}>
         <Ley color="#f0fdf4" borde="#86efac">Con sitio</Ley>
-        <Ley color="#eef2ff" borde="#c7d2fe">Sin clase (más cupo)</Ley>
+        <Ley color="#eef2ff" borde="#c7d2fe">Sin alumnado (más cupo)</Ley>
         <Ley color="#fffbeb" borde="#fcd34d">Se va llenando</Ley>
         <Ley color="#fef2f2" borde="#fca5a5">Al límite</Ley>
-        <Ley color="#f9fafb" borde="#e5e7eb">No se puede pedir</Ley>
+        <Ley color="#f5f3ff" borde="#ede9fe">Vacaciones</Ley>
         <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
           <span style={{ color: '#16a34a', fontSize: 12 }}>●</span> Tu solicitud
         </span>
@@ -214,14 +202,14 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
           </div>
 
           <>
-              {infoLectivo && !infoLectivo.lectivo && (
+              {claseDia?.tipo === 'sin_alumnado' && (
                 <div style={{
                   backgroundColor: '#eef2ff', border: '1.5px solid #c7d2fe', color: '#3730a3',
                   borderRadius: 9, padding: '11px 14px', fontSize: 13, lineHeight: 1.6, marginBottom: 14,
                 }}>
-                  🌙 <strong>Día sin clase{infoLectivo.motivo ? ` — ${infoLectivo.motivo}` : ''}.</strong><br />
-                  Puedes pedirlo igualmente, y además el cupo es mucho mayor
-                  ({limite} profesores) porque no hay clases que cubrir.
+                  🌙 <strong>Día lectivo sin alumnado{claseDia.motivo ? ` — ${claseDia.motivo}` : ''}.</strong><br />
+                  Se trabaja, así que puedes pedirlo, y además el cupo es mucho
+                  mayor ({limite} profesores) porque no hay clases que cubrir.
                   Tampoco tendrás que indicar horario ni dejar tareas.
                 </div>
               )}
