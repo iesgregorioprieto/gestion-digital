@@ -223,17 +223,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ACCESO DEMO - SOLO PARA PRUEBAS INTERNAS */}
-      <div style={{ textAlign: 'center', marginTop: 8, marginBottom: 16 }}>
-        <a href="/demo" style={{
-          fontSize: 11, color: '#bbb', textDecoration: 'none',
-          padding: '4px 12px', borderRadius: 20,
-          border: '1px solid #ddd', backgroundColor: 'rgba(255,255,255,0.5)',
-        }}>
-          🧪 Modo demo (pruebas internas)
-        </a>
-      </div>
-
       {/* FOOTER */}
       <div style={{
         width: '100%', padding: '16px', textAlign: 'center',
