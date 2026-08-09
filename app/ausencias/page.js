@@ -1030,16 +1030,22 @@ export default function Ausencias() {
                     );
                   })()}
 
-                  {/* Aviso justificación */}
-                  {a.estado === 'pendiente' && (
+                  {/* Aviso justificación — siempre se puede justificar, aunque
+                      haya vencido el plazo: es una obligación del profesorado */}
+                  {(a.estado === 'pendiente' || a.estado === 'sin_justificar') && (
                     <div style={{ marginTop: 10 }}>
-                      {dias > 0 ? (
+                      {a.estado === 'sin_justificar' ? (
+                        <div style={{ fontSize: 12, color: '#78350f', backgroundColor: '#fef3c7', border: '1px solid #fbbf24', padding: '8px 12px', borderRadius: 7, marginBottom: 8, lineHeight: 1.5 }}>
+                          ⏰ <strong>Fuera de plazo.</strong> Puedes justificarla igualmente:
+                          quedará registrada la fecha de entrega para que la dirección la valore.
+                        </div>
+                      ) : dias > 0 ? (
                         <div style={{ fontSize: 12, color: dias <= 1 ? rojo : '#92400e', backgroundColor: dias <= 1 ? '#fee2e2' : '#fef3c7', padding: '6px 12px', borderRadius: 7, marginBottom: 8 }}>
                           ⏰ Te quedan <strong>{dias} día{dias !== 1 ? 's' : ''}</strong> para justificar esta ausencia
                         </div>
                       ) : (
                         <div style={{ fontSize: 12, color: rojo, backgroundColor: '#fee2e2', padding: '6px 12px', borderRadius: 7, marginBottom: 8 }}>
-                          ❌ Plazo de justificación vencido
+                          ⏰ Plazo vencido — puedes justificarla igualmente
                         </div>
                       )}
                       <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivo(null); setJustArchNombre(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
