@@ -35,6 +35,11 @@ export default function ConfigCurso() {
 
   const [nuevoPeriodo, setNuevoPeriodo] = useState({ nombre: '', fecha_inicio: '', fecha_fin: '' });
 
+  const n = () => parseInt(form.num_profesores) || 0;
+  const maxLectivo   = () => n() > 60 ? 4 : n() > 40 ? 3 : n() > 20 ? 2 : n() > 0 ? 1 : 0;
+  const maxNoLectivo = () => Math.floor(n() / 3);
+  const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' }) : '';
+
   const set  = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setP = (k, v) => setNuevoPeriodo(p => ({ ...p, [k]: v }));
   const aviso = (texto, tipo = 'ok') => {
@@ -116,11 +121,15 @@ export default function ConfigCurso() {
         await getSupabase().from('config_centro').update({ activo: false }).neq('curso', form.curso);
       }
 
+      // Si no se indica el curso escolar, se asume del 1 de septiembre
+      // al 30 de junio: así los días de septiembre y junio sin clase
+      // cuentan como laborables sin alumnado y no como "fuera de curso".
+      const anioIni = parseInt(form.curso.split('-')[0]);
       const datos = {
         curso: form.curso,
         num_profesores: parseInt(form.num_profesores),
-        fecha_inicio_curso: form.fecha_inicio_curso || null,
-        fecha_fin_curso: form.fecha_fin_curso || null,
+        fecha_inicio_curso: form.fecha_inicio_curso || `${anioIni}-09-01`,
+        fecha_fin_curso: form.fecha_fin_curso || `${anioIni + 1}-06-30`,
         fecha_inicio_lectivo: form.fecha_inicio_lectivo || null,
         fecha_fin_lectivo: form.fecha_fin_lectivo || null,
         activo: form.activo,
@@ -229,39 +238,65 @@ export default function ConfigCurso() {
           </Campo>
         </div>
 
-        <div style={{ fontSize: 12.5, color: '#666', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 14px', margin: '4px 0 16px', lineHeight: 1.6 }}>
-          💡 Con {form.num_profesores || '—'} profesores, el límite diario de DLD en periodo
-          <strong> no lectivo</strong> será de <strong>{form.num_profesores ? Math.floor(parseInt(form.num_profesores) / 3) : '—'}</strong> (un tercio de la plantilla).
+        <div style={{ fontSize: 12, color: '#999', margin: '0 0 8px', lineHeight: 1.6 }}>
+          De este número salen los cupos diarios de DLD.
         </div>
 
-        <Sub>📆 Periodo del curso (profesorado)</Sub>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          <Campo label="Inicio del curso">
-            <input type="date" value={form.fecha_inicio_curso}
-              onChange={e => set('fecha_inicio_curso', e.target.value)} style={inputEstilo} />
-          </Campo>
-          <Campo label="Fin del curso">
-            <input type="date" value={form.fecha_fin_curso}
-              onChange={e => set('fecha_fin_curso', e.target.value)} style={inputEstilo} />
-          </Campo>
+        <Sub>📚 Periodo de clase con alumnado</Sub>
+        <div style={{ fontSize: 12.5, color: '#666', lineHeight: 1.6, marginBottom: 12 }}>
+          Es lo único que cambia cada año. Del resto se encarga la aplicación.
         </div>
 
-        <Sub>📚 Periodo lectivo (clases con alumnado)</Sub>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
-          <Campo label="Primer día de clase">
+          <Campo label="Primer día de clase *">
             <input type="date" value={form.fecha_inicio_lectivo}
               onChange={e => set('fecha_inicio_lectivo', e.target.value)} style={inputEstilo} />
+            <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Suele caer entre el 7 y el 14 de septiembre</div>
           </Campo>
-          <Campo label="Último día de clase">
+          <Campo label="Último día de clase *">
             <input type="date" value={form.fecha_fin_lectivo}
               onChange={e => set('fecha_fin_lectivo', e.target.value)} style={inputEstilo} />
+            <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Suele caer entre el 5 y el 10 de junio</div>
           </Campo>
         </div>
 
-        <div style={{ fontSize: 12, color: '#888', marginBottom: 16, lineHeight: 1.6 }}>
-          Fuera del periodo lectivo no se pedirá el horario ni las tareas al solicitar un DLD,
-          porque no hay clases que cubrir.
-        </div>
+        {/* Vista previa: lo que la app deduce de esas dos fechas */}
+        {form.fecha_inicio_lectivo && form.fecha_fin_lectivo && (
+          <div style={{
+            backgroundColor: '#eef2ff', border: '1.5px solid #c7d2fe', color: '#3730a3',
+            borderRadius: 10, padding: '13px 16px', margin: '4px 0 16px',
+            fontSize: 12.5, lineHeight: 1.8,
+          }}>
+            <strong>Con esas fechas, la aplicación entiende que:</strong><br />
+            🟢 Del {fmt(form.fecha_inicio_lectivo)} al {fmt(form.fecha_fin_lectivo)} hay clase
+            → cupo de <strong>{maxLectivo()}</strong> profesores al día<br />
+            🔵 Los días de septiembre anteriores y los de junio posteriores son
+            días de trabajo <strong>sin alumnado</strong>
+            → cupo de <strong>{maxNoLectivo()}</strong> profesores al día<br />
+            🟣 Navidad, Semana Santa y los festivos que añadas abajo son vacaciones
+            → no se pide DLD
+          </div>
+        )}
+
+        <details style={{ marginBottom: 16 }}>
+          <summary style={{ cursor: 'pointer', fontSize: 12.5, color: '#888', padding: '6px 0' }}>
+            📆 Ajustar el curso escolar completo (opcional)
+          </summary>
+          <div style={{ fontSize: 12, color: '#888', lineHeight: 1.6, margin: '8px 0 12px' }}>
+            Si no pones nada, se toma del 1 de septiembre al 30 de junio.
+            Sirve para que la app sepa qué días quedan fuera del curso.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14 }}>
+            <Campo label="Inicio del curso escolar">
+              <input type="date" value={form.fecha_inicio_curso}
+                onChange={e => set('fecha_inicio_curso', e.target.value)} style={inputEstilo} />
+            </Campo>
+            <Campo label="Fin del curso escolar">
+              <input type="date" value={form.fecha_fin_curso}
+                onChange={e => set('fecha_fin_curso', e.target.value)} style={inputEstilo} />
+            </Campo>
+          </div>
+        </details>
 
         <div onClick={() => set('activo', !form.activo)} style={{
           display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer',
