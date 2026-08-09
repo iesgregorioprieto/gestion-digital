@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import ConfigCurso from '@/components/ConfigCurso';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 
@@ -869,6 +870,7 @@ export default function GestionDatos() {
         {/* TABS */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           {[
+            { id: 'curso', label: '📅 Datos del curso' },
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'guardias', label: '🛡️ Guardias' },
@@ -878,6 +880,13 @@ export default function GestionDatos() {
             </button>
           ))}
         </div>
+
+        {/* ===== DATOS DEL CURSO ===== */}
+        {vistaTab === 'curso' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 22, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <ConfigCurso />
+          </div>
+        )}
 
         {/* ===== ALUMNOS Y GRUPOS ===== */}
         {vistaTab === 'alumnos' && (
