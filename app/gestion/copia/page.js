@@ -216,17 +216,63 @@ export default function CopiaSeguridad() {
 
         {/* BOTÓN */}
         {!generando && (
-          <button
-            onClick={generarCopia}
-            style={{
-              width: '100%', padding: '16px', borderRadius: 12, border: 'none',
-              backgroundColor: tocaCopia ? naranja : azul, color: 'white',
-              fontSize: 16, fontWeight: 800, cursor: 'pointer',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
-            }}
-          >
-            💾 Generar y descargar copia
-          </button>
+          <>
+            <button
+              onClick={generarCopia}
+              style={{
+                width: '100%', padding: '16px', borderRadius: 12, border: 'none',
+                backgroundColor: tocaCopia ? naranja : azul, color: 'white',
+                fontSize: 16, fontWeight: 800, cursor: 'pointer',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.15)',
+              }}
+            >
+              💾 Generar y descargar copia
+            </button>
+
+            {/* GUARDAR EN DRIVE DEL CENTRO */}
+            <div style={{
+              marginTop: 18, backgroundColor: 'white', borderRadius: 12,
+              padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: azul, marginBottom: 8 }}>
+                ☁️ Guardar la copia en el Drive del centro
+              </div>
+              <div style={{ fontSize: 13, color: '#64748b', lineHeight: 1.7, marginBottom: 14 }}>
+                Una copia en tu ordenador se puede perder. Guárdala también en la
+                carpeta compartida del centro para que esté disponible para el
+                equipo directivo.
+              </div>
+
+              <div style={{
+                backgroundColor: '#f8fafc', border: '1px solid #e2e8f0',
+                borderRadius: 10, padding: '14px 16px', marginBottom: 14,
+                fontSize: 13.5, color: '#334155', lineHeight: 2.1,
+              }}>
+                <strong>Cómo hacerlo:</strong><br />
+                1. Pulsa arriba <strong>💾 Generar y descargar copia</strong><br />
+                2. Abre la carpeta del centro con el botón de abajo<br />
+                3. Arrastra ahí el archivo descargado
+              </div>
+
+              <a
+                href="https://drive.google.com/drive/folders/1eEYOlqW9KoKSVyYqXnz_hL6tyBQIcFv3"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'block', textAlign: 'center', padding: '14px',
+                  backgroundColor: verde, color: 'white', borderRadius: 10,
+                  textDecoration: 'none', fontWeight: 800, fontSize: 14.5,
+                }}
+              >
+                📂 Abrir carpeta de copias en Drive
+              </a>
+
+              <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 10, lineHeight: 1.6, textAlign: 'center' }}>
+                El archivo se llama <strong>copia_ies_AAAA-MM-DD.json</strong>,
+                así que quedan ordenados por fecha.
+              </div>
+            </div>
+          </>
         )}
 
         {/* PROGRESO */}
