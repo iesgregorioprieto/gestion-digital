@@ -306,21 +306,23 @@ export default function PanelSecretario() {
     setActivandoMasivo(true);
     let ok = 0;
     for (const id of seleccionados) {
+      // Cada profesor necesita su propio enlace de activación
+      const token = crypto.randomUUID();
       const { error } = await getSupabase()
         .from('profesores')
-        .update({ estado: 'activo', auth_: true })
+        .update({ estado: 'activo', auth_: true, token_activacion: token })
         .eq('id', id);
       if (!error) {
         ok++;
-        // Email de activación de cuenta
+        // Email con el enlace de activación
         try {
-          const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', id);
+          const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
           const prof = (pRows.data || [])[0];
           if (prof?.email) {
             await fetch('/api/enviar-email', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: prof })
+              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: { ...prof, token } })
             });
           }
         } catch(e) { console.error('Email activación masiva:', e); }
