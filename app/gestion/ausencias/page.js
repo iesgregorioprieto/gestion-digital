@@ -136,6 +136,15 @@ export default function GestionAusencias() {
   };
 
   // ===== INFORME INDIVIDUAL PARA LA DELEGACIÓN =====
+
+  // Convierte una URL de Supabase Storage en una de descarga forzada
+  function urlDescarga(url, ausencia) {
+    if (!url) return '';
+    const ext = (url.split('.').pop() || 'pdf').split('?')[0];
+    const nombre = `justificante_${(ausencia?.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${ausencia?.fecha_inicio || ''}.${ext}`;
+    return `${url}${url.includes('?') ? '&' : '?'}download=${encodeURIComponent(nombre)}`;
+  }
+
   function generarInformeAusencia(a) {
     const horas = Array.isArray(a.horas) ? a.horas : [];
     const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
@@ -688,7 +697,7 @@ ${a.observaciones_directivo ? `
                       <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>📄 Justificación presentada:</div>
                       <div style={{ color: '#1e40af', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>
                       {a.justificacion_url && (
-                        <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" download
+                        <a href={urlDescarga(a.justificacion_url, a)}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#1e40af', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
                           📥 Descargar justificante
                         </a>
@@ -701,7 +710,7 @@ ${a.observaciones_directivo ? `
                       <div style={{ fontWeight: 700, color: '#065f46', marginBottom: 4 }}>✅ Justificación aprobada:</div>
                       {a.justificacion_texto && <div style={{ color: '#065f46', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>}
                       {a.justificacion_url && (
-                        <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" download
+                        <a href={urlDescarga(a.justificacion_url, a)}
                           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#065f46', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
                           📥 Descargar justificante
                         </a>
@@ -960,7 +969,10 @@ ${a.observaciones_directivo ? `
                 : <div style={{ color: '#aaa', fontStyle: 'italic', marginTop: 4 }}>Aún no ha aportado justificación.</div>
               }
               {ausenciaGestion.justificacion_url && (
-                <a href={ausenciaGestion.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginTop: 6, color: '#1e40af', fontWeight: 600, fontSize: 12 }}>📎 Ver documento adjunto</a>
+                <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                  <a href={ausenciaGestion.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, fontSize: 12 }}>👁️ Ver documento</a>
+                  <a href={urlDescarga(ausenciaGestion.justificacion_url, ausenciaGestion)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#065f46', fontWeight: 600, fontSize: 12 }}>📥 Descargar</a>
+                </div>
               )}
             </div>
 
