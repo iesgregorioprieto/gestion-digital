@@ -96,7 +96,7 @@ export default function GestionDatos() {
     setCargando(true);
     const [{ data: gs }, { data: als }, { data: hrs }, { data: profs }, { data: guards }] = await Promise.all([
       getSupabase().from('grupos').select('codigo, curso_academico').order('codigo'),
-      getSupabase().from('alumnos').select('id, grupo'),
+      fetch('/api/alumnos?recuento=1').then(r => r.json()).then(d => ({ data: d.alumnos || [] })),
       getSupabase().from('horarios_profesores').select('id, curso_academico'),
       getSupabase().from('profesores').select('id, estado'),
       getSupabase().from('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
@@ -177,11 +177,22 @@ export default function GestionDatos() {
     await getSupabase().from('grupos').insert(gruposNuevos.map(g => ({ ...g, curso_academico: cursoNuevo })));
 
     // Borrar e insertar alumnos en lotes
-    await getSupabase().from('alumnos').delete().eq('curso_academico', cursoNuevo);
-    const LOTE = 200;
-    for (let i = 0; i < alumnosNuevos.length; i += LOTE) {
-      const { error } = await getSupabase().from('alumnos').insert(alumnosNuevos.slice(i, i + LOTE));
-      if (error) { mostrarMensaje('❌ Error: ' + error.message, 'error'); setProcesando(false); setModalAlumnos(false); return; }
+    // La importación la hace el servidor: la tabla de alumnado ya no es
+    // accesible desde el navegador.
+    const respImp = await fetch('/api/alumnos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'importar',
+        alumnos: alumnosNuevos,
+        curso: cursoNuevo,
+        reemplazar: true,
+      }),
+    });
+    if (!respImp.ok) {
+      const err = await respImp.json();
+      mostrarMensaje('❌ Error: ' + (err.error || 'no se pudo importar'), 'error');
+      setProcesando(false); setModalAlumnos(false); return;
     }
     setProcesando(false);
     setModalAlumnos(false);
