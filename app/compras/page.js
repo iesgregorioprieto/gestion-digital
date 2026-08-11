@@ -56,12 +56,11 @@ export default function Compras() {
   async function cargarHistorial(id, verTodo) {
     setCargando(true);
     // 🔑 Directivo ve TODAS las compras del centro; el profesor solo las suyas
-    let query = getSupabase().from('compras').select('*');
-    if (!verTodo) {
-      query = query.eq('profesor_id', id);
-    }
-    const { data } = await query.order('created_at', { ascending: false });
-    setHistorial(data || []);
+    // El servidor decide qué puede ver cada uno: un profesor solo sus
+    // solicitudes, el equipo directivo las de todo el centro.
+    const resp = await fetch(`/api/compras${verTodo ? '?todas=1' : ''}`);
+    const cuerpo = await resp.json();
+    setHistorial(cuerpo.compras || []);
     setCargando(false);
   }
 
