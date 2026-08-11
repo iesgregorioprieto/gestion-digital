@@ -125,6 +125,15 @@ export async function POST(request) {
       return Response.json({ ok: true, insertados: alumnos.length });
     }
 
+    // Borrar el alumnado de un grupo (antes de reimportarlo)
+    if (accion === 'borrar_grupo') {
+      const { grupo } = cuerpo;
+      if (!grupo) return Response.json({ error: 'Falta el grupo' }, { status: 400 });
+      const { error } = await supa().from('alumnos').delete().eq('grupo', grupo);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
