@@ -138,12 +138,22 @@ export default function GestionAusencias() {
 
   // ===== INFORME INDIVIDUAL PARA LA DELEGACIÓN =====
 
-  // Convierte una URL de Supabase Storage en una de descarga forzada
+  /**
+   * Los justificantes son datos médicos: no se enlazan directamente al
+   * almacén, sino que pasan por el servidor, que comprueba permisos y
+   * devuelve un enlace que caduca en un minuto.
+   */
   function urlDescarga(url, ausencia) {
     if (!url) return '';
     const ext = (url.split('.').pop() || 'pdf').split('?')[0];
     const nombre = `justificante_${(ausencia?.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${ausencia?.fecha_inicio || ''}.${ext}`;
-    return `${url}${url.includes('?') ? '&' : '?'}download=${encodeURIComponent(nombre)}`;
+    return `/api/documento?url=${encodeURIComponent(url)}&descargar=${encodeURIComponent(nombre)}`;
+  }
+
+  /** Ver el documento sin descargarlo */
+  function urlVer(url) {
+    if (!url) return '';
+    return `/api/documento?url=${encodeURIComponent(url)}`;
   }
 
   function generarInformeAusencia(a) {
@@ -155,7 +165,9 @@ export default function GestionAusencias() {
     // Supabase Storage fuerza la descarga con el parámetro ?download=
     // (el atributo download del navegador se ignora entre dominios distintos)
     const nombreArchivo = `justificante_${(a.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${a.fecha_inicio || ''}.${(just || '').split('.').pop().split('?')[0] || 'pdf'}`;
-    const justDescarga = just ? `${just}${just.includes('?') ? '&' : '?'}download=${encodeURIComponent(nombreArchivo)}` : '';
+    // A través del servidor: comprueba permisos y caduca en un minuto
+    const justDescarga = just ? `/api/documento?url=${encodeURIComponent(just)}&descargar=${encodeURIComponent(nombreArchivo)}` : '';
+    const justVer = just ? `/api/documento?url=${encodeURIComponent(just)}` : '';
 
     const filasHoras = horas.map(h => `
       <tr>
@@ -246,8 +258,8 @@ ${just ? `
   <a class="btn-descarga" style="margin-left:0" href="${justDescarga}">📎 Descargar el archivo original</a>
 </div>
 <div class="justif">
-  ${esImagen(just) ? `<img src="${just}" alt="Justificante">`
-    : esPdf(just) ? `<embed src="${just}" type="application/pdf">`
+  ${esImagen(just) ? `<img src="${justVer}" alt="Justificante">`
+    : esPdf(just) ? `<embed src="${justVer}" type="application/pdf">`
     : `<div class="aviso">El justificante está disponible en el siguiente enlace:<br><br><a href="${just}">${just}</a></div>`}
 </div>
 <div class="aviso noprint" style="margin-top:10px;font-size:12px">
@@ -987,7 +999,7 @@ ${a.observaciones_directivo ? `
               }
               {ausenciaGestion.justificacion_url && (
                 <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
-                  <a href={ausenciaGestion.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, fontSize: 12 }}>👁️ Ver documento</a>
+                  <a href={urlVer(ausenciaGestion.justificacion_url)} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, fontSize: 12 }}>👁️ Ver documento</a>
                   <a href={urlDescarga(ausenciaGestion.justificacion_url, ausenciaGestion)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#065f46', fontWeight: 600, fontSize: 12 }}>📥 Descargar</a>
                 </div>
               )}
