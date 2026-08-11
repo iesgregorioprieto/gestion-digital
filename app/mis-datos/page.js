@@ -45,7 +45,7 @@ export default function MisDatos() {
     nombre: '', apellidos: '', departamento: '', especialidad: '',
     tipo_contrato: 'Funcionario de carrera',
     anio_centro: '', anio_cuerpo: '', telefono: '',
-    esTutor: false, grupoTutoria: '',
+    esTutor: false, grupoTutoria: '', rolOriginal: ['profesor'],
   });
   const [guardando, setGuardando] = useState(false);
 
@@ -82,6 +82,7 @@ export default function MisDatos() {
           anio_cuerpo: p.anio_cuerpo?.toString()
             || (p.antiguedad_cuerpo ? (new Date().getFullYear() - p.antiguedad_cuerpo).toString() : ''),
           telefono:          p.telefono      || '',
+          rolOriginal:       Array.isArray(p.rol) ? p.rol : ['profesor'],
           esTutor:           Array.isArray(p.rol) && p.rol.includes('tutor'),
           grupoTutoria:      p.grupo_tutoria || '',
         });
@@ -104,26 +105,36 @@ export default function MisDatos() {
       if (form.esTutor && !rolNuevo.includes('tutor')) rolNuevo.push('tutor');
       if (!form.esTutor) rolNuevo = rolNuevo.filter(r => r !== 'tutor');
 
-      const { error } = await getSupabase()
-        .from('profesores')
-        .update({
-          nombre:            form.nombre.trim(),
-          apellidos:         form.apellidos.trim(),
-          departamento:      form.departamento,
-          especialidad:      form.especialidad || null,
-          tipo_contrato:     form.tipo_contrato,
-          anio_centro: form.anio_centro ? parseInt(form.anio_centro) : null,
-          anio_cuerpo: form.anio_cuerpo ? parseInt(form.anio_cuerpo) : null,
-          // Se guardan también los años calculados por compatibilidad
-          antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
-          antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
-          telefono:          form.telefono.trim() || null,
-          rol:               rolNuevo,
-          grupo_tutoria:     form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
-        })
-        .eq('id', profId);
+      // El servidor guarda la ficha: comprueba la sesión y solo permite
+      // cambiar los campos propios (nunca el rol de gestión ni el estado).
+      const resp = await fetch('/api/profesores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'guardar_mi_ficha',
+          datos: {
+            nombre:            form.nombre.trim(),
+            apellidos:         form.apellidos.trim(),
+            departamento:      form.departamento,
+            especialidad:      form.especialidad || null,
+            tipo_contrato:     form.tipo_contrato,
+            anio_centro: form.anio_centro ? parseInt(form.anio_centro) : null,
+            anio_cuerpo: form.anio_cuerpo ? parseInt(form.anio_cuerpo) : null,
+            antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
+            antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
+            telefono:          form.telefono.trim() || null,
+            rol:               rolNuevo,
+            grupo_tutoria:     form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
+          },
+        }),
+      });
 
-      if (error) { aviso('Error al guardar: ' + error.message, 'error'); setGuardando(false); return; }
+      if (!resp.ok) {
+        const err = await resp.json();
+        aviso('Error al guardar: ' + (err.error || ''), 'error');
+        setGuardando(false);
+        return;
+      }
 
       sessionStorage.setItem('profesor_nombre', form.nombre.trim() + ' ' + form.apellidos.trim());
       sessionStorage.setItem('profesor_roles', JSON.stringify(rolNuevo));
