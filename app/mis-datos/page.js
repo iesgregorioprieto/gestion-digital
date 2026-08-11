@@ -65,12 +65,10 @@ export default function MisDatos() {
       if (!id) { window.location.href = '/login'; return; }
       setProfId(id);
 
-      const { data: rows } = await getSupabase()
-        .from('profesores')
-        .select('nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, telefono, rol, grupo_tutoria')
-        .eq('id', id);
-
-      const p = (rows || [])[0];
+      // La ficha completa (con el teléfono) se pide al servidor
+      const resp = await fetch('/api/profesores?mi_ficha=1');
+      const cuerpo = await resp.json();
+      const p = cuerpo.profesor;
       if (p) {
         setEmail(p.email || '');
         setForm({
@@ -101,8 +99,7 @@ export default function MisDatos() {
 
     setGuardando(true);
     try {
-      const { data: rows } = await getSupabase().from('profesores').select('rol').eq('id', profId);
-      const rolActual = (rows || [])[0]?.rol || ['profesor'];
+      const rolActual = Array.isArray(form.rolOriginal) ? form.rolOriginal : ['profesor'];
       let rolNuevo = Array.isArray(rolActual) ? [...rolActual] : ['profesor'];
       if (form.esTutor && !rolNuevo.includes('tutor')) rolNuevo.push('tutor');
       if (!form.esTutor) rolNuevo = rolNuevo.filter(r => r !== 'tutor');
