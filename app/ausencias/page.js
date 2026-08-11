@@ -1072,7 +1072,7 @@ export default function Ausencias() {
                   {a.estado === 'justificada' && (a.justificacion_texto || a.justificacion_url) && (
                     <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: verdeClaro, borderRadius: 8, fontSize: 13 }}>
                       <strong>Justificación:</strong> {a.justificacion_texto}
-                      {a.justificacion_url && <a href={a.justificacion_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: verde, fontWeight: 600 }}>📎 Ver documento</a>}
+                      {a.justificacion_url && <a href={`/api/documento?url=${encodeURIComponent(a.justificacion_url)}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: verde, fontWeight: 600 }}>📎 Ver documento</a>}
                     </div>
                   )}
                 </div>
