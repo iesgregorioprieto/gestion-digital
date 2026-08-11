@@ -84,7 +84,7 @@ export default function GestionAusencias() {
   async function cargarTodo() {
     setCargando(true);
     const [{ data: aus }, { data: profs }] = await Promise.all([
-      getSupabase().from('ausencias').select('*').order('created_at', { ascending: false }),
+      fetch('/api/ausencias').then(r => r.json()).then(d => ({ data: d.ausencias || [] })),
       getSupabase().from('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
     ]);
     setAusencias(aus || []);
