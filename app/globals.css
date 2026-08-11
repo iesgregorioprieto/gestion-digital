@@ -12,11 +12,12 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* El portal está diseñado en claro (fondos blancos, tarjetas, verde
+   institucional). Si el móvil tiene el modo oscuro activado, el navegador
+   invierte los colores y los formularios se vuelven ilegibles.
+   Por eso se fuerza siempre el tema claro. */
+:root {
+  color-scheme: light;
 }
 
 body {
@@ -28,4 +29,38 @@ body {
 @keyframes parpadeo {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.2; transform: scale(0.7); }
+}
+
+
+/* ── FORMULARIOS ─────────────────────────────────────────────
+   Se fija el color explícitamente: sin esto, algunos navegadores
+   de Android pintan el texto casi blanco sobre fondo blanco. */
+input, select, textarea {
+  color: #1f2937 !important;
+  -webkit-text-fill-color: #1f2937 !important;
+  background-color: #ffffff !important;
+  opacity: 1 !important;
+  font-size: 16px;              /* evita el zoom automático al escribir */
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3af !important;
+  -webkit-text-fill-color: #9ca3af !important;
+  opacity: 1 !important;
+}
+
+/* Autocompletado del navegador: suele pintar el fondo azul y el texto claro */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #1f2937 !important;
+  -webkit-box-shadow: 0 0 0 40px #ffffff inset !important;
+}
+
+/* Al enfocar, marco verde para que se vea dónde se está escribiendo */
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid #1e6b2e;
+  outline-offset: 1px;
+  border-color: #1e6b2e !important;
 }
