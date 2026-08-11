@@ -1,0 +1,140 @@
+import { createClient } from '@supabase/supabase-js';
+import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
+
+/**
+ * Sesiones del portal.
+ *
+ * Toda la comprobación se hace AQUÍ, en el servidor. El navegador recibe
+ * una cookie firmada que no puede modificar, y que además es httpOnly:
+ * ni siquiera el JavaScript de la página puede leerla.
+ */
+
+function supa() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+const MAPA_ROLES = {
+  'director': 'director', 'directora': 'director',
+  'secretario': 'secretario', 'secretaria': 'secretario',
+  'jefe_estudios': 'jefe_estudios', 'jefe de estudios': 'jefe_estudios',
+  'jefa_estudios': 'jefe_estudios', 'jefa de estudios': 'jefe_estudios',
+};
+
+// ── Verificación de contraseña (mismo formato que /api/password) ──
+async function comprobarPassword(password, guardado) {
+  if (!guardado) return false;
+
+  // Contraseñas antiguas en texto plano
+  if (!guardado.includes(':')) return password === guardado;
+
+  const [saltHex, hashHex] = guardado.split(':');
+  const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
+
+  const km = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+  );
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, km, 256
+  );
+  const calculado = Array.from(new Uint8Array(bits))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+
+  return calculado === hashHex;
+}
+
+export async function POST(request) {
+  const secreto = process.env.SESSION_SECRET;
+  if (!secreto) {
+    return Response.json({ error: 'Falta configurar SESSION_SECRET' }, { status: 500 });
+  }
+
+  try {
+    const { accion, email, password } = await request.json();
+
+    // ─── CERRAR SESIÓN ───
+    if (accion === 'salir') {
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`,
+        },
+      });
+    }
+
+    // ─── INICIAR SESIÓN ───
+    if (accion === 'entrar') {
+      const em = (email || '').trim().toLowerCase();
+      if (!em || !password) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+
+      const { data: filas } = await supa()
+        .from('profesores')
+        .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email, email_verificado')
+        .eq('email', em);
+
+      const p = (filas || [])[0];
+
+      // Mensaje genérico: no revelamos si el email existe o no
+      if (!p) return Response.json({ error: 'credenciales' }, { status: 401 });
+
+      const estado = (p.estado || '').toString().trim().toLowerCase();
+      if (estado !== 'activo')        return Response.json({ error: 'inactivo' }, { status: 403 });
+      if (p.email_verificado === false) return Response.json({ error: 'sin_verificar' }, { status: 403 });
+
+      const correcta = await comprobarPassword(password, p.password_hash);
+      if (!correcta) return Response.json({ error: 'credenciales' }, { status: 401 });
+
+      const rolNorm = (p.rol_gestion || '').toString().trim().toLowerCase();
+      const rol = MAPA_ROLES[rolNorm] || '';
+
+      const token = await firmarSesion({
+        id: p.id,
+        rol,
+        roles: Array.isArray(p.rol) ? p.rol : ['profesor'],
+        nombre: `${p.nombre || ''} ${p.apellidos || ''}`.trim(),
+      }, secreto);
+
+      return new Response(JSON.stringify({
+        ok: true,
+        profesor: {
+          id: p.id,
+          nombre: p.nombre,
+          apellidos: p.apellidos,
+          email: p.email,
+          rol_gestion: rol,
+          roles: Array.isArray(p.rol) ? p.rol : ['profesor'],
+          fichaCompleta: !!(p.nombre && p.nombre.trim()),
+        },
+      }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${HORAS * 3600}`,
+        },
+      });
+    }
+
+    return Response.json({ error: 'Acción desconocida' }, { status: 400 });
+  } catch (e) {
+    return Response.json({ error: e.message }, { status: 500 });
+  }
+}
+
+// ─── ¿QUIÉN SOY? ───
+// Permite a cualquier página preguntar al servidor por la sesión real.
+export async function GET(request) {
+  const secreto = process.env.SESSION_SECRET;
+  if (!secreto) return Response.json({ sesion: null, error: 'sin_secreto' });
+
+  const cookies = request.headers.get('cookie') || '';
+  const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
+  if (!m) return Response.json({ sesion: null });
+
+  const sesion = await verificarSesion(m[1], secreto);
+  return Response.json({ sesion });
+}
