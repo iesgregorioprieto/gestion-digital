@@ -145,28 +145,29 @@ export default function MisDatos() {
 
     setCambiandoPw(true);
     try {
-      // Verificar la contraseña actual
-      const { data: rows } = await getSupabase()
-        .from('profesores').select('password_hash').eq('id', profId);
-      const hashGuardado = (rows || [])[0]?.password_hash || '';
-
-      const r = await fetch('/api/password', {
+      // El servidor comprueba la contraseña actual y guarda la nueva.
+      // El navegador no llega a ver ningún hash.
+      const r = await fetch('/api/cuenta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'verify', password: pw.actual, hash: hashGuardado }),
+        body: JSON.stringify({
+          accion: 'cambiar_password',
+          passwordActual: pw.actual,
+          passwordNueva: pw.nueva,
+        }),
       });
-      const { valido } = await r.json();
+      const res = await r.json();
 
-      if (!valido) { aviso('La contraseña actual no es correcta.', 'error'); setCambiandoPw(false); return; }
-
-      const nuevoHash = await hashPassword(pw.nueva);
-      const { error } = await getSupabase()
-        .from('profesores').update({ password_hash: nuevoHash }).eq('id', profId);
-
-      if (error) { aviso('Error: ' + error.message, 'error'); setCambiandoPw(false); return; }
+      if (!r.ok) {
+        if (res.error === 'password_incorrecta') aviso('La contraseña actual no es correcta.', 'error');
+        else if (res.error === 'sin_sesion')     aviso('Tu sesión ha caducado. Vuelve a entrar.', 'error');
+        else                                      aviso('No se pudo cambiar: ' + (res.error || ''), 'error');
+        setCambiandoPw(false);
+        return;
+      }
 
       setPw({ actual: '', nueva: '', repite: '' });
-      aviso('✅ Contraseña cambiada correctamente', 'ok');
+      aviso('✅ Contraseña cambiada correctamente');
     } catch (e) {
       aviso('Error inesperado: ' + e.message, 'error');
     }
