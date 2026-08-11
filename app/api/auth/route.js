@@ -84,15 +84,15 @@ export async function POST(request) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
       }
 
+      // Búsqueda tolerante con mayúsculas, como hacía el login anterior
       const { data: filas } = await supa()
         .from('profesores')
         .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email, email_verificado')
-        .eq('email', em);
+        .ilike('email', em);
 
       const p = (filas || [])[0];
 
-      // Mensaje genérico: no revelamos si el email existe o no
-      if (!p) return Response.json({ error: 'credenciales' }, { status: 401 });
+      if (!p) return Response.json({ error: 'no_existe' }, { status: 401 });
 
       const estado = (p.estado || '').toString().trim().toLowerCase();
       if (estado !== 'activo')        return Response.json({ error: 'inactivo' }, { status: 403 });
