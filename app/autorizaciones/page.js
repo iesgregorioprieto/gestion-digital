@@ -54,14 +54,20 @@ export default function Autorizaciones() {
   }
 
   async function cargarStats() {
-    const { data } = await getSupabase().from('alumnos').select('*');
-    if (data) {
-      const conR = data.filter(a =>
-        a.auth_imagenes === false || a.auth_salidas === false || a.auth_actividades === false ||
-        a.auth_informar_progeni === false || a.auth_imagenes_mayor === false
-      ).length;
-      const gs = new Set(data.map(a => a.grupo)).size;
-      setStats({ total: data.length, conRestricciones: conR, grupos: gs });
+    // El servidor devuelve solo las cifras: no hace falta traerse al
+    // navegador los datos personales de todo el alumnado del centro.
+    try {
+      const r = await fetch('/api/alumnos?resumen=1');
+      const d = await r.json();
+      if (r.ok) {
+        setStats({
+          total: d.total || 0,
+          conRestricciones: d.conRestricciones || 0,
+          grupos: d.grupos || 0,
+        });
+      }
+    } catch (e) {
+      console.error('Estadísticas de alumnado:', e);
     }
   }
 
@@ -69,16 +75,24 @@ export default function Autorizaciones() {
     if (!busqueda.trim() && !filtroGrupo) return;
     setCargando(true);
     setAlumnoSeleccionado(null);
-    let query = getSupabase().from('alumnos').select('*');
+    // La búsqueda la hace el servidor, comprobando antes que quien
+    // pregunta tiene sesión iniciada.
+    let parametros;
     if (filtroGrupo) {
-      query = query.eq('grupo', filtroGrupo);
+      parametros = `grupo=${encodeURIComponent(filtroGrupo)}`;
     } else if (filtroBusqueda === 'nombre') {
-      query = query.ilike('apellidos', `%${busqueda.trim()}%`);
+      parametros = `apellidos=${encodeURIComponent(busqueda.trim())}`;
     } else {
-      query = query.eq('grupo', busqueda.trim().toUpperCase());
+      parametros = `grupo=${encodeURIComponent(busqueda.trim().toUpperCase())}`;
     }
-    const { data } = await query.order('apellidos');
-    setAlumnos(data || []);
+
+    try {
+      const r = await fetch(`/api/alumnos?${parametros}`);
+      const d = await r.json();
+      setAlumnos(d.alumnos || []);
+    } catch (e) {
+      setAlumnos([]);
+    }
     setCargando(false);
   }
 
