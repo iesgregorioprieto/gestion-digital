@@ -48,7 +48,7 @@ export default function Autorizaciones() {
   async function cargarGrupos() {
     const { grupos: data } = await fetch('/api/alumnos?grupos=1').then(r => r.json());
     if (data) {
-      const gs = [...new Set(data.map(a => a.grupo))].sort();
+      const gs = [...data].sort();
       setGrupos(gs);
     }
   }
