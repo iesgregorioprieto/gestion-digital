@@ -9,10 +9,22 @@ import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
  * ni siquiera el JavaScript de la página puede leerla.
  */
 
+/**
+ * Cliente con la clave privada del servidor.
+ *
+ * Esta clave NUNCA llega al navegador. Es la que permitirá, en el paso
+ * siguiente, quitarle al navegador el permiso de leer los hash de
+ * contraseñas: la verificación pasa a hacerse solo aquí.
+ *
+ * Si la clave privada no estuviera configurada, se usa la pública para
+ * no dejar a nadie fuera del portal por un despiste.
+ */
 function supa() {
+  const privada = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    privada || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    privada ? { auth: { persistSession: false, autoRefreshToken: false } } : undefined
   );
 }
 
@@ -125,11 +137,21 @@ export async function POST(request) {
   }
 }
 
+// ─── COMPROBACIÓN DE CONFIGURACIÓN ───
+// /api/auth?check=1 → dice si las claves están puestas, sin revelarlas
 // ─── ¿QUIÉN SOY? ───
 // Permite a cualquier página preguntar al servidor por la sesión real.
 export async function GET(request) {
   const secreto = process.env.SESSION_SECRET;
   if (!secreto) return Response.json({ sesion: null, error: 'sin_secreto' });
+
+  const url = new URL(request.url);
+  if (url.searchParams.get('check') === '1') {
+    return Response.json({
+      session_secret: !!process.env.SESSION_SECRET,
+      clave_privada: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    });
+  }
 
   const cookies = request.headers.get('cookie') || '';
   const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
