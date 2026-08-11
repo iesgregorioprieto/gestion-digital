@@ -14,22 +14,6 @@ const DEPARTAMENTOS = [
   'Música', 'Tecnología', 'Orientación', 'PT/AL',
 ];
 
-// Hash de contraseña en el cliente (PBKDF2, mismo formato que /api/password)
-async function hashPassword(password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const encoder = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']
-  );
-  const derivedBits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
-    keyMaterial, 256
-  );
-  const hashArray = new Uint8Array(derivedBits);
-  const saltHex = Array.from(salt).map(b => b.toString(16).padStart(2, '0')).join('');
-  const hashHex = Array.from(hashArray).map(b => b.toString(16).padStart(2, '0')).join('');
-  return saltHex + ':' + hashHex;
-}
 
 export default function Registro() {
   const [pantalla, setPantalla] = useState('inicio');
@@ -68,23 +52,40 @@ export default function Registro() {
 
     setEnviando(true);
     try {
-      const { data: rows } = await getSupabase()
-        .from('profesores')
-        .select('id, password_hash, solicitud_acceso')
-        .eq('email', em);
+      // Se pregunta al servidor por el estado de ese email.
+      // El hash de la contraseña nunca llega al navegador.
+      const rEstado = await fetch('/api/cuenta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'estado_registro', email: em }),
+      });
+      const estado = await rEstado.json();
 
-      const prof = (rows || [])[0];
-
-      // Ya tiene contraseña → cuenta activa, ir al login
-      if (prof?.password_hash?.length > 0) {
+      if (estado.tienePassword) {
         setPantalla('ya_registrado'); setEnviando(false); return;
       }
-      // Ya envió solicitud y espera aprobación
-      if (prof?.solicitud_acceso && prof?.estado === 'pendiente') {
+      if (estado.solicitudEnviada && estado.estado === 'pendiente') {
         setPantalla('pendiente_aprobacion'); setEnviando(false); return;
       }
 
-      const hash = await hashPassword(form.pass1);
+      const prof = estado.existe ? { id: estado.id } : null;
+
+      // El hash lo calcula el servidor
+      const rHash = await fetch('/api/cuenta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'registrar_password', email: em, password: form.pass1 }),
+      });
+      const dHash = await rHash.json();
+
+      if (!rHash.ok || !dHash.hash) {
+        setError(dHash.error === 'ya_tiene_password'
+          ? 'Esa cuenta ya tiene contraseña. Inicia sesión.'
+          : 'No se pudo procesar la contraseña. Inténtalo de nuevo.');
+        setEnviando(false);
+        return;
+      }
+      const hash = dHash.hash;
 
       const datos = {
         nombre:        form.nombre.trim(),
