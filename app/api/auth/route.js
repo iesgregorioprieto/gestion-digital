@@ -147,10 +147,43 @@ export async function GET(request) {
 
   const url = new URL(request.url);
   if (url.searchParams.get('check') === '1') {
-    return Response.json({
+    const privada = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    const info = {
       session_secret: !!process.env.SESSION_SECRET,
-      clave_privada: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
-    });
+      clave_privada: !!privada,
+      formato_clave: privada.slice(0, 10),
+      url_supabase: (process.env.NEXT_PUBLIC_SUPABASE_URL || '').slice(0, 30),
+    };
+
+    // Probar una consulta real para ver si la clave funciona
+    try {
+      const { data, error, count } = await supa()
+        .from('profesores')
+        .select('id', { count: 'exact', head: true });
+      info.consulta_ok = !error;
+      info.total_profesores = count ?? null;
+      if (error) info.error_consulta = error.message;
+    } catch (e) {
+      info.consulta_ok = false;
+      info.error_consulta = e.message;
+    }
+
+    // Probar la búsqueda concreta de un email
+    const emailPrueba = url.searchParams.get('email');
+    if (emailPrueba) {
+      try {
+        const { data, error } = await supa()
+          .from('profesores')
+          .select('id, estado')
+          .ilike('email', emailPrueba.trim().toLowerCase());
+        info.encontrados = (data || []).length;
+        if (error) info.error_email = error.message;
+      } catch (e) {
+        info.error_email = e.message;
+      }
+    }
+
+    return Response.json(info);
   }
 
   const cookies = request.headers.get('cookie') || '';
