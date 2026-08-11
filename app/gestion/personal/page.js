@@ -83,11 +83,10 @@ export default function PanelSecretario() {
 
   async function cargarProfesores() {
     setCargando(true);
-    const { data, error } = await getSupabase()
-      .from('profesores')
-      .select('*')
-      .eq('estado', filtroEstado)
-      .order('apellidos', { ascending: true });
+    const resp = await fetch(`/api/profesores?estado=${encodeURIComponent(filtroEstado)}`);
+    const cuerpo = await resp.json();
+    const data = cuerpo.profesores || [];
+    const error = resp.ok ? null : { message: cuerpo.error || 'error' };
     if (!error) setProfesores(data || []);
     setCargando(false);
   }
