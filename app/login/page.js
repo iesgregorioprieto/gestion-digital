@@ -51,114 +51,65 @@ export default function Login() {
 
     setCargando(true);
 
-    const supabase = getSupabase();
+    // ─────────────────────────────────────────────────────────────
+    // TODA la comprobación se hace en el servidor.
+    //
+    // Antes, el navegador se descargaba el hash de la contraseña para
+    // compararlo. Eso obligaba a que cualquiera con la clave pública
+    // pudiera leer los hash de todo el claustro. Ahora solo viajan el
+    // email y la contraseña, y el servidor responde sí o no.
+    // ─────────────────────────────────────────────────────────────
     const emailBuscado = email.trim().toLowerCase();
 
-    // Búsqueda tolerante: ilike ignora mayúsculas y cubre emails guardados con formato distinto
-    const { data: rows, error: err } = await supabase
-      .from('profesores')
-      .select('id, nombre, apellidos, rol, rol_gestion, estado, password_hash, email, email_verificado')
-      .ilike('email', emailBuscado);
-
-    setCargando(false);
-
-    if (err) {
+    let respuesta, datos;
+    try {
+      respuesta = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'entrar',
+          email: emailBuscado,
+          password: password.trim(),
+        }),
+      });
+      datos = await respuesta.json();
+    } catch (e) {
+      setCargando(false);
       setError('No se pudo conectar con el servidor. Inténtalo de nuevo.');
       return;
     }
 
-    if (!rows || rows.length === 0) {
-      setError('No existe ninguna cuenta con ese email. Revisa que esté bien escrito o regístrate.');
-      return;
-    }
+    setCargando(false);
 
-    const data = rows[0];
-
-    // Estado: aceptar variantes por si en BD quedó con mayúsculas o espacios
-    const estadoNorm = (data.estado || '').toString().trim().toLowerCase();
-    if (estadoNorm !== 'activo') {
-      setError(
-        estadoNorm === 'pendiente'
-          ? 'Tu cuenta está pendiente de activación. Contacta con el secretario.'
-          : 'Tu cuenta no está activa. Contacta con el secretario.'
-      );
-      return;
-    }
-
-    // Debe haber pulsado el enlace de activación del correo
-    if (data.email_verificado === false) {
-      setError('CORREO_SIN_VERIFICAR');
-      return;
-    }
-
-    // Contraseña: verificar con API (soporta hash y texto plano legacy)
-    const passGuardada = (data.password_hash || '').toString().trim();
-    try {
-      const verifyRes = await fetch('/api/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'verify', password: password.trim(), hash: passGuardada }),
-      });
-      const verifyData = await verifyRes.json();
-      if (!verifyData.ok) {
-        setCargando(false);
+    if (!respuesta.ok) {
+      const motivo = datos?.error;
+      if (motivo === 'no_existe') {
+        setError('No existe ninguna cuenta con ese email. Revisa que esté bien escrito o regístrate.');
+      } else if (motivo === 'credenciales') {
         setError('Contraseña incorrecta.');
-        return;
+      } else if (motivo === 'inactivo') {
+        setError('Tu cuenta no está activa. Contacta con el secretario.');
+      } else if (motivo === 'sin_verificar') {
+        setError('CORREO_SIN_VERIFICAR');
+      } else {
+        setError('No se pudo iniciar sesión. Inténtalo de nuevo.');
       }
-    } catch (e) {
-      setCargando(false);
-      setError('Error al verificar la contraseña.');
       return;
     }
 
-    // 🔒 NORMALIZAR rol_gestion: minúsculas + trim para evitar bugs
-    // (por si en BD queda "Director", "Secretary", " secretario ", etc.)
-    const rolGestionNormalizado = (data.rol_gestion || '').toString().trim().toLowerCase();
+    const prof = datos.profesor;
 
-    // Mapeo de sinónimos por si viene en inglés o mal escrito
-    const MAPA_ROLES = {
-      'director': 'director',
-      'directora': 'director',
-      'secretario': 'secretario',
-      'secretaria': 'secretario',
-      'secretary': 'secretario',
-      'jefe_estudios': 'jefe_estudios',
-      'jefe estudios': 'jefe_estudios',
-      'jefa_estudios': 'jefe_estudios',
-      'head of studies': 'jefe_estudios',
-    };
-    const rolFinal = MAPA_ROLES[rolGestionNormalizado] || rolGestionNormalizado;
+    // Se mantiene sessionStorage para que el resto de la aplicación siga
+    // funcionando igual. Ya no decide los permisos: eso lo hace la cookie
+    // firmada que acaba de emitir el servidor.
+    sessionStorage.setItem('profesor_id', prof.id);
+    sessionStorage.setItem('profesor_nombre', `${prof.nombre || ''} ${prof.apellidos || ''}`.trim());
+    sessionStorage.setItem('profesor_email', prof.email || '');
+    sessionStorage.setItem('profesor_rol_gestion', prof.rol_gestion || '');
+    sessionStorage.setItem('profesor_roles', JSON.stringify(prof.roles || ['profesor']));
 
-    sessionStorage.setItem('profesor_id', data.id);
-    sessionStorage.setItem('profesor_nombre', `${data.nombre} ${data.apellidos}`);
-    sessionStorage.setItem('profesor_email', data.email || '');
-    sessionStorage.setItem('profesor_rol_gestion', rolFinal);
-    sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
-
-    // Además de lo anterior, pedimos al servidor una credencial firmada.
-    // Es la que de verdad da acceso a las páginas de gestión: el navegador
-    // no puede falsificarla. Lo de arriba se mantiene para que el resto de
-    // la aplicación siga funcionando igual mientras completamos el cambio.
-    try {
-      const r = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'entrar', email: emailBuscado, password }),
-      });
-      if (!r.ok && rolFinal) {
-        // Solo se avisa al equipo directivo: un profesor sin rol no la necesita
-        console.warn('No se pudo crear la sesión de servidor');
-      }
-    } catch (e) {
-      console.warn('Sesión de servidor no disponible:', e);
-    }
-
-    // Si el profesor no ha rellenado su ficha todavía → a completar perfil
-    if (!data.nombre || !data.nombre.trim()) {
-      window.location.href = '/completar-perfil';
-    } else {
-      window.location.href = '/profesor';
-    }
+    // Si aún no ha rellenado su ficha → a completarla
+    window.location.href = prof.fichaCompleta ? '/profesor' : '/completar-perfil';
   }
 
   return (
