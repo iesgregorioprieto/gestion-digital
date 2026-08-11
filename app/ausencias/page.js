@@ -193,7 +193,7 @@ export default function Ausencias() {
     setCargando(true);
     // Se piden al servidor: el texto de la justificación puede contener
     // datos médicos y ya no está disponible directamente para el navegador.
-    const resp = await fetch('/api/ausencias');
+    const resp = await fetch('/api/ausencias?mias=1');
     const cuerpo = await resp.json();
     const data = cuerpo.ausencias || [];
     setHistorial(data || []);
