@@ -37,13 +37,19 @@ export async function GET(request) {
     return Response.json({ error: 'sin_sesion', ausencias: [] }, { status: 401 });
   }
 
+  const url = new URL(request.url);
+  const soloMias = url.searchParams.get('mias') === '1';
+
   let consulta = supa()
     .from('ausencias')
     .select('*')
     .order('created_at', { ascending: false });
 
-  // Un profesor solo ve las suyas
-  if (!esDirectivo(sesion)) {
+  // Un profesor solo ve las suyas.
+  // Y en la pantalla personal ("mis ausencias") todo el mundo ve solo las
+  // suyas, aunque sea del equipo directivo: para ver las del centro está
+  // el panel de gestión.
+  if (soloMias || !esDirectivo(sesion)) {
     consulta = consulta.eq('profesor_id', sesion.id);
   }
 
