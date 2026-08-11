@@ -102,7 +102,7 @@ export default function GestionAutorizaciones() {
   }, []);
 
   async function cargarGrupos() {
-    const { data } = await getSupabase().from('alumnos').select('grupo').order('grupo');
+    const { grupos: data } = await fetch('/api/alumnos?grupos=1').then(r => r.json());
     if (data) {
       const gs = [...new Set(data.map(a => a.grupo))].sort();
       setGrupos(gs);
@@ -114,11 +114,8 @@ export default function GestionAutorizaciones() {
     setCargando(true);
     setAlumnos([]);
     setCambios({});
-    const { data } = await getSupabase()
-      .from('alumnos')
-      .select('*')
-      .eq('grupo', grupo)
-      .order('apellidos');
+    const { alumnos: data } = await fetch(`/api/alumnos?grupo=${encodeURIComponent(grupo)}`)
+      .then(r => r.json());
     setAlumnos(data || []);
     setCargando(false);
   }
@@ -152,7 +149,12 @@ export default function GestionAutorizaciones() {
     setGuardando(true);
     let errores = 0;
     for (const [id, datos] of Object.entries(cambios)) {
-      const { error } = await getSupabase().from('alumnos').update(datos).eq('id', id);
+      const resp = await fetch('/api/alumnos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'actualizar', id, datos }),
+      });
+      const error = resp.ok ? null : await resp.json();
       if (error) errores++;
     }
     setGuardando(false);
