@@ -7,6 +7,12 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [avisoPermisos, setAvisoPermisos] = useState(false);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('motivo') === 'permisos') setAvisoPermisos(true);
+  }, []);
   const [cargando, setCargando] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [mostrarInstalar, setMostrarInstalar] = useState(false);
@@ -129,6 +135,24 @@ export default function Login() {
     sessionStorage.setItem('profesor_rol_gestion', rolFinal);
     sessionStorage.setItem('profesor_roles', JSON.stringify(Array.isArray(data.rol) ? data.rol : ['profesor']));
 
+    // Además de lo anterior, pedimos al servidor una credencial firmada.
+    // Es la que de verdad da acceso a las páginas de gestión: el navegador
+    // no puede falsificarla. Lo de arriba se mantiene para que el resto de
+    // la aplicación siga funcionando igual mientras completamos el cambio.
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'entrar', email: emailBuscado, password }),
+      });
+      if (!r.ok && rolFinal) {
+        // Solo se avisa al equipo directivo: un profesor sin rol no la necesita
+        console.warn('No se pudo crear la sesión de servidor');
+      }
+    } catch (e) {
+      console.warn('Sesión de servidor no disponible:', e);
+    }
+
     // Si el profesor no ha rellenado su ficha todavía → a completar perfil
     if (!data.nombre || !data.nombre.trim()) {
       window.location.href = '/completar-perfil';
@@ -202,6 +226,17 @@ export default function Login() {
             style={{ width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
           />
         </div>
+
+        {avisoPermisos && (
+          <div style={{
+            backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24',
+            borderRadius: 10, padding: '13px 16px', marginBottom: 16,
+            color: '#78350f', fontSize: 13.5, lineHeight: 1.6
+          }}>
+            🔒 <strong>Necesitas permisos para esa página.</strong><br />
+            Inicia sesión con una cuenta del equipo directivo.
+          </div>
+        )}
 
         {error === 'CORREO_SIN_VERIFICAR' && (
           <div style={{
