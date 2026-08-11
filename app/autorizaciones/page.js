@@ -46,7 +46,7 @@ export default function Autorizaciones() {
   }, []);
 
   async function cargarGrupos() {
-    const { data } = await getSupabase().from('alumnos').select('grupo');
+    const { grupos: data } = await fetch('/api/alumnos?grupos=1').then(r => r.json());
     if (data) {
       const gs = [...new Set(data.map(a => a.grupo))].sort();
       setGrupos(gs);
@@ -150,7 +150,12 @@ export default function Autorizaciones() {
   async function confirmarImportacion() {
     if (!previstaExcel.length) return;
     setSubiendoExcel(true);
-    const { error } = await getSupabase().from('alumnos').insert(previstaExcel);
+    const respImp = await fetch('/api/alumnos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'importar', alumnos: previstaExcel }),
+    });
+    const error = respImp.ok ? null : await respImp.json();
     setSubiendoExcel(false);
     setModalPreview(false);
     if (error) { mostrarMensaje('Error al importar: ' + error.message, 'error'); return; }
@@ -162,7 +167,11 @@ export default function Autorizaciones() {
 
   async function eliminarGrupo(grupo) {
     if (!confirm(`¿Eliminar todos los alumnos del grupo ${grupo}? No se puede deshacer.`)) return;
-    await getSupabase().from('alumnos').delete().eq('grupo', grupo);
+    await fetch('/api/alumnos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar_grupo', grupo }),
+    });
     mostrarMensaje(`🗑️ Grupo ${grupo} eliminado`, 'ok');
     cargarGrupos();
     cargarStats();
