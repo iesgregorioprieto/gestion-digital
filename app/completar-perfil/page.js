@@ -264,9 +264,17 @@ function Campo({ label, children }) {
 }
 
 const inputEstilo = {
-  width: '100%', padding: '10px 12px', borderRadius: 8,
-  border: '1.5px solid #ddd', fontSize: 14,
-  boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif',
+  width: '100%',
+  padding: '13px 14px',
+  borderRadius: 8,
+  border: '1.5px solid #b0b8c1',
+  fontSize: 16,              // 16px evita que el móvil haga zoom al escribir
+  color: '#1f2937',          // sin esto, algunos navegadores lo pintan casi blanco
+  backgroundColor: '#ffffff',
+  boxSizing: 'border-box',
+  fontFamily: 'system-ui, sans-serif',
+  WebkitTextFillColor: '#1f2937',   // Safari/Chrome en Android
+  opacity: 1,
 };
 
 const estiloCenter = {
