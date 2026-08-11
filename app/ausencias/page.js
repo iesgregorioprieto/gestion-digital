@@ -191,7 +191,11 @@ export default function Ausencias() {
 
   async function cargarHistorial(id) {
     setCargando(true);
-    const { data } = await getSupabase().from('ausencias').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
+    // Se piden al servidor: el texto de la justificación puede contener
+    // datos médicos y ya no está disponible directamente para el navegador.
+    const resp = await fetch('/api/ausencias');
+    const cuerpo = await resp.json();
+    const data = cuerpo.ausencias || [];
     setHistorial(data || []);
     setCargando(false);
   }
