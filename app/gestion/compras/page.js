@@ -727,7 +727,7 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase().from('compras').select('*').order('created_at', { ascending: false });
+    const { compras: data } = await fetch('/api/compras?todas=1').then(r => r.json());
     setCompras(data || []);
     setCargando(false);
   }
