@@ -19,6 +19,7 @@ export default function Registro() {
   const [pantalla, setPantalla] = useState('inicio');
   const [enviando, setEnviando] = useState(false);
   const [error, setError]       = useState('');
+  const [verPass, setVerPass]   = useState(false);
 
   const [form, setForm] = useState({
     nombre:        '',
@@ -278,15 +279,27 @@ export default function Registro() {
           </Campo>
 
           <Campo label="🔑 Contraseña *">
-            <input type="password" value={form.pass1} onChange={e => set('pass1', e.target.value)}
-              placeholder="Mínimo 6 caracteres" style={inputEstilo} />
+            <div style={{ position: 'relative' }}>
+              <input type={verPass ? 'text' : 'password'} value={form.pass1} onChange={e => set('pass1', e.target.value)}
+                placeholder="Mínimo 6 caracteres" style={{ ...inputEstilo, paddingRight: 44 }} />
+              <button type="button" onClick={() => setVerPass(v => !v)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                {verPass ? '🙈' : '👁️'}
+              </button>
+            </div>
           </Campo>
 
           <Campo label="🔑 Repite la contraseña *">
-            <input type="password" value={form.pass2} onChange={e => set('pass2', e.target.value)}
-              placeholder="Repite la contraseña"
-              onKeyDown={e => e.key === 'Enter' && enviarSolicitud()}
-              style={inputEstilo} />
+            <div style={{ position: 'relative' }}>
+              <input type={verPass ? 'text' : 'password'} value={form.pass2} onChange={e => set('pass2', e.target.value)}
+                placeholder="Repite la contraseña"
+                onKeyDown={e => e.key === 'Enter' && enviarSolicitud()}
+                style={{ ...inputEstilo, paddingRight: 44 }} />
+              <button type="button" onClick={() => setVerPass(v => !v)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                {verPass ? '🙈' : '👁️'}
+              </button>
+            </div>
           </Campo>
 
           {error && (
