@@ -50,6 +50,7 @@ export default function MisDatos() {
   const [guardando, setGuardando] = useState(false);
 
   const [pw, setPw] = useState({ actual: '', nueva: '', repite: '' });
+  const [verPass, setVerPass] = useState(false);
   const [cambiandoPw, setCambiandoPw] = useState(false);
 
   const set   = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -367,20 +368,38 @@ export default function MisDatos() {
             <Seccion>🔑 Cambiar contraseña</Seccion>
 
             <Campo label="Contraseña actual *">
-              <input type="password" value={pw.actual} onChange={e => setP('actual', e.target.value)}
-                placeholder="Tu contraseña de ahora" style={inputEstilo} />
+              <div style={{ position: 'relative' }}>
+                <input type={verPass ? 'text' : 'password'} value={pw.actual} onChange={e => setP('actual', e.target.value)}
+                  placeholder="Tu contraseña de ahora" style={{ ...inputEstilo, paddingRight: 44 }} />
+                <button type="button" onClick={() => setVerPass(v => !v)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                  {verPass ? '🙈' : '👁️'}
+                </button>
+              </div>
             </Campo>
 
             <Campo label="Nueva contraseña *">
-              <input type="password" value={pw.nueva} onChange={e => setP('nueva', e.target.value)}
-                placeholder="Mínimo 6 caracteres" style={inputEstilo} />
+              <div style={{ position: 'relative' }}>
+                <input type={verPass ? 'text' : 'password'} value={pw.nueva} onChange={e => setP('nueva', e.target.value)}
+                  placeholder="Mínimo 6 caracteres" style={{ ...inputEstilo, paddingRight: 44 }} />
+                <button type="button" onClick={() => setVerPass(v => !v)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                  {verPass ? '🙈' : '👁️'}
+                </button>
+              </div>
             </Campo>
 
             <Campo label="Repite la nueva contraseña *">
-              <input type="password" value={pw.repite} onChange={e => setP('repite', e.target.value)}
-                placeholder="Repite la nueva"
-                onKeyDown={e => e.key === 'Enter' && cambiarPassword()}
-                style={inputEstilo} />
+              <div style={{ position: 'relative' }}>
+                <input type={verPass ? 'text' : 'password'} value={pw.repite} onChange={e => setP('repite', e.target.value)}
+                  placeholder="Repite la nueva"
+                  onKeyDown={e => e.key === 'Enter' && cambiarPassword()}
+                  style={{ ...inputEstilo, paddingRight: 44 }} />
+                <button type="button" onClick={() => setVerPass(v => !v)}
+                  style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                  {verPass ? '🙈' : '👁️'}
+                </button>
+              </div>
             </Campo>
 
             <button onClick={cambiarPassword} disabled={cambiandoPw} style={{
