@@ -11,6 +11,7 @@ function RecuperarContenido() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [password2, setPassword2] = useState('');
+  const [verPass, setVerPass] = useState(false);
   const [nombre, setNombre] = useState('');
   const [mensaje, setMensaje] = useState('');
   const [error, setError] = useState('');
@@ -152,21 +153,33 @@ function RecuperarContenido() {
             <p style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>
               Hola <strong>{nombre}</strong>, elige tu nueva contraseña:
             </p>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="Nueva contraseña"
-              style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' }}
-            />
-            <input
-              type="password"
-              value={password2}
-              onChange={e => setPassword2(e.target.value)}
-              placeholder="Repetir contraseña"
-              onKeyDown={e => e.key === 'Enter' && cambiarPassword()}
-              style={{ width: '100%', padding: '12px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, marginBottom: 16, boxSizing: 'border-box' }}
-            />
+            <div style={{ position: 'relative', marginBottom: 10 }}>
+              <input
+                type={verPass ? 'text' : 'password'}
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Nueva contraseña"
+                style={{ width: '100%', padding: '12px 44px 12px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+              />
+              <button type="button" onClick={() => setVerPass(v => !v)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                {verPass ? '🙈' : '👁️'}
+              </button>
+            </div>
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <input
+                type={verPass ? 'text' : 'password'}
+                value={password2}
+                onChange={e => setPassword2(e.target.value)}
+                placeholder="Repetir contraseña"
+                onKeyDown={e => e.key === 'Enter' && cambiarPassword()}
+                style={{ width: '100%', padding: '12px 44px 12px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
+              />
+              <button type="button" onClick={() => setVerPass(v => !v)}
+                style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+                {verPass ? '🙈' : '👁️'}
+              </button>
+            </div>
             <button
               onClick={cambiarPassword}
               disabled={enviando}
