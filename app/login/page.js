@@ -8,6 +8,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [avisoPermisos, setAvisoPermisos] = useState(false);
+  const [verPass, setVerPass] = useState(false);
 
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
@@ -168,14 +169,20 @@ export default function Login() {
           <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#444', marginBottom: 6 }}>
             Contraseña
           </label>
-          <input
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && entrar()}
-            placeholder="Tu contraseña"
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
-          />
+          <div style={{ position: 'relative' }}>
+            <input
+              type={verPass ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && entrar()}
+              placeholder="Tu contraseña"
+              style={{ width: '100%', padding: '11px 44px 11px 14px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+            />
+            <button type="button" onClick={() => setVerPass(v => !v)}
+              style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#888', padding: 0 }}>
+              {verPass ? '🙈' : '👁️'}
+            </button>
+          </div>
         </div>
 
         {avisoPermisos && (
