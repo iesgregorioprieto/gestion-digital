@@ -35,7 +35,11 @@ export async function POST(request) {
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
       await fetch(baseUrl + '/api/enviar-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Acredita que la llamada sale del propio servidor, no de fuera
+          'x-clave-interna': process.env.SESSION_SECRET || '',
+        },
         body: JSON.stringify({
           tipo: 'recuperar_password',
           datos: {
