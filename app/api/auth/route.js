@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
+import { getRateLimiter } from '@/lib/ratelimit';
 
 /**
  * Sesiones del portal.
@@ -84,6 +85,17 @@ export async function POST(request) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
       }
 
+      // Rate limiting: máx 10 intentos fallidos por IP en 15 minutos
+      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida';
+      const rl = getRateLimiter('login');
+      const { ok: permitido, restantes, reinicioEn } = rl.comprobar(ip);
+      if (!permitido) {
+        return Response.json({
+          error: 'demasiados_intentos',
+          mensaje: `Demasiados intentos fallidos. Espera ${reinicioEn} segundos antes de volver a intentarlo.`,
+        }, { status: 429 });
+      }
+
       // Búsqueda tolerante con mayúsculas, como hacía el login anterior
       const { data: filas } = await supa()
         .from('profesores')
@@ -99,11 +111,15 @@ export async function POST(request) {
       if (p.email_verificado === false) return Response.json({ error: 'sin_verificar' }, { status: 403 });
 
       const correcta = await comprobarPassword(password, p.password_hash);
-      if (!correcta) return Response.json({ error: 'credenciales' }, { status: 401 });
+      if (!correcta) {
+        rl.registrarFallo(ip);
+        return Response.json({ error: 'credenciales' }, { status: 401 });
+      }
 
       const rolNorm = (p.rol_gestion || '').toString().trim().toLowerCase();
       const rol = MAPA_ROLES[rolNorm] || '';
 
+      rl.limpiar(ip); // login correcto: resetear contador de fallos
       const token = await firmarSesion({
         id: p.id,
         rol,
