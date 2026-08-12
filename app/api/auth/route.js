@@ -1,6 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
 import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
-import { comprobarRateLimit, registrarFalloRateLimit, limpiarRateLimit } from '@/lib/ratelimit';
 
 /**
  * Sesiones del portal.
@@ -84,10 +83,6 @@ export async function POST(request) {
       if (!em || !password) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
       }
-
-      // Rate limiting: máx 10 intentos fallidos por IP en 15 minutos
-      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida';
-
 
       // Pausa artificial: hace que la fuerza bruta sea impráctica.
       // Cada intento de login tarda mínimo 500ms en el servidor,
