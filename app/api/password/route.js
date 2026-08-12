@@ -20,9 +20,9 @@ export async function POST(request) {
       return Response.json({ hash: saltHex + ':' + hashHex });
 
     } else if (accion === 'verify') {
-      // Verificar: si el hash no tiene ':', es texto plano (legacy)
+      // Solo se aceptan hashes en formato PBKDF2 (salt:hash)
       if (!hash || !hash.includes(':')) {
-        return Response.json({ ok: hash === password });
+        return Response.json({ ok: false });
       }
       const [saltHex, hashHex] = hash.split(':');
       const salt = new Uint8Array(saltHex.match(/.{2}/g).map(h => parseInt(h, 16)));
