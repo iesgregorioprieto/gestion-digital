@@ -1,45 +1,157 @@
 import { Resend } from 'resend';
+import { createClient } from '@supabase/supabase-js';
+import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+/**
+ * ENVÍO DE CORREOS DEL PORTAL
+ *
+ * Antes esta dirección era un buzón abierto: cualquiera desde fuera podía
+ * pedirle al servidor que mandase un correo, a quien quisiera, con la
+ * dirección del centro como remitente. El caso más peligroso era el correo
+ * de "restablecer contraseña", porque el enlace del botón lo ponía quien
+ * llamaba: se podía suplantar al instituto para robar contraseñas.
+ *
+ * Ahora cada tipo de correo tiene su propia puerta:
+ *
+ *   GESTION  → solo con sesión de director, secretario o jefe de estudios
+ *   INTERNO  → solo desde el propio servidor, con una clave que el
+ *              navegador nunca ve
+ *   REGISTRO → sin sesión (quien se registra aún no la tiene), pero el
+ *              servidor comprueba en la base de datos que ese correo
+ *              acaba de registrarse de verdad, y usa el nombre de la BD
+ *
+ * Se ha eliminado el GET de pruebas, que enviaba correos a cualquier
+ * dirección sin ninguna comprobación.
+ */
+
 const FROM = 'secretario@iesgregorioprieto.com';
 const REPLY_TO = 'llcc12@educastillalamancha.es';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
 
-
-// Diagnóstico: abrir /api/enviar-email?to=tu@correo.es para enviar un email de prueba
-export async function GET(request) {
-  const key = process.env.RESEND_API_KEY || '';
-  const { searchParams } = new URL(request.url);
-  const to = searchParams.get('to');
-
-  const info = {
-    resend_api_key_existe: key.length > 0,
-    resend_api_key_longitud: key.length,
-    from: FROM,
-  };
-
-  if (!to) {
-    return Response.json({ ...info, aviso: 'Añade ?to=tu@correo.es para enviar un email de prueba' });
-  }
-
-  try {
-    const resultado = await resend.emails.send({
-      from: FROM,
-      to: [to],
-      subject: 'Prueba de envío — Portal IES Gregorio Prieto',
-      html: '<p>Si lees esto, el envío de correos funciona correctamente.</p>',
-    });
-    return Response.json({ ...info, resultado });
-  } catch (err) {
-    return Response.json({ ...info, excepcion: err.message, detalle: String(err) });
-  }
+// Resend se crea dentro de la petición, nunca a nivel de módulo
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY);
 }
+
+// ── Clasificación de los tipos de correo ────────────────────────────
+const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario'];
+const REGISTRO = ['registro_pendiente'];
+
+// ── Utilidades ──────────────────────────────────────────────────────
+
+/** Escapa el texto para que nadie pueda colar HTML dentro del correo */
+function e(valor) {
+  if (valor === null || valor === undefined) return '';
+  return String(valor)
+    .slice(0, 300)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function emailValido(v) {
+  return typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim()) && v.length < 200;
+}
+
+function noAutorizado(motivo) {
+  console.warn('enviar-email rechazado:', motivo);
+  return Response.json({ error: 'No autorizado' }, { status: 401 });
+}
+
+// ────────────────────────────────────────────────────────────────────
 
 export async function POST(request) {
   try {
+    const secreto = process.env.SESSION_SECRET;
+
+    // Sin clave configurada no se puede comprobar nada: mejor no enviar
+    // que dejar la puerta abierta.
+    if (!secreto) {
+      console.error('Falta SESSION_SECRET: no se envía ningún correo');
+      return Response.json({ error: 'Portal mal configurado' }, { status: 503 });
+    }
+
+    // Si la petición viene de otra web, se rechaza.
+    // Las llamadas del propio servidor no traen esta cabecera.
+    const origen = request.headers.get('origin');
+    if (origen) {
+      try {
+        const propio = request.headers.get('host') || new URL(request.url).host;
+        if (new URL(origen).host !== propio) {
+          return noAutorizado('origen externo: ' + origen);
+        }
+      } catch (_) {
+        return noAutorizado('origen ilegible');
+      }
+    }
+
     const { tipo, datos } = await request.json();
+    if (!tipo || !datos || typeof datos !== 'object') {
+      return Response.json({ error: 'Petición incompleta' }, { status: 400 });
+    }
+
+    let destinatario = datos.email;
+
+    // ── PUERTA 1: correos de gestión (requieren sesión de directivo) ──
+    if (GESTION.includes(tipo)) {
+      const cookies = request.headers.get('cookie') || '';
+      const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
+      const sesion = m ? await verificarSesion(m[1], secreto) : null;
+      if (!esDirectivo(sesion)) return noAutorizado('sin sesión de directivo para ' + tipo);
+    }
+
+    // ── PUERTA 2: correos internos (solo desde el propio servidor) ────
+    else if (INTERNO.includes(tipo)) {
+      if (request.headers.get('x-clave-interna') !== secreto) {
+        return noAutorizado('sin clave interna para ' + tipo);
+      }
+      // El enlace de recuperación solo puede apuntar al propio portal
+      if (tipo === 'recuperar_password') {
+        if (typeof datos.enlace !== 'string' || !datos.enlace.startsWith(BASE_URL)) {
+          return noAutorizado('enlace de recuperación fuera del portal');
+        }
+      }
+    }
+
+    // ── PUERTA 3: registro (sin sesión, pero comprobado en la BD) ─────
+    else if (REGISTRO.includes(tipo)) {
+      if (!emailValido(datos.email)) {
+        return Response.json({ error: 'Correo no válido' }, { status: 400 });
+      }
+      const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      );
+      const { data: filas } = await supabase
+        .from('profesores')
+        .select('nombre, email, estado, solicitud_acceso')
+        .ilike('email', datos.email.trim().toLowerCase());
+
+      const prof = (filas || [])[0];
+      if (!prof || prof.estado !== 'pendiente' || !prof.solicitud_acceso) {
+        return noAutorizado('registro_pendiente sin solicitud real');
+      }
+      // El nombre y el destinatario salen de la base de datos, no del navegador
+      destinatario = prof.email;
+      datos.nombre = prof.nombre;
+    }
+
+    else {
+      return Response.json({ error: 'Tipo de email desconocido' }, { status: 400 });
+    }
+
+    if (!emailValido(destinatario)) {
+      return Response.json({ error: 'Correo no válido' }, { status: 400 });
+    }
+
+    // ── Construcción del mensaje ─────────────────────────────────────
     let subject, html;
 
     if (tipo === 'activacion_cuenta') {
+      const enlaceActivar = `${BASE_URL}/activar?t=${encodeURIComponent(datos.token || '')}`;
       subject = '✅ Tu acceso al Portal del IES Gregorio Prieto ha sido activado';
       html = `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
@@ -48,24 +160,24 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola${datos.nombre ? ', ' + datos.nombre + ' ' + (datos.apellidos || '') : ''}</h2>
+            <h2 style="color:#1e3a5f">Hola${datos.nombre ? ', ' + e(datos.nombre) + ' ' + e(datos.apellidos || '') : ''}</h2>
             <p>Tu solicitud de acceso al portal ha sido <strong style="color:green">aprobada</strong>.</p>
             <p>Para terminar, activa tu cuenta desde este enlace:</p>
             <div style="text-align:center;margin:26px 0">
-              <a href="https://app.iesgregorioprieto.com/activar?t=${datos.token || ''}"
+              <a href="${enlaceActivar}"
                  style="background:#1e6b2e;color:white;padding:14px 34px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold;display:inline-block">
                 Activar mi cuenta
               </a>
             </div>
             <p style="color:#666;font-size:13px;line-height:1.6">
               Si el botón no funciona, copia esta dirección en tu navegador:<br>
-              <span style="color:#1e3a5f;word-break:break-all">https://app.iesgregorioprieto.com/activar?t=${datos.token || ''}</span>
+              <span style="color:#1e3a5f;word-break:break-all">${enlaceActivar}</span>
             </p>
             <p style="color:#555;font-size:14px">
-              Después podrás entrar con <strong>${datos.email}</strong> y la contraseña que creaste.
+              Después podrás entrar con <strong>${e(datos.email)}</strong> y la contraseña que creaste.
               Solo hay que activarla una vez.
             </p>
-            ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${datos.rol_gestion}</strong></p>` : ''}
+            ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${e(datos.rol_gestion)}</strong></p>` : ''}
             <p style="color:#666;font-size:13px">Si tienes algún problema para acceder, contacta con la secretaría del centro.</p>
           </div>
           <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
@@ -82,20 +194,20 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>Tu solicitud de DLD ha sido <strong style="color:green">aprobada</strong>.</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8eef4">
                 <td style="padding:10px;font-weight:bold">Fecha</td>
-                <td style="padding:10px">${datos.fecha_solicitada}</td>
+                <td style="padding:10px">${e(datos.fecha_solicitada)}</td>
               </tr>
               <tr>
                 <td style="padding:10px;font-weight:bold">Tipo</td>
-                <td style="padding:10px">${datos.tipo_dld || 'DLD'}</td>
+                <td style="padding:10px">${e(datos.tipo_dld || 'DLD')}</td>
               </tr>
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://app.iesgregorioprieto.com/dld"
+              <a href="${BASE_URL}/dld"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis solicitudes
               </a>
@@ -115,21 +227,21 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>Tu solicitud de DLD ha sido <strong style="color:#c0392b">denegada</strong>.</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8eef4">
                 <td style="padding:10px;font-weight:bold">Fecha solicitada</td>
-                <td style="padding:10px">${datos.fecha_solicitada}</td>
+                <td style="padding:10px">${e(datos.fecha_solicitada)}</td>
               </tr>
               ${datos.motivo_rechazo ? `<tr>
                 <td style="padding:10px;font-weight:bold">Motivo</td>
-                <td style="padding:10px">${datos.motivo_rechazo}</td>
+                <td style="padding:10px">${e(datos.motivo_rechazo)}</td>
               </tr>` : ''}
             </table>
             <p style="color:#666;font-size:13px">Si tienes dudas, contacta con la jefatura de estudios.</p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://app.iesgregorioprieto.com/dld"
+              <a href="${BASE_URL}/dld"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis solicitudes
               </a>
@@ -149,28 +261,28 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>Se te ha asignado una <strong>guardia de apoyo</strong>:</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8eef4">
                 <td style="padding:10px;font-weight:bold">Fecha</td>
-                <td style="padding:10px">${datos.fecha}</td>
+                <td style="padding:10px">${e(datos.fecha)}</td>
               </tr>
               <tr>
                 <td style="padding:10px;font-weight:bold">Hora</td>
-                <td style="padding:10px">${datos.hora}</td>
+                <td style="padding:10px">${e(datos.hora)}</td>
               </tr>
               ${datos.grupo ? `<tr style="background:#e8eef4">
                 <td style="padding:10px;font-weight:bold">Grupo a cubrir</td>
-                <td style="padding:10px">${datos.grupo}</td>
+                <td style="padding:10px">${e(datos.grupo)}</td>
               </tr>` : ''}
               ${datos.aula ? `<tr>
                 <td style="padding:10px;font-weight:bold">Aula</td>
-                <td style="padding:10px">${datos.aula}</td>
+                <td style="padding:10px">${e(datos.aula)}</td>
               </tr>` : ''}
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://app.iesgregorioprieto.com/guardias"
+              <a href="${BASE_URL}/guardias"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Ver mis guardias
               </a>
@@ -190,23 +302,23 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>⚠️ Tienes una ausencia pendiente de justificar. El <strong>plazo vence en menos de 24 horas</strong>.</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#fff3cd">
                 <td style="padding:10px;font-weight:bold">Fecha ausencia</td>
-                <td style="padding:10px">${datos.fecha_inicio}</td>
+                <td style="padding:10px">${e(datos.fecha_inicio)}</td>
               </tr>
               <tr>
                 <td style="padding:10px;font-weight:bold">Motivo declarado</td>
-                <td style="padding:10px">${datos.motivo || '—'}</td>
+                <td style="padding:10px">${e(datos.motivo || '—')}</td>
               </tr>
             </table>
             <p style="color:#856404;background:#fff3cd;padding:10px;border-radius:6px">
               Recuerda que dispones de 3 días hábiles para adjuntar el justificante.
             </p>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://app.iesgregorioprieto.com/ausencias"
+              <a href="${BASE_URL}/ausencias"
                  style="background:#e67e22;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Justificar ahora
               </a>
@@ -226,7 +338,7 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">IES Gregorio Prieto</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>Tu registro en el portal se ha completado correctamente.</p>
             <p>Tu cuenta está <strong style="color:#d97706">pendiente de autorización</strong> por la secretaría del centro.</p>
             <p>Recibirás un correo de confirmación cuando tu acceso haya sido activado.</p>
@@ -248,11 +360,11 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">IES Gregorio Prieto</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#1e3a5f">Hola, ${datos.nombre}</h2>
+            <h2 style="color:#1e3a5f">Hola, ${e(datos.nombre)}</h2>
             <p>Has solicitado restablecer tu contraseña del portal.</p>
             <p>Pulsa el botón para elegir una nueva contraseña:</p>
             <div style="text-align:center;margin:30px 0">
-              <a href="${datos.enlace}"
+              <a href="${e(datos.enlace)}"
                  style="background:#1e3a5f;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
                 Restablecer contraseña
               </a>
@@ -278,19 +390,19 @@ export async function POST(request) {
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8f5e9">
                 <td style="padding:10px;font-weight:bold">Nombre</td>
-                <td style="padding:10px">${datos.nombre}</td>
+                <td style="padding:10px">${e(datos.nombre)}</td>
               </tr>
               <tr>
                 <td style="padding:10px;font-weight:bold">Email</td>
-                <td style="padding:10px">${datos.email}</td>
+                <td style="padding:10px">${e(datos.email)}</td>
               </tr>
               <tr style="background:#e8f5e9">
                 <td style="padding:10px;font-weight:bold">Departamento</td>
-                <td style="padding:10px">${datos.departamento || '—'}</td>
+                <td style="padding:10px">${e(datos.departamento || '—')}</td>
               </tr>
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="https://app.iesgregorioprieto.com/gestion/personal"
+              <a href="${BASE_URL}/gestion/personal"
                  style="background:#1e6b2e;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
                 Revisar solicitud
               </a>
@@ -305,10 +417,10 @@ export async function POST(request) {
       return Response.json({ error: 'Tipo de email desconocido' }, { status: 400 });
     }
 
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: FROM,
       reply_to: REPLY_TO,
-      to: [datos.email],
+      to: [destinatario],
       subject,
       html,
     });
