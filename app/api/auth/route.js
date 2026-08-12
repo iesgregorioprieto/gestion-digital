@@ -105,13 +105,11 @@ export async function POST(request) {
 
       const correcta = await comprobarPassword(password, p.password_hash);
       if (!correcta) {
-        await rl.registrarFallo(ip);
         // Pausa mínima de 500ms en fallo para frenar fuerza bruta
         const transcurrido = Date.now() - inicio;
         if (transcurrido < 500) await new Promise(r => setTimeout(r, 500 - transcurrido));
         return Response.json({ error: 'credenciales' }, { status: 401 });
       }
-      await rl.limpiar(ip); // login correcto: resetear contador de fallos
 
       const rolNorm = (p.rol_gestion || '').toString().trim().toLowerCase();
       const rol = MAPA_ROLES[rolNorm] || '';
