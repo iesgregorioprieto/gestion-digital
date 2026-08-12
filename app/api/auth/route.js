@@ -88,13 +88,18 @@ export async function POST(request) {
       // Rate limiting: máx 10 intentos fallidos por IP en 15 minutos
       const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida';
       const rl = getRateLimiter('login');
-      const { ok: permitido, restantes, reinicioEn } = rl.comprobar(ip);
+      const { ok: permitido, reinicioEn } = rl.comprobar(ip);
       if (!permitido) {
         return Response.json({
           error: 'demasiados_intentos',
           mensaje: `Demasiados intentos fallidos. Espera ${reinicioEn} segundos antes de volver a intentarlo.`,
         }, { status: 429 });
       }
+
+      // Pausa artificial: hace que la fuerza bruta sea impráctica.
+      // Cada intento de login tarda mínimo 500ms en el servidor,
+      // lo que limita a ~2 intentos por segundo por conexión.
+      const inicio = Date.now();
 
       // Búsqueda tolerante con mayúsculas, como hacía el login anterior
       const { data: filas } = await supa()
@@ -113,13 +118,16 @@ export async function POST(request) {
       const correcta = await comprobarPassword(password, p.password_hash);
       if (!correcta) {
         rl.registrarFallo(ip);
+        // Pausa mínima de 500ms en fallo para frenar fuerza bruta
+        const transcurrido = Date.now() - inicio;
+        if (transcurrido < 500) await new Promise(r => setTimeout(r, 500 - transcurrido));
         return Response.json({ error: 'credenciales' }, { status: 401 });
       }
+      rl.limpiar(ip); // login correcto: resetear contador de fallos
 
       const rolNorm = (p.rol_gestion || '').toString().trim().toLowerCase();
       const rol = MAPA_ROLES[rolNorm] || '';
 
-      rl.limpiar(ip); // login correcto: resetear contador de fallos
       const token = await firmarSesion({
         id: p.id,
         rol,
