@@ -39,8 +39,8 @@ const MAPA_ROLES = {
 async function comprobarPassword(password, guardado) {
   if (!guardado) return false;
 
-  // Contraseñas antiguas en texto plano
-  if (!guardado.includes(':')) return password === guardado;
+  // Solo se aceptan hashes en formato PBKDF2 (salt:hash)
+  if (!guardado.includes(':')) return false;
 
   const [saltHex, hashHex] = guardado.split(':');
   const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
