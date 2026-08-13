@@ -2,7 +2,6 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 
@@ -20,28 +19,24 @@ export default function Activar() {
       if (!token) { setEstado('invalido'); return; }
 
       try {
-        const { data: rows, error: err } = await getSupabase()
-          .from('profesores')
-          .select('id, nombre, apellidos, email_verificado, estado')
-          .eq('token_activacion', token);
+        // La activación se hace en el servidor con service_role key
+        const res = await fetch('/api/activar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        });
 
-        if (err) { setError(err.message); setEstado('error'); return; }
+        const json = await res.json();
 
-        const prof = (rows || [])[0];
-        if (!prof) { setEstado('invalido'); return; }
+        if (!res.ok) {
+          if (json.error === 'token_invalido') { setEstado('invalido'); return; }
+          setError(json.error || 'Error desconocido');
+          setEstado('error');
+          return;
+        }
 
-        setNombre(prof.nombre || '');
-
-        if (prof.email_verificado) { setEstado('ya_activa'); return; }
-
-        const { error: errUpd } = await getSupabase()
-          .from('profesores')
-          .update({ email_verificado: true, token_activacion: null })
-          .eq('id', prof.id);
-
-        if (errUpd) { setError(errUpd.message); setEstado('error'); return; }
-
-        setEstado('listo');
+        setNombre(json.nombre || '');
+        setEstado(json.ya_activa ? 'ya_activa' : 'listo');
       } catch (e) {
         setError(e.message);
         setEstado('error');
