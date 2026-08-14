@@ -92,6 +92,11 @@ export default function Login() {
         setError('Tu cuenta no está activa. Contacta con el secretario.');
       } else if (motivo === 'sin_verificar') {
         setError('CORREO_SIN_VERIFICAR');
+      } else if (motivo === 'demasiados_intentos') {
+        // El servidor manda el texto con los minutos que quedan.
+        // Sin esto salía "inténtalo de nuevo", que invita justo a lo
+        // contrario de lo que hay que hacer estando bloqueado.
+        setError(datos?.mensaje || 'Demasiados intentos fallidos. Espera unos minutos antes de volver a intentarlo.');
       } else {
         setError('No se pudo iniciar sesión. Inténtalo de nuevo.');
       }
