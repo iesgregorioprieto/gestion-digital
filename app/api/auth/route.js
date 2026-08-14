@@ -37,7 +37,7 @@ const MAPA_ROLES = {
   'jefa_estudios': 'jefe_estudios', 'jefa de estudios': 'jefe_estudios',
 };
 
-// ── Verificación de contraseña (mismo formato que /api/password) ──
+// ── Verificación de contraseña (formato PBKDF2 salt:hash) ──
 async function comprobarPassword(password, guardado) {
   if (!guardado) return false;
 
