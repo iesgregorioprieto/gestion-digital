@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { claveServidor } from '@/lib/claveServidor';
 
 /**
  * LECTURA DE AUSENCIAS
@@ -14,11 +15,10 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
  */
 
 function supa() {
-  const privada = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    privada || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    privada ? { auth: { persistSession: false, autoRefreshToken: false } } : undefined
+    claveServidor(),
+    { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }
 
