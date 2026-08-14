@@ -73,7 +73,10 @@ export default function PanelSecretario() {
     setCargando(true);
     const { data, error } = await getSupabase()
       .from('profesores')
-      .select('*')
+      // Columnas concretas en vez de '*'. Hoy la base de datos ya no
+      // entrega las sensibles, pero pedirlas con '*' deja una mina: si
+      // alguien volviera a conceder la tabla entera, se filtrarían solas.
+      .select('id, nombre, apellidos, email, departamento, especialidad, estado, rol, rol_gestion, grupo_tutoria, tipo_contrato, solicitud_acceso, created_at')
       .eq('estado', filtroEstado)
       .order('apellidos', { ascending: true });
     if (!error) setProfesores(data || []);
