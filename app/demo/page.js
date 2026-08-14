@@ -102,7 +102,7 @@ export default function Demo() {
           if (error) errores.push(tabla);
         }
         // Borrar los profesores test
-        await supabase.from('profesores').delete().like('email', '%test%');
+        await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar_demo' }) });
       }
 
       // Borrar ausencias y DLD creados en modo demo (por cualquier usuario)
