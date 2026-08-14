@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { comprobarRateLimit, registrarFalloRateLimit } from '@/lib/ratelimit';
+import { comprobarLimite, registrarFallo, ipDe } from '@/lib/ratelimit';
 import { claveServidor } from '@/lib/claveServidor';
 
 export async function POST(request) {
@@ -11,13 +11,15 @@ export async function POST(request) {
     );
 
     if (accion === 'solicitar') {
-      // Rate limiting: máx 5 solicitudes por IP en 1 hora
-      const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'desconocida';
-      const { ok: permitido } = await comprobarRateLimit('recuperar', ip, supabase);
-      if (!permitido) {
+      // Freno al spam: 5 solicitudes por IP en 1 hora.
+      // La respuesta al bloquear es la misma de siempre, para no revelar
+      // ni que está bloqueado ni si el correo existe.
+      const ip = ipDe(request);
+      const limite = await comprobarLimite('recuperar', ip);
+      if (!limite.permitido) {
         return Response.json({ ok: true, mensaje: 'Si el email existe, recibirás un enlace.' });
       }
-      await registrarFalloRateLimit('recuperar', ip, supabase);
+      await registrarFallo('recuperar', ip);
 
       // Buscar profesor por email
       const { data: rows } = await supabase
