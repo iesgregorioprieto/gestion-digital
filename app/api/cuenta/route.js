@@ -30,7 +30,9 @@ async function calcularHash(password, saltBytes) {
 
 async function coincide(password, guardado) {
   if (!guardado) return false;
-  if (!guardado.includes(':')) return password === guardado; // texto plano antiguo
+  // Solo se aceptan hashes PBKDF2 (salt:hash). La comparación en texto
+  // plano se eliminó: era la tercera copia de la misma rama antigua.
+  if (!guardado.includes(':')) return false;
   const [saltHex, hashHex] = guardado.split(':');
   const salt = new Uint8Array(saltHex.match(/.{2}/g).map(b => parseInt(b, 16)));
   const { hash } = await calcularHash(password, salt);
