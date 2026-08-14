@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { getCursoActual } from '@/lib/curso';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -113,7 +114,7 @@ export default function Ausencias() {
       .select('grupo, materia, tipo')
       .eq('profesor_nombre_pdf', nPdf)
       .eq('tipo', 'clase')
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     if (!data) return;
     // Grupos únicos por grupo+materia
     const vistos = new Set();
@@ -152,7 +153,7 @@ export default function Ausencias() {
       .select('hora_id, hora_label, tipo, grupo, materia')
       .eq('profesor_nombre_pdf', nPdf)
       .eq('dia', diaSemana)
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
 
     if (!horas || horas.length === 0) { setCargandoHorario(false); return; }
 
