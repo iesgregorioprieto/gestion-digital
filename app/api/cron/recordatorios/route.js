@@ -1,17 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
+import { claveServidor } from '@/lib/claveServidor';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request) {
-  // Seguridad: solo Vercel Cron puede llamar a este endpoint
+  // Seguridad: solo Vercel Cron puede llamar a este endpoint.
+  // Si la clave no está configurada no se ejecuta nada: sin clave no hay
+  // forma de distinguir a Vercel de cualquiera que conozca la URL.
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    console.error('[cron] CRON_SECRET no configurado — endpoint bloqueado');
+    return Response.json({ error: 'Configuración incompleta' }, { status: 500 });
+  }
   const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return Response.json({ error: 'No autorizado' }, { status: 401 });
   }
 
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    claveServidor()
   );
 
   try {
