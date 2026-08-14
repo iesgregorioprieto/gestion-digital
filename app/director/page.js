@@ -253,8 +253,15 @@ export default function PanelDirector() {
   }
 
   async function aprobar(id) {
+    // Solo si sigue pendiente: evita pisar la resolución de jefatura
     setProcesando(true);
-    await getSupabase().from('dld').update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario }).eq('id', id);
+    const { data: tocadas } = await getSupabase().from('dld')
+      .update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario })
+      .eq('id', id).eq('estado', 'pendiente').select('id');
+    if (!tocadas || tocadas.length === 0) {
+      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+      setProcesando(false); setSolicitudAbierta(null); cargarSolicitudes(); return;
+    }
     mostrarMensaje('✅ Solicitud aprobada', 'ok');
     setSolicitudAbierta(null);
     cargarSolicitudes();
@@ -263,8 +270,15 @@ export default function PanelDirector() {
 
   async function rechazar(id) {
     if (!motivoRechazo.trim()) { alert('Debes indicar el motivo del rechazo'); return; }
+    // Solo si sigue pendiente: evita pisar la resolución de jefatura
     setProcesando(true);
-    await getSupabase().from('dld').update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo }).eq('id', id);
+    const { data: tocadas } = await getSupabase().from('dld')
+      .update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo })
+      .eq('id', id).eq('estado', 'pendiente').select('id');
+    if (!tocadas || tocadas.length === 0) {
+      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+      setProcesando(false); setSolicitudAbierta(null); cargarSolicitudes(); return;
+    }
     mostrarMensaje('❌ Solicitud rechazada', 'error');
     setSolicitudAbierta(null);
     setMotivoRechazo('');
