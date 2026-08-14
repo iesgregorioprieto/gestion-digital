@@ -52,7 +52,7 @@ export default function PanelDemo() {
       for (const tabla of ['ausencias', 'dld', 'apoyos_asignados', 'compras', 'horarios_profesores']) {
         await supabase.from(tabla).delete().in('profesor_id', ids);
       }
-      await supabase.from('profesores').delete().like('email', '%test%');
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar_demo' }) });
     }
 
     setMsg('✅ Datos de prueba eliminados. La aplicación queda limpia.');
