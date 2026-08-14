@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { comprobarLimite, registrarFallo, ipDe } from '@/lib/ratelimit';
 import { claveServidor } from '@/lib/claveServidor';
+import { cifrarPassword } from '@/lib/password';
 
 export async function POST(request) {
   try {
@@ -92,13 +93,8 @@ export async function POST(request) {
         return Response.json({ ok: false, error: 'El enlace ha caducado.' });
       }
 
-      // Hashear nueva contraseña
-      const hashRes = await fetch((process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com') + '/api/password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'hash', password: nuevaPassword }),
-      });
-      const { hash } = await hashRes.json();
+      // Cifrar la nueva contraseña aquí mismo, sin pasar por ninguna ruta
+      const hash = await cifrarPassword(nuevaPassword);
 
       // Actualizar contraseña y borrar token
       await supabase.from('profesores').update({
