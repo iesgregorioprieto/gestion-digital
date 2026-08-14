@@ -53,7 +53,17 @@ export async function GET(request) {
     return Response.json({ error: 'sin_permisos' }, { status: 403 });
   }
 
-  let consulta = supa().from('profesores').select('*').order('apellidos', { ascending: true });
+  // Columnas concretas. Con select('*') aquí se devolvían al navegador
+  // los hash de contraseña, los tokens de activación y los de reseteo:
+  // esta ruta usa la clave privilegiada, que se salta los permisos por
+  // columna de la base de datos.
+  const COLUMNAS = 'id, nombre, apellidos, email, email_corporativo, telefono, ' +
+    'departamento, especialidad, estado, rol, rol_gestion, grupo_tutoria, ' +
+    'tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, ' +
+    'autorizado, solicitud_acceso, email_verificado, en_baja, tipo_baja, fecha_baja, ' +
+    'sustituto_id, titular_id, created_at';
+
+  let consulta = supa().from('profesores').select(COLUMNAS).order('apellidos', { ascending: true });
   if (estado) consulta = consulta.eq('estado', estado);
 
   const { data, error } = await consulta;
