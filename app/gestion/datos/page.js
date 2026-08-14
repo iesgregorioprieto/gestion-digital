@@ -796,7 +796,7 @@ export default function GestionDatos() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: mostrarGuia ? 16 : 0 }}>
             <label style={{ fontSize: 13, fontWeight: 700, color: '#374151', whiteSpace: 'nowrap' }}>📅 Curso:</label>
             <input value={cursoNuevo} onChange={e => setCursoNuevo(e.target.value)} placeholder="2026-2027" style={{ padding: '7px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: 130 }} />
-            <span style={{ fontSize: 11, color: '#888' }}>Actual: <strong>{stats.cursoActual || '—'}</strong></span>
+            <span style={{ fontSize: 11, color: '#888' }}>Grupos cargados: <strong>{stats.cursoActual || '—'}</strong></span>
           </div>
 
           {mostrarGuia && (
