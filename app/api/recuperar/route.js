@@ -1,12 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { comprobarRateLimit, registrarFalloRateLimit } from '@/lib/ratelimit';
+import { claveServidor } from '@/lib/claveServidor';
 
 export async function POST(request) {
   try {
     const { accion, email, token, nuevaPassword } = await request.json();
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      claveServidor()
     );
 
     if (accion === 'solicitar') {
