@@ -116,6 +116,14 @@ export default function Limpieza() {
   const inputFotoRef = useRef(null);
   const escaneandoRef = useRef(false); // control loop
 
+  // ── NFC ──
+  // Mientras esta página tiene el lector NFC activo, Chrome se queda con
+  // la lectura y NO deja que Android abra la app que reclama esa URL.
+  // Por eso antes se abría la app de limpieza: aquí no había lector.
+  const [nfcDisponible, setNfcDisponible] = useState(false);
+  const [leyendoNfc, setLeyendoNfc] = useState(false);
+  const nfcAbortRef = useRef(null);
+
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     if (!id) { window.location.href = '/login'; return; }
@@ -127,6 +135,11 @@ export default function Limpieza() {
     jsQRRef.current = jsQR;
     setJsQRCargado(true);
     
+    // ¿Este móvil puede leer NFC desde el navegador?
+    if (typeof window !== 'undefined' && 'NDEFReader' in window) {
+      setNfcDisponible(true);
+    }
+
     // BarcodeDetector nativo si disponible (Android Chrome)
     if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
       try {
@@ -140,6 +153,8 @@ export default function Limpieza() {
     return () => {
       escaneandoRef.current = false;
       pararCamara();
+      // Soltar el lector NFC al salir: si no, sigue capturando
+      if (nfcAbortRef.current) nfcAbortRef.current.abort();
     };
   }, []);
   
@@ -307,6 +322,75 @@ export default function Limpieza() {
         animRef.current = requestAnimationFrame(escanearFrame);
       }
     }, 150);
+  }
+
+  // ── Leer una etiqueta NFC ──
+  async function leerNFC() {
+    if (!('NDEFReader' in window)) {
+      setErrorMensaje('Este móvil o navegador no puede leer NFC. Usa la cámara con el QR.');
+      return;
+    }
+    setErrorMensaje('');
+    setLeyendoNfc(true);
+    setEstadoScanner('Acerca el móvil a la etiqueta...');
+
+    try {
+      const lector = new window.NDEFReader();
+      const abort = new AbortController();
+      nfcAbortRef.current = abort;
+
+      // scan() pide permiso la primera vez. Mientras está activo,
+      // el navegador se queda la lectura en lugar de abrir otra app.
+      await lector.scan({ signal: abort.signal });
+
+      lector.onreadingerror = () => {
+        setEstadoScanner('No se pudo leer la etiqueta. Prueba otra vez.');
+      };
+
+      lector.onreading = (evento) => {
+        let leido = null;
+
+        for (const registro of evento.message.records) {
+          try {
+            if (registro.recordType === 'url') {
+              leido = new TextDecoder().decode(registro.data);
+            } else if (registro.recordType === 'text') {
+              const cod = registro.encoding || 'utf-8';
+              leido = new TextDecoder(cod).decode(registro.data);
+            }
+          } catch (e) { /* registro ilegible, se prueba el siguiente */ }
+          if (leido) break;
+        }
+
+        // Si la etiqueta no trae nada útil, queda el número de serie
+        if (!leido && evento.serialNumber) leido = evento.serialNumber;
+
+        if (!leido) {
+          setEstadoScanner('La etiqueta está vacía.');
+          return;
+        }
+
+        pararNFC();
+        procesarQR(leido);   // mismo camino que el QR: acepta URL, IES_DEP_ o UUID
+      };
+    } catch (e) {
+      setLeyendoNfc(false);
+      if (e.name === 'NotAllowedError') {
+        setErrorMensaje('Hace falta dar permiso de NFC. Vuelve a intentarlo y pulsa "Permitir".');
+      } else if (e.name === 'NotSupportedError') {
+        setErrorMensaje('El NFC está desactivado en el móvil. Actívalo en los ajustes y prueba otra vez.');
+      } else {
+        setErrorMensaje('No se pudo iniciar el lector NFC: ' + e.message);
+      }
+    }
+  }
+
+  function pararNFC() {
+    if (nfcAbortRef.current) {
+      nfcAbortRef.current.abort();
+      nfcAbortRef.current = null;
+    }
+    setLeyendoNfc(false);
   }
 
   async function procesarQR(data) {
@@ -595,6 +679,32 @@ export default function Limpieza() {
                   boxShadow:'0 2px 8px rgba(8, 145, 178, 0.4)',
                 }}
               >📷 Abrir cámara</button>
+
+              {nfcDisponible && (
+                <div style={{ marginTop:14 }}>
+                  <div style={{ fontSize:12, color:'#888', marginBottom:10 }}>
+                    — o si la dependencia tiene pegatina NFC —
+                  </div>
+                  <button
+                    onClick={leyendoNfc ? pararNFC : leerNFC}
+                    style={{
+                      padding:'14px 28px', borderRadius:12,
+                      border: leyendoNfc ? '2px solid #0891b2' : 'none',
+                      backgroundColor: leyendoNfc ? 'white' : '#7c3aed',
+                      color: leyendoNfc ? '#0891b2' : 'white',
+                      fontSize:15, fontWeight:800, cursor:'pointer',
+                      boxShadow: leyendoNfc ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.4)',
+                    }}
+                  >{leyendoNfc ? '⏳ Acerca el móvil... (pulsa para cancelar)' : '📲 Leer etiqueta NFC'}</button>
+
+                  {leyendoNfc && (
+                    <div style={{ fontSize:12, color:'#666', marginTop:10, lineHeight:1.5 }}>
+                      Acerca la parte de atrás del móvil a la pegatina.
+                      Mantén esta pantalla abierta mientras lo haces.
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div style={{ backgroundColor:'#f3f4f6', borderRadius:10, padding:14, marginTop:16 }}>
