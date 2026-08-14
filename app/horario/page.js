@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 import { getSupabase } from "../../lib/supabase";
+import { getCursoActual } from '@/lib/curso';
 
 const DIAS = ['lunes','martes','miercoles','jueves','viernes'];
 const DIAS_LABEL = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes' };
@@ -89,7 +90,7 @@ function HorarioContenido() {
         .from('horarios_profesores')
         .select('dia, hora_id, tipo, grupo, materia, aula')
         .eq('profesor_nombre_pdf', nPdf)
-        .eq('curso_academico', '2025-2026');
+        .eq('curso_academico', await getCursoActual());
 
       setHorario(data || []);
     } catch (e) {
