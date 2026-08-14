@@ -730,7 +730,6 @@ export default function GestionDatos() {
         autorizado: true,
         estado: 'pendiente',
         rol: ['profesor'],
-        password_hash: '',
       });
       if (error) {
         console.error('Error insertando', prof.email, error.message);
