@@ -399,28 +399,44 @@ export default function Limpieza() {
     
     console.log('Datos QR:', data);
     
-    // Aceptar múltiples formatos posibles
+    // Aceptar múltiples formatos posibles.
+    // Las etiquetas NFC suelen llevar la URL de la app de limpiadores,
+    // que no tiene por qué contener "IES_DEP_": por eso se busca el
+    // identificador en cualquier parte del texto.
+    const texto = data.trim();
     let uuid = null;
-    
-    // Formato esperado: IES_DEP_{uuid}
-    if (data.startsWith('IES_DEP_')) {
-      uuid = data.replace('IES_DEP_', '').trim();
+
+    // 1) Formato esperado: IES_DEP_{uuid}
+    if (texto.startsWith('IES_DEP_')) {
+      uuid = texto.replace('IES_DEP_', '').trim();
     }
-    // Puede ser URL con el UUID: https://.../IES_DEP_xxx
-    else if (data.includes('IES_DEP_')) {
-      const match = data.match(/IES_DEP_([a-f0-9-]+)/i);
-      if (match) uuid = match[1];
-    }
-    // Puede ser solo el UUID directo (36 caracteres)
-    else if (/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(data.trim())) {
-      uuid = data.trim();
-    }
-    
+    // 2) IES_DEP_ en medio de una URL
     if (!uuid) {
-      setErrorMensaje(`El código escaneado no tiene un formato reconocible. Se leyó: "${data.slice(0, 50)}${data.length > 50 ? '...' : ''}". Debe empezar por "IES_DEP_" o ser un UUID válido.`);
+      const m = texto.match(/IES_DEP_([a-f0-9-]{36})/i);
+      if (m) uuid = m[1];
+    }
+    // 3) Solo el UUID
+    if (!uuid && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(texto)) {
+      uuid = texto;
+    }
+    // 4) Un UUID en cualquier sitio: .../dep/xxx, ?dep=xxx, ?id=xxx...
+    if (!uuid) {
+      const m = texto.match(/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/i);
+      if (m) uuid = m[0];
+    }
+    // 5) Último recurso: el tramo final de una URL sin barra
+    if (!uuid && texto.includes('/')) {
+      const ultimo = texto.split(/[/?#=]/).filter(Boolean).pop();
+      if (ultimo && ultimo.length >= 8) uuid = ultimo.trim();
+    }
+
+    if (!uuid) {
+      setErrorMensaje(`No se reconoce el código. Se leyó exactamente: "${data}". Envíale este texto al secretario para que lo revise.`);
       setPantalla('inicio');
       return;
     }
+
+    console.log('Identificador extraído:', uuid);
     
     await cargarDependencia(uuid);
   }
