@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
+import { getCursoActual } from '@/lib/curso';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 
@@ -90,6 +91,12 @@ export default function GestionDatos() {
     }
     setNombre(sessionStorage.getItem('profesor_nombre') || '');
     cargarStats();
+
+    // El curso de las importaciones se rellena solo con el que está
+    // configurado en Datos del curso. Así, cada septiembre basta con
+    // configurar el curso una vez y todo lo que se suba (horarios,
+    // alumnado y grupos) queda marcado con el curso correcto.
+    getCursoActual().then(cur => setCursoNuevo(prev => prev || cur));
   }, []);
 
   async function cargarStats() {
