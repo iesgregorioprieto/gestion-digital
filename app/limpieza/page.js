@@ -664,46 +664,52 @@ export default function Limpieza() {
             )}
             
             <div style={{ backgroundColor:'white', borderRadius:14, padding:20, textAlign:'center', boxShadow:'0 1px 3px rgba(0,0,0,0.08)' }}>
-              <div style={{ fontSize:56, marginBottom:12 }}>📱</div>
               <div style={{ fontSize:16, fontWeight:800, color:azulOscuro, marginBottom:6 }}>
-                Escanea el QR de la dependencia
+                ¿Dónde está el problema?
               </div>
-              <div style={{ fontSize:13, color:'#666', marginBottom:20, lineHeight:1.5 }}>
-                Apunta la cámara al código QR pegado en la puerta del baño, aula o taller donde has visto el problema.
+              <div style={{ fontSize:13, color:'#666', marginBottom:18, lineHeight:1.5 }}>
+                Identifica la dependencia con la pegatina de la puerta del baño, aula o taller.
               </div>
+
+              {/* ── BOTÓN QR ── */}
               <button
                 onClick={iniciarEscaneo}
                 style={{
-                  padding:'14px 28px', borderRadius:12, border:'none',
-                  backgroundColor:azul, color:'white', fontSize:15, fontWeight:800, cursor:'pointer',
-                  boxShadow:'0 2px 8px rgba(8, 145, 178, 0.4)',
+                  width:'100%', padding:'16px 18px', borderRadius:12, border:'none',
+                  backgroundColor:azul, color:'white', cursor:'pointer', textAlign:'left',
+                  boxShadow:'0 2px 8px rgba(8, 145, 178, 0.4)', marginBottom:12,
                 }}
-              >📷 Abrir cámara</button>
-
-              {nfcDisponible && (
-                <div style={{ marginTop:14 }}>
-                  <div style={{ fontSize:12, color:'#888', marginBottom:10 }}>
-                    — o si la dependencia tiene pegatina NFC —
-                  </div>
-                  <button
-                    onClick={leyendoNfc ? pararNFC : leerNFC}
-                    style={{
-                      padding:'14px 28px', borderRadius:12,
-                      border: leyendoNfc ? '2px solid #0891b2' : 'none',
-                      backgroundColor: leyendoNfc ? 'white' : '#7c3aed',
-                      color: leyendoNfc ? '#0891b2' : 'white',
-                      fontSize:15, fontWeight:800, cursor:'pointer',
-                      boxShadow: leyendoNfc ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.4)',
-                    }}
-                  >{leyendoNfc ? '⏳ Acerca el móvil... (pulsa para cancelar)' : '📲 Leer etiqueta NFC'}</button>
-
-                  {leyendoNfc && (
-                    <div style={{ fontSize:12, color:'#666', marginTop:10, lineHeight:1.5 }}>
-                      Acerca la parte de atrás del móvil a la pegatina.
-                      Mantén esta pantalla abierta mientras lo haces.
-                    </div>
-                  )}
+              >
+                <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>
+                  📷 Pulsa aquí para leer el QR
                 </div>
+                <div style={{ fontSize:12, fontWeight:500, opacity:0.9, lineHeight:1.4 }}>
+                  Se abrirá la cámara. Apunta al código QR de la pegatina.
+                </div>
+              </button>
+
+              {/* ── BOTÓN NFC ── */}
+              {nfcDisponible && (
+                <button
+                  onClick={leyendoNfc ? pararNFC : leerNFC}
+                  style={{
+                    width:'100%', padding:'16px 18px', borderRadius:12,
+                    border: leyendoNfc ? '2px solid #7c3aed' : 'none',
+                    backgroundColor: leyendoNfc ? '#f5f3ff' : '#7c3aed',
+                    color: leyendoNfc ? '#5b21b6' : 'white',
+                    cursor:'pointer', textAlign:'left',
+                    boxShadow: leyendoNfc ? 'none' : '0 2px 8px rgba(124, 58, 237, 0.4)',
+                  }}
+                >
+                  <div style={{ fontSize:16, fontWeight:800, marginBottom:4 }}>
+                    {leyendoNfc ? '⏳ Acerca ahora el móvil a la pegatina' : '📲 Pulsa aquí para leer el NFC'}
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:500, opacity:0.9, lineHeight:1.4 }}>
+                    {leyendoNfc
+                      ? 'Acerca la parte de atrás del móvil. Pulsa otra vez para cancelar.'
+                      : 'Importante: pulsa el botón ANTES de acercar el móvil. Si lo acercas sin pulsar, se abrirá la app de limpiadores.'}
+                  </div>
+                </button>
               )}
             </div>
 
