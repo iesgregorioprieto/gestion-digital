@@ -55,7 +55,7 @@ export default function GestionDatos() {
   const [mensaje, setMensaje] = useState(null);
   const [vistaTab, setVistaTab] = useState('alumnos');
   const [mostrarGuia, setMostrarGuia] = useState(true);
-  const [cursoNuevo, setCursoNuevo] = useState('2025-2026');
+  const [cursoNuevo, setCursoNuevo] = useState(''); // lo escribe el secretario
   const [procesando, setProcesando] = useState(false);
 
   // Alumnos
@@ -984,7 +984,7 @@ export default function GestionDatos() {
                   type="text" 
                   value={cursoNuevo} 
                   onChange={e => setCursoNuevo(e.target.value)} 
-                  placeholder="2025-2026" 
+                  placeholder="2026-2027" 
                   disabled={procesando}
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} 
                 />
