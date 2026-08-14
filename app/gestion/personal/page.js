@@ -139,7 +139,8 @@ export default function PanelSecretario() {
 
   async function eliminarInactivos() {
     if (!confirm('¿Eliminar todos los profesores INACTIVOS (dados de baja al importar el CSV del nuevo curso)? Esta acción no se puede deshacer.')) return;
-    const { error } = await getSupabase().from('profesores').delete().eq('estado', 'inactivo');
+    const resp = await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar_inactivos' }) });
+    const error = resp.ok ? null : await resp.json();
     if (!error) mostrarMensaje('🗑️ Profesores inactivos eliminados', 'ok');
     else mostrarMensaje('❌ Error al eliminar: ' + error.message, 'error');
     cargarProfesores();
@@ -147,7 +148,8 @@ export default function PanelSecretario() {
 
   async function eliminarProfesor(id, nombre) {
     if (!confirm(`¿Eliminar a ${nombre}? Esta acción no se puede deshacer.`)) return;
-    const { error } = await getSupabase().from('profesores').delete().eq('id', id);
+    const resp = await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar', id }) });
+    const error = resp.ok ? null : await resp.json();
     if (error) { mostrarMensaje('⚠️ Error al eliminar: ' + error.message, 'error'); return; }
     mostrarMensaje('🗑️ Profesor eliminado', 'ok');
     cargarProfesores();
