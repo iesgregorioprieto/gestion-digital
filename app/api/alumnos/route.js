@@ -100,7 +100,23 @@ export async function POST(request) {
       const { id, datos } = cuerpo;
       if (!id || !datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
 
-      const { error } = await supa().from('alumnos').update(datos).eq('id', id);
+      // Solo estos campos son editables desde la pantalla de
+      // autorizaciones. Antes se hacía update(datos) con lo que llegara,
+      // así que se podía cambiar cualquier columna del alumno (nombre,
+      // grupo, curso...) mandando la petición a mano.
+      const permitidos = [
+        'auth_imagenes', 'auth_salidas', 'auth_actividades',
+        'auth_informar_progeni', 'auth_imagenes_mayor', 'dni',
+      ];
+      const limpio = {};
+      for (const k of permitidos) {
+        if (k in datos) limpio[k] = datos[k];
+      }
+      if (Object.keys(limpio).length === 0) {
+        return Response.json({ error: 'Nada que actualizar' }, { status: 400 });
+      }
+
+      const { error } = await supa().from('alumnos').update(limpio).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
     }
@@ -126,7 +142,12 @@ export async function POST(request) {
     }
 
     // Borrar el alumnado de un grupo (antes de reimportarlo)
+    // Solo equipo directivo: es una acción destructiva y sin vuelta atrás.
+    // Antes bastaba con tener sesión de profesor.
     if (accion === 'borrar_grupo') {
+      if (!esDirectivo(sesion)) {
+        return Response.json({ error: 'Sin permisos' }, { status: 403 });
+      }
       const { grupo } = cuerpo;
       if (!grupo) return Response.json({ error: 'Falta el grupo' }, { status: 400 });
       const { error } = await supa().from('alumnos').delete().eq('grupo', grupo);
