@@ -6,6 +6,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { departamentoASector } from '@/lib/sectores';
+import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -129,7 +130,7 @@ export default function GestionGuardias() {
       const { data } = await getSupabase()
         .from('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
-        .eq('curso_academico','2025-2026')
+        .eq('curso_academico',await getCursoActual())
         .range(offset, offset + limit - 1);
       if (!data || data.length === 0) break;
       horarios = horarios.concat(data);
@@ -153,7 +154,7 @@ export default function GestionGuardias() {
     const { data: apoyos } = await getSupabase()
       .from('apoyos_asignados')
       .select('sector_apoyo,profesor_id,estado')
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     const cont = {};
     const contProf = {};
     (apoyos || []).forEach(a => {
@@ -241,7 +242,7 @@ export default function GestionGuardias() {
         .from('apoyos_asignados')
         .select('*')
         .eq('fecha', f)
-        .eq('curso_academico', '2025-2026');
+        .eq('curso_academico', await getCursoActual());
       setApAsig(r.data || []);
     } catch(e) {}
 
@@ -423,7 +424,7 @@ export default function GestionGuardias() {
         asignado_por: usuario?.id,
         estado: 'pendiente',
         tipo_apoyo: 'obligatorio',
-        curso_academico: '2025-2026',
+        curso_academico: await getCursoActual(),
       });
     }
 
@@ -468,7 +469,7 @@ export default function GestionGuardias() {
       asignado_por: usuario?.id,
       estado: 'confirmado', // Se marca como confirmado directamente para contar
       tipo_apoyo: 'urgente',
-      curso_academico: '2025-2026',
+      curso_academico: await getCursoActual(),
     }]).select();
     if (error) { alert('Error: ' + error.message); return; }
     if (data) {
@@ -536,7 +537,7 @@ export default function GestionGuardias() {
       })
       .eq('id', apoyoId);
     if (error) { alert('Error: ' + error.message); return; }
-    const r = await getSupabase().from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico','2025-2026');
+    const r = await getSupabase().from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico',await getCursoActual());
     setApAsig(r.data || []);
     setModalActivar(null);
   }
