@@ -53,60 +53,40 @@ export default function Registro() {
 
     setEnviando(true);
     try {
-      // Se pregunta al servidor por el estado de ese email.
-      // El hash de la contraseña nunca llega al navegador.
-      const rEstado = await fetch('/api/cuenta', {
+      // Todo el alta la hace el servidor: valida, cifra la contraseña y
+      // escribe la fila. El navegador ya no toca la tabla `profesores`.
+      const rAlta = await fetch('/api/registro', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'estado_registro', email: em }),
+        body: JSON.stringify({
+          email: em,
+          nombre: form.nombre,
+          apellidos: form.apellidos,
+          departamento: form.departamento,
+          esTutor: form.esTutor,
+          grupoTutoria: form.grupoTutoria,
+          password: form.pass1,
+        }),
       });
-      const estado = await rEstado.json();
+      const alta = await rAlta.json();
 
-      if (estado.tienePassword) {
-        setPantalla('ya_registrado'); setEnviando(false); return;
-      }
-      if (estado.solicitudEnviada && estado.estado === 'pendiente') {
-        setPantalla('pendiente_aprobacion'); setEnviando(false); return;
-      }
-
-      const prof = estado.existe ? { id: estado.id } : null;
-
-      // El hash lo calcula el servidor
-      const rHash = await fetch('/api/cuenta', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'registrar_password', email: em, password: form.pass1 }),
-      });
-      const dHash = await rHash.json();
-
-      if (!rHash.ok || !dHash.hash) {
-        setError(dHash.error === 'ya_tiene_password'
-          ? 'Esa cuenta ya tiene contraseña. Inicia sesión.'
-          : 'No se pudo procesar la contraseña. Inténtalo de nuevo.');
+      if (!rAlta.ok) {
+        const mensajes = {
+          dominio_no_permitido: 'Solo se admite email @educastillalamancha.es',
+          password_corta:       'La contraseña debe tener al menos 6 caracteres.',
+          datos_incompletos:    'Faltan datos por rellenar.',
+          falta_grupo:          'Indica de qué grupo eres tutor/a.',
+        };
+        setError(mensajes[alta.error] || 'No se pudo completar el registro. Inténtalo de nuevo.');
         setEnviando(false);
         return;
       }
-      const hash = dHash.hash;
 
-      const datos = {
-        nombre:        form.nombre.trim(),
-        apellidos:     form.apellidos.trim(),
-        departamento:  form.departamento,
-        rol:           form.esTutor ? ['profesor', 'tutor'] : ['profesor'],
-        grupo_tutoria: form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
-        password_hash: hash,
-        solicitud_acceso: true,
-        estado:        'pendiente',
-      };
-
-      if (prof) {
-        const { error: err } = await getSupabase()
-          .from('profesores').update(datos).eq('id', prof.id);
-        if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
-      } else {
-        const { error: err } = await getSupabase()
-          .from('profesores').insert({ ...datos, email: em });
-        if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
+      if (alta.estado === 'ya_registrado') {
+        setPantalla('ya_registrado'); setEnviando(false); return;
+      }
+      if (alta.estado === 'pendiente_aprobacion') {
+        setPantalla('pendiente_aprobacion'); setEnviando(false); return;
       }
 
       // Email de confirmación al profesor
