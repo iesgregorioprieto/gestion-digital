@@ -1,5 +1,6 @@
 import webpush from 'web-push';
 import { createClient } from '@supabase/supabase-js';
+import { claveServidor } from '@/lib/claveServidor';
 
 const PUBLIC_KEY  = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -7,7 +8,7 @@ const PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+    claveServidor()
   );
 }
 
