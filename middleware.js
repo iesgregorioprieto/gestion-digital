@@ -30,9 +30,18 @@ export async function middleware(request) {
 
   const secreto = process.env.SESSION_SECRET;
 
-  // Sin secreto configurado no se bloquea nada: evita dejar el centro
-  // fuera del portal por un despiste de configuración.
-  if (!secreto) return NextResponse.next();
+  // Sin secreto configurado NO se puede comprobar la sesión, así que no
+  // se deja pasar a nadie. Antes se dejaba pasar para no dejar al centro
+  // fuera por un despiste, pero eso abría el panel de dirección a
+  // cualquiera en cuanto faltase la variable (despliegue nuevo, preview,
+  // variable mal copiada...). Es preferible un portal caído y visible
+  // que un portal abierto y silencioso.
+  if (!secreto) {
+    console.error('SESSION_SECRET no configurado — acceso a gestión bloqueado');
+    const destino = new URL('/login', request.url);
+    destino.searchParams.set('motivo', 'config');
+    return NextResponse.redirect(destino);
+  }
 
   const token = request.cookies.get(COOKIE)?.value;
   const sesion = await verificarSesion(token, secreto);
