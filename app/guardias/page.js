@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
+import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -131,7 +132,7 @@ export default function Guardias() {
       const { data } = await getSupabase()
         .from('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
-        .eq('curso_academico','2025-2026')
+        .eq('curso_academico',await getCursoActual())
         .range(offset, offset + limit - 1);
       if (!data || data.length === 0) break;
       horarios = horarios.concat(data);
@@ -156,7 +157,7 @@ export default function Guardias() {
     const { data: apoyosCurso } = await getSupabase()
       .from('apoyos_asignados')
       .select('sector_apoyo,profesor_id,estado')
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     const contSector = {};
     const contProfesor = {};
     (apoyosCurso || []).forEach(a => {
@@ -176,7 +177,7 @@ export default function Guardias() {
     const { data: apoyos } = await getSupabase()
       .from('apoyos_asignados')
       .select('sector_apoyo,estado')
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     const cont = {};
     (apoyos || []).forEach(a => {
       if (a.estado === 'confirmado' || a.estado === 'realizado') {
@@ -259,7 +260,7 @@ export default function Guardias() {
         .from('apoyos_asignados')
         .select('*')
         .eq('fecha', f)
-        .eq('curso_academico', '2025-2026');
+        .eq('curso_academico', await getCursoActual());
       setApAsig(r.data || []);
     } catch(e) { console.warn('Error apoyos:', e); }
 
@@ -472,7 +473,7 @@ export default function Guardias() {
       .from('apoyos_asignados')
       .select('*')
       .eq('fecha', fecha)
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     setApAsig(r.data || []);
     setModalCambiar(null);
   }
