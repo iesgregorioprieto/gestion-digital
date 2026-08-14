@@ -98,6 +98,24 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Aprobar / reactivar: genera el token en el servidor ───
+    //
+    // El token de activación es lo que permite dar por verificado un
+    // correo, así que el navegador no debe poder escribirlo. Antes lo
+    // generaba la página y lo guardaba ella misma.
+    if (accion === 'aprobar') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const token = crypto.randomUUID();
+      const cambios = { estado: 'activo', token_activacion: token };
+      if (datos && datos.auth_ === true) cambios.auth_ = true;
+
+      const { error } = await supa().from('profesores').update(cambios).eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true, token });
+    }
+
     // ─── Borrados: siempre en el servidor y solo equipo directivo ───
     //
     // Antes estos borrados los hacía el navegador directamente contra
