@@ -97,12 +97,15 @@ export default function PanelSecretario() {
     if (aprobandoId) return;
     setAprobandoId(id);
 
-    // Token único para verificar que el correo es suyo
-    const token = crypto.randomUUID();
-    const { error } = await getSupabase()
-      .from('profesores')
-      .update({ estado: 'activo', token_activacion: token })
-      .eq('id', id);
+    // El token lo genera el servidor: el navegador no puede escribirlo
+    const resp = await fetch('/api/profesores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'aprobar', id }),
+    });
+    const respuesta = await resp.json();
+    const error = resp.ok ? null : respuesta;
+    const token = respuesta.token;
 
     // Si la base de datos falla no se envía el correo: sería un enlace muerto
     if (error) {
@@ -358,12 +361,14 @@ export default function PanelSecretario() {
     for (let i = 0; i < ids.length; i++) {
       const id = ids[i];
       const prof = porId[id];
-      const token = crypto.randomUUID();
-
-      const { error } = await getSupabase()
-        .from('profesores')
-        .update({ estado: 'activo', auth_: true, token_activacion: token })
-        .eq('id', id);
+      const resp = await fetch('/api/profesores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'aprobar', id, datos: { auth_: true } }),
+      });
+      const respuesta = await resp.json();
+      const error = resp.ok ? null : respuesta;
+      const token = respuesta.token;
 
       if (error) {
         fallidos.push(`${prof?.apellidos || '?'}, ${prof?.nombre || '?'}`);
