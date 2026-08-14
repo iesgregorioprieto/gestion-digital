@@ -95,14 +95,15 @@ export default function PanelSecretario() {
 
   async function eliminarInterinos() {
     if (!confirm('¿Eliminar TODOS los interinos? Esta acción no se puede deshacer.')) return;
-    await getSupabase().from('profesores').delete().like('tipo_contrato', 'Interino%');
+    await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar_interinos' }) });
     mostrarMensaje('🗑️ Interinos eliminados', 'ok');
     cargarProfesores();
   }
 
   async function eliminarProfesor(id, nombre) {
     if (!confirm(`¿Eliminar a ${nombre}? Esta acción no se puede deshacer.`)) return;
-    const { error } = await getSupabase().from('profesores').delete().eq('id', id);
+    const resp = await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'eliminar', id }) });
+    const error = resp.ok ? null : await resp.json();
     if (error) { mostrarMensaje('⚠️ Error al eliminar: ' + error.message, 'error'); return; }
     mostrarMensaje('🗑️ Profesor eliminado', 'ok');
     cargarProfesores();
