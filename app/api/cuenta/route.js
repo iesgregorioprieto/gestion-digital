@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
+import { claveServidor } from '@/lib/claveServidor';
 
 /**
  * Operaciones con contraseñas. Todas se hacen aquí, en el servidor,
@@ -7,11 +8,10 @@ import { verificarSesion, COOKIE } from '@/lib/sesion';
  */
 
 function supa() {
-  const privada = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    privada || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    privada ? { auth: { persistSession: false, autoRefreshToken: false } } : undefined
+    claveServidor(),
+    { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }
 
