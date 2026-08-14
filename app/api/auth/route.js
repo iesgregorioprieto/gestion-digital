@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
+import { claveServidor } from '@/lib/claveServidor';
 
 /**
  * Sesiones del portal.
@@ -16,15 +17,15 @@ import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
  * siguiente, quitarle al navegador el permiso de leer los hash de
  * contraseñas: la verificación pasa a hacerse solo aquí.
  *
- * Si la clave privada no estuviera configurada, se usa la pública para
- * no dejar a nadie fuera del portal por un despiste.
+ * Si la clave privada no estuviera configurada, esta ruta falla y lo
+ * deja escrito en el log. Antes se caía en silencio a la clave pública,
+ * lo que producía errores confusos de permisos en vez de un aviso claro.
  */
 function supa() {
-  const privada = process.env.SUPABASE_SERVICE_ROLE_KEY;
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
-    privada || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    privada ? { auth: { persistSession: false, autoRefreshToken: false } } : undefined
+    claveServidor(),
+    { auth: { persistSession: false, autoRefreshToken: false } }
   );
 }
 
@@ -147,54 +148,16 @@ export async function POST(request) {
   }
 }
 
-// ─── COMPROBACIÓN DE CONFIGURACIÓN ───
-// /api/auth?check=1 → dice si las claves están puestas, sin revelarlas
 // ─── ¿QUIÉN SOY? ───
 // Permite a cualquier página preguntar al servidor por la sesión real.
+//
+// El antiguo /api/auth?check=1 se ha eliminado: no pedía sesión y
+// revelaba si las claves estaban puestas, los 10 primeros caracteres de
+// la service_role key, el total de profesores y permitía comprobar si un
+// correo existía en el sistema (enumeración de usuarios).
 export async function GET(request) {
   const secreto = process.env.SESSION_SECRET;
   if (!secreto) return Response.json({ sesion: null, error: 'sin_secreto' });
-
-  const url = new URL(request.url);
-  if (url.searchParams.get('check') === '1') {
-    const privada = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-    const info = {
-      session_secret: !!process.env.SESSION_SECRET,
-      clave_privada: !!privada,
-      formato_clave: privada.slice(0, 10),
-      url_supabase: (process.env.NEXT_PUBLIC_SUPABASE_URL || '').slice(0, 30),
-    };
-
-    // Probar una consulta real para ver si la clave funciona
-    try {
-      const { data, error, count } = await supa()
-        .from('profesores')
-        .select('id', { count: 'exact', head: true });
-      info.consulta_ok = !error;
-      info.total_profesores = count ?? null;
-      if (error) info.error_consulta = error.message;
-    } catch (e) {
-      info.consulta_ok = false;
-      info.error_consulta = e.message;
-    }
-
-    // Probar la búsqueda concreta de un email
-    const emailPrueba = url.searchParams.get('email');
-    if (emailPrueba) {
-      try {
-        const { data, error } = await supa()
-          .from('profesores')
-          .select('id, estado')
-          .ilike('email', emailPrueba.trim().toLowerCase());
-        info.encontrados = (data || []).length;
-        if (error) info.error_email = error.message;
-      } catch (e) {
-        info.error_email = e.message;
-      }
-    }
-
-    return Response.json(info);
-  }
 
   const cookies = request.headers.get('cookie') || '';
   const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
