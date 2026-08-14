@@ -50,50 +50,7 @@ async function sesionDe(request) {
 
 export async function POST(request) {
   try {
-    const { accion, email, password, passwordActual, passwordNueva } = await request.json();
-
-    // ─── ¿Este email ya tiene contraseña? (para el registro) ───
-    // Solo devuelve sí/no, nunca el hash.
-    if (accion === 'estado_registro') {
-      const em = (email || '').trim().toLowerCase();
-      if (!em) return Response.json({ error: 'Falta el email' }, { status: 400 });
-
-      const { data } = await supa()
-        .from('profesores')
-        .select('id, password_hash, solicitud_acceso, estado')
-        .ilike('email', em);
-
-      const p = (data || [])[0];
-      if (!p) return Response.json({ existe: false });
-
-      return Response.json({
-        existe: true,
-        id: p.id,
-        tienePassword: !!(p.password_hash && p.password_hash.length > 0),
-        solicitudEnviada: !!p.solicitud_acceso,
-        estado: p.estado,
-      });
-    }
-
-    // ─── Establecer contraseña al registrarse ───
-    if (accion === 'registrar_password') {
-      const em = (email || '').trim().toLowerCase();
-      if (!em || !password || password.length < 6) {
-        return Response.json({ error: 'Datos incompletos' }, { status: 400 });
-      }
-
-      const { data } = await supa()
-        .from('profesores').select('id, password_hash').ilike('email', em);
-      const p = (data || [])[0];
-
-      // No se permite sobrescribir la contraseña de una cuenta que ya la tiene
-      if (p?.password_hash?.length > 0) {
-        return Response.json({ error: 'ya_tiene_password' }, { status: 409 });
-      }
-
-      const { completo } = await calcularHash(password);
-      return Response.json({ ok: true, hash: completo, id: p?.id || null });
-    }
+    const { accion, passwordActual, passwordNueva } = await request.json();
 
     // ─── Cambiar la contraseña estando dentro ───
     if (accion === 'cambiar_password') {
