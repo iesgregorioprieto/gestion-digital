@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { hoyLocal } from '@/lib/fechas';
+import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 
@@ -38,7 +38,9 @@ export default function PanelProfesor() {
   async function cargarApoyosPendientes(id) {
     // Buscar apoyos pendientes de HOY y siguientes días (hasta 7)
     const hoy = hoyLocal();
-    const dentroDe7 = new Date(Date.now() + 7*24*60*60*1000).toISOString().split('T')[0];
+    // sumarDias trabaja en hora local. Con toISOString, de madrugada
+    // en España el cálculo se iba un día y dejaba fuera avisos.
+    const dentroDe7 = sumarDias(hoy, 7);
     const { data } = await getSupabase()
       .from('apoyos_asignados')
       .select('*')
