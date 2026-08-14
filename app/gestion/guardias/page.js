@@ -100,6 +100,9 @@ export default function GestionGuardias() {
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
+  // Evita que un doble clic cree dos apoyos para el mismo profesor y hora.
+  // En una mañana de guardias, con prisa, el doble clic pasa.
+  const [procesandoApoyo, setProcesandoApoyo] = useState(false);
   const [modalActivar, setModalActivar] = useState(null);
 
   useEffect(() => {
@@ -456,6 +459,9 @@ export default function GestionGuardias() {
 
   // Activar apoyo (jefe pulsa botón cuando no era obligatorio)
   async function activarApoyoUrgente(asig, profesorSeleccionado) {
+    if (procesandoApoyo) return;   // ya hay uno en marcha
+    setProcesandoApoyo(true);
+    try {
     const { data, error } = await getSupabase().from('apoyos_asignados').insert([{
       fecha,
       hora: horaActiva,
@@ -524,6 +530,9 @@ export default function GestionGuardias() {
       } catch(e) { console.error('Push guardia urgente:', e); }
     }
     setModalActivar(null);
+    } finally {
+      setProcesandoApoyo(false);   // se suelta pase lo que pase
+    }
   }
 
   // Cambiar profesor de un apoyo ya registrado
@@ -544,7 +553,10 @@ export default function GestionGuardias() {
 
   // Eliminar apoyo urgente activado por error
   async function desactivarApoyo(apoyoId) {
+    if (procesandoApoyo) return;
     if (!confirm('¿Desactivar este apoyo? El profesor dejará de estar asignado y no contará en la rotación.')) return;
+    setProcesandoApoyo(true);
+    try {
     const apoyo = apoyosAsignados.find(a => a.id === apoyoId);
     const { error } = await getSupabase().from('apoyos_asignados').delete().eq('id', apoyoId);
     if (error) { alert('Error: ' + error.message); return; }
@@ -561,6 +573,9 @@ export default function GestionGuardias() {
         ...prev,
         [apoyo.sector_apoyo]: Math.max(0, (prev[apoyo.sector_apoyo] || 0) - 1)
       }));
+    }
+    } finally {
+      setProcesandoApoyo(false);
     }
   }
 
@@ -948,6 +963,7 @@ export default function GestionGuardias() {
                                       </span>
                                       <button
                                         onClick={() => desactivarApoyo(apoyoParaGuardia.id)}
+                                        disabled={procesandoApoyo}
                                         style={{ padding:'4px 8px', borderRadius:6, border:'none', backgroundColor:'#6b7280', color:'white', fontSize:10, fontWeight:700, cursor:'pointer' }}
                                       >✕</button>
                                     </div>
@@ -981,6 +997,7 @@ export default function GestionGuardias() {
                                                     <div style={{ fontSize:10, color:'#92400e' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios !== 1 ? 's' : ''}</div>
                                                   </div>
                                                   <button
+                                                    disabled={procesandoApoyo}
                                                     onClick={() => activarApoyoUrgente({
                                                       ausencia: aus,
                                                       clase: { grupo: grupoGuardia || 'GUARDIA', aula: null, materia: 'GUARDIA_SUSTITUTO', instrucciones: 'Sustituir en la guardia de ' + sectorSup },
@@ -1100,6 +1117,7 @@ export default function GestionGuardias() {
                                 </span>
                                 <button
                                   onClick={() => desactivarApoyo(apoyoUrgenteExistente.id)}
+                                        disabled={procesandoApoyo}
                                   style={{
                                     padding:'4px 8px', borderRadius:6, border:'none',
                                     backgroundColor:'#6b7280', color:'white', fontSize:10, fontWeight:700, cursor:'pointer',
@@ -1198,6 +1216,7 @@ export default function GestionGuardias() {
                                       </div>
                                       <button
                                         onClick={() => activarApoyoUrgente(asig, p)}
+                                        disabled={procesandoApoyo}
                                         style={{
                                           padding:'4px 10px', borderRadius:6, border:'none',
                                           backgroundColor: i === 0 ? '#059669' : '#f59e0b',
