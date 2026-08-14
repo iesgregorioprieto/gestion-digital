@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -209,7 +209,7 @@ export default function DLD() {
       setCargandoHorario(false);
       return;
     }
-    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', '2025-2026');
+    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', await getCursoActual());
     if (horas?.length > 0) {
       const nuevoHorario = {};
       horas.forEach(h => { 
