@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { getCursoActual } from '@/lib/curso';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
 const rojo = '#991b1b';
@@ -401,7 +402,7 @@ function descargarInforme() {
       .select('hora_id, tipo, grupo, materia')
       .eq('profesor_nombre_pdf', fnResult)
       .eq('dia', diaSem)
-      .eq('curso_academico', '2025-2026');
+      .eq('curso_academico', await getCursoActual());
     
     if (horas?.length > 0) {
       const nuevoHorario = {};
