@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
@@ -100,7 +101,7 @@ export default function CopiaSeguridad() {
       centro: 'IES Gregorio Prieto — Valdepeñas',
       generada: ahora.toISOString(),
       generada_por: nombre,
-      curso: '2025-2026',
+      curso: await getCursoActual(),
       version_formato: 1,
       resumen: Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, v.length])),
       datos,
