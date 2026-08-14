@@ -29,9 +29,18 @@ const FROM = 'secretario@iesgregorioprieto.com';
 const REPLY_TO = 'llcc12@educastillalamancha.es';
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
 
-// Resend se crea dentro de la petición, nunca a nivel de módulo
+// Resend se crea dentro de la petición, nunca a nivel de módulo.
+// Si falta la clave se avisa aquí y con nombre y apellidos: sin esta
+// comprobación, el fallo aparecía más tarde y con un mensaje de la
+// librería que no mencionaba la variable. El síntoma era "los correos
+// no llegan" sin ninguna pista de por qué.
 function getResend() {
-  return new Resend(process.env.RESEND_API_KEY);
+  const clave = process.env.RESEND_API_KEY;
+  if (!clave) {
+    console.error('RESEND_API_KEY no configurada — no se envía ningún correo. Revisa las variables de entorno en Vercel.');
+    throw new Error('resend_sin_configurar');
+  }
+  return new Resend(clave);
 }
 
 // ── Clasificación de los tipos de correo ────────────────────────────
