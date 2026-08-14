@@ -350,9 +350,9 @@ export default function PanelDirector() {
             { emoji: '🏥', label: 'Ausencias', href: '/jefe-estudios/ausencias' },
             { emoji: '📋', label: 'Autorizaciones', href: '/autorizaciones/gestion' },
             { emoji: '📊', label: 'Datos Centro', href: '/jefe-estudios/datos' },
-            { emoji: '🔧', label: 'Mantenimiento', href: '/secretario' },
+            { emoji: '🔧', label: 'Mantenimiento', href: '/gestion/mantenimiento' },
             { emoji: '🛒', label: 'Compras', href: '/compras' },
-            { emoji: '👥', label: 'Profesores', href: '/secretario' },
+            { emoji: '👥', label: 'Profesores', href: '/gestion/personal' },
           ].map(m => (
             <a key={m.label} href={m.href} style={{ backgroundColor: 'white', borderRadius: 10, padding: '12px 10px', textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.07)', textDecoration: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, border: '1.5px solid #e0e0e0', cursor: 'pointer' }}>
               <span style={{ fontSize: 24 }}>{m.emoji}</span>
