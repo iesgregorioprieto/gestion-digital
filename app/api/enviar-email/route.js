@@ -1,6 +1,7 @@
 import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { claveServidor } from '@/lib/claveServidor';
 
 /**
  * ENVÍO DE CORREOS DEL PORTAL
@@ -123,7 +124,7 @@ export async function POST(request) {
       }
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+        claveServidor()
       );
       const { data: filas } = await supabase
         .from('profesores')
