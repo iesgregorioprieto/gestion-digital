@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { getCursoActual } from '@/lib/curso';
 const DEPARTAMENTOS = [
   'TMV/Carrocería','Hostelería','Informática','Electricidad','Comercio',
   'Administración','Industrias Alimentarias','FOL','Física y Química',
@@ -514,7 +515,7 @@ export default function PanelSecretario() {
       const { data: horariosTitular } = await getSupabase()
         .from('horarios_profesores')
         .select('*')
-        .eq('curso_academico', '2025-2026')
+        .eq('curso_academico', await getCursoActual())
         .ilike('profesor_nombre_pdf', `%${titular.apellidos.split(' ')[0]}%`);
 
       if (horariosTitular && horariosTitular.length > 0) {
