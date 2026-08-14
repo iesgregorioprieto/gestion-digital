@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { firmarSesion, verificarSesion, COOKIE, HORAS } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { comprobarLimite, registrarFallo, limpiarLimite, ipDe } from '@/lib/ratelimit';
 
 /**
  * Sesiones del portal.
@@ -85,6 +86,17 @@ export async function POST(request) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
       }
 
+      // Freno a la fuerza bruta: 10 fallos por IP en 15 minutos.
+      // Si el limitador falla, deja pasar (ver lib/ratelimit.js).
+      const ip = ipDe(request);
+      const limite = await comprobarLimite('login', ip);
+      if (!limite.permitido) {
+        return Response.json({
+          error: 'demasiados_intentos',
+          mensaje: `Demasiados intentos fallidos. Vuelve a intentarlo dentro de ${Math.ceil(limite.segundos / 60)} minutos.`,
+        }, { status: 429 });
+      }
+
       // Pausa artificial: hace que la fuerza bruta sea impráctica.
       // Cada intento de login tarda mínimo 500ms en el servidor,
       // lo que limita a ~2 intentos por segundo por conexión.
@@ -106,11 +118,14 @@ export async function POST(request) {
 
       const correcta = await comprobarPassword(password, p.password_hash);
       if (!correcta) {
+        await registrarFallo('login', ip);
         // Pausa mínima de 500ms en fallo para frenar fuerza bruta
         const transcurrido = Date.now() - inicio;
         if (transcurrido < 500) await new Promise(r => setTimeout(r, 500 - transcurrido));
         return Response.json({ error: 'credenciales' }, { status: 401 });
       }
+
+      await limpiarLimite('login', ip);   // login correcto: contador a cero
 
       const rolNorm = (p.rol_gestion || '').toString().trim().toLowerCase();
       const rol = MAPA_ROLES[rolNorm] || '';
