@@ -531,8 +531,17 @@ export default function PanelDirector() {
   }
 
   async function aprobar(id) {
+    // Solo se resuelve si sigue pendiente. Si el director y jefatura la
+    // tocan casi a la vez, el segundo no debe pisar al primero ni mandar
+    // un correo que contradiga al anterior.
     setProcesando(true);
-    await getSupabase().from('dld').update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario }).eq('id', id);
+    const { data: tocadas } = await getSupabase().from('dld')
+      .update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario })
+      .eq('id', id).eq('estado', 'pendiente').select('id');
+    if (!tocadas || tocadas.length === 0) {
+      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+      setProcesando(false); cargarSolicitudes(); return;
+    }
     mostrarMensaje('✅ Solicitud aprobada', 'ok');
 
     // Email al profesor aprobado
@@ -629,8 +638,17 @@ export default function PanelDirector() {
 
   async function rechazar(id) {
     if (!motivoRechazo.trim()) { alert('Debes indicar el motivo del rechazo'); return; }
+    // Solo se resuelve si sigue pendiente. Si el director y jefatura la
+    // tocan casi a la vez, el segundo no debe pisar al primero ni mandar
+    // un correo que contradiga al anterior.
     setProcesando(true);
-    await getSupabase().from('dld').update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo }).eq('id', id);
+    const { data: tocadas } = await getSupabase().from('dld')
+      .update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo })
+      .eq('id', id).eq('estado', 'pendiente').select('id');
+    if (!tocadas || tocadas.length === 0) {
+      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+      setProcesando(false); cargarSolicitudes(); return;
+    }
     mostrarMensaje('❌ Solicitud rechazada', 'error');
     // Email al profesor
     try {
