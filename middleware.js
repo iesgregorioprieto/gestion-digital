@@ -15,7 +15,6 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 const SOLO_DIRECTIVOS = [
   '/gestion',
   '/director',
-  '/secretario',
   '/jefe-estudios',
   '/demo',
 ];
@@ -59,7 +58,6 @@ export const config = {
   matcher: [
     '/gestion/:path*',
     '/director/:path*',
-    '/secretario/:path*',
     '/jefe-estudios/:path*',
     '/demo/:path*',
   ],
