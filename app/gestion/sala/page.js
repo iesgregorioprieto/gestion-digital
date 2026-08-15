@@ -49,23 +49,27 @@ export default function GestionSala() {
     setEnviando(true);
 
     if (editando) {
-      const { error } = await getSupabase().from('avisos_sala').update({
-        titulo: titulo.trim(),
-        mensaje: texto.trim(),
-        urgente,
-      }).eq('id', editando);
-      if (!error) mostrarMsg('✅ Aviso actualizado', 'ok');
-      else mostrarMsg('❌ Error: ' + error.message, 'error');
-    } else {
-      const { error } = await getSupabase().from('avisos_sala').insert({
-        titulo: titulo.trim(),
-        mensaje: texto.trim(),
-        urgente,
-        autor: nombre,
-        activo: true,
+      const _re = await fetch('/api/centro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tabla: 'avisos_sala', accion: 'actualizar', id: editando,
+          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente },
+        }),
       });
-      if (!error) mostrarMsg('✅ Aviso publicado', 'ok');
-      else mostrarMsg('❌ Error: ' + error.message, 'error');
+      if (_re.ok) mostrarMsg('✅ Aviso actualizado', 'ok');
+      else mostrarMsg('❌ No se pudo actualizar el aviso', 'error');
+    } else {
+      const _rp = await fetch('/api/centro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tabla: 'avisos_sala', accion: 'crear',
+          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, autor: nombre, activo: true },
+        }),
+      });
+      if (_rp.ok) mostrarMsg('✅ Aviso publicado', 'ok');
+      else mostrarMsg('❌ No se pudo publicar el aviso', 'error');
     }
 
     setTitulo(''); setTexto(''); setUrgente(false); setEditando(null);
@@ -74,13 +78,21 @@ export default function GestionSala() {
   }
 
   async function toggleActivo(id, activo) {
-    await getSupabase().from('avisos_sala').update({ activo: !activo }).eq('id', id);
+    await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'avisos_sala', accion: 'actualizar', id, datos: { activo: !activo } }),
+    });
     cargarAvisos();
   }
 
   async function eliminarAviso(id) {
     if (!confirm('¿Eliminar este aviso definitivamente?')) return;
-    await getSupabase().from('avisos_sala').delete().eq('id', id);
+    await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'avisos_sala', accion: 'borrar', id }),
+    });
     mostrarMsg('🗑️ Aviso eliminado', 'ok');
     cargarAvisos();
   }
