@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from "../../lib/supabase";
 
@@ -31,6 +31,7 @@ export default function SalaProfesores() {
   const [dlds, setDlds] = useState([]);
   const [apoyos, setApoyos] = useState([]);
   const [avisos, setAvisos] = useState([]);
+  const cajaAvisosRef = useRef(null);
   const [reloj, setReloj] = useState(new Date());
   const [ultimaCarga, setUltimaCarga] = useState(null);
 
@@ -84,7 +85,27 @@ export default function SalaProfesores() {
     cargarDatos();
     const intervalo = setInterval(cargarDatos, 120000); // cada 2 min
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
-    return () => { clearInterval(intervalo); clearInterval(relojInterval); };
+
+    // Los avisos bajan y suben solos: la pantalla está en la pared y
+    // nadie va a mover la barra de desplazamiento. Si caben todos, no
+    // se mueve nada.
+    let bajando = true;
+    let esperando = 0;
+    const vaiven = setInterval(() => {
+      const caja = cajaAvisosRef.current;
+      if (!caja) return;
+      const sobra = caja.scrollHeight - caja.clientHeight;
+      if (sobra <= 4) return;              // caben todos: quieto
+
+      if (esperando > 0) { esperando--; return; }
+
+      caja.scrollTop += bajando ? 1 : -1;
+
+      // Pausa de 4 segundos al llegar arriba y abajo, para dar tiempo a leer
+      if (bajando && caja.scrollTop >= sobra - 1) { bajando = false; esperando = 80; }
+      if (!bajando && caja.scrollTop <= 1)        { bajando = true;  esperando = 80; }
+    }, 50);
+    return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); };
   }, [cargarDatos]);
 
   // Profesores ausentes con sus horas
@@ -290,7 +311,7 @@ export default function SalaProfesores() {
           </div>
 
           {/* AVISOS */}
-          <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
+          <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>📢 Avisos del equipo directivo</h2>
             {avisos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
