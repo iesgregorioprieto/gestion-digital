@@ -100,6 +100,7 @@ export default function GestionGuardias() {
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
+  const [errorCarga, setErrorCarga] = useState('');
   // Evita que un doble clic cree dos apoyos para el mismo profesor y hora.
   // En una mañana de guardias, con prisa, el doble clic pasa.
   const [procesandoApoyo, setProcesandoApoyo] = useState(false);
@@ -188,6 +189,7 @@ export default function GestionGuardias() {
 
   async function cargarDia(f) {
     setCargandoDia(true);
+    setErrorCarga('');
     setAusDia([]);
     setApAsig([]);
 
@@ -197,8 +199,15 @@ export default function GestionGuardias() {
     let aus = [], dlds = [];
     try {
       const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas,fecha_fin').lte('fecha_inicio', f).or(`fecha_fin.gte.${f},fecha_fin.is.null`);
+      if (r.error) throw r.error;
       aus = r.data || [];
-    } catch(e) {}
+    } catch(e) {
+      // Antes este fallo se tragaba en silencio y el cuadrante salía
+      // vacío como si no faltara nadie, que es lo peor que puede pasar
+      // en una mañana de guardias.
+      console.error('No se pudieron cargar las ausencias del día:', e);
+      setErrorCarga('No se han podido cargar las ausencias: ' + (e.message || e));
+    }
     try {
       const r = await getSupabase().from('dld')
         .select('profesor_id,profesor_nombre,horas,grupos_afectados,guardias_horario')
@@ -806,12 +815,25 @@ export default function GestionGuardias() {
             🏖️ Fin de semana
           </div>
         ) : ausentesEstaHora().length === 0 ? (
+          errorCarga ? (
+            <div style={{
+              backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:12,
+              padding:20, textAlign:'center', color:'#991b1b', fontSize:14,
+            }}>
+              ⚠️ <strong>No se han podido cargar las ausencias.</strong>
+              <div style={{ fontSize:12, marginTop:6, color:'#7f1d1d' }}>{errorCarga}</div>
+              <div style={{ fontSize:12, marginTop:6 }}>
+                El cuadrante puede estar incompleto. Avisa antes de repartir guardias.
+              </div>
+            </div>
+          ) : (
           <div style={{
             backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
             padding:20, textAlign:'center', color:verde, fontSize:14,
           }}>
             ✅ No hay profesores ausentes esta hora
           </div>
+          )
         ) : (
           <>
             {(() => {
