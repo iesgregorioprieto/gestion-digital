@@ -339,14 +339,24 @@ export default function Ausencias() {
       horas: horasConUrl,
     };
 
+    // La escritura pasa por el servidor: el profesor_id sale de la cookie
+    // firmada, no de sessionStorage. Antes se podía cambiar desde la
+    // consola y notificar una ausencia a nombre de otra persona.
     let error;
     if (editandoId) {
-      // Actualizar ausencia existente (no tocamos estado ni justificación)
-      const res = await getSupabase().from('ausencias').update(datosAusencia).eq('id', editandoId);
-      error = res.error;
+      const r = await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'editar', id: editandoId, datos: datosAusencia }),
+      });
+      error = r.ok ? null : await r.json();
     } else {
-      const res = await getSupabase().from('ausencias').insert([datosAusencia]);
-      error = res.error;
+      const r = await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'crear', datos: datosAusencia }),
+      });
+      error = r.ok ? null : await r.json();
     }
 
     setEnviando(false);
