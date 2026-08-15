@@ -389,14 +389,12 @@ export default function DLD() {
       .toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
     if (!confirm(`¿Retirar tu solicitud del ${fecha}?\n\nEl día volverá a quedar libre para ti y para tus compañeros.`)) return;
 
-    const { error } = await getSupabase()
-      .from('dld')
-      .update({
-        estado: 'cancelada',
-        resuelto_at: new Date().toISOString(),
-        resuelto_por: 'Retirada por el solicitante',
-      })
-      .eq('id', s.id);
+    const _rt = await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'retirar', id: s.id }),
+    });
+    const error = _rt.ok ? null : await _rt.json();
 
     if (error) { setError('No se pudo retirar la solicitud: ' + error.message); return; }
     setError('');
@@ -423,7 +421,7 @@ export default function DLD() {
         {esDirectivo && (
           <div style={{ padding: '10px 14px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', color: '#1e3a5f', fontSize: 13, marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
             <span>ℹ️ Aquí solicitas <strong>tus propios</strong> DLD. Para gestionar los del centro entra en el panel de dirección.</span>
-            <button onClick={() => window.location.href = '/director'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            <button onClick={() => window.location.href = '/gestion/dld'} style={{ padding: '6px 12px', borderRadius: 8, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}>
               👔 Ir a Gestión
             </button>
           </div>
