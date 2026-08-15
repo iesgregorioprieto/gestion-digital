@@ -102,8 +102,8 @@ export default function SalaProfesores() {
       caja.scrollTop += bajando ? 1 : -1;
 
       // Pausa de 4 segundos al llegar arriba y abajo, para dar tiempo a leer
-      if (bajando && caja.scrollTop >= sobra - 1) { bajando = false; esperando = 80; }
-      if (!bajando && caja.scrollTop <= 1)        { bajando = true;  esperando = 80; }
+      if (bajando && caja.scrollTop >= sobra - 1) { bajando = false; esperando = 100; }  // 5 s de pausa
+      if (!bajando && caja.scrollTop <= 1)        { bajando = true;  esperando = 100; }
     }, 50);
     return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); };
   }, [cargarDatos]);
@@ -170,7 +170,7 @@ export default function SalaProfesores() {
           <p style={{ margin: '4px 0 0', fontSize: 16, opacity: 0.8, textTransform: 'capitalize' }}>{formatFecha()}</p>
         </div>
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 48, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 82, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
             {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
           <div style={{ fontSize: 13, opacity: 0.6 }}>
@@ -179,7 +179,7 @@ export default function SalaProfesores() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, padding: 20, height: 'calc(100vh - 110px)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.35fr', gap: 20, padding: 20, height: 'calc(100vh - 150px)' }}>
 
         {/* COLUMNA IZQUIERDA: AUSENCIAS */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
@@ -312,24 +312,24 @@ export default function SalaProfesores() {
 
           {/* AVISOS */}
           <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 16, fontWeight: 700 }}>📢 Avisos del equipo directivo</h2>
+            <h2 style={{ margin: '0 0 14px', fontSize: 22, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
             {avisos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
                 <div style={{ fontSize: 30 }}>📌</div>
                 <p style={{ fontSize: 13 }}>Sin avisos</p>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 {avisos.map((a, i) => (
                   <div key={a.id || i} style={{
-                    backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
-                    borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
+                    backgroundColor: '#0f172a', borderRadius: 10, padding: '16px 18px',
+                    borderLeft: `6px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
                   }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>
+                    <div style={{ fontWeight: 800, fontSize: 20, marginBottom: 6 }}>
                       {a.urgente ? '🔴' : '📌'} {a.titulo}
                     </div>
-                    <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.4 }}>{a.mensaje}</div>
-                    <div style={{ fontSize: 10, opacity: 0.4, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
+                    <div style={{ fontSize: 17, opacity: 0.9, lineHeight: 1.45 }}>{a.mensaje}</div>
+                    <div style={{ fontSize: 12, opacity: 0.45, marginTop: 8 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
                   </div>
                 ))}
               </div>
