@@ -513,9 +513,11 @@ export default function PanelSecretario() {
       await getSupabase().from('profesores').update({ titular_id: titular.id }).eq('id', sustituto.id);
 
       // 2. Borrar horario previo del sustituto (por si tenía algo)
-      await getSupabase().from('horarios_profesores')
-        .delete()
-        .eq('profesor_id', sustituto.id);
+      await fetch('/api/horarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustituto.id }),
+      });
 
       // 3. Copiar horario del titular al sustituto
       // Primero obtenemos el nombre PDF del titular para buscar su horario
@@ -541,7 +543,11 @@ export default function PanelSecretario() {
 
         // Insertar en batches de 50
         for (let i = 0; i < copias.length; i += 50) {
-          await getSupabase().from('horarios_profesores').insert(copias.slice(i, i + 50));
+          await fetch('/api/horarios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accion: 'insertar', lote: copias.slice(i, i + 50) }),
+          });
         }
       }
 
@@ -571,7 +577,11 @@ export default function PanelSecretario() {
 
     try {
       // 1. Borrar horario del sustituto
-      await getSupabase().from('horarios_profesores').delete().eq('profesor_id', sustitutoId);
+      await fetch('/api/horarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustitutoId }),
+      });
 
       // 2. Desactivar sustituto y limpiar relación
       await getSupabase().from('profesores').update({ estado: 'inactivo', titular_id: null }).eq('id', sustitutoId);
