@@ -460,15 +460,16 @@ export default function Guardias() {
 
   // Cambiar el profesor asignado a un apoyo (solo directivos)
   async function cambiarApoyo(apoyoId, nuevoProfesor) {
-    const { error } = await getSupabase()
-      .from('apoyos_asignados')
-      .update({
-        profesor_id: nuevoProfesor.profesorId,
-        sector_apoyo: nuevoProfesor.sectorOriginal,
-        asignado_por: profesorId,
-      })
-      .eq('id', apoyoId);
-    if (error) { alert('Error: ' + error.message); return; }
+    const _rc = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'cambiar',
+        id: apoyoId,
+        datos: { profesor_id: nuevoProfesor.profesorId, sector_apoyo: nuevoProfesor.sectorOriginal },
+      }),
+    });
+    if (!_rc.ok) { alert('No se pudo cambiar el apoyo'); return; }
     const r = await getSupabase()
       .from('apoyos_asignados')
       .select('*')
