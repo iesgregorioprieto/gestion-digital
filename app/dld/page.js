@@ -340,24 +340,33 @@ export default function DLD() {
       const gruposAfectados = construirGruposAfectados(horarioConUrls);
       const guardiasHorario = construirGuardiasHorario(horarioConUrls);
       const horasCuadrante = construirHorasCuadrante(horarioConUrls);
-      const { error: err } = await getSupabase().from('dld').insert([{
-        profesor_id: profesorId,
-        profesor_nombre: profesorNombre,
-        tipo_contrato: tipoContrato,
-        tipo_dld: form.tipo_dld,
-        fecha_solicitada: form.fecha_solicitada,
-        grupos_afectados: gruposAfectados,
-        guardias_horario: guardiasHorario,
-        horas: horasCuadrante,
-        tipo_guardia: form.tipo_guardia,
-        causa_sobrevenida: form.causa_sobrevenida,
-        descripcion_causa: form.descripcion_causa.trim(),
-        estado: 'pendiente',
-        antiguedad_centro: antiguedadCentro,
-        antiguedad_cuerpo: antiguedadCuerpo,
-        departamento: departamento,
-      }]);
-      if (err) { setError('Error al enviar: ' + err.message); }
+      // El servidor pone el profesor_id de la cookie y el estado
+      // pendiente: antes salían de sessionStorage y se podía pedir un
+      // día a nombre de otra persona.
+      const _r = await fetch('/api/dld', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'solicitar',
+          datos: {
+            profesor_nombre: profesorNombre,
+            tipo_contrato: tipoContrato,
+            tipo_dld: form.tipo_dld,
+            fecha_solicitada: form.fecha_solicitada,
+            grupos_afectados: gruposAfectados,
+            guardias_horario: guardiasHorario,
+            horas: horasCuadrante,
+            tipo_guardia: form.tipo_guardia,
+            causa_sobrevenida: form.causa_sobrevenida,
+            descripcion_causa: form.descripcion_causa.trim(),
+            antiguedad_centro: antiguedadCentro,
+            antiguedad_cuerpo: antiguedadCuerpo,
+            departamento: departamento,
+          },
+        }),
+      });
+      const err = _r.ok ? null : await _r.json();
+      if (err) { setError('Error al enviar: ' + (err.error || 'inténtalo de nuevo')); }
       else {
         setVista('historial');
         setForm({ tipo_dld: '', fecha_solicitada: '', tipo_guardia: '', causa_sobrevenida: false, descripcion_causa: '' });
