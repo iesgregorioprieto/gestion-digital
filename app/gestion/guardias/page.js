@@ -432,7 +432,12 @@ export default function GestionGuardias() {
     }
 
     if (apoyosNuevos.length > 0) {
-      const { data } = await getSupabase().from('apoyos_asignados').insert(apoyosNuevos).select();
+      const _rm = await fetch('/api/apoyos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'asignar', lista: apoyosNuevos }),
+      });
+      const data = _rm.ok ? (await _rm.json()).apoyos : null;
       if (data) {
         setApAsig(prev => [...prev, ...data]);
         // Push a cada profesor asignado
@@ -462,22 +467,29 @@ export default function GestionGuardias() {
     if (procesandoApoyo) return;   // ya hay uno en marcha
     setProcesandoApoyo(true);
     try {
-    const { data, error } = await getSupabase().from('apoyos_asignados').insert([{
-      fecha,
-      hora: horaActiva,
-      sector_apoyo: profesorSeleccionado.sectorOriginal,
-      sector_destino: asig.ausencia.sector.toUpperCase(),
-      profesor_id: profesorSeleccionado.profesorId,
-      grupo: asig.clase.grupo || null,
-      aula: asig.clase.aula || null,
-      materia: asig.clase.materia || null,
-      tarea: asig.clase.instrucciones || null,
-      asignado_por: usuario?.id,
-      estado: 'confirmado', // Se marca como confirmado directamente para contar
-      tipo_apoyo: 'urgente',
-      curso_academico: await getCursoActual(),
-    }]).select();
-    if (error) { alert('Error: ' + error.message); return; }
+    const _ru = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'asignar',
+        datos: {
+          fecha,
+          hora: horaActiva,
+          sector_apoyo: profesorSeleccionado.sectorOriginal,
+          sector_destino: asig.ausencia.sector.toUpperCase(),
+          profesor_id: profesorSeleccionado.profesorId,
+          grupo: asig.clase.grupo || null,
+          aula: asig.clase.aula || null,
+          materia: asig.clase.materia || null,
+          tarea: asig.clase.instrucciones || null,
+          estado: 'confirmado', // urgente: cuenta desde el momento de asignarlo
+          tipo_apoyo: 'urgente',
+          curso_academico: await getCursoActual(),
+        },
+      }),
+    });
+    const data = _ru.ok ? (await _ru.json()).apoyos : null;
+    if (!_ru.ok) { alert('No se pudo asignar el apoyo'); return; }
     if (data) {
       setApAsig(prev => [...prev, ...data]);
       // Actualizar contadores locales para que la lista se reordene
@@ -537,15 +549,16 @@ export default function GestionGuardias() {
 
   // Cambiar profesor de un apoyo ya registrado
   async function cambiarProfesor(apoyoId, nuevoProfesor) {
-    const { error } = await getSupabase()
-      .from('apoyos_asignados')
-      .update({
-        profesor_id: nuevoProfesor.profesorId,
-        sector_apoyo: nuevoProfesor.sectorOriginal,
-        asignado_por: usuario?.id,
-      })
-      .eq('id', apoyoId);
-    if (error) { alert('Error: ' + error.message); return; }
+    const _rc = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'cambiar',
+        id: apoyoId,
+        datos: { profesor_id: nuevoProfesor.profesorId, sector_apoyo: nuevoProfesor.sectorOriginal },
+      }),
+    });
+    if (!_rc.ok) { alert('No se pudo cambiar el apoyo'); return; }
     const r = await getSupabase().from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico',await getCursoActual());
     setApAsig(r.data || []);
     setModalActivar(null);
@@ -558,8 +571,12 @@ export default function GestionGuardias() {
     setProcesandoApoyo(true);
     try {
     const apoyo = apoyosAsignados.find(a => a.id === apoyoId);
-    const { error } = await getSupabase().from('apoyos_asignados').delete().eq('id', apoyoId);
-    if (error) { alert('Error: ' + error.message); return; }
+    const _rd = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'desactivar', id: apoyoId }),
+    });
+    if (!_rd.ok) { alert('No se pudo desactivar el apoyo'); return; }
     setApAsig(prev => prev.filter(a => a.id !== apoyoId));
     // Decrementar contador local si era confirmado o realizado
     if (apoyo && (apoyo.estado === 'confirmado' || apoyo.estado === 'realizado')) {
