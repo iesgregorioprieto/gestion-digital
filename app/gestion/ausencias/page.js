@@ -157,6 +157,149 @@ export default function GestionAusencias() {
     return `/api/documento?url=${encodeURIComponent(url)}`;
   }
 
+  /**
+   * INFORME MENSUAL PARA LA DELEGACIÓN
+   *
+   * Antes esto salía como CSV pelado, que no es presentable ante la
+   * Administración. Ahora genera un documento con la cabecera del
+   * centro, un resumen por profesor, el detalle de cada ausencia y pie
+   * de firma para el secretario y el director.
+   *
+   * Se abre en una ventana con botón de imprimir: desde ahí se guarda
+   * como PDF con "Guardar como PDF" del propio navegador.
+   */
+  function generarInformeMensual(lista) {
+    if (!lista || lista.length === 0) {
+      mostrarMensaje('No hay ausencias en el periodo seleccionado', 'error');
+      return;
+    }
+
+    const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+
+    // Periodo: el de los filtros, o el que abarquen las ausencias
+    const fechas = lista.map(a => a.fecha_inicio).filter(Boolean).sort();
+    const desde = filtroFechaDesde || fechas[0];
+    const hasta = filtroFechaHasta || (lista.map(a => a.fecha_fin || a.fecha_inicio).filter(Boolean).sort().pop());
+
+    // ── Resumen por profesor ──
+    const porProfesor = {};
+    lista.forEach(a => {
+      const n = a.profesor_nombre || '—';
+      if (!porProfesor[n]) porProfesor[n] = { total: 0, dpto: a.departamento || '—', sinJust: 0 };
+      porProfesor[n].total++;
+      if (a.estado !== 'justificada') porProfesor[n].sinJust++;
+    });
+    const profesores = Object.entries(porProfesor).sort((a, b) => b[1].total - a[1].total);
+
+    const filasResumen = profesores.map(([nombre, d]) => `
+      <tr>
+        <td><strong>${nombre}</strong></td>
+        <td>${d.dpto}</td>
+        <td class="c">${d.total}</td>
+        <td class="c">${d.sinJust > 0 ? `<span class="rojo">${d.sinJust}</span>` : '—'}</td>
+      </tr>`).join('');
+
+    const filasDetalle = lista
+      .slice()
+      .sort((a, b) => (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''))
+      .map(a => {
+        const horas = Array.isArray(a.horas) ? a.horas : [];
+        const clases = horas.filter(h => h.tipo === 'clase').length;
+        const est = a.estado === 'justificada' ? '<span class="ok">Justificada</span>'
+                  : a.estado === 'sin_justificar' ? '<span class="rojo">Sin justificar</span>'
+                  : '<span class="pend">Pendiente</span>';
+        return `
+      <tr>
+        <td>${fmt(a.fecha_inicio)}${a.fecha_fin && a.fecha_fin !== a.fecha_inicio ? ' a ' + fmt(a.fecha_fin) : ''}</td>
+        <td>${a.profesor_nombre || '—'}</td>
+        <td>${a.departamento || '—'}</td>
+        <td>${a.tipo === 'prevista' ? 'Prevista' : 'Imprevista'}</td>
+        <td>${(a.motivo || '—').replace(/</g, '&lt;')}</td>
+        <td class="c">${clases || '—'}</td>
+        <td class="c">${est}</td>
+      </tr>`;
+      }).join('');
+
+    const hoy = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
+<title>Informe de ausencias — IES Gregorio Prieto</title>
+<style>
+  @page { size: A4; margin: 18mm 14mm; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 30px; color: #1a1a1a; font-size: 12px; }
+  .header { background: #1e3a5f; color: white; padding: 22px 26px; border-radius: 8px; margin-bottom: 22px; }
+  .header h1 { margin: 0 0 6px; font-size: 19px; }
+  .header p { margin: 2px 0; opacity: .9; font-size: 12px; }
+  h2 { font-size: 13px; color: #1e3a5f; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #dbeafe; }
+  .totales { display: flex; gap: 12px; margin-bottom: 8px; }
+  .caja { flex: 1; border: 1px solid #dbeafe; border-radius: 8px; padding: 14px; text-align: center; background: #f8fbff; }
+  .caja .n { font-size: 26px; font-weight: 800; color: #1e3a5f; }
+  .caja .t { font-size: 11px; color: #555; margin-top: 2px; }
+  table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  th { background: #1e3a5f; color: white; text-align: left; padding: 8px 9px; font-size: 11px; }
+  td { padding: 7px 9px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .c { text-align: center; }
+  .ok { color: #065f46; font-weight: 700; }
+  .rojo { color: #991b1b; font-weight: 700; }
+  .pend { color: #92400e; font-weight: 700; }
+  .firmas { display: flex; gap: 60px; margin-top: 55px; page-break-inside: avoid; }
+  .firma { flex: 1; text-align: center; }
+  .linea { border-top: 1px solid #1a1a1a; margin-bottom: 6px; padding-top: 0; }
+  .firma .cargo { font-weight: 700; font-size: 12px; }
+  .firma .nota { font-size: 10px; color: #777; margin-top: 2px; }
+  footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #e0e0e0; font-size: 10px; color: #888; text-align: center; }
+  .btn { position: fixed; top: 16px; right: 16px; background: #1e3a5f; color: white; border: none; padding: 12px 22px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  @media print { .btn { display: none; } body { padding: 0; } }
+</style></head><body>
+
+<button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+
+<div class="header">
+  <h1>Informe de ausencias del profesorado</h1>
+  <p><strong>IES Gregorio Prieto</strong> · Valdepeñas (Ciudad Real)</p>
+  <p>Periodo: ${fmt(desde)} — ${fmt(hasta)}</p>
+</div>
+
+<div class="totales">
+  <div class="caja"><div class="n">${lista.length}</div><div class="t">Ausencias registradas</div></div>
+  <div class="caja"><div class="n">${profesores.length}</div><div class="t">Profesores afectados</div></div>
+</div>
+
+<h2>RESUMEN POR PROFESOR</h2>
+<table>
+  <thead><tr><th>Profesor/a</th><th>Departamento</th><th class="c">Ausencias</th><th class="c">Sin justificar</th></tr></thead>
+  <tbody>${filasResumen}</tbody>
+</table>
+
+<h2>DETALLE DE AUSENCIAS</h2>
+<table>
+  <thead><tr><th>Fecha</th><th>Profesor/a</th><th>Departamento</th><th>Tipo</th><th>Motivo</th><th class="c">Horas clase</th><th class="c">Estado</th></tr></thead>
+  <tbody>${filasDetalle}</tbody>
+</table>
+
+<div class="firmas">
+  <div class="firma">
+    <div class="linea"></div>
+    <div class="cargo">EL SECRETARIO</div>
+    <div class="nota">Fdo.: ______________________</div>
+  </div>
+  <div class="firma">
+    <div class="linea"></div>
+    <div class="cargo">V.º B.º EL DIRECTOR</div>
+    <div class="nota">Fdo.: ______________________</div>
+  </div>
+</div>
+
+<footer>Documento generado el ${hoy} desde el portal de gestión del IES Gregorio Prieto · Contiene datos de carácter personal (RGPD)</footer>
+</body></html>`;
+
+    const v = window.open('', '_blank');
+    if (!v) { mostrarMensaje('El navegador ha bloqueado la ventana emergente. Permítelas para este sitio.', 'error'); return; }
+    v.document.write(html);
+    v.document.close();
+  }
+
   function generarInformeAusencia(a) {
     const horas = Array.isArray(a.horas) ? a.horas : [];
     const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
@@ -669,7 +812,13 @@ ${a.observaciones_directivo ? `
                     a.download = `ausencias_${new Date().toLocaleDateString('es-ES').replace(/\//g,'-')}.csv`;
                     a.click();
                     URL.revokeObjectURL(url);
-                  }} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>📊 Descargar informe</button>
+                  }} style={{ width: '100%', padding: '7px 10px', borderRadius: 7, border: '1.5px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#475569', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>📊 Descargar en Excel</button>
+
+                  {/* Informe oficial para la Delegación */}
+                  <button
+                    onClick={() => generarInformeMensual(ausenciasFiltradas)}
+                    style={{ width: '100%', marginTop: 6, padding: '10px', borderRadius: 7, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}
+                  >🖨️ Informe para la Delegación (PDF)</button>
                 </div>
               </div>
               <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}><strong style={{ color: azul }}>{ausenciasFiltradas.length}</strong> ausencias</div>
