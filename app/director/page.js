@@ -484,7 +484,11 @@ export default function PanelDirector() {
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                               {grupos.map((g, i) => {
                                 const nombre = typeof g === 'object' ? g.grupo : g;
-                                const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
+                                const horas = typeof g === 'object' && Array.isArray(g.horas)
+                              // Cada hora es un objeto {hora, instrucciones...}:
+                              // con join() salía "[object Object]".
+                              ? g.horas.map(h => (typeof h === 'object' ? h.hora : h)).filter(Boolean).join(', ')
+                              : '';
                                 return <span key={i} style={{ fontSize: 11, backgroundColor: '#e8f0fe', color: '#1a56db', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{nombre}{horas ? ` (${horas})` : ''}</span>;
                               })}
                             </div>
@@ -542,7 +546,11 @@ export default function PanelDirector() {
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
                           {grupos.map((g, i) => {
                             const nombre = typeof g === 'object' ? g.grupo : g;
-                            const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
+                            const horas = typeof g === 'object' && Array.isArray(g.horas)
+                              // Cada hora es un objeto {hora, instrucciones...}:
+                              // con join() salía "[object Object]".
+                              ? g.horas.map(h => (typeof h === 'object' ? h.hora : h)).filter(Boolean).join(', ')
+                              : '';
                             return <span key={i} style={{ fontSize: 12, backgroundColor: '#e8f0fe', color: '#1a56db', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{nombre}{horas ? ` (${horas})` : ''}</span>;
                           })}
                         </div>
