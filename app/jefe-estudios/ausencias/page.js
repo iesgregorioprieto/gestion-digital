@@ -109,7 +109,11 @@ export default function GestionAusencias() {
   // ===== GESTIÓN JUSTIFICACIÓN =====
   async function aprobarJustificacion(id) {
     setProcesando(true);
-    await getSupabase().from('ausencias').update({ estado: 'justificada', comentario_secretario: comentarioJust || null }).eq('id', id);
+    await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'resolver', id, datos: { estado: 'justificada', comentario_secretario: comentarioJust || null } }),
+    });
     setProcesando(false);
     setAusenciaGestion(null);
     setComentarioJust('');
@@ -120,7 +124,11 @@ export default function GestionAusencias() {
   async function rechazarJustificacion(id) {
     if (!comentarioJust.trim()) { mostrarMensaje('Indica el motivo del rechazo.', 'error'); return; }
     setProcesando(true);
-    await getSupabase().from('ausencias').update({ estado: 'sin_justificar', comentario_secretario: comentarioJust }).eq('id', id);
+    await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'resolver', id, datos: { estado: 'sin_justificar', comentario_secretario: comentarioJust } }),
+    });
     setProcesando(false);
     setAusenciaGestion(null);
     setComentarioJust('');
@@ -130,7 +138,11 @@ export default function GestionAusencias() {
 
   async function eliminarAusencia(id) {
     if (!confirm('¿Eliminar esta ausencia? No se puede deshacer.')) return;
-    await getSupabase().from('ausencias').delete().eq('id', id);
+    await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar', id }),
+    });
     mostrarMensaje('🗑️ Ausencia eliminada', 'ok');
     cargarTodo();
   }
@@ -168,17 +180,24 @@ export default function GestionAusencias() {
       instrucciones: val.instrucciones?.trim() || null,
     }));
 
-    const { error } = await getSupabase().from('ausencias').insert([{
-      profesor_id: prof.id,
-      profesor_nombre: `${prof.nombre} ${prof.apellidos}`,
-      departamento: prof.departamento || '',
-      fecha_inicio: fechaInicio,
-      fecha_fin: fechaFin || fechaInicio,
-      motivo: motivo.trim(),
-      tipo,
-      horas: horasConDatos,
-      estado: 'pendiente',
-    }]);
+    const _resp = await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'crear',
+        datos: {
+          profesor_id: prof.id,
+          profesor_nombre: `${prof.nombre} ${prof.apellidos}`,
+          departamento: prof.departamento || '',
+          fecha_inicio: fechaInicio,
+          fecha_fin: fechaFin || fechaInicio,
+          motivo: motivo.trim(),
+          tipo,
+          horas: horasConDatos,
+        },
+      }),
+    });
+    const error = _resp.ok ? null : await _resp.json();
 
     setEnviando(false);
     if (error) { mostrarMensaje('Error: ' + error.message, 'error'); return; }
