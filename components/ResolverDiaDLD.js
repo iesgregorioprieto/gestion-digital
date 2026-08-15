@@ -154,27 +154,29 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
 
         const esAprobar = (a === 'aprobar');
 
-        const { error } = await getSupabase().from('dld').update(
-          esAprobar
-            ? {
-                estado: 'aprobada',
-                resuelto_at: new Date().toISOString(),
-                resuelto_por: nombreUsuario,
-                motivo_rechazo: null,
-              }
-            : {
-                estado: 'rechazada',
-                resuelto_at: new Date().toISOString(),
-                resuelto_por: nombreUsuario,
-                motivo_rechazo: s.motivo || 'Resuelto por criterios de prelación.',
-              }
-        ).eq('id', s.id);
+        const _rm = await fetch('/api/dld', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'resolver',
+            id: s.id,
+            datos: esAprobar
+              ? { estado: 'aprobada', resuelto_por: nombreUsuario, motivo_rechazo: null }
+              : { estado: 'rechazada', resuelto_por: nombreUsuario, motivo_rechazo: s.motivo || 'Resuelto por criterios de prelación.' },
+          }),
+        });
+        const error = _rm.ok ? null : await _rm.json();
 
         // Si la base de datos falla NO se avisa al profesor: mandarle un correo
         // diciendo "aprobado" cuando en el sistema sigue pendiente sería peor
         // que no mandar nada.
         if (error) {
-          fallos.push({ nombre: s.profesor_nombre, motivo: error.message });
+          fallos.push({
+            nombre: s.profesor_nombre,
+            motivo: error.error === 'ya_resuelta'
+              ? 'Ya la había resuelto otra persona'
+              : (error.error || 'Error al guardar'),
+          });
           continue;
         }
 
