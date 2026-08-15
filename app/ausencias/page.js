@@ -452,13 +452,21 @@ export default function Ausencias() {
     const fueraDePlazo = ausenciaJustificando.estado === 'sin_justificar'
       || diasParaJustificar(ausenciaJustificando.created_at) <= 0;
 
-    await getSupabase().from('ausencias').update({
-      estado: 'justificada',
-      justificacion_texto: justTexto.trim() || null,
-      justificacion_url: url,
-      justificada_at: new Date().toISOString(),
-      justificada_fuera_plazo: fueraDePlazo,
-    }).eq('id', ausenciaJustificando.id);
+    await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'editar',
+        id: ausenciaJustificando.id,
+        datos: {
+          estado: 'justificada',
+          justificacion_texto: justTexto.trim() || null,
+          justificacion_url: url,
+          justificada_at: new Date().toISOString(),
+          justificada_fuera_plazo: fueraDePlazo,
+        },
+      }),
+    });
 
     setEnviandoJust(false);
     setAusenciaJustificando(null);
