@@ -140,6 +140,45 @@ export default function GestionSala() {
           🖥️ Abrir pantalla de la sala de profesores (para TV)
         </a>
 
+        {/* CÓMO PONERLA EN LA TELE */}
+        <div style={{
+          backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 12,
+          padding: '14px 18px', marginBottom: 16, fontSize: 13, color: '#1e3a5f', lineHeight: 1.6,
+        }}>
+          <div style={{ fontWeight: 800, marginBottom: 8, fontSize: 14 }}>
+            📺 Cómo dejarla puesta en la televisión de la sala
+          </div>
+
+          <div style={{ marginBottom: 8 }}>
+            <strong>1.</strong> En el ordenador conectado a la tele, abre <strong>Chrome</strong> y entra en{' '}
+            <span style={{ backgroundColor: 'white', padding: '1px 6px', borderRadius: 4, border: '1px solid #cbd5e1' }}>
+              app.iesgregorioprieto.com/sala
+            </span>
+          </div>
+
+          <div style={{ marginBottom: 8 }}>
+            <strong>2.</strong> Pulsa <strong>F11</strong> para ponerla a pantalla completa y que desaparezca
+            la barra del navegador. Con F11 otra vez se sale.
+          </div>
+
+          <div style={{ marginBottom: 8 }}>
+            <strong>3.</strong> Ya está. <strong>No hay que tocar nada más</strong>: la pantalla se actualiza
+            sola cada 2 minutos y los avisos van subiendo y bajando para que se lean todos.
+          </div>
+
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #bfdbfe', color: '#475569' }}>
+            <strong>Los avisos que publiques aquí</strong> salen en esa pantalla al momento.
+            Los marcados como urgentes aparecen destacados en rojo.
+            Cuando un aviso deje de tener sentido, desactívalo o bórralo: si se acumulan muchos,
+            los de abajo tardan más en verse.
+          </div>
+
+          <div style={{ marginTop: 8, color: '#475569' }}>
+            <strong>Si la tele se apaga o se reinicia</strong>, basta con repetir los pasos 1 y 2.
+            Conviene dejar la página guardada en favoritos del navegador de ese ordenador.
+          </div>
+        </div>
+
         {/* FORMULARIO */}
         <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
           <h3 style={{ margin: '0 0 12px', fontSize: 15, color: azul }}>
