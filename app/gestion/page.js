@@ -86,6 +86,16 @@ export default function PanelGestion() {
       color: '#be185d',
     },
     {
+      id: 'sala',
+      emoji: '🖥️',
+      titulo: 'Panel Sala de Profesores',
+      descripcion: 'Gestiona avisos y accede a la pantalla de la sala',
+      href: '/gestion/sala',
+      bg: '#f0f9ff',
+      border: '#bae6fd',
+      color: '#0369a1',
+    },
+    {
       id: 'personal',
       emoji: '👥',
       titulo: 'Personal (Profesorado)',
@@ -135,16 +145,6 @@ export default function PanelGestion() {
       border: avisoCopia ? '#fbbf24' : '#e2e8f0',
       color: avisoCopia ? '#b45309' : '#475569',
       aviso: avisoCopia,
-    },
-    {
-      id: 'sala',
-      emoji: '🖥️',
-      titulo: 'Panel Sala de Profesores',
-      descripcion: 'Gestiona avisos y accede a la pantalla de la sala',
-      href: '/gestion/sala',
-      bg: '#f0f9ff',
-      border: '#bae6fd',
-      color: '#0369a1',
     },
   ];
 
