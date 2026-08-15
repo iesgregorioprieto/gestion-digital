@@ -110,12 +110,14 @@ export default function CambioCurso() {
 
       let dldArchivados = 0;
       if (dldCurso && dldCurso.length > 0) {
-        const { error: errDld } = await getSupabase()
-          .from('dld')
-          .update({ curso_archivado: cursoActual?.curso || 'anterior' })
-          .is('curso_archivado', null);
+        const _ra = await fetch('/api/dld', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'archivar_curso', datos: { curso: cursoActual?.curso || 'anterior' } }),
+        });
+        const errDld = _ra.ok ? null : await _ra.json();
 
-        if (errDld) fallos.push(`Archivo de DLD — ${errDld.message}`);
+        if (errDld) fallos.push(`Archivo de DLD — ${errDld.error || 'error al archivar'}`);
         else dldArchivados = dldCurso.length;
       }
 
