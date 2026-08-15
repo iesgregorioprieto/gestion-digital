@@ -114,18 +114,25 @@ export default function Mantenimiento() {
         foto_url = urlData.publicUrl;
       }
 
-      const { error: err } = await getSupabase().from('mantenimiento').insert([{
-        profesor_id: profesorId,
-        profesor_nombre: profesorNombre,
-        estancia: form.estancia,
-        ubicacion_exacta: form.ubicacion_exacta.trim(),
-        descripcion: form.descripcion.trim(),
-        foto_url,
-        estado: 'pendiente',
-      }]);
+      const _r = await fetch('/api/solicitudes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tabla: 'mantenimiento',
+          accion: 'crear',
+          datos: {
+            profesor_nombre: profesorNombre,
+            estancia: form.estancia,
+            ubicacion_exacta: form.ubicacion_exacta.trim(),
+            descripcion: form.descripcion.trim(),
+            foto_url,
+          },
+        }),
+      });
+      const err = _r.ok ? null : await _r.json();
 
       if (err) {
-        setError('Error al enviar: ' + err.message);
+        setError('Error al enviar: ' + (err.error || 'inténtalo de nuevo'));
       } else {
         setEnviado(true);
       }
