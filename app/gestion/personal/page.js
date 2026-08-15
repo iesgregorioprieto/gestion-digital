@@ -444,14 +444,21 @@ export default function PanelSecretario() {
 
     // Si es baja TEMPORAL (sin sustituto): crear ausencia abierta para que aparezca en el cuadrante de guardias
     if (tipoBajaSeleccionada === 'temporal') {
-      await getSupabase().from('ausencias').insert({
-        profesor_id: profesor.id,
-        profesor_nombre: `${profesor.nombre} ${profesor.apellidos}`,
-        fecha_inicio: fechaBaja,
-        fecha_fin: null,
-        horas: null,
-        categoria: 'baja_sin_sustituto',
-        estado: 'aprobada',
+      await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'crear',
+          datos: {
+            profesor_id: profesor.id,
+            profesor_nombre: `${profesor.nombre} ${profesor.apellidos}`,
+            fecha_inicio: fechaBaja,
+            fecha_fin: null,
+            horas: null,
+            categoria: 'baja_sin_sustituto',
+            estado: 'aprobada',
+          },
+        }),
       });
     }
 
