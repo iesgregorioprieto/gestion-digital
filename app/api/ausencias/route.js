@@ -92,9 +92,13 @@ export async function POST(request) {
       const dueño = (esDirectivo(sesion) && datos.profesor_id) ? datos.profesor_id : sesion.id;
 
       const fila = { ...datos, profesor_id: dueño };
-      delete fila.estado;            // el estado lo decide el servidor
-      delete fila.observaciones_directivo;
-      if (!esDirectivo(sesion)) delete fila.comentario_secretario;
+      // El profesorado no decide el estado de su propia ausencia; el
+      // equipo directivo sí (por ejemplo, una baja ya aprobada).
+      if (!esDirectivo(sesion)) {
+        delete fila.estado;
+        delete fila.observaciones_directivo;
+        delete fila.comentario_secretario;
+      }
 
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
@@ -105,7 +109,16 @@ export async function POST(request) {
     if (accion === 'editar') {
       if (!id || !datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
 
-      let consulta = supa().from('ausencias').update(datos).eq('id', id);
+      const cambios = { ...datos };
+      // Los comentarios internos son cosa de dirección, aunque la
+      // ausencia sea propia.
+      if (!esDirectivo(sesion)) {
+        delete cambios.observaciones_directivo;
+        delete cambios.comentario_secretario;
+        delete cambios.profesor_id;      // no se puede cambiar de dueño
+      }
+
+      let consulta = supa().from('ausencias').update(cambios).eq('id', id);
       // Quien no es directivo solo puede tocar las suyas
       if (!esDirectivo(sesion)) consulta = consulta.eq('profesor_id', sesion.id);
 
