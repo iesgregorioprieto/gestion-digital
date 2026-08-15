@@ -535,11 +535,16 @@ export default function PanelDirector() {
     // tocan casi a la vez, el segundo no debe pisar al primero ni mandar
     // un correo que contradiga al anterior.
     setProcesando(true);
-    const { data: tocadas } = await getSupabase().from('dld')
-      .update({ estado: 'aprobada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario })
-      .eq('id', id).eq('estado', 'pendiente').select('id');
-    if (!tocadas || tocadas.length === 0) {
-      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+    const _ra = await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'resolver', id, datos: { estado: 'aprobada', resuelto_por: nombreUsuario } }),
+    });
+    if (!_ra.ok) {
+      const e = await _ra.json();
+      mostrarMensaje(e.error === 'ya_resuelta'
+        ? '⚠️ Esta solicitud ya la ha resuelto otra persona'
+        : '❌ No se pudo aprobar', 'error');
       setProcesando(false); cargarSolicitudes(); return;
     }
     mostrarMensaje('✅ Solicitud aprobada', 'ok');
@@ -588,12 +593,18 @@ export default function PanelDirector() {
           const desplazado = ordenados[0];
           if (desplazado) {
             // Revocar DLD del desplazado
-            await getSupabase().from('dld').update({
-              estado: 'rechazada',
-              resuelto_at: new Date().toISOString(),
-              resuelto_por: nombreUsuario,
-              motivo_rechazo: `Desplazado por ${prof.nombre} ${prof.apellidos} (mayor prelación según normativa).`
-            }).eq('id', desplazado.id);
+            await fetch('/api/dld', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                accion: 'revocar',
+                id: desplazado.id,
+                datos: {
+                  resuelto_por: nombreUsuario,
+                  motivo_rechazo: `Desplazado por ${prof.nombre} ${prof.apellidos} (mayor prelación según normativa).`,
+                },
+              }),
+            });
 
             // Email al desplazado
             const dRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', desplazado.profesor_id);
@@ -642,11 +653,16 @@ export default function PanelDirector() {
     // tocan casi a la vez, el segundo no debe pisar al primero ni mandar
     // un correo que contradiga al anterior.
     setProcesando(true);
-    const { data: tocadas } = await getSupabase().from('dld')
-      .update({ estado: 'rechazada', resuelto_at: new Date().toISOString(), resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo })
-      .eq('id', id).eq('estado', 'pendiente').select('id');
-    if (!tocadas || tocadas.length === 0) {
-      mostrarMensaje('⚠️ Esta solicitud ya la ha resuelto otra persona', 'error');
+    const _rr = await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'resolver', id, datos: { estado: 'rechazada', resuelto_por: nombreUsuario, motivo_rechazo: motivoRechazo } }),
+    });
+    if (!_rr.ok) {
+      const e = await _rr.json();
+      mostrarMensaje(e.error === 'ya_resuelta'
+        ? '⚠️ Esta solicitud ya la ha resuelto otra persona'
+        : '❌ No se pudo rechazar', 'error');
       setProcesando(false); cargarSolicitudes(); return;
     }
     mostrarMensaje('❌ Solicitud rechazada', 'error');
@@ -699,12 +715,15 @@ export default function PanelDirector() {
       `\n\nConforme al punto 11 de la Resolución de 18/07/2024, la Dirección puede revocar ` +
       `un permiso concedido cuando concurran necesidades sobrevenidas del servicio.`;
 
-    await getSupabase().from('dld').update({
-      estado: 'rechazada',
-      motivo_rechazo: motivoCompleto,
-      resuelto_at: new Date().toISOString(),
-      resuelto_por: nombreUsuario,
-    }).eq('id', s.id);
+    await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'revocar',
+        id: s.id,
+        datos: { resuelto_por: nombreUsuario, motivo_rechazo: motivoCompleto },
+      }),
+    });
 
     mostrarMensaje('⚠️ Permiso revocado', 'ok');
 
@@ -750,7 +769,11 @@ export default function PanelDirector() {
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
     setProcesando(true);
-    await getSupabase().from('dld').delete().eq('id', id);
+    await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar', id }),
+    });
     mostrarMensaje('🗑️ Solicitud eliminada', 'ok');
     setSolicitudAbierta(null);
     setDiaSeleccionado(null);
