@@ -14,7 +14,6 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 // Rutas que solo puede ver el equipo directivo
 const SOLO_DIRECTIVOS = [
   '/gestion',
-  '/director',
   '/jefe-estudios',
   '/demo',
 ];
