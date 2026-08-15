@@ -126,7 +126,11 @@ export default function ConfigCurso() {
     try {
       // Solo un curso puede estar activo
       if (form.activo) {
-        await getSupabase().from('config_centro').update({ activo: false }).neq('curso', form.curso);
+        await fetch('/api/centro', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tabla: 'config_centro', accion: 'desactivar_otros', filtro: { curso: form.curso } }),
+        });
       }
 
       // El curso escolar es siempre del 1 de septiembre al 30 de junio.
@@ -142,10 +146,16 @@ export default function ConfigCurso() {
         activo: form.activo,
       };
 
-      const { error } = await getSupabase()
-        .from('config_centro').upsert(datos, { onConflict: 'curso' });
+      const _rg = await fetch('/api/centro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabla: 'config_centro', accion: 'guardar', datos, onConflict: 'curso' }),
+      });
 
-      if (error) { aviso('Error: ' + error.message, 'error'); setGuardando(false); return; }
+      if (!_rg.ok) {
+        const e = await _rg.json();
+        aviso('Error: ' + (e.error || 'no se pudo guardar'), 'error'); setGuardando(false); return;
+      }
 
       // Sin esto, el resto de la app seguiría usando los datos antiguos
       // hasta que caducase la caché (1 minuto).
@@ -166,14 +176,24 @@ export default function ConfigCurso() {
     if (!nuevoPeriodo.fecha_fin)      return aviso('Indica la fecha de fin', 'error');
     if (nuevoPeriodo.fecha_fin < nuevoPeriodo.fecha_inicio) return aviso('La fecha de fin es anterior a la de inicio', 'error');
 
-    const { error } = await getSupabase().from('periodos_no_lectivos').insert({
-      curso: form.curso,
-      nombre: nuevoPeriodo.nombre.trim(),
-      fecha_inicio: nuevoPeriodo.fecha_inicio,
-      fecha_fin: nuevoPeriodo.fecha_fin,
+    const _rp = await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tabla: 'periodos_no_lectivos', accion: 'crear',
+        datos: {
+          curso: form.curso,
+          nombre: nuevoPeriodo.nombre.trim(),
+          fecha_inicio: nuevoPeriodo.fecha_inicio,
+          fecha_fin: nuevoPeriodo.fecha_fin,
+        },
+      }),
     });
 
-    if (error) { aviso('Error: ' + error.message, 'error'); return; }
+    if (!_rp.ok) {
+      const e = await _rp.json();
+      aviso('Error: ' + (e.error || 'no se pudo añadir'), 'error'); return;
+    }
     limpiarCacheCurso();
     setNuevoPeriodo({ nombre: '', fecha_inicio: '', fecha_fin: '' });
     cargarPeriodos(form.curso);
@@ -182,7 +202,11 @@ export default function ConfigCurso() {
 
   async function borrarPeriodo(id) {
     if (!confirm('¿Eliminar este periodo?')) return;
-    await getSupabase().from('periodos_no_lectivos').delete().eq('id', id);
+    await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'periodos_no_lectivos', accion: 'borrar', id }),
+    });
     limpiarCacheCurso();
     cargarPeriodos(form.curso);
   }
