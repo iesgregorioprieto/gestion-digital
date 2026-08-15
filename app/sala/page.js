@@ -186,19 +186,19 @@ export default function SalaProfesores() {
 
           {/* RESUMEN */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 56, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
-              <div style={{ fontSize: 18, opacity: 0.75 }}>Ausentes hoy</div>
+            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #334155' }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>Ausentes hoy</div>
             </div>
             <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 56, fontWeight: 800, color: '#ef4444' }}>{totalAusentesAhora}</div>
-              <div style={{ fontSize: 18, opacity: 0.75 }}>Ausentes ahora ({HORAS.find(h => h.id === horaAct)?.label || ''})</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: '#ef4444' }}>{totalAusentesAhora}</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>Ausentes ahora ({HORAS.find(h => h.id === horaAct)?.label || ''})</div>
             </div>
           </div>
 
           {/* LISTA DE AUSENTES */}
           <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 24, fontWeight: 800 }}>🏥 Profesores ausentes hoy</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes hoy</h2>
             {totalAusentesHoy === 0 ? (
               <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
                 <div style={{ fontSize: 40 }}>✅</div>
@@ -242,40 +242,9 @@ export default function SalaProfesores() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* COLUMNA DERECHA: GUARDIAS + AVISOS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
-
-          {/* FRANJA HORARIA ACTUAL */}
-          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 24, fontWeight: 800 }}>🕐 Franjas del día</h2>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {HORAS.map(h => (
-                <div key={h.id} style={{
-                  flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: 8,
-                  backgroundColor: h.id === horaAct ? '#1d4ed8' : '#0f172a',
-                  border: h.id === horaAct ? '2px solid #3b82f6' : '1px solid #334155',
-                  transition: 'all 0.3s',
-                }}>
-                  <div style={{ fontSize: 22, fontWeight: 800 }}>{h.label}</div>
-                  <div style={{ fontSize: 14, opacity: 0.6 }}>{h.rango}</div>
-                  {(() => {
-                    const ausEstaHora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(h.id)).length;
-                    return ausEstaHora > 0 ? (
-                      <div style={{ marginTop: 5, fontSize: 17, fontWeight: 700, color: '#ef4444' }}>⚠️ {ausEstaHora}</div>
-                    ) : (
-                      <div style={{ marginTop: 5, fontSize: 17, color: '#22c55e' }}>✓</div>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* GUARDIAS ASIGNADAS */}
           <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', flex: apoyos.length > 0 ? 1 : 'none', overflow: 'auto' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 24, fontWeight: 800 }}>🛡️ Guardias asignadas hoy</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Guardias asignadas hoy</h2>
             {apoyos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 16, opacity: 0.5, fontSize: 13 }}>
                 Sin guardias asignadas
@@ -308,6 +277,36 @@ export default function SalaProfesores() {
                 })}
               </div>
             )}
+          </div>
+
+        </div>
+
+        {/* COLUMNA DERECHA: GUARDIAS + AVISOS */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
+
+          {/* FRANJA HORARIA ACTUAL */}
+          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {HORAS.map(h => (
+                <div key={h.id} style={{
+                  flex: 1, textAlign: 'center', padding: '5px 3px', borderRadius: 7,
+                  backgroundColor: h.id === horaAct ? '#1d4ed8' : '#0f172a',
+                  border: h.id === horaAct ? '2px solid #3b82f6' : '1px solid #334155',
+                  transition: 'all 0.3s',
+                }}>
+                  <div style={{ fontSize: 15, fontWeight: 800 }}>{h.label}</div>
+                  <div style={{ fontSize: 10, opacity: 0.55 }}>{h.rango}</div>
+                  {(() => {
+                    const ausEstaHora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(h.id)).length;
+                    return ausEstaHora > 0 ? (
+                      <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>⚠️ {ausEstaHora}</div>
+                    ) : (
+                      <div style={{ marginTop: 3, fontSize: 12, color: '#22c55e' }}>✓</div>
+                    );
+                  })()}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* AVISOS */}
