@@ -180,8 +180,20 @@ export default function GestionDatos() {
     setProcesando(true);
 
     // Borrar e insertar grupos
-    await getSupabase().from('grupos').delete().eq('curso_academico', cursoNuevo);
-    await getSupabase().from('grupos').insert(gruposNuevos.map(g => ({ ...g, curso_academico: cursoNuevo })));
+    await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'grupos', accion: 'borrar', filtro: { curso_academico: cursoNuevo } }),
+    });
+    await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tabla: 'grupos',
+        accion: 'crear',
+        lista: gruposNuevos.map(g => ({ ...g, curso_academico: cursoNuevo })),
+      }),
+    });
 
     // Borrar e insertar alumnos en lotes
     // La importación la hace el servidor: la tabla de alumnado ya no es
