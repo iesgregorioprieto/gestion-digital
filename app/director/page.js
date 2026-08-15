@@ -37,9 +37,16 @@ function GruposAfectados({ grupos }) {
             <div style={{ fontWeight: 700, fontSize: 14, color: verde, marginBottom: 4 }}>📚 {nombre}</div>
             {horas.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {horas.map(h => (
-                  <span key={h} style={{ fontSize: 11, backgroundColor: verde, color: 'white', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{h}</span>
-                ))}
+                {horas.map((h, j) => {
+                  // Cada hora puede ser un texto o un objeto
+                  // {hora, instrucciones, archivoUrl, archivoNombre}.
+                  // Pintar el objeto tal cual reventaba la página entera.
+                  const etiqueta = typeof h === 'object' && h !== null ? h.hora : h;
+                  if (!etiqueta) return null;
+                  return (
+                    <span key={j} style={{ fontSize: 11, backgroundColor: verde, color: 'white', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>{etiqueta}</span>
+                  );
+                })}
               </div>
             )}
           </div>
