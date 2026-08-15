@@ -544,7 +544,11 @@ export default function DLD() {
                       <div style={{ marginTop: 6 }}>
                         {grupos.map((g, i) => {
                           const nombre = typeof g === 'object' ? g.grupo : g;
-                          const horas = typeof g === 'object' && g.horas ? g.horas.join(', ') : '';
+                          const horas = typeof g === 'object' && Array.isArray(g.horas)
+                              // Cada hora es un objeto {hora, instrucciones...}:
+                              // con join() salía "[object Object]".
+                              ? g.horas.map(h => (typeof h === 'object' ? h.hora : h)).filter(Boolean).join(', ')
+                              : '';
                           return <div key={i} style={{ fontSize: 12, color: '#555', marginTop: 2 }}>📚 {nombre} — {horas}</div>;
                         })}
                       </div>
