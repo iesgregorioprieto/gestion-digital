@@ -125,19 +125,27 @@ export default function Compras() {
       return sum + conIva;
     }, 0);
 
-    const { error } = await getSupabase().from('compras').insert([{
-      profesor_id: profesorId,
-      profesor_nombre: profesorNombre,
-      departamento,
-      tipo,
-      proveedor: proveedor.trim() || null,
-      articulos: articulosConUrl,
-      albaran_url: albaranUrl,
-      total_estimado: total > 0 ? total : null,
-    }]);
+    const _r = await fetch('/api/solicitudes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tabla: 'compras',
+        accion: 'crear',
+        datos: {
+          profesor_nombre: profesorNombre,
+          departamento,
+          tipo,
+          proveedor: proveedor.trim() || null,
+          articulos: articulosConUrl,
+          albaran_url: albaranUrl,
+          total_estimado: total > 0 ? total : null,
+        },
+      }),
+    });
+    const error = _r.ok ? null : await _r.json();
 
     setEnviando(false);
-    if (error) { mostrarMensaje(`Error: ${error.message || JSON.stringify(error)}`, 'error'); return; }
+    if (error) { mostrarMensaje(`Error: ${error.error || 'no se pudo enviar'}`, 'error'); return; }
 
     mostrarMensaje('✅ Solicitud enviada correctamente.', 'ok');
     // Resetear formulario
