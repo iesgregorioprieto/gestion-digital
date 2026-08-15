@@ -100,6 +100,9 @@ export default function SalaProfesores() {
         const caja = c.ref.current;
         if (!caja) continue;
         const sobra = caja.scrollHeight - caja.clientHeight;
+        // Si la caja es muy baja, mejor no moverse: el vaivén en un
+        // espacio de dos líneas marea y no deja leer nada.
+        if (caja.clientHeight < 140) continue;
         // Margen amplio: si solo sobresalen unos pocos píxeles no merece
         // la pena moverse, quedaría un temblor raro en la pantalla.
         if (sobra <= 24) continue;
@@ -208,9 +211,8 @@ export default function SalaProfesores() {
           <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes hoy</h2>
             {totalAusentesHoy === 0 ? (
-              <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
-                <div style={{ fontSize: 40 }}>✅</div>
-                <p>Sin ausencias hoy</p>
+              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                ✅ Sin ausencias hoy
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -254,8 +256,8 @@ export default function SalaProfesores() {
           <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Guardias asignadas hoy</h2>
             {apoyos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 16, opacity: 0.5, fontSize: 13 }}>
-                Sin guardias asignadas
+              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                🛡️ Sin guardias asignadas
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -321,9 +323,8 @@ export default function SalaProfesores() {
           <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
             {avisos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
-                <div style={{ fontSize: 30 }}>📌</div>
-                <p style={{ fontSize: 13 }}>Sin avisos</p>
+              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                📌 Sin avisos
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
