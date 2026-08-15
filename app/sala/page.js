@@ -100,7 +100,9 @@ export default function SalaProfesores() {
         const caja = c.ref.current;
         if (!caja) continue;
         const sobra = caja.scrollHeight - caja.clientHeight;
-        if (sobra <= 4) continue;               // cabe todo: quieto
+        // Margen amplio: si solo sobresalen unos pocos píxeles no merece
+        // la pena moverse, quedaría un temblor raro en la pantalla.
+        if (sobra <= 24) continue;
 
         if (c.espera > 0) { c.espera--; continue; }
 
