@@ -289,7 +289,11 @@ export default function PanelDirector() {
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
     setProcesando(true);
-    await getSupabase().from('dld').delete().eq('id', id);
+    await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar', id }),
+    });
     mostrarMensaje('🗑️ Solicitud eliminada', 'ok');
     setSolicitudAbierta(null);
     setDiaSeleccionado(null);
