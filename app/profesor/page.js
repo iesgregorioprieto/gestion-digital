@@ -53,11 +53,14 @@ export default function PanelProfesor() {
   }
   
   async function confirmarApoyo(apoyoId) {
-    const { error } = await getSupabase()
-      .from('apoyos_asignados')
-      .update({ estado: 'confirmado', confirmado_at: new Date().toISOString() })
-      .eq('id', apoyoId);
-    if (error) { alert('Error confirmando: ' + error.message); return; }
+    // El servidor comprueba que el apoyo es tuyo: antes cualquiera podía
+    // dar por confirmado el de otro cambiando el id en la consola.
+    const r = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'confirmar', id: apoyoId }),
+    });
+    if (!r.ok) { alert('No se pudo confirmar el apoyo'); return; }
     cargarApoyosPendientes(profId);
   }
 
