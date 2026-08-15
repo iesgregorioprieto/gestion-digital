@@ -1315,7 +1315,7 @@ function SeccionMantenimiento() {
 
   async function cambiarEstado(id, estado) {
     setProcesando(true);
-    await getSupabase().from('mantenimiento').update({ estado, comentario_secretario: comentario || null }).eq('id', id);
+    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'resolver', id, datos: { estado, comentario_secretario: comentario || null } }) });
     setProcesando(false);
     setAbierta(null);
     setComentario('');
@@ -1325,7 +1325,7 @@ function SeccionMantenimiento() {
 
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta incidencia? No se puede deshacer.')) return;
-    await getSupabase().from('mantenimiento').delete().eq('id', id);
+    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'borrar', id }) });
     mostrarMensaje('🗑️ Incidencia eliminada', 'ok');
     cargar();
   }
@@ -1501,7 +1501,7 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
 
   async function cambiarEstado(id, estado) {
     setProcesando(true);
-    await getSupabase().from('compras').update({ estado, comentario_secretario: comentario || null }).eq('id', id);
+    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'compras', accion: 'resolver', id, datos: { estado, comentario_secretario: comentario || null } }) });
     setProcesando(false);
     setCompraAbierta(null);
     setComentario('');
@@ -1521,17 +1521,25 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
     }));
     const total = articulosConIva.reduce((sum, a) => sum + (a.precio || 0) * a.cantidad * (1 + (a.iva || 21) / 100), 0);
     const nombreSecretario = typeof window !== 'undefined' ? (sessionStorage.getItem('profesor_nombre') || 'Secretaría') : 'Secretaría';
-    const { error } = await getSupabase().from('compras').insert([{
-      profesor_id: '00000000-0000-0000-0000-000000000000',
-      profesor_nombre: nombreSecretario,
-      departamento: 'Secretaría',
-      tipo: 'ya_comprado',
-      estado: 'aprobada',
-      proveedor: registro.proveedor.trim() || null,
-      articulos: articulosConIva,
-      total_estimado: total > 0 ? total : null,
-      comentario_secretario: 'Compra registrada directamente por secretaría',
-    }]);
+    const _rc = await fetch('/api/solicitudes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tabla: 'compras',
+        accion: 'crear',
+        datos: {
+          profesor_nombre: nombreSecretario,
+          departamento: 'Secretaría',
+          tipo: 'ya_comprado',
+          estado: 'aprobada',
+          proveedor: registro.proveedor.trim() || null,
+          articulos: articulosConIva,
+          total_estimado: total > 0 ? total : null,
+          comentario_secretario: 'Compra registrada directamente por secretaría',
+        },
+      }),
+    });
+    const error = _rc.ok ? null : await _rc.json();
     setEnviandoRegistro(false);
     if (error) { mostrarMensaje('Error: ' + error.message, 'error'); return; }
     mostrarMensaje('✅ Compra registrada correctamente', 'ok');
@@ -1698,7 +1706,7 @@ function SeccionCompras({ compras, setCompras, cargando, setCargando, filtroEsta
               <div style={{ marginTop: 12 }}>
                 <button onClick={async () => {
                   if (!confirm('¿Eliminar esta solicitud? Esta acción no se puede deshacer.')) return;
-                  await getSupabase().from('compras').delete().eq('id', c.id);
+                  await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'compras', accion: 'borrar', id: c.id }) });
                   mostrarMensaje('🗑️ Solicitud eliminada correctamente', 'ok');
                   cargar();
                 }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>
