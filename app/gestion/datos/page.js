@@ -427,7 +427,11 @@ export default function GestionDatos() {
     try {
       // 1. Borrar horarios del curso actual (para reemplazar)
       setProgresoHorarios(p => ({ ...p, mensaje: 'Borrando horarios anteriores...' }));
-      await getSupabase().from('horarios_profesores').delete().eq('curso_academico', cursoNuevo);
+      await fetch('/api/horarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo }),
+      });
       
       // 2. Insertar los nuevos en lotes de 500
       const registros = [];
@@ -454,8 +458,15 @@ export default function GestionDatos() {
           total: registros.length, 
           mensaje: `Guardando registro ${i + 1}-${Math.min(i + TAMANO_LOTE, registros.length)} de ${registros.length}...` 
         });
-        const { error } = await getSupabase().from('horarios_profesores').insert(lote);
-        if (error) throw new Error(`Error en lote ${i}: ${error.message}`);
+        const _r = await fetch('/api/horarios', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'insertar', lote }),
+        });
+        if (!_r.ok) {
+          const e = await _r.json();
+          throw new Error(`Error en lote ${i}: ${e.error || 'no se pudo guardar'}`);
+        }
       }
       
       setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente` });
@@ -639,9 +650,11 @@ export default function GestionDatos() {
     setProcesando(true);
 
     // Borrar guardias existentes del curso
-    await getSupabase().from('horarios_profesores').delete()
-      .eq('curso_academico', cursoNuevo)
-      .eq('tipo', 'guardia');
+    await fetch('/api/horarios', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia' }),
+    });
 
     // Insertar en lotes
     const LOTE = 200;
@@ -656,8 +669,16 @@ export default function GestionDatos() {
         curso_academico: cursoNuevo,
       }));
       setProgresoGuardias({ actual: i + LOTE, total: previewGuardias.length, mensaje: `Guardando ${i}/${previewGuardias.length}...` });
-      const { error } = await getSupabase().from('horarios_profesores').insert(lote);
-      if (error) { setMensaje({ tipo: 'error', texto: `❌ Error: ${error.message}` }); setProcesando(false); return; }
+      const _rg = await fetch('/api/horarios', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'insertar', lote }),
+      });
+      if (!_rg.ok) {
+        const e = await _rg.json();
+        setMensaje({ tipo: 'error', texto: `❌ Error: ${e.error || 'no se pudo guardar'}` });
+        setProcesando(false); return;
+      }
     }
 
     setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente` });
