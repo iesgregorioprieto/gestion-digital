@@ -129,7 +129,10 @@ export default function Actividades() {
     setEnviando(true);
     try {
       const cfg = await getConfigCurso();
-      const { error } = await getSupabase().from('actividades').insert({
+      const _ra = await fetch('/api/centro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabla: 'actividades', accion: 'crear', datos: {
         titulo: form.titulo.trim(),
         tipo: form.tipo,
         departamento: departamento || null,
@@ -144,13 +147,13 @@ export default function Actividades() {
         lugar: form.lugar.trim() || null,
         transporte: form.transporte.trim() || null,
         coste_alumno: form.coste_alumno ? parseFloat(form.coste_alumno) : null,
-        estado: 'pendiente',
-        profesor_id: profId,
         profesor_nombre: nombre,
         curso: cfg?.config?.curso || null,
+      } }),
       });
+      const error = _ra.ok ? null : await _ra.json();
 
-      if (error) { aviso('Error al guardar: ' + error.message, 'error'); setEnviando(false); return; }
+      if (error) { aviso('Error al guardar: ' + (error.error || 'inténtalo de nuevo'), 'error'); setEnviando(false); return; }
 
       aviso('📨 Propuesta enviada a jefatura de estudios');
       setForm({
