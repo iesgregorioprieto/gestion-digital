@@ -166,8 +166,8 @@ export default function SalaProfesores() {
       {/* HEADER */}
       <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 40, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
-          <p style={{ margin: '6px 0 0', fontSize: 23, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</p>
+          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
+          <p style={{ margin: '4px 0 0', fontSize: 18, opacity: 0.8, textTransform: 'capitalize' }}>{formatFecha()}</p>
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 96, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
