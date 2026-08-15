@@ -32,6 +32,8 @@ export default function SalaProfesores() {
   const [apoyos, setApoyos] = useState([]);
   const [avisos, setAvisos] = useState([]);
   const cajaAvisosRef = useRef(null);
+  const cajaAusentesRef = useRef(null);
+  const cajaGuardiasRef = useRef(null);
   const [reloj, setReloj] = useState(new Date());
   const [ultimaCarga, setUltimaCarga] = useState(null);
 
@@ -86,24 +88,28 @@ export default function SalaProfesores() {
     const intervalo = setInterval(cargarDatos, 120000); // cada 2 min
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
 
-    // Los avisos bajan y suben solos: la pantalla está en la pared y
-    // nadie va a mover la barra de desplazamiento. Si caben todos, no
-    // se mueve nada.
-    let bajando = true;
-    let esperando = 0;
+    // Los tres listados bajan y suben solos: la pantalla está en la
+    // pared y nadie va a mover la barra. Si cabe todo, no se mueve nada.
+    const cajas = [
+      { ref: cajaAvisosRef,   bajando: true, espera: 0 },
+      { ref: cajaAusentesRef, bajando: true, espera: 0 },
+      { ref: cajaGuardiasRef, bajando: true, espera: 0 },
+    ];
     const vaiven = setInterval(() => {
-      const caja = cajaAvisosRef.current;
-      if (!caja) return;
-      const sobra = caja.scrollHeight - caja.clientHeight;
-      if (sobra <= 4) return;              // caben todos: quieto
+      for (const c of cajas) {
+        const caja = c.ref.current;
+        if (!caja) continue;
+        const sobra = caja.scrollHeight - caja.clientHeight;
+        if (sobra <= 4) continue;               // cabe todo: quieto
 
-      if (esperando > 0) { esperando--; return; }
+        if (c.espera > 0) { c.espera--; continue; }
 
-      caja.scrollTop += bajando ? 1 : -1;
+        caja.scrollTop += c.bajando ? 1 : -1;
 
-      // Pausa de 4 segundos al llegar arriba y abajo, para dar tiempo a leer
-      if (bajando && caja.scrollTop >= sobra - 1) { bajando = false; esperando = 80; }
-      if (!bajando && caja.scrollTop <= 1)        { bajando = true;  esperando = 80; }
+        // Pausa de 4 segundos arriba y abajo, para dar tiempo a leer
+        if (c.bajando && caja.scrollTop >= sobra - 1) { c.bajando = false; c.espera = 80; }
+        if (!c.bajando && caja.scrollTop <= 1)        { c.bajando = true;  c.espera = 80; }
+      }
     }, 50);
     return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); };
   }, [cargarDatos]);
@@ -197,7 +203,7 @@ export default function SalaProfesores() {
           </div>
 
           {/* LISTA DE AUSENTES */}
-          <div style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'auto' }}>
+          <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes hoy</h2>
             {totalAusentesHoy === 0 ? (
               <div style={{ textAlign: 'center', padding: 30, opacity: 0.5 }}>
@@ -243,7 +249,7 @@ export default function SalaProfesores() {
             )}
           </div>
           {/* GUARDIAS ASIGNADAS */}
-          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', flex: apoyos.length > 0 ? 1 : 'none', overflow: 'auto' }}>
+          <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Guardias asignadas hoy</h2>
             {apoyos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 16, opacity: 0.5, fontSize: 13 }}>
@@ -311,7 +317,7 @@ export default function SalaProfesores() {
 
           {/* AVISOS */}
           <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 24, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
             {avisos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 20, opacity: 0.5 }}>
                 <div style={{ fontSize: 30 }}>📌</div>
@@ -324,11 +330,11 @@ export default function SalaProfesores() {
                     backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
                     borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
                   }}>
-                    <div style={{ fontWeight: 800, fontSize: 22, marginBottom: 6 }}>
+                    <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 5 }}>
                       {a.urgente ? '🔴' : '📌'} {a.titulo}
                     </div>
-                    <div style={{ fontSize: 19, opacity: 0.9, lineHeight: 1.45 }}>{a.mensaje}</div>
-                    <div style={{ fontSize: 14, opacity: 0.45, marginTop: 8 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
+                    <div style={{ fontSize: 15, opacity: 0.88, lineHeight: 1.45 }}>{a.mensaje}</div>
+                    <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
                   </div>
                 ))}
               </div>
