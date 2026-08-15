@@ -220,7 +220,7 @@ export default function GestionAusencias() {
 
       {/* HEADER */}
       <div style={{ backgroundColor: naranja, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => { const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = r === 'director' ? '/director' : '/jefe-estudios'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+        <button onClick={() => { const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = r === 'director' ? '/gestion' : '/jefe-estudios'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 22 }}>🏥</span>
         <div>
           <div style={{ fontWeight: 800, fontSize: 17 }}>Gestión de Ausencias</div>
