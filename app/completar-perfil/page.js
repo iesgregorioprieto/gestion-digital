@@ -75,9 +75,10 @@ export default function CompletarPerfil() {
 
     setEnviando(true);
     try {
-      const { error: err } = await getSupabase()
-        .from('profesores')
-        .update({
+      const _rp = await fetch('/api/profesores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'guardar_mi_ficha', datos: {
           especialidad:      form.especialidad,
           tipo_contrato:     form.tipo_contrato,
           anio_centro:       form.anio_centro ? parseInt(form.anio_centro) : null,
@@ -85,10 +86,11 @@ export default function CompletarPerfil() {
           antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
           antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
           telefono:          form.telefono.trim() || null,
-        })
-        .eq('id', profId);
+        } }),
+      });
+      const err = _rp.ok ? null : await _rp.json();
 
-      if (err) { setError('Error al guardar: ' + err.message); setEnviando(false); return; }
+      if (err) { setError('Error al guardar: ' + (err.error || 'inténtalo de nuevo')); setEnviando(false); return; }
       setListo(true);
     } catch (e) {
       setError('Error inesperado: ' + e.message);
