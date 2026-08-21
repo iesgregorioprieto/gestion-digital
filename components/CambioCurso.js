@@ -37,8 +37,8 @@ export default function CambioCurso() {
       const [{ data: cfgs }, { data: profs }, { count: nDld }, { count: nAus }] = await Promise.all([
         getSupabase().from('config_centro').select('*').eq('activo', true),
         getSupabase().from('profesores').select('id, nombre, apellidos, email, departamento, estado, titular_id').eq('estado', 'activo').order('apellidos'),
-        getSupabase().from('dld').select('id', { count: 'exact', head: true }),
-        getSupabase().from('ausencias').select('id', { count: 'exact', head: true }),
+        fetch('/api/dld').then(r => r.json()).then(j => ({ count: (j.solicitudes || []).length })),
+        fetch('/api/ausencias').then(r => r.json()).then(j => ({ count: (j.ausencias || []).length })),
       ]);
 
       const cfg = (cfgs || [])[0] || null;
@@ -108,10 +108,8 @@ export default function CambioCurso() {
       }
 
       // 2. Archivar las solicitudes de DLD del curso que termina
-      const { data: dldCurso } = await getSupabase()
-        .from('dld')
-        .select('id')
-        .is('curso_archivado', null);
+      const dldCurso = await fetch('/api/dld').then(r => r.json())
+        .then(j => (j.solicitudes || []).filter(d => !d.curso_archivado));
 
       let dldArchivados = 0;
       if (dldCurso && dldCurso.length > 0) {
