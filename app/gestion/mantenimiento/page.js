@@ -83,14 +83,14 @@ export default function PanelSecretario() {
   }
 
   async function aprobar(id) {
-    await getSupabase().from('profesores').update({ estado: 'activo' }).eq('id', id);
+    await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'cambiar_estado', id, datos: { estado: 'activo' } }) });
     mostrarMensaje('✅ Profesor aprobado', 'ok');
     cargarProfesores();
     cerrarModal();
   }
 
   async function rechazar(id) {
-    await getSupabase().from('profesores').update({ estado: 'inactivo' }).eq('id', id);
+    await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'cambiar_estado', id, datos: { estado: 'inactivo' } }) });
     mostrarMensaje('❌ Profesor rechazado', 'error');
     cargarProfesores();
     cerrarModal();
@@ -131,10 +131,12 @@ export default function PanelSecretario() {
       grupo_tutoria: rolesFinales.includes('tutor') ? (formEdicion.grupo_tutoria || null) : null,
       estado: formEdicion.estado,
     };
-    const { error } = await getSupabase()
-      .from('profesores')
-      .update(datosAGuardar)
-      .eq('id', profesorSeleccionado.id);
+    const _rf = await fetch('/api/profesores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'guardar_ficha', id: profesorSeleccionado.id, datos: datosAGuardar }),
+    });
+    const error = _rf.ok ? null : await _rf.json();
     setGuardando(false);
     if (!error) {
       mostrarMensaje('💾 Datos guardados correctamente', 'ok');
