@@ -133,7 +133,8 @@ export default function DLD() {
       setAntiguedadCentro(calcularAntiguedad(prof.anio_centro, prof.antiguedad_centro, cfg));
       setAntiguedadCuerpo(calcularAntiguedad(prof.anio_cuerpo, prof.antiguedad_cuerpo, cfg));
     }
-    const { data: sols } = await getSupabase().from('dld').select('*').eq('profesor_id', id).order('created_at', { ascending: false });
+    const _rm = await fetch('/api/dld?modo=mias');
+    const sols = (await _rm.json()).solicitudes;
     setMisSolicitudes(sols || []);
     setCargando(false);
   }
@@ -291,10 +292,9 @@ export default function DLD() {
     // El límite sale del mismo sitio que usa el equipo directivo (lib/curso),
     // para que profesor y director vean siempre el mismo número.
     try {
-      const { data: aprobados } = await getSupabase().from('dld')
-        .select('id')
-        .eq('fecha_solicitada', form.fecha_solicitada)
-        .eq('estado', 'aprobada');
+      // Cuántos hay ya aprobados ese día, para avisar del cupo
+      const aprobados = await fetch(`/api/dld?modo=cuadrante&fecha=${form.fecha_solicitada}`)
+        .then(r => r.json()).then(j => j.solicitudes || []);
 
       const cfg = await getConfigCurso();
       const { limite, esLectivo } = limiteDLD(form.fecha_solicitada, cfg, form.tipo_dld);
