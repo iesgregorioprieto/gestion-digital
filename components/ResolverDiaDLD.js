@@ -30,11 +30,9 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
   useEffect(() => { cargarFechas(); }, []);
 
   async function cargarFechas() {
-    const { data } = await getSupabase()
-      .from('dld')
-      .select('fecha_solicitada')
-      .eq('estado', 'pendiente')
-      .order('fecha_solicitada');
+    const todas = await fetch('/api/dld').then(r => r.json()).then(j => j.solicitudes || []);
+    const data = todas.filter(d => d.estado === 'pendiente')
+      .sort((a, b) => (a.fecha_solicitada || '').localeCompare(b.fecha_solicitada || ''));
 
     const unicas = [...new Set((data || []).map(d => d.fecha_solicitada))];
     setFechas(unicas);
@@ -49,11 +47,9 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
 
     try {
       // Todas las del día que cuentan (pendientes + aprobadas)
-      const { data } = await getSupabase()
-        .from('dld')
-        .select('*')
-        .eq('fecha_solicitada', f)
-        .in('estado', ['pendiente', 'aprobada']);
+      const todasDld = await fetch('/api/dld').then(r => r.json()).then(j => j.solicitudes || []);
+      const data = todasDld.filter(d =>
+        d.fecha_solicitada === f && ['pendiente', 'aprobada'].includes(d.estado));
 
       const lista = data || [];
       setSol(lista);
@@ -62,11 +58,8 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
 
       // Días ya disfrutados por cada profesor (para el criterio de desempate)
       const ids = [...new Set(lista.map(s => s.profesor_id))];
-      const { data: historico } = await getSupabase()
-        .from('dld')
-        .select('profesor_id, fecha_solicitada')
-        .in('profesor_id', ids)
-        .eq('estado', 'aprobada');
+      const historico = todasDld.filter(d =>
+        ids.includes(d.profesor_id) && d.estado === 'aprobada');
 
       const disfrutados = {};
       for (const h of (historico || [])) {
