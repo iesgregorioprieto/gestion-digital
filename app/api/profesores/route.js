@@ -126,6 +126,64 @@ export async function POST(request) {
       return Response.json({ ok: true, token });
     }
 
+    // ─── Cambiar el estado (activo / inactivo) ───
+    if (accion === 'cambiar_estado') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id || !datos?.estado) return Response.json({ error: 'Faltan datos' }, { status: 400 });
+
+      const cambios = { estado: datos.estado };
+      if ('titular_id' in datos) cambios.titular_id = datos.titular_id;
+      if ('baja_curso' in datos) cambios.baja_curso = datos.baja_curso;
+
+      const { error } = await supa().from('profesores').update(cambios).eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
+    // ─── Bajas y sustituciones ───
+    // Se acepta una lista de campos concreta: nunca lo que llegue del
+    // navegador, para que por aquí no se cuele un cambio de cargo.
+    if (accion === 'baja') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id || !datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
+
+      const permitidos = ['en_baja', 'tipo_baja', 'fecha_baja', 'sustituto_id', 'titular_id'];
+      const cambios = {};
+      for (const k of permitidos) if (k in datos) cambios[k] = datos[k];
+      if (Object.keys(cambios).length === 0) {
+        return Response.json({ error: 'Nada que cambiar' }, { status: 400 });
+      }
+
+      const { error } = await supa().from('profesores').update(cambios).eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
+    // ─── Alta manual de un profesor desde Datos del centro ───
+    if (accion === 'alta_manual') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!datos?.email) return Response.json({ error: 'Falta el correo' }, { status: 400 });
+
+      const { error } = await supa().from('profesores').insert([datos]);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
+    // ─── Marcar inactivos al cambiar de curso ───
+    if (accion === 'cerrar_curso') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!Array.isArray(datos?.ids) || datos.ids.length === 0) {
+        return Response.json({ error: 'Faltan los profesores' }, { status: 400 });
+      }
+
+      const { error } = await supa().from('profesores')
+        .update({ estado: 'inactivo', baja_curso: datos.curso || null })
+        .in('id', datos.ids);
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Borrados: siempre en el servidor y solo equipo directivo ───
     //
     // Antes estos borrados los hacía el navegador directamente contra
