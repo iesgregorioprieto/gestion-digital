@@ -215,14 +215,12 @@ export default function Guardias() {
 
     let aus = [], dlds = [];
     try {
-      const r = await getSupabase().from('ausencias').select('profesor_id,profesor_nombre,horas,fecha_fin').lte('fecha_inicio', f).or(`fecha_fin.gte.${f},fecha_fin.is.null`);
-      aus = r.data || [];
+      const r = await fetch(`/api/ausencias?cuadrante=${f}`).then(x => x.json());
+      aus = r.ausencias || [];
     } catch(e) { console.warn('Error ausencias:', e); }
     try {
-      const r = await getSupabase().from('dld')
-        .select('profesor_id,profesor_nombre,horas,grupos_afectados,guardias_horario')
-        .eq('fecha_solicitada', f).eq('estado','aprobada');
-      dlds = (r.data || []).map(d => {
+      const r = await fetch(`/api/dld?modo=cuadrante&fecha=${f}`).then(x => x.json());
+      dlds = (r.solicitudes || []).map(d => {
         if (Array.isArray(d.horas) && d.horas.length > 0) return d;
         // Compatibilidad con DLD antiguos sin campo 'horas'
         const reconstruidas = [];
