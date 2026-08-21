@@ -761,18 +761,25 @@ export default function GestionDatos() {
     for (const prof of nuevos) {
       procesados++;
       setProgresoProfesores({ actual: procesados, total, mensaje: `Añadiendo ${prof.nombre} ${prof.apellidos}...` });
-      const { error } = await getSupabase().from('profesores').insert({
-        nombre: prof.nombre,
-        apellidos: prof.apellidos,
-        email: prof.email,
-        email_corporativo: prof.email_corporativo,
-        departamento: prof.departamento,
-        autorizado: true,
-        estado: 'pendiente',
-        rol: ['profesor'],
+      const _ra = await fetch('/api/profesores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'alta_manual',
+          datos: {
+            nombre: prof.nombre,
+            apellidos: prof.apellidos,
+            email: prof.email,
+            email_corporativo: prof.email_corporativo,
+            departamento: prof.departamento,
+            autorizado: true,
+            estado: 'pendiente',
+            rol: ['profesor'],
+          },
+        }),
       });
-      if (error) {
-        console.error('Error insertando', prof.email, error.message);
+      if (!_ra.ok) {
+        console.error('Error insertando', prof.email, (await _ra.json()).error);
       } else { contadorNuevos++; }
     }
 
@@ -780,12 +787,13 @@ export default function GestionDatos() {
     for (const prof of bajas) {
       procesados++;
       setProgresoProfesores({ actual: procesados, total, mensaje: `Dando de baja ${prof.nombre} ${prof.apellidos}...` });
-      const { error } = await getSupabase().from('profesores').update({
-        autorizado: false,
-        estado: 'inactivo',
-      }).eq('id', prof.id);
-      if (error) {
-        console.error('Error bajando', prof.email, error.message);
+      const _rb = await fetch('/api/profesores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'guardar_ficha', id: prof.id, datos: { autorizado: false, estado: 'inactivo' } }),
+      });
+      if (!_rb.ok) {
+        console.error('Error bajando', prof.email, (await _rb.json()).error);
       } else { contadorBajas++; }
     }
 
