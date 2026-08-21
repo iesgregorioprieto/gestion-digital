@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { hoyLocal } from '@/lib/fechas';
-import { getSupabase } from "../../lib/supabase";
 
 const HORAS = [
   { id: '1', label: '1ª', rango: '8:30–9:25' },
@@ -43,45 +42,22 @@ export default function SalaProfesores() {
   const horaAct = horaActual();
 
   const cargarDatos = useCallback(async () => {
-    const sb = getSupabase();
-
-    // Ausencias de hoy
+    // Todo llega de una sola llamada al servidor. Esta pantalla no tiene
+    // sesión (la enciende cualquiera por la mañana), así que el servidor
+    // devuelve solo lo del día y sin motivos ni justificaciones.
     try {
-      const { data } = await sb.from('ausencias')
-        .select('profesor_nombre, horas, fecha_inicio, fecha_fin')
-        .lte('fecha_inicio', hoy)
-        .or(`fecha_fin.gte.${hoy},fecha_fin.is.null`);
-      setAusencias(data || []);
-    } catch(e) {}
-
-    // DLD aprobados de hoy
-    try {
-      const { data } = await sb.from('dld')
-        .select('profesor_nombre, horas, grupos_afectados, guardias_horario')
-        .eq('fecha_solicitada', hoy)
-        .eq('estado', 'aprobada');
-      setDlds(data || []);
-    } catch(e) {}
-
-    // Apoyos de guardia asignados hoy
-    try {
-      const { data } = await sb.from('apoyos_asignados')
-        .select('*')
-        .eq('fecha', hoy);
-      setApoyos(data || []);
-    } catch(e) { setApoyos([]); }
-
-    // Avisos del equipo directivo
-    try {
-      const { data } = await sb.from('avisos_sala')
-        .select('*')
-        .eq('activo', true)
-        .order('created_at', { ascending: false });
-      setAvisos(data || []);
-    } catch(e) { setAvisos([]); }
+      const r = await fetch('/api/sala');
+      const d = await r.json();
+      setAusencias(d.ausencias || []);
+      setDlds(d.dlds || []);
+      setApoyos(d.apoyos || []);
+      setAvisos(d.avisos || []);
+    } catch (e) {
+      console.error('No se pudieron cargar los datos de la sala:', e);
+    }
 
     setUltimaCarga(new Date());
-  }, [hoy]);
+  }, []);
 
   useEffect(() => {
     cargarDatos();
