@@ -27,15 +27,11 @@ export default function CalendarioDLD({ profesorId, onElegirFecha }) {
       const desde = ymd(new Date(mes.getFullYear(), mes.getMonth(), 1));
       const hasta = ymd(new Date(mes.getFullYear(), mes.getMonth() + 1, 0));
 
-      const [{ data }, config] = await Promise.all([
-        getSupabase()
-          .from('dld')
-          .select('fecha_solicitada, estado, profesor_id, profesor_nombre, tipo_dld')
-          .gte('fecha_solicitada', desde)
-          .lte('fecha_solicitada', hasta)
-          .in('estado', ['aprobada', 'pendiente']),
+      const [respuesta, config] = await Promise.all([
+        fetch(`/api/dld?modo=calendario&desde=${desde}&hasta=${hasta}`).then(r => r.json()),
         getConfigCurso(),
       ]);
+      const data = respuesta.solicitudes || [];
 
       const mapa = {};
       for (const s of (data || [])) {
