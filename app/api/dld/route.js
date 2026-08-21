@@ -36,6 +36,70 @@ async function sesionDe(request) {
   return verificarSesion(m[1], secreto);
 }
 
+/**
+ * LECTURA DE SOLICITUDES
+ *
+ * Cada modo devuelve solo lo que esa pantalla necesita:
+ *   mias       → las propias, completas
+ *   calendario → sin motivos ni causas: solo fecha, estado y quién,
+ *                que es lo que pinta el semáforo del calendario
+ *   cuadrante  → quién falta ese día y en qué horas, para las guardias
+ *   (sin modo) → todo, y solo para el equipo directivo
+ *
+ * La descripción de la causa y el motivo de rechazo no salen nunca
+ * salvo a quien es dueño de la solicitud o al equipo directivo.
+ */
+export async function GET(request) {
+  const sesion = await sesionDe(request);
+  if (!sesion?.id) return Response.json({ error: 'sin_sesion', solicitudes: [] }, { status: 401 });
+
+  const url = new URL(request.url);
+  const modo = url.searchParams.get('modo');
+
+  // ── Las mías ──
+  if (modo === 'mias') {
+    const { data, error } = await supa().from('dld').select('*')
+      .eq('profesor_id', sesion.id).order('created_at', { ascending: false });
+    if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
+    return Response.json({ solicitudes: data || [] });
+  }
+
+  // ── Calendario de carga: lo ve todo el claustro, sin motivos ──
+  if (modo === 'calendario') {
+    const desde = url.searchParams.get('desde');
+    const hasta = url.searchParams.get('hasta');
+    if (!desde || !hasta) return Response.json({ error: 'Faltan fechas', solicitudes: [] }, { status: 400 });
+
+    const { data, error } = await supa().from('dld')
+      .select('fecha_solicitada, estado, profesor_id, profesor_nombre, tipo_dld')
+      .gte('fecha_solicitada', desde).lte('fecha_solicitada', hasta)
+      .in('estado', ['aprobada', 'pendiente']);
+    if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
+    return Response.json({ solicitudes: data || [] });
+  }
+
+  // ── Cuadrante de guardias: quién falta ese día y qué clases deja ──
+  if (modo === 'cuadrante') {
+    const fecha = url.searchParams.get('fecha');
+    if (!fecha) return Response.json({ error: 'Falta la fecha', solicitudes: [] }, { status: 400 });
+
+    const { data, error } = await supa().from('dld')
+      .select('profesor_id, profesor_nombre, horas, grupos_afectados, guardias_horario')
+      .eq('fecha_solicitada', fecha).eq('estado', 'aprobada');
+    if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
+    return Response.json({ solicitudes: data || [] });
+  }
+
+  // ── Todo: solo equipo directivo ──
+  if (!esDirectivo(sesion)) {
+    return Response.json({ error: 'sin_permisos', solicitudes: [] }, { status: 403 });
+  }
+  const { data, error } = await supa().from('dld').select('*')
+    .order('created_at', { ascending: false });
+  if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
+  return Response.json({ solicitudes: data || [] });
+}
+
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
