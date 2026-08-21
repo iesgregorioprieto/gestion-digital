@@ -241,7 +241,7 @@ export default function PanelDirector() {
   async function cargarSolicitudes() {
     setCargando(true);
     const [{ data }, { data: profData, count }] = await Promise.all([
-      getSupabase().from('dld').select('*').order('created_at', { ascending: false }),
+      fetch('/api/dld').then(r => r.json()).then(j => ({ data: j.solicitudes || [] })),
       getSupabase().from('profesores').select('id, titular_id', { count: 'exact' }).eq('estado', 'activo'),
     ]);
     setTodasSolicitudes(data || []);
@@ -558,7 +558,7 @@ export default function PanelDirector() {
 
     // Email al profesor aprobado
     try {
-      const rows = await getSupabase().from('dld').select('profesor_id,fecha_solicitada,tipo_dld').eq('id', id);
+      const rows = await fetch('/api/dld').then(r => r.json()).then(j => ({ data: (j.solicitudes || []).filter(s => s.id === id) }));
       const sol = (rows.data || [])[0];
       if (sol) {
         const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
@@ -675,7 +675,7 @@ export default function PanelDirector() {
     mostrarMensaje('❌ Solicitud rechazada', 'error');
     // Email al profesor
     try {
-      const rows = await getSupabase().from('dld').select('profesor_id,fecha_solicitada').eq('id', id);
+      const rows = await fetch('/api/dld').then(r => r.json()).then(j => ({ data: (j.solicitudes || []).filter(s => s.id === id) }));
       const sol = (rows.data || [])[0];
       if (sol) {
         const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
