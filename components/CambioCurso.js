@@ -90,13 +90,18 @@ export default function CambioCurso() {
 
       // 1. Los que no continúan → inactivos (nunca se borran)
       for (const p of salen) {
-        const { error } = await getSupabase()
-          .from('profesores')
-          .update({ estado: 'inactivo', baja_curso: cursoActual?.curso || null })
-          .eq('id', p.id);
+        const _rc = await fetch('/api/profesores', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'cambiar_estado', id: p.id,
+            datos: { estado: 'inactivo', baja_curso: cursoActual?.curso || null },
+          }),
+        });
 
-        if (error) {
-          fallos.push(`${p.apellidos}, ${p.nombre} — ${error.message}`);
+        if (!_rc.ok) {
+          const e = await _rc.json();
+          fallos.push(`${p.apellidos}, ${p.nombre} — ${e.error || 'error al dar de baja'}`);
           continue;
         }
         bajas++;
