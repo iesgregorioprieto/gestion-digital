@@ -135,7 +135,7 @@ export default function PanelSecretario() {
   }
 
   async function rechazar(id) {
-    await getSupabase().from('profesores').update({ estado: 'inactivo' }).eq('id', id);
+    await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'cambiar_estado', id, datos: { estado: 'inactivo' } }) });
     mostrarMensaje('❌ Profesor rechazado', 'error');
     cargarProfesores();
     cerrarModal();
@@ -177,10 +177,12 @@ export default function PanelSecretario() {
       grupo_tutoria: rolesFinales.includes('tutor') ? (formEdicion.grupo_tutoria || null) : null,
       estado: formEdicion.estado,
     };
-    const { error } = await getSupabase()
-      .from('profesores')
-      .update(datosAGuardar)
-      .eq('id', profesorSeleccionado.id);
+    const _rf = await fetch('/api/profesores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'guardar_ficha', id: profesorSeleccionado.id, datos: datosAGuardar }),
+    });
+    const error = _rf.ok ? null : await _rf.json();
     setGuardando(false);
     if (!error) {
       mostrarMensaje('💾 Datos guardados correctamente', 'ok');
@@ -436,10 +438,15 @@ export default function PanelSecretario() {
       : `¿Registrar baja CON SUSTITUTO de ${profesor.nombre} ${profesor.apellidos}? A continuación podrás buscar y asignar al sustituto.`;
     if (!confirm(mensajeConfirm)) return;
     setGestionandoBaja(true);
-    const { error } = await getSupabase()
-      .from('profesores')
-      .update({ en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja })
-      .eq('id', profesor.id);
+    const _rb = await fetch('/api/profesores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'baja', id: profesor.id,
+        datos: { en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja },
+      }),
+    });
+    const error = _rb.ok ? null : await _rb.json();
     if (error) { mostrarMensaje('❌ Error registrando baja: ' + error.message, 'error'); setGestionandoBaja(false); return; }
 
     // Si es baja TEMPORAL (sin sustituto): crear ausencia abierta para que aparezca en el cuadrante de guardias
@@ -473,7 +480,7 @@ export default function PanelSecretario() {
     setGestionandoBaja(true);
     try {
       // 1. Cambiar tipo de baja
-      await getSupabase().from('profesores').update({ tipo_baja: 'con_sustituto' }).eq('id', profesor.id);
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: profesor.id, datos: { tipo_baja: 'con_sustituto' } }) });
 
       // 2. Cerrar la ausencia abierta en el cuadrante (ya no hace falta guardia, viene sustituto)
       const ayer = new Date();
@@ -509,8 +516,8 @@ export default function PanelSecretario() {
 
     try {
       // 1. Marcar relación titular-sustituto en profesores
-      await getSupabase().from('profesores').update({ sustituto_id: sustituto.id }).eq('id', titular.id);
-      await getSupabase().from('profesores').update({ titular_id: titular.id }).eq('id', sustituto.id);
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { sustituto_id: sustituto.id } }) });
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: sustituto.id, datos: { titular_id: titular.id } }) });
 
       // 2. Borrar horario previo del sustituto (por si tenía algo)
       await fetch('/api/horarios', {
@@ -566,7 +573,7 @@ export default function PanelSecretario() {
     const sustitutoId = titular.sustituto_id;
     if (!sustitutoId) {
       // Solo quitar la baja
-      await getSupabase().from('profesores').update({ en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null }).eq('id', titular.id);
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null } }) });
       mostrarMensaje('✅ Titular dado de alta', 'ok');
       cargarProfesores();
       return;
@@ -584,10 +591,10 @@ export default function PanelSecretario() {
       });
 
       // 2. Desactivar sustituto y limpiar relación
-      await getSupabase().from('profesores').update({ estado: 'inactivo', titular_id: null }).eq('id', sustitutoId);
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'cambiar_estado', id: sustitutoId, datos: { estado: 'inactivo', titular_id: null } }) });
 
       // 3. Dar de alta al titular
-      await getSupabase().from('profesores').update({ en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null }).eq('id', titular.id);
+      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null } }) });
 
       mostrarMensaje('✅ Titular de vuelta. Sustituto desactivado y horario restaurado.', 'ok');
       setGestionandoBaja(false);
