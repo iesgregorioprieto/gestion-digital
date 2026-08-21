@@ -486,12 +486,11 @@ export default function PanelSecretario() {
       const ayer = new Date();
       ayer.setDate(ayer.getDate() - 1);
       const fechaCierre = ayer.toISOString().split('T')[0];
-      await getSupabase()
-        .from('ausencias')
-        .update({ fecha_fin: fechaCierre })
-        .eq('profesor_id', profesor.id)
-        .eq('categoria', 'baja_sin_sustituto')
-        .is('fecha_fin', null);
+      await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'cerrar_baja', datos: { profesor_id: profesor.id, fecha_fin: fechaCierre } }),
+      });
 
       mostrarMensaje('✅ Cambiado a "con sustituto". Ya puedes buscarlo abajo.', 'ok');
       cargarProfesores();
@@ -506,12 +505,14 @@ export default function PanelSecretario() {
     if (!confirm(`¿Asignar a ${sustituto.nombre} ${sustituto.apellidos} como sustituto de ${titular.nombre} ${titular.apellidos}? Se copiará el horario completo.`)) return;
     // Cerrar cualquier ausencia abierta del titular en el cuadrante (ya no hace falta cubrir, tiene sustituto)
     const ayerCierre = new Date(); ayerCierre.setDate(ayerCierre.getDate() - 1);
-    await getSupabase()
-      .from('ausencias')
-      .update({ fecha_fin: ayerCierre.toISOString().split('T')[0] })
-      .eq('profesor_id', titular.id)
-      .eq('categoria', 'baja_sin_sustituto')
-      .is('fecha_fin', null);
+    await fetch('/api/ausencias', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'cerrar_baja',
+        datos: { profesor_id: titular.id, fecha_fin: ayerCierre.toISOString().split('T')[0] },
+      }),
+    });
     setGestionandoBaja(true);
 
     try {
