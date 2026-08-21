@@ -39,6 +39,23 @@ export async function GET(request) {
 
   const url = new URL(request.url);
   const soloMias = url.searchParams.get('mias') === '1';
+  const cuadrante = url.searchParams.get('cuadrante');
+
+  // ── Cuadrante de guardias ──
+  // Lo consulta todo el profesorado para saber a quién cubre. Devuelve
+  // quién falta y en qué horas, pero NUNCA el motivo ni la justificación:
+  // que alguien esté de baja lo tiene que saber quien le cubre; por qué
+  // lo está, no.
+  if (cuadrante) {
+    const { data, error } = await supa()
+      .from('ausencias')
+      .select('profesor_id, profesor_nombre, horas, fecha_inicio, fecha_fin')
+      .lte('fecha_inicio', cuadrante)
+      .or(`fecha_fin.gte.${cuadrante},fecha_fin.is.null`);
+
+    if (error) return Response.json({ error: error.message, ausencias: [] }, { status: 500 });
+    return Response.json({ ausencias: data || [] });
+  }
 
   let consulta = supa()
     .from('ausencias')
@@ -151,6 +168,24 @@ export async function POST(request) {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
       const { error } = await supa().from('ausencias').delete().eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
+    // ─── Cerrar la ausencia abierta de una baja sin sustituto ───
+    // Cuando llega el sustituto, el titular deja de generar guardias.
+    if (accion === 'cerrar_baja') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!datos?.profesor_id || !datos?.fecha_fin) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+
+      const { error } = await supa().from('ausencias')
+        .update({ fecha_fin: datos.fecha_fin })
+        .eq('profesor_id', datos.profesor_id)
+        .eq('categoria', 'baja_sin_sustituto')
+        .is('fecha_fin', null);
+
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
     }
