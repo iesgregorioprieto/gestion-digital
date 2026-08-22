@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ResolverDiaDLD from '@/components/ResolverDiaDLD';
-import { getConfigCurso, numProfesores } from '@/lib/curso';
+import { getConfigCurso, numProfesores, plazoSolicitudDLD } from '@/lib/curso';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS_SEMANA = ['L','M','X','J','V','S','D'];
 const azul = '#1a3a6b';
@@ -220,6 +220,20 @@ export default function PanelDirector() {
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
   const [mensaje, setMensaje] = useState(null);
   const [solicitudAbierta, setSolicitudAbierta] = useState(null);
+  const [plazoAbierta, setPlazoAbierta] = useState(null);
+
+  // Al abrir una solicitud se comprueba con cuánta antelación se pidió,
+  // contando días hábiles y descontando vacaciones.
+  async function abrirSolicitud(s) {
+    setSolicitudAbierta(s);
+    setMotivoRechazo('');
+    setPlazoAbierta(null);
+    try {
+      const cfg = await getConfigCurso();
+      const base = (s.created_at || '').slice(0, 10) || undefined;
+      setPlazoAbierta(plazoSolicitudDLD(s.fecha_solicitada, cfg, base));
+    } catch (e) { /* sin configuración no se puede calcular: no se avisa */ }
+  }
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [diasVistos, setDiasVistos] = useState(new Set());
@@ -990,7 +1004,7 @@ export default function PanelDirector() {
                             {s.estado === 'pendiente' ? '⏳ Pendiente' : s.estado === 'aprobada' ? '✅ Aprobada' : '❌ Rechazada'}
                           </span>
                           {s.estado === 'pendiente' && (
-                            <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>📋 Revisar</button>
+                            <button onClick={() => abrirSolicitud(s)} style={{ padding: '6px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>📋 Revisar</button>
                           )}
                           {s.estado === 'aprobada' && (
                             <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar</button>
@@ -1053,7 +1067,7 @@ export default function PanelDirector() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
                       <div style={{ fontSize: 12, color: '#888' }}>{new Date(s.created_at).toLocaleDateString('es-ES')}</div>
                       {filtroEstado === 'pendiente' && (
-                        <button onClick={() => { setSolicitudAbierta(s); setMotivoRechazo(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>📋 Revisar</button>
+                        <button onClick={() => abrirSolicitud(s)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>📋 Revisar</button>
                       )}
                       {s.estado === 'aprobada' && (
                         <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar permiso</button>
@@ -1082,6 +1096,41 @@ export default function PanelDirector() {
               <div style={{ fontSize: 16 }}>{solicitudAbierta.profesor_nombre} ha solicitado el {new Date(solicitudAbierta.fecha_solicitada).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} como {etiquetaTipoDLD(solicitudAbierta.tipo_dld)}.</div>
             </div>
             
+            {/* AVISO DE PLAZO — parpadea para que no pase desapercibido.
+                La norma permite flexibilizar el mínimo por causa
+                sobrevenida, así que solo se avisa: decide el director. */}
+            {plazoAbierta && plazoAbierta.estado !== 'ok' && (
+              <>
+              <style>{`
+                @keyframes parpadeoPlazo {
+                  0%, 100% { border-color: #ef4444; background-color: #fef2f2; }
+                  50%      { border-color: #b91c1c; background-color: #fee2e2; }
+                }
+              `}</style>
+              <div style={{
+                marginBottom: 20, padding: '14px 18px', borderRadius: 10,
+                backgroundColor: '#fef2f2', border: '2px solid #ef4444',
+                color: '#991b1b', fontSize: 14, lineHeight: 1.6,
+                animation: 'parpadeoPlazo 1.2s ease-in-out infinite',
+              }}>
+                <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 4 }}>
+                  ⚠️ FUERA DE PLAZO — {plazoAbierta.habiles === 0
+                    ? 'sin días hábiles de antelación'
+                    : `solo ${plazoAbierta.habiles} día${plazoAbierta.habiles === 1 ? '' : 's'} hábil${plazoAbierta.habiles === 1 ? '' : 'es'} de antelación`}
+                </div>
+                <div>
+                  La Resolución de 18/07/2024 pide un mínimo de 2 días hábiles.
+                  {solicitudAbierta.causa_sobrevenida
+                    ? ' El solicitante alega causa sobrevenida, en cuyo caso la norma permite flexibilizar el plazo.'
+                    : ' El solicitante NO ha alegado causa sobrevenida.'}
+                </div>
+                <div style={{ marginTop: 6, fontSize: 13, opacity: 0.85 }}>
+                  La decisión es tuya: puedes concederlo igualmente si lo consideras justificado.
+                </div>
+              </div>
+              </>
+            )}
+
             <AlertasPanel alertas={calcularAlertas(solicitudAbierta)} prelacion={calcularPrelacion(solicitudAbierta)} />
             
             <details style={{ marginBottom: 20 }}>
