@@ -317,7 +317,7 @@ export default function GestionGuardias() {
   }
 
   // Profesores FP libres esta hora (para sugerir apoyos)
-  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null) {
+  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null, sectorSolicitante = null) {
     if (porSector === null) porSector = ausenciasPorSector();
 
     const ocupadosEnClase = new Set(
@@ -327,14 +327,17 @@ export default function GestionGuardias() {
     );
     const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
-    const sectoresFPLibres = sectores.filter(s => {
-      if (!esSectorFP(s)) return false;
-      const sup = s.toUpperCase();
-      return !porSector[sup];
-    });
+    // Sectores que pueden prestar apoyo: los que no tienen ausencias
+    // propias esa hora. Se incluyen TODOS, familias y generales.
+    //
+    // Antes solo entraban las familias profesionales, así que una guardia
+    // de Automoción sin nadie libre en su familia se quedaba sin ninguna
+    // sugerencia, aunque hubiera profesorado de guardia general
+    // disponible. El apoyo es recíproco en los dos sentidos.
+    const sectoresLibres = sectores.filter(s => !porSector[s.toUpperCase()]);
 
     const libres = [];
-    for (const sector of sectoresFPLibres) {
+    for (const sector of sectoresLibres) {
       const guardiasFP = guardiasDeSector(sector);
       guardiasFP.forEach(p => {
         const key = normAbrev(p);
@@ -353,9 +356,23 @@ export default function GestionGuardias() {
         }
       });
     }
-    // Rotación justa: primero quien menos apoyos ha hecho personalmente,
-    // luego el sector con menos apoyos acumulados, luego alfabético
+    // Orden acordado con jefatura de estudios:
+    //   1º  la propia familia del profesor ausente
+    //   2º  guardias generales
+    //   3º  otras familias, por rotación
+    //
+    // Dentro de cada grupo manda la rotación: quien menos apoyos ha
+    // prestado, después el sector con menos apoyos acumulados.
+    const sectorAusente = (sectorSolicitante || '').toUpperCase();
+    const prioridadDe = p => {
+      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;  // su familia
+      if (!esSectorFP(p.sectorOriginal)) return 1;                        // generales
+      return 2;                                                          // otras familias
+    };
+
     libres.sort((a, b) => {
+      const pa = prioridadDe(a), pb = prioridadDe(b);
+      if (pa !== pb) return pa - pb;
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
       if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
       return a.nombre.localeCompare(b.nombre);
@@ -393,7 +410,7 @@ export default function GestionGuardias() {
           }
 
           if (!cubre) {
-            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector);
+            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
             if (libres.length > 0) {
               const primero = libres[0];
               asignadosAbrev.add(normAbrev(primero.abrev));
@@ -1017,7 +1034,7 @@ export default function GestionGuardias() {
                                   ) : (
                                     (() => {
                                       // Sugerencias para sustituir esta guardia
-                                      const sugerencias = profesoresLibresParaApoyo(new Set(), ausenciasPorSector());
+                                      const sugerencias = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
                                       if (sugerencias.length === 0) return null;
                                       return (
                                         <details open style={{ marginTop:6, backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
@@ -1089,7 +1106,7 @@ export default function GestionGuardias() {
                       // Sugerencias para "apoyo urgente" cuando el sector YA está cubierto
                       const sectorEstaCubierto = cubre?.tipo === 'guardia_sector';
                       const sugerenciasBackup = sectorEstaCubierto
-                        ? profesoresLibresParaApoyo(new Set([normAbrev(cubre.abrev)]), ausenciasPorSector())
+                        ? profesoresLibresParaApoyo(new Set([normAbrev(cubre.abrev)]), ausenciasPorSector(), asig.ausencia.sector?.toUpperCase())
                         : [];
 
                       // Ya hay un apoyo urgente activado para esta clase específica?
