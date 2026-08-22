@@ -25,7 +25,12 @@ export default function PanelGestion() {
         const dias = Math.floor((Date.now() - new Date(ultima).getTime()) / 86400000);
         setAvisoCopia(dias >= 30);
       }
-    } catch (e) {}
+    } catch (e) {
+      // Si el navegador tiene bloqueado el almacenamiento local no se
+      // puede saber cuándo fue la última copia. No es grave, pero que
+      // quede constancia en lugar de desaparecer.
+      console.warn('No se pudo leer la fecha de la última copia:', e);
+    }
     
     if (!id) { window.location.href = '/login'; return; }
     
