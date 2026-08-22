@@ -50,7 +50,9 @@ export default function CopiaSeguridad() {
     try {
       const guardada = localStorage.getItem(CLAVE_ULTIMA);
       if (guardada) setUltimaCopia(guardada);
-    } catch (e) {}
+    } catch (e) {
+      console.warn('No se pudo leer la fecha de la última copia:', e);
+    }
   }, []);
 
   // Días transcurridos desde la última copia
@@ -124,7 +126,10 @@ export default function CopiaSeguridad() {
     try {
       localStorage.setItem(CLAVE_ULTIMA, ahora.toISOString());
       setUltimaCopia(ahora.toISOString());
-    } catch (e) {}
+    } catch (e) {
+      // La copia se ha hecho igualmente; solo no queda anotada la fecha.
+      console.warn('No se pudo anotar la fecha de esta copia:', e);
+    }
 
     setResultado({
       totalFilas,
