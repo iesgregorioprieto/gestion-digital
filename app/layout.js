@@ -38,7 +38,11 @@ export default function RootLayout({ children }) {
               try {
                 var z = localStorage.getItem('ies-tamano-letra');
                 if (z && z !== '1') document.documentElement.style.zoom = z;
-              } catch(e) {}
+              } catch(e) {
+                // Se ignora a propósito: esto corre antes de pintar la
+                // página y si falla solo se ve el tamaño de letra normal.
+                // Escribir en la consola aquí ensuciaría cada carga.
+              }
             })();
           `
         }} />
