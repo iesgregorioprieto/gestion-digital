@@ -240,7 +240,12 @@ export default function GestionGuardias() {
         });
         return { ...d, horas: reconstruidas };
       });
-    } catch(e) {}
+    } catch(e) {
+      // Si fallan los DLD, el cuadrante mostraría menos ausentes de los
+      // que hay y se repartirían mal las guardias. Hay que avisar.
+      console.error('No se pudieron cargar los DLD del día:', e);
+      setErrorCarga('No se han podido cargar los permisos de libre disposición: ' + (e.message || e));
+    }
 
     const todas = [
       ...aus.map(a => ({...a, tipo_falta:'ausencia'})),
@@ -254,7 +259,12 @@ export default function GestionGuardias() {
         .eq('fecha', f)
         .eq('curso_academico', await getCursoActual());
       setApAsig(r.data || []);
-    } catch(e) {}
+    } catch(e) {
+      // Sin los apoyos ya asignados se podría asignar dos veces a la
+      // misma persona sin darse cuenta.
+      console.error('No se pudieron cargar los apoyos del día:', e);
+      setErrorCarga('No se han podido cargar los apoyos ya asignados: ' + (e.message || e));
+    }
 
     const resultado = [];
     for (const falta of todas) {
