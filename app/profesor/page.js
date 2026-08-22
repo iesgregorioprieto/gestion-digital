@@ -92,7 +92,9 @@ export default function PanelProfesor() {
       }
 
       // 4. Limpiar storages
-      try { localStorage.clear(); } catch(e) {}
+      try { localStorage.clear(); } catch(e) {
+        console.warn('No se pudo limpiar el almacenamiento local:', e);
+      }
       sessionStorage.clear();
 
       // 5. Restaurar la sesión del usuario
