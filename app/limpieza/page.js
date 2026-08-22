@@ -145,7 +145,10 @@ export default function Limpieza() {
       try {
         barcodeDetectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
         console.log('✅ BarcodeDetector nativo disponible');
-      } catch(e) {}
+      } catch(e) {
+        // Sin lector nativo se usa el de reserva; no es un fallo.
+        console.warn('El lector de QR nativo no está disponible, se usará el alternativo:', e);
+      }
     }
     
     cargarMisIncidencias(nombre);
@@ -229,7 +232,9 @@ export default function Limpieza() {
           try {
             barcodeDetectorRef.current = new window.BarcodeDetector({ formats: ['qr_code'] });
             console.log('✅ BarcodeDetector nativo listo');
-          } catch(e) {}
+          } catch(e) {
+            console.warn('El lector de QR nativo no está disponible, se usará el alternativo:', e);
+          }
         }
         
         setEstadoScanner(barcodeDetectorRef.current 
