@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -99,6 +99,7 @@ export default function DLD() {
   const [textoOtro, setTextoOtro] = useState('');
   const [nombrePdf, setNombrePdf] = useState('');
   const [cargandoHorario, setCargandoHorario] = useState(false);
+  const [avisoPlazo, setAvisoPlazo] = useState(null);
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
   const [form, setForm] = useState({
@@ -190,6 +191,15 @@ export default function DLD() {
     }
     setCargandoHorario(true);
     setError('');
+
+    // Avisar del plazo en cuanto se elige la fecha, no al final del
+    // formulario: si no llega, mejor saberlo antes de rellenar todo.
+    try {
+      const cfgP = await getConfigCurso();
+      const p = plazoSolicitudDLD(fecha, cfgP);
+      setAvisoPlazo(p.estado === 'ok' ? null : p);
+    } catch (e) { setAvisoPlazo(null); }
+
     let nPdf = nombrePdf;
     if (!nPdf) {
       const id = sessionStorage.getItem('profesor_id');
@@ -278,6 +288,21 @@ export default function DLD() {
     setError('');
     if (!form.tipo_dld) { setError('Selecciona el tipo de DLD.'); return; }
     if (!form.fecha_solicitada) { setError('Indica la fecha solicitada.'); return; }
+
+    // Plazos de la Resolución de 18/07/2024 (apartado 7).
+    // Pasado el máximo se bloquea. Por debajo del mínimo se deja pasar
+    // solo si es causa sobrevenida: la norma permite flexibilizarlo y la
+    // última palabra es del director.
+    const cfgPlazo = await getConfigCurso();
+    const plazo = plazoSolicitudDLD(form.fecha_solicitada, cfgPlazo);
+    if (plazo.estado === 'muy_pronto') {
+      setError('⛔ ' + plazo.mensaje);
+      return;
+    }
+    if (plazo.estado === 'muy_tarde' && !form.causa_sobrevenida) {
+      setError('⚠️ ' + plazo.mensaje + ' Si es tu caso, marca la casilla de causa sobrevenida y explica el motivo.');
+      return;
+    }
 
     // Validar tareas obligatorias en horas de clase (solo en días lectivos)
     const horasClaseSinTarea = !infoDia.lectivo ? [] : Object.entries(horario)
@@ -650,6 +675,30 @@ export default function DLD() {
                   cargarHorarioDelDia(fecha);
                 }
               }} style={{ ...inputEstilo, marginTop: 8 }} />
+
+              {/* AVISO DE PLAZO — Resolución 18/07/2024, apartado 7 */}
+              {avisoPlazo && (
+                <div style={{
+                  marginTop: 10, padding: '12px 16px', borderRadius: 10, fontSize: 13.5, lineHeight: 1.6,
+                  backgroundColor: avisoPlazo.estado === 'muy_pronto' ? '#fef2f2' : '#fffbeb',
+                  border: `1.5px solid ${avisoPlazo.estado === 'muy_pronto' ? '#fca5a5' : '#fde68a'}`,
+                  color: avisoPlazo.estado === 'muy_pronto' ? '#991b1b' : '#92400e',
+                }}>
+                  {avisoPlazo.estado === 'muy_pronto' ? '⛔ ' : '⚠️ '}
+                  <strong>
+                    {avisoPlazo.estado === 'muy_pronto'
+                      ? 'Todavía es pronto para pedir este día'
+                      : 'Estás fuera del plazo mínimo'}
+                  </strong>
+                  <div style={{ marginTop: 4 }}>{avisoPlazo.mensaje}</div>
+                  {avisoPlazo.estado === 'muy_tarde' && (
+                    <div style={{ marginTop: 6, fontWeight: 700 }}>
+                      Puedes enviarla marcando la casilla de causa sobrevenida.
+                      El director decidirá.
+                    </div>
+                  )}
+                </div>
+              )}
 
               {form.fecha_solicitada && !infoDia.lectivo && (
                 <div style={{
