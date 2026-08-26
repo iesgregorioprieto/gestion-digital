@@ -6,7 +6,6 @@ import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
-import ValoracionModulo from '@/components/ValoracionModulo';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -504,7 +503,6 @@ export default function Guardias() {
       </div>
 
       {/* NAV FECHA */}
-      <div style={{ padding:'0 16px' }}><ValoracionModulo modulo="guardias" /></div>
 
       <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
         <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>←</button>
