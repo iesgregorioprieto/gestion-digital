@@ -141,6 +141,16 @@ export default function PanelGestion() {
       color: '#1e40af',
     },
     {
+      id: 'valoraciones',
+      emoji: '📊',
+      titulo: 'Valoración de módulos',
+      descripcion: 'Qué opina el claustro de los módulos en periodo de prueba',
+      href: '/gestion/valoraciones',
+      bg: '#fdf4ff',
+      border: '#e9d5ff',
+      color: '#7e22ce',
+    },
+    {
       id: 'copia',
       emoji: '💾',
       titulo: 'Copia de seguridad',
