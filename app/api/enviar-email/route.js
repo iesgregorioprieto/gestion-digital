@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -380,6 +380,42 @@ export async function POST(request) {
               </a>
             </div>
             <p style="color:#666;font-size:13px">Este enlace caduca en <strong>30 minutos</strong>. Si no has solicitado esto, ignora este correo.</p>
+          </div>
+          <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
+    } else if (tipo === 'sugerencias_del_dia') {
+      const lista = Array.isArray(datos.sugerencias) ? datos.sugerencias : [];
+      subject = `💬 ${lista.length} sugerencia${lista.length === 1 ? '' : 's'} sobre los módulos en prueba`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e3a5f;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#adc8e8;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:26px;background:#f9f9f9">
+            <h2 style="color:#1e3a5f;margin:0 0 6px">Sugerencias de mejora</h2>
+            <p style="color:#666;font-size:13px;margin:0 0 18px">
+              Recogidas hoy en los módulos que están en periodo de prueba.
+            </p>
+            ${lista.map(s => `
+              <div style="background:white;border-left:4px solid #f59e0b;border-radius:8px;padding:14px;margin-bottom:10px">
+                <div style="font-size:12px;color:#92400e;font-weight:bold;margin-bottom:6px">
+                  ${e(s.modulo)} — ${e(s.valoracion)}
+                </div>
+                <div style="font-size:14px;color:#333;line-height:1.6">${e(s.sugerencia)}</div>
+                <div style="font-size:11px;color:#999;margin-top:8px">
+                  ${s.quien ? '✉️ ' + e(s.quien) + ' acepta que se le pregunte' : 'Enviada sin identificar'}
+                </div>
+              </div>`).join('')}
+            <div style="text-align:center;margin:24px 0 6px">
+              <a href="${BASE_URL}/gestion/valoraciones"
+                 style="background:#1e3a5f;color:white;padding:12px 28px;border-radius:6px;text-decoration:none;font-size:15px;font-weight:bold">
+                Ver todas las valoraciones
+              </a>
+            </div>
           </div>
           <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
             IES Gregorio Prieto · Valdepeñas · Ciudad Real
