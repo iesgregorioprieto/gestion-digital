@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import ValoracionModulo from '@/components/ValoracionModulo';
 const ESTANCIAS = [
   { valor: 'aula', emoji: '🏫', etiqueta: 'Aula' },
   { valor: 'taller', emoji: '🔧', etiqueta: 'Taller' },
@@ -188,8 +187,6 @@ export default function Mantenimiento() {
       </div>
 
       <div style={{ maxWidth: 600, margin: '0 auto', padding: '24px 16px' }}>
-
-        <ValoracionModulo modulo="mantenimiento" />
 
         {/* BOTÓN VER HISTORIAL */}
         <div style={{ marginBottom: 16, textAlign: 'right' }}>
