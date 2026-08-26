@@ -48,7 +48,32 @@ export async function GET(request) {
 
       const { data } = await supa().from('valoraciones')
         .select('*').order('created_at', { ascending: false });
-      return Response.json({ valoraciones: data || [] });
+
+      // De quien ha aceptado que se le pregunte, se añade su nombre y
+      // su correo: si no, el "acepta que se le pregunte" no sirve de
+      // nada porque no hay forma de localizarle.
+      const ids = [...new Set((data || [])
+        .filter(v => v.quiere_contacto && v.profesor_id)
+        .map(v => v.profesor_id))];
+
+      let personas = {};
+      if (ids.length > 0) {
+        const { data: profs } = await supa().from('profesores')
+          .select('id, nombre, apellidos, email').in('id', ids);
+        for (const p of (profs || [])) {
+          personas[p.id] = { nombre: `${p.nombre} ${p.apellidos}`, email: p.email };
+        }
+      }
+
+      const conNombre = (data || []).map(v => ({
+        ...v,
+        // El identificador no viaja al navegador: solo lo necesario
+        profesor_id: undefined,
+        profesor_id_control: undefined,
+        persona: v.quiere_contacto ? personas[v.profesor_id] || null : null,
+      }));
+
+      return Response.json({ valoraciones: conNombre });
     }
 
     // ¿Ya ha contestado? Solo se pregunta una vez
