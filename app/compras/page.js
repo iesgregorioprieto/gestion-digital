@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import ValoracionModulo from '@/components/ValoracionModulo';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -221,6 +222,8 @@ export default function Compras() {
       </div>
 
       <div style={{ padding: 16 }}>
+
+        <ValoracionModulo modulo="compras" />
         {/* =================== FORMULARIO =================== */}
         {vista === 'formulario' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
