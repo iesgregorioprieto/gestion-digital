@@ -100,7 +100,26 @@ export async function GET(request) {
     }
 
     // ── ¿Toca la valoración rápida? ──
-    if (veces >= 3 && !uso?.preguntado && hoyLocal() < fin) {
+    //
+    // Para un módulo: con dos usos ya hay criterio, y así llega a más
+    // gente (en 15 días hay quien no abre un módulo tres veces). Quien
+    // no llegue ni a eso recibirá igualmente la encuesta final.
+    //
+    // Para la aplicación en conjunto ('general') se exige más: haber
+    // usado al menos 3 módulos distintos y 8 visitas en total. Opinar
+    // del portal entero después de entrar dos veces no dice gran cosa.
+    let listoParaPreguntar = veces >= 2;
+
+    if (modulo === 'general') {
+      const { data: todos } = await supa()
+        .from('usos_modulo').select('modulo, veces').eq('profesor_id', sesion.id);
+
+      const distintos = (todos || []).filter(u => u.modulo !== 'general').length;
+      const total = (todos || []).reduce((s, u) => s + (u.veces || 0), 0);
+      listoParaPreguntar = distintos >= 3 && total >= 8;
+    }
+
+    if (listoParaPreguntar && !uso?.preguntado && hoyLocal() < fin) {
       return Response.json({
         preguntar: 'rapida',
         modulo: mod.clave,
