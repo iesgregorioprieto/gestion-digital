@@ -129,6 +129,16 @@ export default function PanelProfesor() {
       color: '#7c2d12', bg: '#fff7ed', border: '#fdba74',
     },
     {
+      id: 'calendario',
+      emoji: '📆',
+      titulo: 'Calendario escolar',
+      descripcion: 'Consulta el calendario oficial del curso',
+      href: '/calendario',
+      disponible: true,
+      roles: ['todos'],
+      color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd',
+    },
+    {
       id: 'actividades',
       emoji: '🎒',
       titulo: 'Actividades Complementarias',
