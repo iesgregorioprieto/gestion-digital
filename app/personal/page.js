@@ -19,14 +19,14 @@ const ROLES = [
   },
   {
     id: 'conserjeria',
-    emoji: '🧾',
+    emoji: '🗝️',
     titulo: 'Soy Conserje',
-    descripcion: 'Próximamente',
-    href: '#',
-    disponible: false,
-    color: '#aaa',
-    bg: '#f5f5f5',
-    border: '#e0e0e0',
+    descripcion: 'Control del cajetín de llaves del centro',
+    href: '/personal/conserjeria',
+    disponible: true,
+    color: '#b45309',
+    bg: '#fffbeb',
+    border: '#b45309',
   },
 ];
 
