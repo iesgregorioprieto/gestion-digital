@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { createClient } from '@supabase/supabase-js';
 import jsQR from 'jsqr';
-import ValoracionModulo from '@/components/ValoracionModulo';
 
 // Cliente Supabase específico del proyecto de LIMPIEZA (NO usar getSupabase principal)
 const supaLimpieza = createClient(
@@ -675,8 +674,6 @@ export default function Limpieza() {
       </div>
 
       <div style={{ padding:16, maxWidth:600, margin:'0 auto' }}>
-
-        <ValoracionModulo modulo="limpieza" />
         
         {/* PANTALLA INICIO */}
         {pantalla === 'inicio' && (
