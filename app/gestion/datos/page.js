@@ -70,6 +70,11 @@ export default function GestionDatos() {
   const [progresoHorarios, setProgresoHorarios] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefHorarios = useRef(null);
 
+  // Calendario escolar oficial de la Consejería
+  const [calendario, setCalendario] = useState(null);
+  const [subiendoCal, setSubiendoCal] = useState(false);
+  const fileRefCalendario = useRef(null);
+
   // Guardias
   const [previewGuardias, setPreviewGuardias] = useState([]);
   const [modalGuardias, setModalGuardias] = useState(false);
@@ -87,6 +92,7 @@ export default function GestionDatos() {
     }
     setNombre(sessionStorage.getItem('profesor_nombre') || '');
     cargarStats();
+    cargarCalendario();
 
     // El curso de las importaciones se rellena solo con el que está
     // configurado en Datos del curso. Así, cada septiembre basta con
@@ -94,6 +100,63 @@ export default function GestionDatos() {
     // alumnado y grupos) queda marcado con el curso correcto.
     getCursoActual().then(cur => setCursoNuevo(prev => prev || cur));
   }, []);
+
+  async function cargarCalendario() {
+    try {
+      const r = await fetch('/api/calendario');
+      const d = await r.json();
+      setCalendario(d.calendario || null);
+    } catch (e) {
+      console.warn('No se pudo cargar el calendario escolar:', e);
+    }
+  }
+
+  async function subirCalendario(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const permitidos = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+    if (!permitidos.includes(file.type)) {
+      setMensaje({ tipo: 'error', texto: '❌ Solo se admite PDF o imagen (JPG, PNG o WEBP).' });
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setMensaje({ tipo: 'error', texto: '❌ El archivo pesa más de 8 MB. Comprímelo o usa una imagen.' });
+      return;
+    }
+
+    setSubiendoCal(true);
+    setMensaje(null);
+    try {
+      const ext = file.name.split('.').pop().toLowerCase();
+      const nombre = `calendario_${cursoNuevo || 'curso'}_${Date.now()}.${ext}`;
+
+      const { error: errSubida } = await getSupabase().storage
+        .from('calendario').upload(nombre, file, { upsert: true });
+      if (errSubida) throw new Error(errSubida.message);
+
+      const { data: pub } = getSupabase().storage.from('calendario').getPublicUrl(nombre);
+
+      const r = await fetch('/api/calendario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          curso: cursoNuevo,
+          archivo_url: pub.publicUrl,
+          nombre: file.name,
+          tipo: file.type,
+        }),
+      });
+      if (!r.ok) throw new Error((await r.json()).error || 'no se pudo guardar');
+
+      setMensaje({ tipo: 'ok', texto: '✅ Calendario publicado. Ya lo puede consultar el claustro.' });
+      cargarCalendario();
+    } catch (err) {
+      setMensaje({ tipo: 'error', texto: '❌ Error al subir: ' + err.message });
+    }
+    setSubiendoCal(false);
+    if (fileRefCalendario.current) fileRefCalendario.current.value = '';
+  }
 
   async function cargarStats() {
     setCargando(true);
@@ -826,6 +889,7 @@ export default function GestionDatos() {
             { id: 'alumnos', label: '👥 Alumnos y Grupos' },
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'guardias', label: '🛡️ Guardias' },
+            { id: 'calendario', label: '📆 Calendario escolar' },
             { id: 'cambio', label: '🔄 Cambio de curso' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -835,6 +899,56 @@ export default function GestionDatos() {
         </div>
 
         {/* ===== CAMBIO DE CURSO ===== */}
+        {vistaTab === 'calendario' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 17, color: azul }}>📆 Calendario escolar del curso</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#666', lineHeight: 1.6 }}>
+              El cartel oficial de la Consejería. Una vez subido, todo el claustro puede
+              consultarlo desde su panel, sin salir de la aplicación.
+            </p>
+
+            {calendario ? (
+              <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 18 }}>
+                <div style={{ fontWeight: 800, color: '#166534', marginBottom: 6, fontSize: 15 }}>
+                  ✅ Publicado — curso {calendario.curso}
+                </div>
+                <div style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
+                  {calendario.nombre} · subido el {new Date(calendario.created_at).toLocaleDateString('es-ES')}
+                </div>
+                <a href={calendario.archivo_url} target="_blank" rel="noreferrer"
+                  style={{ display: 'inline-block', padding: '9px 18px', borderRadius: 9, backgroundColor: '#166534', color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 13 }}>
+                  👁️ Ver el calendario
+                </a>
+              </div>
+            ) : (
+              <div style={{ backgroundColor: '#fffbeb', border: '1.5px solid #fde68a', borderRadius: 12, padding: 16, marginBottom: 18, fontSize: 13.5, color: '#92400e' }}>
+                ⚠️ Todavía no hay calendario publicado para este curso.
+              </div>
+            )}
+
+            <div style={{ borderTop: '1px solid #eee', paddingTop: 18 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 6, color: '#333' }}>
+                {calendario ? 'Sustituir por otro archivo' : 'Subir el calendario'}
+              </div>
+              <div style={{ fontSize: 12.5, color: '#777', marginBottom: 12, lineHeight: 1.6 }}>
+                Se admite <strong>PDF o imagen</strong> (JPG, PNG o WEBP), hasta 8 MB.
+                Una imagen se ve mejor en el móvil: se abre directa y se amplía con los dedos.
+                <br />
+                Se publicará para el curso <strong>{cursoNuevo || '—'}</strong>. Si no es el correcto,
+                cámbialo arriba en el panel de arranque antes de subirlo.
+              </div>
+
+              <input ref={fileRefCalendario} type="file" accept=".pdf,.jpg,.jpeg,.png,.webp"
+                onChange={subirCalendario} style={{ display: 'none' }} disabled={subiendoCal} />
+
+              <button onClick={() => fileRefCalendario.current?.click()} disabled={subiendoCal}
+                style={{ padding: '11px 22px', borderRadius: 10, border: 'none', backgroundColor: subiendoCal ? '#94a3b8' : azul, color: 'white', fontWeight: 700, fontSize: 14, cursor: subiendoCal ? 'default' : 'pointer' }}>
+                {subiendoCal ? '⏳ Subiendo...' : '📤 Seleccionar archivo'}
+              </button>
+            </div>
+          </div>
+        )}
+
         {vistaTab === 'cambio' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 22, boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
             <CambioCurso />
