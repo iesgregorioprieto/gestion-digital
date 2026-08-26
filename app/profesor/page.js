@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
+import ValoracionModulo from '@/components/ValoracionModulo';
 
 export default function PanelProfesor() {
   const [nombre, setNombre] = useState('');
@@ -303,6 +304,10 @@ export default function PanelProfesor() {
 
         {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
         {profId && <AvisoNotificaciones profesorId={profId} />}
+
+        {/* Cómo va el portal en su conjunto. Solo aparece a quien ya lo
+            ha usado lo suficiente como para tener opinión formada. */}
+        <ValoracionModulo modulo="general" />
 
         {/* BANNER DE APOYOS PENDIENTES - LLAMATIVO */}
         {apoyosPendientes.length > 0 && (
