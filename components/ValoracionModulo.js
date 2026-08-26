@@ -3,29 +3,51 @@
 import { useState, useEffect } from 'react';
 
 /**
- * VALORACIÓN DE UN MÓDULO EN PRUEBA
+ * VALORACIÓN DEL PORTAL
  *
- * Se coloca dentro de cada módulo que esté a prueba. Al abrirse la
- * pantalla pregunta al servidor si a esta persona le toca valorar; si no
- * le toca, no pinta nada y no molesta.
+ * Una sola pregunta, sobre APrieto en conjunto, a los 15 días de que la
+ * persona se diera de alta. Ni antes (aún no lo conoce) ni por cada
+ * módulo (con diez módulos serían diez encuestas y nadie contestaría
+ * la tercera en serio).
  *
- * Uso:  <ValoracionModulo modulo="guardias" />
+ * Si dice que lo mejoraría, se le pregunta EN QUÉ PARTE con un
+ * desplegable: sin eso, un "va lento" no se puede arreglar.
+ *
+ * El nombre solo se guarda si marca que quiere que le contacten. Quien
+ * teme que su crítica llegue con nombre y apellidos al director acaba
+ * pulsando "me ayuda" y callándose, y entonces esto no sirve de nada.
  */
-export default function ValoracionModulo({ modulo }) {
-  const [pregunta, setPregunta] = useState(null);   // null = no toca
+
+const PARTES = [
+  { id: 'general',        emoji: '📱', texto: 'En general, el portal entero' },
+  { id: 'guardias',       emoji: '🛡️', texto: 'Guardias' },
+  { id: 'ausencias',      emoji: '🏥', texto: 'Notificar una ausencia' },
+  { id: 'dld',            emoji: '📄', texto: 'Días de libre disposición' },
+  { id: 'autorizaciones', emoji: '📋', texto: 'Autorizaciones del alumnado' },
+  { id: 'actividades',    emoji: '🎒', texto: 'Actividades complementarias' },
+  { id: 'calendario',     emoji: '📆', texto: 'Calendario escolar' },
+  { id: 'mantenimiento',  emoji: '🔧', texto: 'Mantenimiento' },
+  { id: 'limpieza',       emoji: '🧹', texto: 'Incidencias de limpieza' },
+  { id: 'compras',        emoji: '🛒', texto: 'Solicitudes de compra' },
+  { id: 'entrar',         emoji: '🔑', texto: 'Entrar / la contraseña' },
+  { id: 'movil',          emoji: '📲', texto: 'Cómo se ve en el móvil' },
+];
+
+export default function ValoracionModulo() {
+  const [toca, setToca] = useState(false);
   const [elegida, setElegida] = useState(null);
+  const [parte, setParte] = useState('general');
   const [sugerencia, setSugerencia] = useState('');
   const [contacto, setContacto] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [gracias, setGracias] = useState(false);
 
   useEffect(() => {
-    if (!modulo) return;
-    fetch(`/api/valoraciones?modulo=${encodeURIComponent(modulo)}`)
+    fetch('/api/valoraciones')
       .then(r => r.json())
-      .then(d => { if (d.preguntar) setPregunta(d); })
+      .then(d => setToca(!!d.preguntar))
       .catch(e => console.warn('No se pudo comprobar la valoración:', e));
-  }, [modulo]);
+  }, []);
 
   async function enviar() {
     if (!elegida) return;
@@ -35,90 +57,93 @@ export default function ValoracionModulo({ modulo }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          modulo,
           valoracion: elegida,
+          parte: elegida === 'ayuda' ? 'general' : parte,
           sugerencia: sugerencia.trim() || null,
           quiereContacto: contacto,
-          tipo: pregunta.preguntar,
         }),
       });
-      if (r.ok) setGracias(true);
-      else setPregunta(null);   // si falla, mejor no insistir
-    } catch (e) {
-      setPregunta(null);
-    }
+      if (r.ok) setGracias(true); else setToca(false);
+    } catch (e) { setToca(false); }
     setEnviando(false);
   }
 
-  if (!pregunta) return null;
+  if (!toca) return null;
 
   if (gracias) {
     return (
-      <div style={{ ...caja, backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', color: '#166534' }}>
-        ✅ <strong>Gracias.</strong> Tu opinión llega al equipo directivo y ayuda a decidir
-        si este módulo se queda como está, se mejora o se retira.
+      <div style={{ ...caja, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', color: '#166534' }}>
+        ✅ <strong>Gracias.</strong> Tu opinión llega al director y al secretario,
+        y de ahí salen las mejoras del portal.
       </div>
     );
   }
 
-  const esFinal = pregunta.preguntar === 'encuesta_final';
+  const pideDetalle = elegida === 'mejorable' || elegida === 'no_sirve';
 
   return (
     <div style={caja}>
-      <div style={{ fontWeight: 800, fontSize: 15, color: '#1e3a5f', marginBottom: 4 }}>
-        {esFinal ? '📋 Han pasado los 15 días de prueba' : '💬 ¿Qué te parece?'}
+      <div style={{ fontWeight: 800, fontSize: 16, color: '#1e3a5f', marginBottom: 4 }}>
+        💬 ¿Qué tal te va APrieto?
       </div>
-      <div style={{ fontSize: 13.5, color: '#555', marginBottom: 14, lineHeight: 1.6 }}>
-        {esFinal
-          ? `Estamos decidiendo si ${pregunta.nombre} se queda en el portal. Tu respuesta cuenta.`
-          : `${pregunta.nombre} está en periodo de prueba. Un toque y seguimos.`}
+      <div style={{ fontSize: 13.5, color: '#666', marginBottom: 16, lineHeight: 1.6 }}>
+        Llevas unos días usándolo. Un toque y seguimos: nos ayuda a decidir qué mejorar.
       </div>
 
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         {[
-          { id: 'ayuda',     emoji: '😀', texto: 'Me ayuda',    color: '#166534', bg: '#dcfce7', bd: '#86efac' },
+          { id: 'ayuda',     emoji: '😀', texto: 'Me ayuda',     color: '#166534', bg: '#dcfce7', bd: '#86efac' },
           { id: 'mejorable', emoji: '🔧', texto: 'Lo mejoraría', color: '#92400e', bg: '#fef3c7', bd: '#fcd34d' },
           { id: 'no_sirve',  emoji: '🙁', texto: 'No me sirve',  color: '#991b1b', bg: '#fee2e2', bd: '#fca5a5' },
         ].map(op => (
           <button key={op.id} onClick={() => setElegida(op.id)}
             style={{
-              flex: '1 1 130px', padding: '12px 10px', borderRadius: 10, cursor: 'pointer',
-              border: `2px solid ${elegida === op.id ? op.color : op.bd}`,
+              flex: '1 1 140px', padding: '14px 10px', borderRadius: 12, cursor: 'pointer',
+              border: `2.5px solid ${elegida === op.id ? op.color : op.bd}`,
               backgroundColor: elegida === op.id ? op.bg : 'white',
-              color: op.color, fontWeight: 700, fontSize: 13.5,
+              color: op.color, fontWeight: 700, fontSize: 14,
+              transform: elegida === op.id ? 'scale(1.03)' : 'none',
+              transition: 'transform .12s',
             }}>
-            <div style={{ fontSize: 22, marginBottom: 2 }}>{op.emoji}</div>
+            <div style={{ fontSize: 30, marginBottom: 4 }}>{op.emoji}</div>
             {op.texto}
           </button>
         ))}
       </div>
 
-      {/* El campo de texto solo aparece cuando hace falta */}
-      {(elegida === 'mejorable' || elegida === 'no_sirve') && (
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#333', marginBottom: 6 }}>
+      {pideDetalle && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#333', marginBottom: 7 }}>
+            ¿En qué parte?
+          </div>
+          <select value={parte} onChange={e => setParte(e.target.value)}
+            style={{
+              width: '100%', padding: '12px 14px', borderRadius: 10, fontSize: 15,
+              border: '1.5px solid #ddd', backgroundColor: 'white', marginBottom: 14,
+              fontFamily: 'inherit', cursor: 'pointer', boxSizing: 'border-box',
+            }}>
+            {PARTES.map(p => (
+              <option key={p.id} value={p.id}>{p.emoji}  {p.texto}</option>
+            ))}
+          </select>
+
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: '#333', marginBottom: 7 }}>
             {elegida === 'mejorable' ? '¿Qué cambiarías?' : '¿Qué es lo que no te encaja?'}
           </div>
-          <textarea
-            value={sugerencia}
-            onChange={e => setSugerencia(e.target.value)}
-            rows={3}
-            placeholder="Cuéntalo con tus palabras. Cuanto más concreto, más fácil de arreglar."
+          <textarea value={sugerencia} onChange={e => setSugerencia(e.target.value)} rows={3}
+            placeholder="Con tus palabras. Cuanto más concreto, más fácil de arreglar."
             style={{
-              width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 14,
+              width: '100%', padding: '11px 13px', borderRadius: 10, fontSize: 14.5,
               border: '1.5px solid #ddd', boxSizing: 'border-box', fontFamily: 'inherit', resize: 'vertical',
-            }}
-          />
+            }} />
 
-          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, fontSize: 12.5, color: '#555', cursor: 'pointer', lineHeight: 1.5 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 12, fontSize: 13, color: '#555', cursor: 'pointer', lineHeight: 1.5 }}>
             <input type="checkbox" checked={contacto} onChange={e => setContacto(e.target.checked)}
-              style={{ marginTop: 2, width: 16, height: 16, cursor: 'pointer' }} />
+              style={{ marginTop: 2, width: 17, height: 17, cursor: 'pointer' }} />
             <span>
-              Quiero que el equipo directivo pueda contactar conmigo para aclarar esto.
+              Quiero que puedan contactar conmigo para aclararlo.
               <br />
-              <span style={{ color: '#888' }}>
-                Si no lo marcas, tu respuesta llega sin tu nombre.
-              </span>
+              <span style={{ color: '#999' }}>Si no lo marcas, llega sin tu nombre.</span>
             </span>
           </label>
         </div>
@@ -127,14 +152,14 @@ export default function ValoracionModulo({ modulo }) {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button onClick={enviar} disabled={!elegida || enviando}
           style={{
-            padding: '10px 22px', borderRadius: 9, border: 'none', fontWeight: 700, fontSize: 14,
+            padding: '12px 26px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 15,
             backgroundColor: !elegida || enviando ? '#cbd5e1' : '#1e3a5f',
             color: 'white', cursor: !elegida || enviando ? 'default' : 'pointer',
           }}>
           {enviando ? 'Enviando...' : 'Enviar'}
         </button>
-        <button onClick={() => setPregunta(null)}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', backgroundColor: 'transparent', color: '#888', fontSize: 13, cursor: 'pointer' }}>
+        <button onClick={() => setToca(false)}
+          style={{ padding: '12px 16px', borderRadius: 10, border: 'none', backgroundColor: 'transparent', color: '#999', fontSize: 13.5, cursor: 'pointer' }}>
           Ahora no
         </button>
       </div>
@@ -145,9 +170,9 @@ export default function ValoracionModulo({ modulo }) {
 const caja = {
   backgroundColor: 'white',
   border: '1.5px solid #dbeafe',
-  borderRadius: 12,
-  padding: '16px 18px',
-  marginBottom: 16,
-  boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+  borderRadius: 14,
+  padding: '18px 20px',
+  marginBottom: 18,
+  boxShadow: '0 2px 8px rgba(0,0,0,0.07)',
   fontFamily: 'system-ui, sans-serif',
 };
