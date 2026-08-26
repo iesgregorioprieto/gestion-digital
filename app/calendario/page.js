@@ -2,7 +2,6 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import ValoracionModulo from '@/components/ValoracionModulo';
 
 const AZUL = '#1e3a5f';
 
@@ -38,8 +37,6 @@ export default function CalendarioEscolar() {
       </div>
 
       <div style={{ padding: 16, maxWidth: 900, margin: '0 auto' }}>
-
-        <ValoracionModulo modulo="calendario" />
 
         {cargando && (
           <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>⏳ Cargando...</div>
