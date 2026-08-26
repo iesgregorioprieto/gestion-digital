@@ -169,13 +169,26 @@ export default function PanelValoraciones() {
                           <div style={{ fontSize: 14, color: '#333', lineHeight: 1.6, marginBottom: 6 }}>
                             {s.sugerencia}
                           </div>
-                          <div style={{ fontSize: 11.5, color: '#888' }}>
+                          <div style={{ fontSize: 11.5, color: '#888', marginBottom: s.persona ? 8 : 0 }}>
                             {ETIQUETAS[s.valoracion].emoji} {ETIQUETAS[s.valoracion].texto} ·{' '}
                             {new Date(s.created_at).toLocaleDateString('es-ES')} ·{' '}
-                            {s.quiere_contacto
-                              ? <span style={{ color: '#166534', fontWeight: 700 }}>✉️ Acepta que se le pregunte</span>
+                            {s.persona
+                              ? <span style={{ color: '#166534', fontWeight: 700 }}>{s.persona.nombre}</span>
                               : <span>Sin identificar</span>}
                           </div>
+
+                          {/* Si aceptó que se le preguntara, se le puede
+                              escribir desde aquí sin buscar su correo. */}
+                          {s.persona?.email && (
+                            <a href={`mailto:${s.persona.email}?subject=${encodeURIComponent('Sobre tu sugerencia en APrieto')}&body=${encodeURIComponent(`Hola ${s.persona.nombre.split(' ')[0]},\n\nNos has escrito esto en el portal:\n\n"${s.sugerencia}"\n\nQueríamos preguntarte...\n\nUn saludo.`)}`}
+                              style={{
+                                display: 'inline-block', padding: '6px 14px', borderRadius: 7,
+                                backgroundColor: '#166534', color: 'white', textDecoration: 'none',
+                                fontSize: 12, fontWeight: 700,
+                              }}>
+                              ✉️ Escribirle
+                            </a>
+                          )}
                         </div>
                       ))}
                     </div>
