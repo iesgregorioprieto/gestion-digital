@@ -111,7 +111,60 @@ export async function GET(request) {
       console.error('Error marcando ausencias vencidas:', e);
     }
 
-    return Response.json({ ok: true, revisadas: (ausencias || []).length, enviados, marcadas, errores });
+    // ── Resumen diario de sugerencias sobre módulos en prueba ──
+    // Se manda una sola vez al día con todas las de la jornada: con 150
+    // profesores, un correo por sugerencia llenaría el buzón.
+    let sugerenciasEnviadas = 0;
+    try {
+      const urlBase = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+      const desde = new Date();
+      desde.setHours(0, 0, 0, 0);
+
+      const { data: sugs } = await supabase
+        .from('valoraciones')
+        .select('modulo, valoracion, sugerencia, quiere_contacto, profesor_id')
+        .not('sugerencia', 'is', null)
+        .gte('created_at', desde.toISOString());
+
+      if (sugs && sugs.length > 0) {
+        // Nombre solo de quien ha aceptado que se le pregunte
+        const conNombre = await Promise.all(sugs.map(async s => {
+          let quien = null;
+          if (s.quiere_contacto && s.profesor_id) {
+            const { data } = await supabase.from('profesores')
+              .select('nombre, apellidos').eq('id', s.profesor_id);
+            const p = (data || [])[0];
+            if (p) quien = `${p.nombre} ${p.apellidos}`;
+          }
+          return { ...s, quien };
+        }));
+
+        // Al director y al secretario
+        const { data: equipo } = await supabase.from('profesores')
+          .select('email').in('rol_gestion', ['director', 'secretario']);
+
+        for (const p of (equipo || [])) {
+          if (!p.email) continue;
+          await fetch(`${urlBase}/api/enviar-email`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-clave-interna': process.env.SESSION_SECRET || '',
+            },
+            body: JSON.stringify({
+              tipo: 'sugerencias_del_dia',
+              datos: { email: p.email, sugerencias: conNombre },
+            }),
+          });
+          sugerenciasEnviadas++;
+          await new Promise(r => setTimeout(r, 600));   // Resend: 2 correos por segundo
+        }
+      }
+    } catch (e) {
+      console.error('Error enviando el resumen de sugerencias:', e);
+    }
+
+    return Response.json({ ok: true, revisadas: (ausencias || []).length, enviados, marcadas, errores, sugerenciasEnviadas });
   } catch (err) {
     console.error('Error en cron recordatorios:', err);
     return Response.json({ error: err.message }, { status: 500 });
