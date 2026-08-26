@@ -5,6 +5,21 @@ import { useState, useEffect } from 'react';
 
 const AZUL = '#1e3a5f';
 
+const NOMBRES = {
+  general: '📱 El portal en general',
+  guardias: '🛡️ Guardias',
+  ausencias: '🏥 Notificar una ausencia',
+  dld: '📄 Días de libre disposición',
+  autorizaciones: '📋 Autorizaciones del alumnado',
+  actividades: '🎒 Actividades complementarias',
+  calendario: '📆 Calendario escolar',
+  mantenimiento: '🔧 Mantenimiento',
+  limpieza: '🧹 Incidencias de limpieza',
+  compras: '🛒 Solicitudes de compra',
+  entrar: '🔑 Entrar / la contraseña',
+  movil: '📲 Cómo se ve en el móvil',
+};
+
 const ETIQUETAS = {
   ayuda:     { texto: 'Me ayuda',     emoji: '😀', color: '#16a34a' },
   mejorable: { texto: 'Lo mejoraría', emoji: '🔧', color: '#f59e0b' },
@@ -24,7 +39,13 @@ export default function PanelValoraciones() {
     }
     fetch('/api/valoraciones?resumen=1')
       .then(r => r.json())
-      .then(d => { setModulos(d.modulos || []); setValoraciones(d.valoraciones || []); })
+      .then(d => {
+        const vals = d.valoraciones || [];
+        setValoraciones(vals);
+        // Las partes salen de las propias respuestas, no de una tabla
+        const partes = [...new Set(vals.map(v => v.modulo || 'general'))];
+        setModulos(partes.map(p => ({ clave: p, nombre: NOMBRES[p] || p, estado: null })));
+      })
       .catch(e => console.error('No se pudieron cargar las valoraciones:', e))
       .finally(() => setCargando(false));
   }, []);
@@ -91,9 +112,10 @@ export default function PanelValoraciones() {
         {!cargando && modulos.length === 0 && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 30, textAlign: 'center', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
             <div style={{ fontSize: 44, marginBottom: 10 }}>📊</div>
-            <div style={{ fontWeight: 700, color: '#555', marginBottom: 6 }}>No hay módulos en prueba</div>
+            <div style={{ fontWeight: 700, color: '#555', marginBottom: 6 }}>Todavía no hay valoraciones</div>
             <div style={{ fontSize: 13.5, color: '#888', lineHeight: 1.6 }}>
-              Cuando se ponga un módulo a prueba aparecerá aquí con las respuestas del claustro.
+              A cada profesor se le pregunta una vez, a los 15 días de darse de alta.
+              Según vayan contestando aparecerán aquí agrupadas por la parte que indiquen.
             </div>
           </div>
         )}
@@ -111,17 +133,9 @@ export default function PanelValoraciones() {
                 <div style={{ flex: '1 1 260px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
                     <h2 style={{ margin: 0, fontSize: 17, color: AZUL }}>{m.nombre}</h2>
-                    <span style={{
-                      fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-                      backgroundColor: m.estado === 'en_prueba' ? '#fef3c7' : m.estado === 'consolidado' ? '#dcfce7' : '#fee2e2',
-                      color: m.estado === 'en_prueba' ? '#92400e' : m.estado === 'consolidado' ? '#166534' : '#991b1b',
-                    }}>
-                      {m.estado === 'en_prueba' ? '⏳ En prueba' : m.estado === 'consolidado' ? '✅ Consolidado' : '🗑️ Retirado'}
-                    </span>
+
                   </div>
-                  <div style={{ fontSize: 12.5, color: '#888', marginBottom: 12 }}>
-                    Desde el {new Date(m.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES')} · {m.dias_prueba} días de prueba
-                  </div>
+                  <div style={{ height: 8 }} />
 
                   {Object.entries(cuenta).map(([k, n]) => (
                     <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
