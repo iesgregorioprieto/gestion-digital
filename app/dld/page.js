@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
+import ValoracionModulo from '@/components/ValoracionModulo';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -441,6 +442,8 @@ export default function DLD() {
       </div>
 
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '24px 16px' }}>
+
+        <ValoracionModulo modulo="dld" />
 
         {/* AVISO DIRECTIVO */}
         {esDirectivo && (
