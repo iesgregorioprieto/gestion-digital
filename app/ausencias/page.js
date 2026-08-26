@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getCursoActual } from '@/lib/curso';
+import ValoracionModulo from '@/components/ValoracionModulo';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -529,6 +530,8 @@ export default function Ausencias() {
       </div>
 
       <div style={{ padding: 16 }}>
+
+        <ValoracionModulo modulo="ausencias" />
 
         {/* ===== FORMULARIO ===== */}
         {vista === 'formulario' && (
