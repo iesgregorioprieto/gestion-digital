@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
+import ValoracionModulo from '@/components/ValoracionModulo';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -195,6 +196,8 @@ export default function Actividades() {
       </div>
 
       <div style={{ maxWidth: 720, margin: '0 auto', padding: '20px 16px 50px' }}>
+
+        <ValoracionModulo modulo="actividades" />
 
         {mensaje && (
           <div style={{
