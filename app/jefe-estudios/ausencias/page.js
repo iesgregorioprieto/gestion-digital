@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
 const rojo = '#991b1b';
@@ -60,6 +61,7 @@ export default function GestionAusencias() {
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState('imprevista');
+  const [subtipo, setSubtipo] = useState('');
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
@@ -168,7 +170,8 @@ export default function GestionAusencias() {
   async function enviarManual() {
     if (!profesorSeleccionado) { mostrarMensaje('Selecciona el profesor.', 'error'); return; }
     if (!fechaInicio) { mostrarMensaje('Indica la fecha.', 'error'); return; }
-    if (!motivo.trim()) { mostrarMensaje('Indica el motivo.', 'error'); return; }
+    if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
+    if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
 
     const prof = profesores.find(p => p.id === profesorSeleccionado);
     setEnviando(true);
@@ -191,8 +194,9 @@ export default function GestionAusencias() {
           departamento: prof.departamento || '',
           fecha_inicio: fechaInicio,
           fecha_fin: fechaFin || fechaInicio,
-          motivo: motivo.trim(),
-          tipo,
+          motivo: motivo.trim() ? `${etiquetaMotivo(subtipo)} — ${motivo.trim()}` : etiquetaMotivo(subtipo),
+          tipo: tipoDeMotivo(subtipo),
+          subtipo,
           horas: horasConDatos,
         },
       }),
@@ -204,7 +208,7 @@ export default function GestionAusencias() {
 
     mostrarMensaje(`✅ Ausencia de ${prof.nombre} ${prof.apellidos} registrada correctamente`, 'ok');
     setProfesorSeleccionado(''); setFechaInicio(''); setFechaFin('');
-    setMotivo(''); setTipo('imprevista'); setHorario({});
+    setMotivo(''); setTipo('imprevista'); setSubtipo(''); setHorario({});
     setVista('lista');
     cargarTodo();
   }
@@ -337,7 +341,7 @@ export default function GestionAusencias() {
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{a.profesor_nombre}</div>
                       <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                        {a.tipo === 'prevista' ? '📆' : '🚨'} {a.tipo} ·
+                        {a.subtipo ? etiquetaMotivo(a.subtipo) : (a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista')} ·
                         {a.fecha_inicio === a.fecha_fin
                           ? ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`
                           : ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
@@ -447,23 +451,31 @@ export default function GestionAusencias() {
               </div>
             </div>
 
-            {/* TIPO */}
+            {/* MOTIVO (lista unica Delphos) */}
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>⚠️ Tipo</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                {[{ valor: 'prevista', emoji: '📆', label: 'Prevista' }, { valor: 'imprevista', emoji: '🚨', label: 'Imprevista' }].map(t => (
-                  <div key={t.valor} onClick={() => setTipo(t.valor)} style={{ padding: 12, borderRadius: 10, border: `2px solid ${tipo === t.valor ? naranja : '#e0e0e0'}`, backgroundColor: tipo === t.valor ? '#fff7ed' : 'white', cursor: 'pointer', textAlign: 'center' }}>
-                    <div style={{ fontSize: 20 }}>{t.emoji}</div>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: tipo === t.valor ? naranja : '#333' }}>{t.label}</div>
-                  </div>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📋 Motivo de la ausencia *</label>
+              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : 'imprevista'); }}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? '#f0fdf4' : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
+                <option value="">-- Selecciona el motivo --</option>
+                {MOTIVOS_AUSENCIA.map(m => (
+                  <option key={m.valor} value={m.valor}>{m.emoji} {m.label}</option>
                 ))}
-              </div>
+              </select>
+              {subtipo && tipoDeMotivo(subtipo) === 'imprevista' && (
+                <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', fontSize: 12, color: '#991b1b', lineHeight: 1.4 }}>
+                  ℹ️ El profesor debe aportar justificación en un plazo de 3 días hábiles.
+                </div>
+              )}
             </div>
 
-            {/* MOTIVO */}
+            {/* OBSERVACIONES */}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📝 Motivo *</label>
-              <textarea value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Enfermedad, visita médica, asunto personal..." rows={2} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>
+                📝 {subtipo === 'otros' ? 'Especifica el motivo *' : 'Observaciones (opcional)'}
+              </label>
+              <textarea value={motivo} onChange={e => setMotivo(e.target.value)}
+                placeholder={subtipo === 'otros' ? 'Especifica el motivo de la ausencia...' : 'Detalle adicional si es necesario...'}
+                rows={2} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${subtipo === 'otros' && !motivo.trim() ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
 
             {/* HORARIO */}
