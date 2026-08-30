@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getCursoActual } from '@/lib/curso';
-import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo } from '@/lib/motivosAusencia';
+import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -66,6 +66,7 @@ export default function Ausencias() {
   const [motivo, setMotivo] = useState('');
   const [tipo, setTipo] = useState('');
   const [subtipo, setSubtipo] = useState('');
+  const [datosExtra, setDatosExtra] = useState({});
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
@@ -260,6 +261,11 @@ export default function Ausencias() {
     if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
+    const bloqueExtra = camposExtraDe(subtipo);
+    if (bloqueExtra) {
+      const falta = bloqueExtra.campos.find(c => c.requerido && !(datosExtra[c.id] || '').trim());
+      if (falta) { mostrarMensaje(`Falta rellenar: ${falta.label}.`, 'error'); return; }
+    }
 
     const diasAusencia = calcularDiasAusencia(fechaInicio, fechaFin);
     const esAusenciaLarga = diasAusencia >= 3;
@@ -345,6 +351,7 @@ export default function Ausencias() {
       motivo: motivo.trim() ? `${etiquetaMotivo(subtipo)} — ${motivo.trim()}` : etiquetaMotivo(subtipo),
       tipo: tipoDeMotivo(subtipo),
       subtipo,
+      datos_extra: camposExtraDe(subtipo) ? datosExtra : null,
       horas: horasConUrl,
     };
 
@@ -378,7 +385,7 @@ export default function Ausencias() {
       'ok'
     );
     setEditandoId(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setHorario({}); setModoManual(false);
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false);
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -390,6 +397,7 @@ export default function Ausencias() {
     setFechaInicio(a.fecha_inicio || '');
     setFechaFin(a.fecha_fin || a.fecha_inicio || '');
     setMotivo(observacionesDe(a.motivo, a.subtipo));
+    setDatosExtra(a.datos_extra || {});
     setTipo(a.tipo || '');
     setSubtipo(a.subtipo || '');
     setModoManual(false);
@@ -443,7 +451,7 @@ export default function Ausencias() {
 
   function cancelarEdicion() {
     setEditandoId(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo('');
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({});
     setHorario({}); setModoManual(false); setGruposUnicos([]); setTareasBloque({});
     setVista('historial');
   }
@@ -620,7 +628,7 @@ export default function Ausencias() {
             {/* MOTIVO (lista unica Delphos) */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📋 Motivo de la ausencia *</label>
-              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); }}
+              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); }}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? verdeClaro : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
                 <option value="">-- Selecciona el motivo --</option>
                 {MOTIVOS_AUSENCIA.map(m => (
@@ -639,6 +647,27 @@ export default function Ausencias() {
                 </div>
               )}
             </div>
+
+            {/* CAMPOS PROPIOS DEL MOTIVO */}
+            {camposExtraDe(subtipo) && (
+              <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1.5px solid #cbd5e1' }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: azul, marginBottom: 10 }}>
+                  {camposExtraDe(subtipo).titulo}
+                </div>
+                {camposExtraDe(subtipo).campos.map(c => (
+                  <div key={c.id} style={{ marginBottom: 10 }}>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
+                      {c.label}{c.requerido ? ' *' : ''}
+                    </label>
+                    <input type="text" value={datosExtra[c.id] || ''}
+                      onChange={e => setDatosExtra(d => ({ ...d, [c.id]: e.target.value }))}
+                      style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
+                        border: `1.5px solid ${c.requerido && !(datosExtra[c.id] || '').trim() ? '#fca5a5' : '#ddd'}` }} />
+                    {c.ayuda && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{c.ayuda}</div>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* OBSERVACIONES */}
             <div style={{ marginBottom: 20 }}>
