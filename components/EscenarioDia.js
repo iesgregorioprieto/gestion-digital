@@ -40,7 +40,7 @@ export default function EscenarioDia({ fecha, compacto = false }) {
         const sb = getSupabase();
         const [rAus, rAct, rDld] = await Promise.all([
           sb.from('ausencias')
-            .select('id, profesor_nombre, fecha_inicio, fecha_fin, subtipo, motivo, horas, estado')
+            .select('id, profesor_nombre, fecha_inicio, fecha_fin, subtipo, motivo, horas, estado, datos_extra')
             .lte('fecha_inicio', fecha).gte('fecha_fin', fecha),
           sb.from('actividades')
             .select('id, titulo, profesor_nombre, acompanantes, grupos, fecha_inicio, fecha_fin, estado')
@@ -62,10 +62,14 @@ export default function EscenarioDia({ fecha, compacto = false }) {
         // 1 y 3. Ausencias -> las de formacion van a su propio bloque
         (rAus.data || []).forEach(a => {
           const esFormacion = a.subtipo === 'permiso_formacion';
+          const ex = a.datos_extra || {};
+          const detalleFormacion = [ex.curso, ex.entidad, ex.horario].filter(Boolean).join(' · ');
           lista.push({
             bloque: esFormacion ? 'formacion' : 'ausencias',
             profesor: a.profesor_nombre || '—',
-            detalle: a.subtipo ? etiquetaMotivo(a.subtipo) : (a.motivo || 'Sin especificar'),
+            detalle: (esFormacion && detalleFormacion)
+              ? detalleFormacion
+              : (a.subtipo ? etiquetaMotivo(a.subtipo) : (a.motivo || 'Sin especificar')),
             nHoras: Array.isArray(a.horas) ? a.horas.length : 0,
             estado: a.estado,
           });
