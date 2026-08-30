@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getCursoActual } from '@/lib/curso';
-import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
+import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -627,7 +627,13 @@ export default function Ausencias() {
                   <option key={m.valor} value={m.valor}>{m.emoji} {m.label}</option>
                 ))}
               </select>
-              {subtipo && tipoDeMotivo(subtipo) === 'imprevista' && (
+              {subtipo && avisoDeMotivo(subtipo) && (
+                <div style={{ marginTop: 8, padding: '11px 13px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 12.5, color: '#78350f', lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 3 }}>{avisoDeMotivo(subtipo).titulo}</div>
+                  {avisoDeMotivo(subtipo).texto}
+                </div>
+              )}
+              {subtipo && tipoDeMotivo(subtipo) === 'imprevista' && !avisoDeMotivo(subtipo) && (
                 <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', fontSize: 12, color: '#991b1b', lineHeight: 1.4 }}>
                   ℹ️ Recuerda aportar justificación en un plazo de 3 días hábiles.
                 </div>
