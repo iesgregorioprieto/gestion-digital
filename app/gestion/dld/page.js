@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ResolverDiaDLD from '@/components/ResolverDiaDLD';
 import { getConfigCurso, numProfesores, plazoSolicitudDLD } from '@/lib/curso';
+import EscenarioDia from '@/components/EscenarioDia';
+import { hoyLocal } from '@/lib/fechas';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS_SEMANA = ['L','M','X','J','V','S','D'];
 const azul = '#1a3a6b';
@@ -215,6 +217,7 @@ export default function PanelDirector() {
   const [origenPlantilla, setOrigenPlantilla] = useState('registrados');
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState('calendario');
+  const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
   const [mesActual, setMesActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
@@ -893,7 +896,24 @@ export default function PanelDirector() {
           <button onClick={() => setVista('calendario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'calendario' ? azul : '#ddd'}`, backgroundColor: vista === 'calendario' ? azul : 'white', color: vista === 'calendario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Calendario</button>
           <button onClick={() => setVista('lista')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'lista' ? azul : '#ddd'}`, backgroundColor: vista === 'lista' ? azul : 'white', color: vista === 'lista' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📋 Lista</button>
           <button onClick={() => setVista('resolver')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'resolver' ? verde : '#ddd'}`, backgroundColor: vista === 'resolver' ? verde : 'white', color: vista === 'resolver' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>⚖️ Resolver día</button>
+          <button onClick={() => setVista('escenario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'escenario' ? verde : '#ddd'}`, backgroundColor: vista === 'escenario' ? verde : 'white', color: vista === 'escenario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Escenario del día</button>
         </div>
+
+        {vista === 'escenario' && (
+          <div>
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 14, border: '1px solid #e5e7eb' }}>
+              <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 8 }}>
+                📅 ¿Qué día quieres consultar?
+              </label>
+              <input type="date" value={fechaEscenario} onChange={e => setFechaEscenario(e.target.value)}
+                style={{ padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: '100%', maxWidth: 260, boxSizing: 'border-box' }} />
+              <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+                Todo lo previsto ese día por orden de prioridad: ausencias, extraescolares, formación y DLD.
+              </div>
+            </div>
+            <EscenarioDia fecha={fechaEscenario} />
+          </div>
+        )}
 
         {/* RESOLVER DÍA COMPLETO */}
         {vista === 'resolver' && (
