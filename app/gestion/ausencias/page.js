@@ -859,6 +859,15 @@ ${a.observaciones_directivo ? `
                         )}
                         {a.motivo}
                       </div>
+                      {a.datos_extra && Object.keys(a.datos_extra).length > 0 && (
+                        <div style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 12, lineHeight: 1.6, maxWidth: 520 }}>
+                          {a.datos_extra.curso &&        <div><strong>Curso:</strong> {a.datos_extra.curso}</div>}
+                          {a.datos_extra.entidad &&      <div><strong>Organiza:</strong> {a.datos_extra.entidad}</div>}
+                          {a.datos_extra.lugar &&        <div><strong>Lugar:</strong> {a.datos_extra.lugar}</div>}
+                          {a.datos_extra.horario &&      <div><strong>Horario:</strong> {a.datos_extra.horario}</div>}
+                          {a.datos_extra.dias_totales && <div><strong>Días que supone:</strong> {a.datos_extra.dias_totales}</div>}
+                        </div>
+                      )}
                     </div>
                     <span style={{ padding: '4px 10px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
                   </div>
