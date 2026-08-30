@@ -212,6 +212,19 @@ export default function Ausencias() {
     setCargando(false);
   }
 
+  // Cursos de formacion que este profesor ya registro antes, para no
+  // tener que reescribir los datos en cada dia suelto del mismo curso.
+  function cursosPrevios() {
+    const vistos = new Map();
+    (historial || []).forEach(a => {
+      if (a.subtipo !== 'permiso_formacion') return;
+      const d = a.datos_extra;
+      if (!d || !d.curso) return;
+      if (!vistos.has(d.curso)) vistos.set(d.curso, d);
+    });
+    return Array.from(vistos.values()).slice(0, 4);
+  }
+
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -654,6 +667,23 @@ export default function Ausencias() {
                 <div style={{ fontSize: 13, fontWeight: 800, color: azul, marginBottom: 10 }}>
                   {camposExtraDe(subtipo).titulo}
                 </div>
+                {subtipo === 'permiso_formacion' && cursosPrevios().length > 0 && (
+                  <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>
+                      ¿Es otro día del mismo curso? Reutiliza los datos:
+                    </div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {cursosPrevios().map((d, i) => (
+                        <button key={i} type="button" onClick={() => setDatosExtra({ ...d })}
+                          style={{ padding: '6px 11px', borderRadius: 20, border: '1.5px solid #94a3b8', backgroundColor: 'white',
+                            fontSize: 11.5, fontWeight: 600, color: '#334155', cursor: 'pointer', maxWidth: '100%',
+                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          ↩️ {d.curso}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {camposExtraDe(subtipo).campos.map(c => (
                   <div key={c.id} style={{ marginBottom: 10 }}>
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
