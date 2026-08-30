@@ -865,6 +865,7 @@ ${a.observaciones_directivo ? `
                           {a.datos_extra.entidad &&      <div><strong>Organiza:</strong> {a.datos_extra.entidad}</div>}
                           {a.datos_extra.lugar &&        <div><strong>Lugar:</strong> {a.datos_extra.lugar}</div>}
                           {a.datos_extra.horario &&      <div><strong>Horario:</strong> {a.datos_extra.horario}</div>}
+                          {a.datos_extra.horas &&        <div><strong>Horas del curso:</strong> {a.datos_extra.horas} h</div>}
                           {a.datos_extra.dias_totales && <div><strong>Días que supone:</strong> {a.datos_extra.dias_totales}</div>}
                         </div>
                       )}
