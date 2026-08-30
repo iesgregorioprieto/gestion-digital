@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
-import { getCursoActual } from '@/lib/curso';
+import { getCursoActual, cursoPorFecha } from '@/lib/curso';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
@@ -215,14 +215,24 @@ export default function Ausencias() {
   // Cursos de formacion que este profesor ya registro antes, para no
   // tener que reescribir los datos en cada dia suelto del mismo curso.
   function cursosPrevios() {
+    const cursoAcad = cursoPorFecha(new Date());
     const vistos = new Map();
     (historial || []).forEach(a => {
       if (a.subtipo !== 'permiso_formacion') return;
       const d = a.datos_extra;
       if (!d || !d.curso) return;
-      if (!vistos.has(d.curso)) vistos.set(d.curso, d);
+      // Solo el curso academico en marcha
+      if (a.fecha_inicio && cursoPorFecha(new Date(a.fecha_inicio + 'T12:00:00')) !== cursoAcad) return;
+      const ya = vistos.get(d.curso);
+      if (ya) { ya.dias += 1; }
+      else { vistos.set(d.curso, { datos: d, dias: 1, horas: parseFloat(d.horas) || 0 }); }
     });
-    return Array.from(vistos.values()).slice(0, 4);
+    return Array.from(vistos.values());
+  }
+
+  // Horas de formacion acumuladas este curso academico (cada curso cuenta una vez)
+  function horasFormacionCurso() {
+    return cursosPrevios().reduce((t, c) => t + c.horas, 0);
   }
 
   function mostrarMensaje(texto, tipo) {
@@ -668,19 +678,28 @@ export default function Ausencias() {
                   {camposExtraDe(subtipo).titulo}
                 </div>
                 {subtipo === 'permiso_formacion' && cursosPrevios().length > 0 && (
-                  <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>
-                      ¿Es otro día del mismo curso? Reutiliza los datos:
+                  <div style={{ marginBottom: 14, paddingBottom: 12, borderBottom: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#334155' }}>
+                        📊 Tu formación este curso
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1e40af', backgroundColor: '#eff6ff', padding: '3px 10px', borderRadius: 20 }}>
+                        {horasFormacionCurso()} h en {cursosPrevios().length} curso{cursosPrevios().length !== 1 ? 's' : ''}
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {cursosPrevios().map((d, i) => (
-                        <button key={i} type="button" onClick={() => setDatosExtra({ ...d })}
-                          style={{ padding: '6px 11px', borderRadius: 20, border: '1.5px solid #94a3b8', backgroundColor: 'white',
-                            fontSize: 11.5, fontWeight: 600, color: '#334155', cursor: 'pointer', maxWidth: '100%',
-                            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          ↩️ {d.curso}
-                        </button>
-                      ))}
+                    {cursosPrevios().map((c, i) => (
+                      <button key={i} type="button" onClick={() => setDatosExtra({ ...c.datos })}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', marginBottom: 5, padding: '8px 11px',
+                          borderRadius: 8, border: '1.5px solid #cbd5e1', backgroundColor: 'white', cursor: 'pointer' }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#334155' }}>↩️ {c.datos.curso}</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                          {c.horas > 0 ? `${c.horas} h` : 'sin horas'} · {c.dias} día{c.dias !== 1 ? 's' : ''} ya registrado{c.dias !== 1 ? 's' : ''}
+                          {c.datos.entidad ? ` · ${c.datos.entidad}` : ''}
+                        </div>
+                      </button>
+                    ))}
+                    <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                      Pulsa un curso para reutilizar sus datos en este día.
                     </div>
                   </div>
                 )}
@@ -689,7 +708,7 @@ export default function Ausencias() {
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
                       {c.label}{c.requerido ? ' *' : ''}
                     </label>
-                    <input type="text" value={datosExtra[c.id] || ''}
+                    <input type={c.tipo === 'number' ? 'number' : 'text'} min={c.tipo === 'number' ? '0' : undefined} value={datosExtra[c.id] || ''}
                       onChange={e => setDatosExtra(d => ({ ...d, [c.id]: e.target.value }))}
                       style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
                         border: `1.5px solid ${c.requerido && !(datosExtra[c.id] || '').trim() ? '#fca5a5' : '#ddd'}` }} />
