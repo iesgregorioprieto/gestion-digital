@@ -4,6 +4,8 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
+import { hoyLocal } from '@/lib/fechas';
+import EscenarioDia from '@/components/EscenarioDia';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
 const rojo = '#991b1b';
@@ -39,6 +41,7 @@ const ESTADOS = {
 export default function GestionAusencias() {
   const [nombre, setNombre] = useState('');
   const [vista, setVista] = useState('lista');
+  const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [ausencias, setAusencias] = useState([]);
   const [profesores, setProfesores] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -243,6 +246,7 @@ export default function GestionAusencias() {
         {[
           { id: 'lista', label: `📋 Todas las ausencias (${ausencias.length})` },
           { id: 'manual', label: '✍️ Registrar ausencia' },
+          { id: 'escenario', label: '📅 Escenario del día' },
         ].map(t => (
           <button key={t.id} onClick={() => setVista(t.id)} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === t.id ? naranja : '#ddd'}`, backgroundColor: vista === t.id ? naranja : 'white', color: vista === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {t.label}
@@ -347,6 +351,16 @@ export default function GestionAusencias() {
                           : ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
                       </div>
                       <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>{a.motivo}</div>
+                      {a.datos_extra && Object.keys(a.datos_extra).length > 0 && (
+                        <div style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', fontSize: 12, lineHeight: 1.6, maxWidth: 520 }}>
+                          {a.datos_extra.curso &&        <div><strong>Curso:</strong> {a.datos_extra.curso}</div>}
+                          {a.datos_extra.entidad &&      <div><strong>Organiza:</strong> {a.datos_extra.entidad}</div>}
+                          {a.datos_extra.lugar &&        <div><strong>Lugar:</strong> {a.datos_extra.lugar}</div>}
+                          {a.datos_extra.horario &&      <div><strong>Horario:</strong> {a.datos_extra.horario}</div>}
+                          {a.datos_extra.horas &&        <div><strong>Horas del curso:</strong> {a.datos_extra.horas} h</div>}
+                          {a.datos_extra.dias_totales && <div><strong>Días que supone:</strong> {a.datos_extra.dias_totales}</div>}
+                        </div>
+                      )}
                     </div>
                     <span style={{ padding: '4px 10px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
                   </div>
@@ -424,6 +438,22 @@ export default function GestionAusencias() {
         )}
 
         {/* ===== FORMULARIO MANUAL ===== */}
+        {vista === 'escenario' && (
+          <div>
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 14, border: '1px solid #e5e7eb' }}>
+              <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 8 }}>
+                📅 ¿Qué día quieres consultar?
+              </label>
+              <input type="date" value={fechaEscenario} onChange={e => setFechaEscenario(e.target.value)}
+                style={{ padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: '100%', maxWidth: 260, boxSizing: 'border-box' }} />
+              <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+                Todo lo previsto ese día por orden de prioridad: ausencias, extraescolares, formación y DLD.
+              </div>
+            </div>
+            <EscenarioDia fecha={fechaEscenario} />
+          </div>
+        )}
+
         {vista === 'manual' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
             <div style={{ backgroundColor: '#fff7ed', border: '1.5px solid #fed7aa', borderRadius: 10, padding: '10px 14px', marginBottom: 20, fontSize: 13, color: '#92400e' }}>
