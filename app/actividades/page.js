@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
+import EscenarioDia from '@/components/EscenarioDia';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -43,7 +44,8 @@ export default function Actividades() {
   const [nombre, setNombre]       = useState('');
   const [departamento, setDepto]  = useState('');
   const [cargando, setCargando]   = useState(true);
-  const [vista, setVista]         = useState('lista'); // 'lista' | 'nueva'
+  const [vista, setVista]         = useState('lista'); // 'lista' | 'nueva' | 'escenario'
+  const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [mensaje, setMensaje]     = useState(null);
 
   const [actividades, setActividades] = useState([]);
@@ -209,6 +211,7 @@ export default function Actividades() {
           {[
             { id: 'lista', label: '📅 Calendario' },
             { id: 'nueva', label: '➕ Proponer' },
+            { id: 'escenario', label: '📅 Escenario' },
           ].map(t => (
             <button key={t.id} onClick={() => setVista(t.id)} style={{
               flex: 1, padding: '11px', borderRadius: 10, cursor: 'pointer', fontSize: 14, fontWeight: 700,
@@ -252,6 +255,22 @@ export default function Actividades() {
         )}
 
         {/* ── PROPONER ── */}
+        {vista === 'escenario' && (
+          <div>
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 14, border: '1px solid #e5e7eb' }}>
+              <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 8 }}>
+                📅 ¿Qué día quieres consultar?
+              </label>
+              <input type="date" value={fechaEscenario} onChange={e => setFechaEscenario(e.target.value)}
+                style={{ padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: '100%', maxWidth: 260, boxSizing: 'border-box' }} />
+              <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
+                Todo lo previsto ese día por orden de prioridad: ausencias, extraescolares, formación y DLD.
+              </div>
+            </div>
+            <EscenarioDia fecha={fechaEscenario} />
+          </div>
+        )}
+
         {vista === 'nueva' && (
           <div>
             <div style={{ ...nota('#eff6ff', '#bfdbfe', '#1e40af') }}>
