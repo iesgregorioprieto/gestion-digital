@@ -11,7 +11,7 @@
  */
 
 const WEB = 'https://somosdelprieto.com';
-const CUANTAS = 8;
+const CUANTAS = 5;
 
 /** Convierte las entidades HTML de WordPress en texto normal */
 function limpiar(texto) {
