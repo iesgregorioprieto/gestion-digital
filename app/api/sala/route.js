@@ -30,7 +30,15 @@ export async function GET() {
     const hoy = hoyLocal();
     const cliente = supa();
 
-    const [aus, dlds, apoyos, avisos] = await Promise.all([
+    // Semana en curso, de lunes a domingo, para las extraescolares
+    const d = new Date(hoy + 'T12:00:00');
+    const diaSemana = (d.getDay() + 6) % 7;           // 0 = lunes
+    const lunes = new Date(d); lunes.setDate(d.getDate() - diaSemana);
+    const domingo = new Date(lunes); domingo.setDate(lunes.getDate() + 6);
+    const iso = f => f.toISOString().slice(0, 10);
+    const lunesStr = iso(lunes), domingoStr = iso(domingo);
+
+    const [aus, dlds, apoyos, avisos, actividades] = await Promise.all([
       cliente.from('ausencias')
         .select('profesor_nombre, horas, fecha_inicio, fecha_fin')
         .lte('fecha_inicio', hoy)
@@ -49,6 +57,13 @@ export async function GET() {
         .select('*')
         .eq('activo', true)
         .order('created_at', { ascending: false }),
+
+      // Extraescolares de esta semana (las rechazadas se descartan luego)
+      cliente.from('actividades')
+        .select('titulo, profesor_nombre, acompanantes, grupos, fecha_inicio, fecha_fin, lugar, estado')
+        .lte('fecha_inicio', domingoStr)
+        .gte('fecha_fin', lunesStr)
+        .order('fecha_inicio', { ascending: true }),
     ]);
 
     return Response.json({
@@ -57,6 +72,8 @@ export async function GET() {
       dlds: dlds.data || [],
       apoyos: apoyos.data || [],
       avisos: avisos.data || [],
+      actividades: (actividades.data || []).filter(a => a.estado !== 'rechazada'),
+      semana: { desde: lunesStr, hasta: domingoStr },
     });
   } catch (e) {
     return Response.json({ error: e.message, ausencias: [], dlds: [], apoyos: [], avisos: [] }, { status: 500 });
