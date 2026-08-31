@@ -119,6 +119,13 @@ export async function POST(request) {
 
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // Permiso de formación: se avisa a dirección. Si el correo falla,
+      // la ausencia ya está guardada y no se pierde nada.
+      if (fila.subtipo === 'permiso_formacion') {
+        avisarFormacion(fila).catch(err => console.error('aviso formacion:', err?.message));
+      }
+
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
@@ -193,5 +200,59 @@ export async function POST(request) {
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
+  }
+}
+
+
+/**
+ * Avisa por correo a la dirección de que alguien ha comunicado un
+ * permiso de formación. No bloquea el guardado: se lanza en segundo
+ * plano y si falla solo se registra en el log.
+ */
+async function avisarFormacion(fila) {
+  const cliente = supa();
+
+  const { data: directivos } = await cliente
+    .from('profesores')
+    .select('nombre, apellidos, email, rol_gestion')
+    .not('rol_gestion', 'is', null);
+
+  const destinos = (directivos || [])
+    .filter(p => (p.rol_gestion || '').toLowerCase().startsWith('director') && p.email)
+    .map(p => p.email);
+
+  if (destinos.length === 0) return;
+
+  const { data: profs } = await cliente
+    .from('profesores')
+    .select('nombre, apellidos')
+    .eq('id', fila.profesor_id);
+  const prof = (profs || [])[0];
+  const nombre = prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : 'Un profesor/a';
+
+  const ex = fila.datos_extra || {};
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+
+  for (const email of destinos) {
+    await fetch(`${baseUrl}/api/enviar-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-clave-interna': process.env.SESSION_SECRET || '',
+      },
+      body: JSON.stringify({
+        tipo: 'formacion_solicitada',
+        datos: {
+          email,
+          nombre,
+          fecha: fila.fecha_inicio || '',
+          curso: ex.curso || '',
+          entidad: ex.entidad || '',
+          lugar: ex.lugar || '',
+          horario: ex.horario || '',
+          horas: ex.horas ? `${ex.horas} h` : '',
+        },
+      }),
+    });
   }
 }
