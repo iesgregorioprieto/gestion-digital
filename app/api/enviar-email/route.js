@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -189,6 +189,58 @@ export async function POST(request) {
             </p>
             ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${e(datos.rol_gestion)}</strong></p>` : ''}
             <p style="color:#666;font-size:13px">Si tienes algún problema para acceder, contacta con la secretaría del centro.</p>
+          </div>
+          <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
+    } else if (tipo === 'formacion_solicitada') {
+      subject = `🎓 Permiso de formación solicitado — ${e(datos.nombre)}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e3a5f;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">IES Gregorio Prieto</h1>
+            <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
+          </div>
+          <div style="padding:30px;background:#f9f9f9">
+            <h2 style="color:#1e3a5f">Permiso de formación</h2>
+            <p><strong>${e(datos.nombre)}</strong> ha comunicado un permiso de formación.</p>
+            <table style="width:100%;border-collapse:collapse;margin:20px 0">
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold;width:40%">Fecha de la ausencia</td>
+                <td style="padding:10px">${e(datos.fecha)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Curso</td>
+                <td style="padding:10px">${e(datos.curso)}</td>
+              </tr>
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold">Organiza</td>
+                <td style="padding:10px">${e(datos.entidad)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Lugar</td>
+                <td style="padding:10px">${e(datos.lugar)}</td>
+              </tr>
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold">Horario</td>
+                <td style="padding:10px">${e(datos.horario)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Horas del curso</td>
+                <td style="padding:10px">${e(datos.horas)}</td>
+              </tr>
+            </table>
+            <p style="font-size:13px;color:#666">
+              Recuerda que el profesorado debe solicitarlo además por la vía oficial de Delphos.
+            </p>
+            <div style="text-align:center;margin:30px 0">
+              <a href="${BASE_URL}/gestion/ausencias"
+                 style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
+                Ver en el portal
+              </a>
+            </div>
           </div>
           <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
             IES Gregorio Prieto · Valdepeñas · Ciudad Real
