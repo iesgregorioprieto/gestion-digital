@@ -31,6 +31,8 @@ export default function SalaProfesores() {
   const [apoyos, setApoyos] = useState([]);
   const [avisos, setAvisos] = useState([]);
   const [noticias, setNoticias] = useState([]);
+  const [actividades, setActividades] = useState([]);
+  const [semana, setSemana] = useState(null);
   // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
   const [modoPanel, setModoPanel] = useState('avisos');
   const cajaAvisosRef = useRef(null);
@@ -55,6 +57,8 @@ export default function SalaProfesores() {
       setDlds(d.dlds || []);
       setApoyos(d.apoyos || []);
       setAvisos(d.avisos || []);
+      setActividades(d.actividades || []);
+      setSemana(d.semana || null);
     } catch (e) {
       console.error('No se pudieron cargar los datos de la sala:', e);
     }
@@ -77,8 +81,9 @@ export default function SalaProfesores() {
     const intervaloNoticias = setInterval(traerNoticias, 1800000);
 
     // Cada minuto cambia de avisos a noticias y vuelta
+    const CICLO = ['avisos', 'extraescolares', 'noticias'];
     const alternancia = setInterval(() => {
-      setModoPanel(m => (m === 'avisos' ? 'noticias' : 'avisos'));
+      setModoPanel(m => CICLO[(CICLO.indexOf(m) + 1) % CICLO.length]);
       if (cajaAvisosRef.current) cajaAvisosRef.current.scrollTop = 0;
     }, 60000);
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
@@ -338,6 +343,57 @@ export default function SalaProfesores() {
                         <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </>
+            ) : modoPanel === 'extraescolares' ? (
+              <>
+                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>
+                  🚌 Extraescolares de la semana
+                  {semana && (
+                    <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.5, marginLeft: 8 }}>
+                      {new Date(semana.desde + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                      {' – '}
+                      {new Date(semana.hasta + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}
+                    </span>
+                  )}
+                </h2>
+                {actividades.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                    🚌 Ninguna actividad esta semana
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {actividades.map((a, i) => {
+                      const ini = a.fecha_inicio ? new Date(a.fecha_inicio + 'T12:00:00') : null;
+                      const fin = a.fecha_fin ? new Date(a.fecha_fin + 'T12:00:00') : null;
+                      const fmt = f => f.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric' });
+                      const cuando = ini
+                        ? (fin && a.fecha_fin !== a.fecha_inicio ? `${fmt(ini)} – ${fmt(fin)}` : fmt(ini))
+                        : '';
+                      const grupos = Array.isArray(a.grupos) ? a.grupos.join(', ') : '';
+                      const acomp = Array.isArray(a.acompanantes) ? a.acompanantes.length : 0;
+                      return (
+                        <div key={i} style={{
+                          backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                          borderLeft: `4px solid ${a.estado === 'pendiente' ? '#f59e0b' : '#0ea5e9'}`,
+                        }}>
+                          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, lineHeight: 1.3 }}>
+                            {a.titulo || 'Actividad'}
+                            {a.estado === 'pendiente' && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', marginLeft: 8 }}>pendiente</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 15, opacity: 0.88, lineHeight: 1.45, textTransform: 'capitalize' }}>
+                            📅 {cuando}
+                          </div>
+                          {grupos && <div style={{ fontSize: 14, opacity: 0.8, marginTop: 2 }}>👥 {grupos}</div>}
+                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>
+                            {a.profesor_nombre || ''}{acomp > 0 ? ` +${acomp}` : ''}{a.lugar ? ` · ${a.lugar}` : ''}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </>
