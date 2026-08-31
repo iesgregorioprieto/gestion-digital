@@ -30,6 +30,9 @@ export default function SalaProfesores() {
   const [dlds, setDlds] = useState([]);
   const [apoyos, setApoyos] = useState([]);
   const [avisos, setAvisos] = useState([]);
+  const [noticias, setNoticias] = useState([]);
+  // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
+  const [modoPanel, setModoPanel] = useState('avisos');
   const cajaAvisosRef = useRef(null);
   const cajaAusentesRef = useRef(null);
   const cajaGuardiasRef = useRef(null);
@@ -62,6 +65,22 @@ export default function SalaProfesores() {
   useEffect(() => {
     cargarDatos();
     const intervalo = setInterval(cargarDatos, 120000); // cada 2 min
+
+    // Noticias de la web del centro (se refrescan cada media hora)
+    const traerNoticias = () => {
+      fetch('/api/noticias')
+        .then(r => r.json())
+        .then(d => setNoticias(d.noticias || []))
+        .catch(() => {});
+    };
+    traerNoticias();
+    const intervaloNoticias = setInterval(traerNoticias, 1800000);
+
+    // Cada minuto cambia de avisos a noticias y vuelta
+    const alternancia = setInterval(() => {
+      setModoPanel(m => (m === 'avisos' ? 'noticias' : 'avisos'));
+      if (cajaAvisosRef.current) cajaAvisosRef.current.scrollTop = 0;
+    }, 60000);
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
 
     // Los tres listados bajan y suben solos: la pantalla está en la
@@ -92,7 +111,7 @@ export default function SalaProfesores() {
         if (!c.bajando && caja.scrollTop <= 1)        { c.bajando = true;  c.espera = 80; }
       }
     }, 50);
-    return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); };
+    return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); clearInterval(intervaloNoticias); clearInterval(alternancia); };
   }, [cargarDatos]);
 
   // Profesores ausentes con sus horas
@@ -295,28 +314,69 @@ export default function SalaProfesores() {
             </div>
           </div>
 
-          {/* AVISOS */}
+          {/* AVISOS / NOTICIAS: la caja alterna sola cada minuto */}
           <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
-            {avisos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                📌 Sin avisos
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {avisos.map((a, i) => (
-                  <div key={a.id || i} style={{
-                    backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
-                    borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
-                  }}>
-                    <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 5 }}>
-                      {a.urgente ? '🔴' : '📌'} {a.titulo}
-                    </div>
-                    <div style={{ fontSize: 15, opacity: 0.88, lineHeight: 1.45 }}>{a.mensaje}</div>
-                    <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
+
+            {modoPanel === 'avisos' ? (
+              <>
+                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
+                {avisos.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                    📌 Sin avisos
                   </div>
-                ))}
-              </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {avisos.map((a, i) => (
+                      <div key={a.id || i} style={{
+                        backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                        borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
+                      }}>
+                        <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 5 }}>
+                          {a.urgente ? '🔴' : '📌'} {a.titulo}
+                        </div>
+                        <div style={{ fontSize: 15, opacity: 0.88, lineHeight: 1.45 }}>{a.mensaje}</div>
+                        <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>{a.autor} · {new Date(a.created_at).toLocaleDateString('es-ES')}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>
+                  📰 Noticias del centro
+                  <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.5, marginLeft: 8 }}>somosdelprieto.com</span>
+                </h2>
+                {noticias.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                    📰 Sin noticias que mostrar
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {noticias.map((n, i) => (
+                      <div key={n.id || i} style={{
+                        backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                        borderLeft: '4px solid #10b981',
+                        display: 'flex', gap: 12, alignItems: 'flex-start',
+                      }}>
+                        {n.imagen && (
+                          <img src={n.imagen} alt="" style={{
+                            width: 64, height: 64, objectFit: 'cover', borderRadius: 6, flexShrink: 0,
+                          }} />
+                        )}
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, lineHeight: 1.3 }}>
+                            {n.titulo}
+                          </div>
+                          <div style={{ fontSize: 11, opacity: 0.45 }}>
+                            {n.fecha ? new Date(n.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
