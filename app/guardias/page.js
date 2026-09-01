@@ -252,6 +252,20 @@ export default function Guardias() {
       ...dlds.map(d => ({...d, tipo_falta:'dld'})),
     ];
 
+    // Antes de leer los apoyos se pide al servidor que preasigne los
+    // que falten. Así la propuesta le llega al profesorado aunque nadie
+    // de jefatura haya abierto el cuadrante. Si falla, se sigue igual:
+    // se verán los apoyos que ya hubiera.
+    try {
+      await fetch('/api/guardias/preasignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha: f }),
+      });
+    } catch (e) {
+      console.error('No se pudieron preasignar las guardias:', e);
+    }
+
     // Cargar apoyos para esta fecha
     try {
       const r = await getSupabase()
