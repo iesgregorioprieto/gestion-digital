@@ -13,10 +13,10 @@ const azul = '#1a3a6b';
 const verde = '#1e6b2e';
 
 function etiquetaTipoDLD(tipo) {
-  if (tipo === 'no_lectivo') return '🌙 Moscoso no lectivo';
-  if (tipo === '1_lectivo') return '📚 1º Moscoso lectivo';
-  if (tipo === '2_lectivo') return '📖 2º Moscoso lectivo';
-  if (tipo === '3_lectivo') return '📗 3º Moscoso lectivo';
+  if (tipo === 'no_lectivo') return '🌙 DLD no lectivo';
+  if (tipo === '1_lectivo') return '📚 1º DLD lectivo';
+  if (tipo === '2_lectivo') return '📖 2º DLD lectivo';
+  if (tipo === '3_lectivo') return '📗 3º DLD lectivo (retirado)';
   if (tipo === 'canoso') return '🦳 Canoso (+55 años o +18 años servicio)';
   return tipo;
 }
