@@ -17,7 +17,7 @@ import { claveServidor } from '@/lib/claveServidor';
  * complementarias, que las propone cualquier profesor.
  */
 
-const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos'];
+const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
 
 // Solo las actividades las puede crear cualquiera; el resto es de gestión
 const ABIERTAS_A_PROFESORADO = ['actividades'];
