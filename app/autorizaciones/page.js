@@ -27,9 +27,6 @@ export default function Autorizaciones() {
   const [cargando, setCargando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   // Jefe de estudios
-  const [subiendoExcel, setSubiendoExcel] = useState(false);
-  const [previstaExcel, setPrevistaExcel] = useState([]);
-  const [modalPreview, setModalPreview] = useState(false);
   const [grupos, setGrupos] = useState([]);
   const [filtroGrupo, setFiltroGrupo] = useState('');
   const [stats, setStats] = useState({ total: 0, conRestricciones: 0, grupos: 0 });
@@ -99,83 +96,6 @@ export default function Autorizaciones() {
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 5000);
-  }
-
-  // ===== IMPORTAR EXCEL =====
-  async function procesarExcel(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setSubiendoExcel(true);
-
-    const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const wb = XLSX.read(ev.target.result, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-        // Mapear columnas del Excel a campos de la tabla
-        const alumnos = rows.map(r => {
-          // Intentar detectar las columnas automáticamente
-          const keys = Object.keys(r).map(k => k.toLowerCase().trim());
-          const get = (terminos) => {
-            const key = Object.keys(r).find(k => terminos.some(t => k.toLowerCase().includes(t)));
-            return key ? String(r[key]).trim() : '';
-          };
-
-          return {
-            nombre: get(['nombre']),
-            apellidos: get(['apellido']),
-            grupo: get(['grupo', 'curso', 'clase']).toUpperCase(),
-            no_imagen_menor14:    ['si','sí','yes','1','true','x'].includes(String(get(['imagen_menor14','img_menor14','menor14','imagen14'])).toLowerCase()),
-            no_imagen_mayor14:    ['si','sí','yes','1','true','x'].includes(String(get(['imagen_mayor14','img_mayor14','mayor14'])).toLowerCase()),
-            no_salidas_1617:      ['si','sí','yes','1','true','x'].includes(String(get(['salida','recreo','1617','16_17'])).toLowerCase()),
-            no_actividades_menor18: ['si','sí','yes','1','true','x'].includes(String(get(['actividad','extracurricular','menor18'])).toLowerCase()),
-            no_informar_mayor18:  ['si','sí','yes','1','true','x'].includes(String(get(['informar','progenitor','mayor18'])).toLowerCase()),
-          };
-        }).filter(a => a.nombre || a.apellidos);
-
-        setPrevistaExcel(alumnos);
-        setModalPreview(true);
-      } catch (err) {
-        mostrarMensaje('Error al leer el Excel: ' + err.message, 'error');
-      }
-      setSubiendoExcel(false);
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = '';
-  }
-
-  async function confirmarImportacion() {
-    if (!previstaExcel.length) return;
-    setSubiendoExcel(true);
-    const respImp = await fetch('/api/alumnos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'importar', alumnos: previstaExcel }),
-    });
-    const error = respImp.ok ? null : await respImp.json();
-    setSubiendoExcel(false);
-    setModalPreview(false);
-    if (error) { mostrarMensaje('Error al importar: ' + error.message, 'error'); return; }
-    mostrarMensaje(`✅ ${previstaExcel.length} alumnos importados correctamente`, 'ok');
-    setPrevistaExcel([]);
-    cargarGrupos();
-    cargarStats();
-  }
-
-  async function eliminarGrupo(grupo) {
-    if (!confirm(`¿Eliminar todos los alumnos del grupo ${grupo}? No se puede deshacer.`)) return;
-    await fetch('/api/alumnos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar_grupo', grupo }),
-    });
-    mostrarMensaje(`🗑️ Grupo ${grupo} eliminado`, 'ok');
-    cargarGrupos();
-    cargarStats();
-    setAlumnos([]);
   }
 
   const esJefeEstudios = rolGestion === 'jefe_estudios' || rolGestion === 'secretario' || rolGestion === 'director';
