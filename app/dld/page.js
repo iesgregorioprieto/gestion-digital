@@ -55,9 +55,9 @@ const GRUPOS_POR_ETAPA = {
 // NORMATIVA DLD — Resolución 07/07/2026 (curso 26/27)
 // =========================================================
 const TIPOS_DLD = [
-  { valor: 'no_lectivo',  emoji: '🌙', label: 'Moscoso en período no lectivo' },
-  { valor: '1_lectivo',   emoji: '📚', label: '1º Moscoso en período lectivo' },
-  { valor: '2_lectivo',   emoji: '📖', label: '2º Moscoso en período lectivo' },
+  { valor: 'no_lectivo',  emoji: '🌙', label: 'Día de libre disposición en período no lectivo' },
+  { valor: '1_lectivo',   emoji: '📚', label: '1º día de libre disposición en período lectivo' },
+  { valor: '2_lectivo',   emoji: '📖', label: '2º día de libre disposición en período lectivo' },
   { valor: 'canoso',      emoji: '🦳', label: 'CANOSO (+55 años o +18 años servicio)' },
 ];
 
@@ -463,7 +463,7 @@ export default function DLD() {
           <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
             {/* MOSCOSOS */}
           <div style={{ marginBottom: 8 }}>
-            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>🌙 MOSCOSOS ({moscososUsados}/{maxMoscosos})</div>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>🌙 DÍAS DE LIBRE DISPOSICIÓN ({moscososUsados}/{maxMoscosos})</div>
             <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
               {Array(maxMoscosos).fill(null).map((_, i) => (
                 <div key={i} style={{ flex: 1, height: 10, borderRadius: 4, backgroundColor: i < moscososUsados ? verde : '#e0e0e0' }} />
@@ -580,10 +580,10 @@ export default function DLD() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 700, fontSize: 15, color: '#222', marginBottom: 4 }}>
                       {s.tipo_dld === 'canoso' ? '🦳 CANOSO' :
-                       s.tipo_dld === 'no_lectivo' ? '🌙 Moscoso no lectivo' :
-                       s.tipo_dld === '1_lectivo' ? '📚 1º Moscoso lectivo' :
-                       s.tipo_dld === '2_lectivo' ? '📖 2º Moscoso lectivo' :
-                       s.tipo_dld === '3_lectivo' ? '📗 3º Moscoso lectivo (retirado)' : s.tipo_dld}
+                       s.tipo_dld === 'no_lectivo' ? '🌙 DLD no lectivo' :
+                       s.tipo_dld === '1_lectivo' ? '📚 1º DLD lectivo' :
+                       s.tipo_dld === '2_lectivo' ? '📖 2º DLD lectivo' :
+                       s.tipo_dld === '3_lectivo' ? '📗 3º DLD lectivo (retirado)' : s.tipo_dld}
                     </div>
                     <div style={{ fontSize: 13, color: '#555' }}>📅 {new Date(s.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
                     {grupos.length > 0 && (
@@ -907,7 +907,7 @@ export default function DLD() {
                 {
                   tipo: 'Funcionario de carrera / Interino con vacante',
                   moscosos: 3, canoso: true,
-                  nota: 'Un moscoso obligatoriamente en periodo no lectivo (1-5 sept. o 18-30 jun.). Los otros dos y el canoso pueden ser en cualquier momento.',
+                  nota: 'Un día obligatoriamente en periodo no lectivo (1-5 sept. o 18-30 jun.). Los otros dos y el canoso pueden ser en cualquier momento.',
                   color: '#166534', bg: '#dcfce7', border: '#86efac',
                 },
                 {
@@ -919,13 +919,13 @@ export default function DLD() {
                 {
                   tipo: 'Interino sin vacante (≥ 87 días trabajados)',
                   moscosos: 1, canoso: true,
-                  nota: 'Solo 1 moscoso, pero con derecho a canoso si cumples los requisitos.',
+                  nota: 'Solo 1 día de libre disposición, pero con derecho a canoso si cumples los requisitos.',
                   color: '#78350f', bg: '#fef3c7', border: '#fcd34d',
                 },
                 {
                   tipo: 'Interino sin vacante (< 87 días)',
                   moscosos: 0, canoso: true,
-                  nota: 'Sin moscosos, pero con derecho a canoso si tienes +55 años o +18 años de servicio.',
+                  nota: 'Sin días de libre disposición, pero con derecho a canoso si tienes +55 años o +18 años de servicio.',
                   color: '#6b7280', bg: '#f3f4f6', border: '#d1d5db',
                 },
               ].map((t, i) => (
@@ -934,7 +934,7 @@ export default function DLD() {
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                     {t.moscosos > 0 && (
                       <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 20, backgroundColor: 'white', border: `1px solid ${t.border}`, fontWeight: 700, color: t.color }}>
-                        🌙 {t.moscosos} moscoso{t.moscosos > 1 ? 's' : ''}
+                        🌙 {t.moscosos} día{t.moscosos > 1 ? 's' : ''} de libre disposición
                       </span>
                     )}
                     <span style={{ fontSize: 12, padding: '2px 10px', borderRadius: 20, backgroundColor: 'white', border: '1px solid #c4b5fd', fontWeight: 700, color: '#6d28d9' }}>
@@ -965,7 +965,7 @@ export default function DLD() {
                   <li>Lunes, viernes, vísperas de festivos o después de festivos</li>
                   <li>En el mismo semestre (dos seguidos si quieres)</li>
                   <li>Prolongar fines de semana, vacaciones o constituir puentes</li>
-                  <li>Varios moscosos en periodo no lectivo (novedad 26/27)</li>
+                  <li>Varios días de libre disposición en periodo no lectivo (novedad 26/27)</li>
                 </ul>
               </div>
               <div>
