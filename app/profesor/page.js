@@ -155,7 +155,6 @@ export default function PanelProfesor() {
       titulo: 'Autorizaciones',
       descripcion: 'Consulta autorizaciones y restricciones del alumnado',
       href: '/autorizaciones',
-      hrefTutor: '/autorizaciones/gestion',
       disponible: true,
       roles: ['todos'],
       color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd',
@@ -234,7 +233,7 @@ export default function PanelProfesor() {
   // Tutores también tienen acceso a gestión de autorizaciones
   const esTutor = roles.includes('tutor');
   const panelTutor = esTutor && !panelDirectivo
-    ? { emoji: '📋', titulo: 'Mis Autorizaciones', href: '/autorizaciones/gestion' }
+    ? { emoji: '📋', titulo: 'Mis Autorizaciones', href: '/autorizaciones' }
     : null;
 
   const esDirector = rolGestion === 'director';
@@ -457,7 +456,7 @@ export default function PanelProfesor() {
             return (
             <div
               key={m.id}
-              onClick={() => m.disponible && acceso && (window.location.href = (m.hrefTutor && esTutor) ? m.hrefTutor : m.href)}
+              onClick={() => m.disponible && acceso && (window.location.href = m.href)}
               style={{
                 backgroundColor: m.disponible && acceso ? bgActivo : '#fafafa',
                 borderRadius: 14, padding: 20,
@@ -479,7 +478,7 @@ export default function PanelProfesor() {
                 {m.titulo}
               </div>
               <div style={{ fontSize: 12, color: m.disponible && acceso ? `${colorActivo}99` : '#ccc', lineHeight: 1.4 }}>
-                {m.hrefTutor && esTutor ? 'Gestiona las autorizaciones y restricciones de tu grupo' : m.descripcion}
+                {m.id === 'autorizaciones' && esTutor ? 'Consulta autorizaciones y gestiona las de tu tutoría' : m.descripcion}
               </div>
               {!m.disponible && (
                 <div style={{
@@ -499,7 +498,7 @@ export default function PanelProfesor() {
               {m.disponible && acceso && (
                 <div style={{ marginTop: 12, fontSize: 12, color: colorActivo, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
                   Acceder →
-                  {m.hrefTutor && esTutor && (
+                  {m.id === 'autorizaciones' && esTutor && (
                     <span style={{ fontSize: 10, backgroundColor: `${borderActivo}60`, color: colorActivo, padding: '2px 8px', borderRadius: 10, fontWeight: 700 }}>Tutor</span>
                   )}
                 </div>
