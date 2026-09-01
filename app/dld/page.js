@@ -58,7 +58,6 @@ const TIPOS_DLD = [
   { valor: 'no_lectivo',  emoji: '🌙', label: 'Moscoso en período no lectivo' },
   { valor: '1_lectivo',   emoji: '📚', label: '1º Moscoso en período lectivo' },
   { valor: '2_lectivo',   emoji: '📖', label: '2º Moscoso en período lectivo' },
-  { valor: '3_lectivo',   emoji: '📗', label: '3º Moscoso en período lectivo' },
   { valor: 'canoso',      emoji: '🦳', label: 'CANOSO (+55 años o +18 años servicio)' },
 ];
 
@@ -148,14 +147,16 @@ export default function DLD() {
     return total;
   }
 
+  // Resolución 18/07/2024, punto 1: tres días por curso, repartidos en
+  // uno de período no lectivo y dos del resto del curso. El tercer
+  // moscoso lectivo que había aquí no existe en la norma.
   function tieneDerecho(tipoDld) {
     const { moscosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
     if (tipoDld === 'canoso') return tieneDerechoCanoso;
-    // 3º moscoso solo para carrera/vacante
-    if (tipoDld === '3_lectivo') return tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante';
-    // 2º moscoso: carrera/vacante y sin vacante con 8+ meses
-    if (tipoDld === '2_lectivo') return tipoContrato !== '';
-    return true;
+    // El segundo día lectivo solo lo tiene quien disponga de dos o más
+    // moscosos: carrera, interino con vacante, y sin vacante con 8+ meses.
+    if (tipoDld === '2_lectivo') return moscosos >= 2;
+    return tipoContrato !== '';
   }
 
   const diasAprobados = misSolicitudes.filter(s => s.estado === 'aprobada').length;
@@ -582,7 +583,7 @@ export default function DLD() {
                        s.tipo_dld === 'no_lectivo' ? '🌙 Moscoso no lectivo' :
                        s.tipo_dld === '1_lectivo' ? '📚 1º Moscoso lectivo' :
                        s.tipo_dld === '2_lectivo' ? '📖 2º Moscoso lectivo' :
-                       s.tipo_dld === '3_lectivo' ? '📗 3º Moscoso lectivo' : s.tipo_dld}
+                       s.tipo_dld === '3_lectivo' ? '📗 3º Moscoso lectivo (retirado)' : s.tipo_dld}
                     </div>
                     <div style={{ fontSize: 13, color: '#555' }}>📅 {new Date(s.fecha_solicitada + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</div>
                     {grupos.length > 0 && (
