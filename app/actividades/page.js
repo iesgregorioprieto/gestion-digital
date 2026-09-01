@@ -7,6 +7,29 @@ import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
 import EscenarioDia from '@/components/EscenarioDia';
 
+const FAMILIAS = {
+  'ESO':  'ESO',            'BTO':  'Bachillerato',
+  'GB':   'FP Básica',      'GM':   'Grado Medio',
+  'GS':   'Grado Superior', 'CA':   'Cursos Espec.',
+  'FPPE': 'FP Permanente',
+};
+
+/** Agrupa los códigos de grupo por etapa, en el orden del catálogo */
+function agruparPorFamilia(codigos) {
+  const bloques = {};
+  const sueltos = [];
+  (codigos || []).forEach(g => {
+    const G = (g || '').trim().toUpperCase();
+    const fam = Object.keys(FAMILIAS).find(p => G.startsWith(p + '-') || G.startsWith(p + ' '));
+    if (fam) (bloques[fam] = bloques[fam] || []).push(g);
+    else sueltos.push(g);
+  });
+  const orden = Object.keys(FAMILIAS).filter(f => bloques[f]?.length);
+  const salida = orden.map(f => ({ familia: f, nombre: FAMILIAS[f], grupos: bloques[f].sort() }));
+  if (sueltos.length) salida.push({ familia: 'OTROS', nombre: 'Otros', grupos: sueltos.sort() });
+  return salida;
+}
+
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
 const AMBAR = '#b45309';
@@ -60,12 +83,62 @@ export default function Actividades() {
     horas: [], hora_salida: '', hora_regreso: '',
     grupos: [], acompanantes: [],
     lugar: '', transporte: '', coste_alumno: '',
+    profesor_guardia: '',
     en_pga: null,          // null = sin elegir todavía
     pga_seleccionada: '',  // id de la actividad de la PGA
   });
   const [pgaLista, setPgaLista] = useState([]);
+  const [alumnosPorGrupo, setAlumnosPorGrupo] = useState({});
+  const [asistentes, setAsistentes] = useState({});
+  const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+  // Al elegir grupos se traen sus alumnos. Por defecto van todos,
+  // que es lo habitual; el profesor va quitando a quien no vaya.
+  useEffect(() => {
+    const pendientes = form.grupos.filter(g => !alumnosPorGrupo[g]);
+    if (pendientes.length === 0) return;
+    let cancelado = false;
+    setCargandoAlumnos(true);
+    (async () => {
+      const nuevos = {}, nuevosAsist = {};
+      for (const g of pendientes) {
+        try {
+          const r = await fetch(`/api/alumnos?grupo=${encodeURIComponent(g)}`);
+          const d = await r.json();
+          const lista = d.alumnos || [];
+          nuevos[g] = lista;
+          nuevosAsist[g] = lista.map(a => a.id);
+        } catch (e) {
+          nuevos[g] = []; nuevosAsist[g] = [];
+        }
+      }
+      if (cancelado) return;
+      setAlumnosPorGrupo(prev => ({ ...prev, ...nuevos }));
+      setAsistentes(prev => ({ ...prev, ...nuevosAsist }));
+      setCargandoAlumnos(false);
+    })();
+    return () => { cancelado = true; };
+  }, [form.grupos]);
+
+  const alternarAlumno = (grupo, id) => {
+    setAsistentes(prev => {
+      const actual = prev[grupo] || [];
+      return { ...prev, [grupo]: actual.includes(id) ? actual.filter(x => x !== id) : [...actual, id] };
+    });
+  };
+
+  const todosDelGrupo = (grupo) => {
+    const total = (alumnosPorGrupo[grupo] || []).length;
+    return total > 0 && (asistentes[grupo] || []).length === total;
+  };
+
+  // Si alguien se queda en el centro, hace falta profesor de guardia
+  const hayAlumnosQueSeQuedan = () =>
+    form.grupos.some(g => (alumnosPorGrupo[g] || []).length > 0 && !todosDelGrupo(g));
+
+  const totalVan = () => form.grupos.reduce((t, g) => t + (asistentes[g] || []).length, 0);
   const aviso = (texto, tipo = 'ok') => {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 5000);
@@ -134,6 +207,10 @@ export default function Actividades() {
     if (!form.fecha_inicio)    return aviso('Indica la fecha.', 'error');
     if (form.grupos.length === 0)       return aviso('Selecciona al menos un grupo.', 'error');
     if (form.acompanantes.length === 0) return aviso('Indica quién acompaña.', 'error');
+    if (totalVan() === 0) return aviso('No has marcado ningún alumno que asista.', 'error');
+    if (hayAlumnosQueSeQuedan() && !form.profesor_guardia) {
+      return aviso('Asigna quién atiende al alumnado que se queda en el centro.', 'error');
+    }
 
     setEnviando(true);
     try {
@@ -154,6 +231,11 @@ export default function Actividades() {
         hora_regreso: form.hora_regreso || null,
         grupos: form.grupos,
         acompanantes: form.acompanantes,
+        alumnos_asistentes: Object.fromEntries(
+          form.grupos.map(g => [g, todosDelGrupo(g) ? 'todos' : (asistentes[g] || [])])
+        ),
+        necesita_guardia: hayAlumnosQueSeQuedan(),
+        profesor_guardia: form.profesor_guardia || null,
         lugar: form.lugar.trim() || null,
         transporte: form.transporte.trim() || null,
         coste_alumno: form.coste_alumno ? parseFloat(form.coste_alumno) : null,
@@ -167,10 +249,12 @@ export default function Actividades() {
 
       aviso('📨 Propuesta enviada a jefatura de estudios');
       setForm({
-        titulo: '', tipo: 'salida', relacion_curricular: '', en_pga: null, pga_seleccionada: '',
+        titulo: '', tipo: 'salida', relacion_curricular: '', en_pga: null, pga_seleccionada: '', profesor_guardia: '',
         fecha_inicio: '', fecha_fin: '', horas: [], hora_salida: '', hora_regreso: '',
         grupos: [], acompanantes: [], lugar: '', transporte: '', coste_alumno: '',
       });
+      setAsistentes({});
+      setAlumnosPorGrupo({});
       setAvisoFecha(null);
       setVista('lista');
       cargar(profId);
@@ -420,15 +504,106 @@ export default function Actividades() {
               <Sub2>Quién va</Sub2>
 
               <Campo label="Grupos participantes *">
-                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', maxHeight: 190, overflowY: 'auto' }}>
+                <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                   {grupos.length === 0 && <Pista>No hay grupos cargados todavía.</Pista>}
-                  {grupos.map(g => (
-                    <Chip key={g} activo={form.grupos.includes(g)} onClick={() => alternar('grupos', g)}>
-                      {g}
-                    </Chip>
+                  {agruparPorFamilia(grupos).map(bloque => (
+                    <div key={bloque.familia} style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 5 }}>
+                        {bloque.nombre}
+                      </div>
+                      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                        {bloque.grupos.map(g => (
+                          <Chip key={g} activo={form.grupos.includes(g)} onClick={() => alternar('grupos', g)}>
+                            {g}
+                          </Chip>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </Campo>
+
+              {/* ALUMNADO QUE ASISTE */}
+              {form.grupos.length > 0 && (
+                <Campo label="Alumnado que asiste">
+                  {cargandoAlumnos && <Pista>Cargando alumnos...</Pista>}
+                  {form.grupos.map(g => {
+                    const lista = alumnosPorGrupo[g] || [];
+                    const van = asistentes[g] || [];
+                    const completo = todosDelGrupo(g);
+                    return (
+                      <div key={g} style={{ marginBottom: 12, border: `1.5px solid ${completo ? '#bbf7d0' : '#fde68a'}`, borderRadius: 10, overflow: 'hidden' }}>
+                        <div style={{ padding: '9px 12px', backgroundColor: completo ? '#f0fdf4' : '#fffbeb', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <strong style={{ fontSize: 13.5, color: '#333' }}>{g}</strong>
+                          <span style={{ fontSize: 12, color: completo ? '#166534' : '#92400e', fontWeight: 700 }}>
+                            {completo ? '✅ va el grupo entero' : `⚠️ van ${van.length} de ${lista.length}`}
+                          </span>
+                          {lista.length > 0 && (
+                            <button type="button"
+                              onClick={() => setAsistentes(p => ({ ...p, [g]: completo ? [] : lista.map(a => a.id) }))}
+                              style={{ marginLeft: 'auto', padding: '4px 10px', borderRadius: 20, border: '1.5px solid #cbd5e1', backgroundColor: 'white', fontSize: 11.5, fontWeight: 700, color: '#475569', cursor: 'pointer' }}>
+                              {completo ? 'Quitar todos' : 'Marcar todos'}
+                            </button>
+                          )}
+                        </div>
+                        {lista.length === 0 ? (
+                          <div style={{ padding: '9px 12px', fontSize: 12, color: '#94a3b8' }}>
+                            Sin alumnos cargados en este grupo.
+                          </div>
+                        ) : (
+                          <div style={{ maxHeight: 170, overflowY: 'auto', backgroundColor: 'white' }}>
+                            {lista.map(a => {
+                              const marcado = van.includes(a.id);
+                              const sinAuth = a.auth_salidas === false || a.auth_actividades === false;
+                              return (
+                                <label key={a.id} style={{
+                                  display: 'flex', alignItems: 'center', gap: 9, padding: '7px 12px',
+                                  borderTop: '1px solid #f1f5f9', fontSize: 13, cursor: 'pointer',
+                                  backgroundColor: marcado && sinAuth ? '#fef2f2' : 'transparent',
+                                }}>
+                                  <input type="checkbox" checked={marcado}
+                                    onChange={() => alternarAlumno(g, a.id)}
+                                    style={{ width: 17, height: 17, cursor: 'pointer' }} />
+                                  <span style={{ color: marcado ? '#111' : '#94a3b8' }}>
+                                    {a.apellidos || ''}{a.apellidos ? ', ' : ''}{a.nombre || ''}
+                                  </span>
+                                  {sinAuth && (
+                                    <span style={{ marginLeft: 'auto', fontSize: 10.5, fontWeight: 800, color: '#991b1b', backgroundColor: '#fee2e2', padding: '2px 8px', borderRadius: 20 }}>
+                                      SIN AUTORIZACIÓN
+                                    </span>
+                                  )}
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <Pista>{totalVan()} alumnos asistirán en total.</Pista>
+                </Campo>
+              )}
+
+              {/* PROFESOR DE GUARDIA PARA QUIEN SE QUEDA */}
+              {hayAlumnosQueSeQuedan() && (
+                <Campo label="Profesor/a que atiende a quien se queda *">
+                  <div style={{ marginBottom: 9, padding: '11px 13px', borderRadius: 9, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 12.5, color: '#78350f', lineHeight: 1.55 }}>
+                    No va el grupo completo, así que queda alumnado en el centro.
+                    Hay que asignar a alguien que lo atienda durante la actividad.
+                  </div>
+                  <select value={form.profesor_guardia} style={input}
+                    onChange={e => set('profesor_guardia', e.target.value)}>
+                    <option value="">-- Elige quién se queda con ellos --</option>
+                    {profesores
+                      .filter(p => !form.acompanantes.includes(p.id))
+                      .map(p => (
+                        <option key={p.id} value={`${p.apellidos || ''}, ${p.nombre || ''}`.trim()}>
+                          {p.apellidos || ''}, {p.nombre || ''}
+                        </option>
+                      ))}
+                  </select>
+                </Campo>
+              )}
 
               <Campo label="Profesores acompañantes *">
                 <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', maxHeight: 190, overflowY: 'auto' }}>
