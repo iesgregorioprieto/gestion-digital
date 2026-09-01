@@ -15,7 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante,
-  prepararAusencias, asignacionesDeHora, normHora,
+  prepararAusencias, asignacionesDeHora, normHora, normAbrev,
 } from '@/lib/asignacionGuardias';
 
 let _cliente = null;
@@ -141,6 +141,24 @@ export async function POST(request) {
     const ausencias = prepararAusencias(faltas, profesores || []);
     const cuadrante = construirCuadrante(horarios);
 
+    // Índice del horario oficial: quién · día · hora → grupo, aula y materia.
+    // Sirve para rellenar los huecos cuando el profesor que falta no llegó
+    // a detallar su horario, que es lo habitual en las ausencias de última
+    // hora. Quien entra al aula necesita saber a qué grupo va.
+    const horarioOficial = {};
+    horarios
+      .filter(h => h.tipo === 'clase' && (h.dia || '').toLowerCase() === dia)
+      .forEach(h => {
+        const clave = `${normAbrev(h.profesor_nombre_pdf)}|${normHora(h.hora_id)}`;
+        if (!horarioOficial[clave]) {
+          horarioOficial[clave] = {
+            grupo: h.grupo || null,
+            aula: h.aula || null,
+            materia: h.materia || null,
+          };
+        }
+      });
+
     // ─── Cálculo hora por hora ───
     const nuevas = [];
     for (const hora of HORAS_GUARDIA) {
@@ -153,7 +171,16 @@ export async function POST(request) {
       for (const asig of asignaciones) {
         if (!asig.cubre?.profesorId) continue;
 
-        const clave = `${hora}|${asig.clase.grupo || ''}|${asig.ausencia.sector.toUpperCase()}`;
+        // Lo que no dejó dicho el profesor ausente se completa con su
+        // horario oficial del centro. Se resuelve antes de la clave de
+        // duplicados: si no, el mismo hueco entraría dos veces, una con
+        // grupo y otra sin él.
+        const oficial = horarioOficial[`${normAbrev(asig.ausencia.abrev)}|${hora}`] || {};
+        const grupoFinal   = asig.clase.grupo   || oficial.grupo   || null;
+        const aulaFinal    = asig.clase.aula    || oficial.aula    || null;
+        const materiaFinal = asig.clase.materia || oficial.materia || null;
+
+        const clave = `${hora}|${grupoFinal || ''}|${asig.ausencia.sector.toUpperCase()}`;
         if (yaCubiertos.has(clave)) continue;
         yaCubiertos.add(clave);
 
@@ -163,9 +190,9 @@ export async function POST(request) {
           sector_apoyo: asig.cubre.sectorOriginal,
           sector_destino: asig.ausencia.sector.toUpperCase(),
           profesor_id: asig.cubre.profesorId,
-          grupo: asig.clase.grupo || null,
-          aula: asig.clase.aula || null,
-          materia: asig.clase.materia || null,
+          grupo: grupoFinal,
+          aula: aulaFinal,
+          materia: materiaFinal,
           tarea: asig.clase.instrucciones || null,
           asignado_por: null,          // la propuso el sistema, no una persona
           estado: 'pendiente',
