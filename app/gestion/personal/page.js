@@ -34,7 +34,6 @@ export default function PanelSecretario() {
   const [formEdicion, setFormEdicion] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [aprobandoId, setAprobandoId] = useState(null);
-  const [progresoMasivo, setProgresoMasivo] = useState(null);
   const [resumenMasivo, setResumenMasivo] = useState(null);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
@@ -43,8 +42,6 @@ export default function PanelSecretario() {
   const [fechaBaja, setFechaBaja] = useState(hoyLocal());
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
-  const [seleccionados, setSeleccionados] = useState(new Set());
-  const [activandoMasivo, setActivandoMasivo] = useState(false);
 
   // PROTECCIÓN: si no has hecho login, te manda al login
   useEffect(() => {
@@ -326,92 +323,8 @@ export default function PanelSecretario() {
    * mayoría devuelve error 429 y los profesores nunca reciben su enlace.
    * Por eso se espera entre envío y envío y se reintenta si hace falta.
    */
-  async function activarMasivos() {
-    if (seleccionados.size === 0) return;
 
-    const ids = [...seleccionados];
 
-    setActivandoMasivo(true);
-    setProgresoMasivo({ hecho: 0, total: ids.length });
-
-    // Traer todos los datos de una vez en lugar de uno por uno
-    const { data: fichas } = await getSupabase()
-      .from('profesores')
-      .select('id, nombre, apellidos, email, rol_gestion')
-      .in('id', ids);
-    const porId = Object.fromEntries((fichas || []).map(p => [p.id, p]));
-
-    let activados = 0;
-    const sinCorreo = [];
-    const fallidos  = [];
-
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i];
-      const prof = porId[id];
-      const resp = await fetch('/api/profesores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'aprobar', id, datos: { auth_: true } }),
-      });
-      const respuesta = await resp.json();
-      const error = resp.ok ? null : respuesta;
-      const token = respuesta.token;
-
-      if (error) {
-        fallidos.push(`${prof?.apellidos || '?'}, ${prof?.nombre || '?'}`);
-        setProgresoMasivo({ hecho: i + 1, total: ids.length });
-        continue;
-      }
-
-      activados++;
-
-      // Envío del correo, con un reintento si Resend responde 429
-      if (prof?.email) {
-        let enviado = false;
-        for (let intento = 0; intento < 2 && !enviado; intento++) {
-          try {
-            const r = await fetch('/api/enviar-email', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tipo: 'activacion_cuenta', datos: { ...prof, token } }),
-            });
-            if (r.ok) enviado = true;
-            else await esperar(1500); // probablemente límite de envío
-          } catch (e) {
-            await esperar(1500);
-          }
-        }
-        if (!enviado) sinCorreo.push(`${prof.apellidos}, ${prof.nombre}`);
-      }
-
-      setProgresoMasivo({ hecho: i + 1, total: ids.length });
-
-      // Respetar el límite de 2 correos por segundo
-      if (i < ids.length - 1) await esperar(600);
-    }
-
-    setSeleccionados(new Set());
-    setActivandoMasivo(false);
-    setProgresoMasivo(null);
-    setResumenMasivo({ activados, sinCorreo, fallidos, total: ids.length });
-    cargarProfesores();
-  }
-
-  function toggleSeleccion(id) {
-    setSeleccionados(prev => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  }
-
-  function toggleTodos(pendientes) {
-    if (seleccionados.size === pendientes.length) {
-      setSeleccionados(new Set());
-    } else {
-      setSeleccionados(new Set(pendientes.map(p => p.id)));
-    }
-  }
 
 
   // ── GESTIÓN DE BAJAS ──────────────────────────────────────
@@ -627,7 +540,6 @@ export default function PanelSecretario() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {[
             { id: 'profesores', emoji: '👥', label: 'Profesorado' },
-            { id: 'claustro', emoji: '🎓', label: 'Alta masiva' },
           ].map(t => (
             <button key={t.id} onClick={() => setPestana(t.id)} style={{
               padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -1085,178 +997,7 @@ export default function PanelSecretario() {
       {/* ========== PESTAÑA COMPRAS ========== */}
 
         {/* ========== PESTAÑA CLAUSTRO ========== */}
-        {pestana === 'claustro' && (() => {
-          const pendientes = profesores.filter(p => p.estado === 'pendiente' || !p.estado);
-          const todos = seleccionados.size === pendientes.length && pendientes.length > 0;
 
-          return (
-            <div>
-              <div style={{ backgroundColor: '#1e6b2e', borderRadius: 12, padding: '20px 24px', marginBottom: 20, color: 'white' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 6 }}>🎓 Alta masiva de profesores</div>
-                <div style={{ fontSize: 13, opacity: 0.9 }}>
-                  Los profesores se registran en <strong>/registro</strong> durante el claustro.
-                  Aquí puedes activarlos todos de una sola vez.
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-                <div style={{ backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '12px 20px', flex: 1, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#78350f' }}>{pendientes.length}</div>
-                  <div style={{ fontSize: 12, color: '#92400e', fontWeight: 600 }}>⏳ Pendientes de activar</div>
-                </div>
-                <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #86efac', borderRadius: 10, padding: '12px 20px', flex: 1, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#1e6b2e' }}>{profesores.filter(p => p.estado === 'activo').length}</div>
-                  <div style={{ fontSize: 12, color: '#166534', fontWeight: 600 }}>✅ Ya activados</div>
-                </div>
-                <div style={{ backgroundColor: '#f3f4f6', border: '1.5px solid #d1d5db', borderRadius: 10, padding: '12px 20px', flex: 1, textAlign: 'center' }}>
-                  <div style={{ fontSize: 28, fontWeight: 800, color: '#374151' }}>{profesores.length}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600 }}>📋 Total registrados</div>
-                </div>
-              </div>
-
-              {pendientes.length === 0 ? (
-                <div style={{ backgroundColor: '#dcfce7', border: '1.5px solid #86efac', borderRadius: 12, padding: 30, textAlign: 'center', color: '#1e6b2e' }}>
-                  <div style={{ fontSize: 32, marginBottom: 8 }}>🎉</div>
-                  <div style={{ fontSize: 16, fontWeight: 800 }}>¡Todos los profesores están activados!</div>
-                  <div style={{ fontSize: 13, marginTop: 6, opacity: 0.8 }}>No hay cuentas pendientes de activar.</div>
-                </div>
-              ) : (
-                <>
-                  <div style={{ backgroundColor: 'white', borderRadius: 12, padding: '14px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', flexWrap: 'wrap' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 14, fontWeight: 700 }}>
-                      <input type="checkbox" checked={todos} onChange={() => toggleTodos(pendientes)}
-                        style={{ width: 18, height: 18, cursor: 'pointer' }} />
-                      {todos ? 'Deseleccionar todos' : 'Seleccionar todos (' + pendientes.length + ')'}
-                    </label>
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                      {seleccionados.size > 0 && (
-                        <button
-                          onClick={activarMasivos}
-                          disabled={activandoMasivo}
-                          style={{
-                            padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer',
-                            backgroundColor: '#1e6b2e', color: 'white', fontWeight: 800, fontSize: 14,
-                            boxShadow: '0 2px 8px rgba(30,107,46,0.4)',
-                            opacity: activandoMasivo ? 0.7 : 1,
-                          }}
-                        >
-                          {activandoMasivo ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{
-                                width: 15, height: 15, display: 'inline-block',
-                                border: '2px solid rgba(255,255,255,0.35)',
-                                borderTopColor: 'white', borderRadius: '50%',
-                                animation: 'girar 0.8s linear infinite',
-                              }} />
-                              Activando
-                            </span>
-                          ) : '✅ Activar seleccionados (' + seleccionados.size + ')'}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Rueda de carga mientras se activa */}
-                  {progresoMasivo && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14,
-                      backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe',
-                      borderRadius: 10, padding: '18px 16px', marginBottom: 14,
-                    }}>
-                      <div style={{
-                        width: 26, height: 26, flexShrink: 0,
-                        border: '3px solid #bfdbfe',
-                        borderTopColor: '#1e6b2e',
-                        borderRadius: '50%',
-                        animation: 'girar 0.8s linear infinite',
-                      }} />
-                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1e40af' }}>
-                        {progresoMasivo.hecho} de {progresoMasivo.total}
-                      </div>
-                      <style>{`@keyframes girar { to { transform: rotate(360deg); } }`}</style>
-                    </div>
-                  )}
-
-                  {/* Resumen al terminar */}
-                  {resumenMasivo && (
-                    <div style={{
-                      backgroundColor: '#f9fafb', border: '1.5px solid #e5e7eb',
-                      borderRadius: 10, padding: '14px 16px', marginBottom: 14,
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <div style={{ fontSize: 14, fontWeight: 800, color: '#166534' }}>
-                          ✅ {resumenMasivo.activados} de {resumenMasivo.total} activados
-                        </div>
-                        <button onClick={() => setResumenMasivo(null)}
-                          style={{ background: 'none', border: 'none', fontSize: 17, cursor: 'pointer', color: '#aaa', lineHeight: 1 }}>✕</button>
-                      </div>
-
-                      {resumenMasivo.sinCorreo.length > 0 && (
-                        <div style={{ marginTop: 11, backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 13px', fontSize: 12.5, color: '#78350f', lineHeight: 1.6 }}>
-                          <strong>⚠️ Activados pero sin recibir el correo ({resumenMasivo.sinCorreo.length}):</strong>
-                          <div style={{ marginTop: 5 }}>{resumenMasivo.sinCorreo.join(' · ')}</div>
-                          <div style={{ marginTop: 6 }}>
-                            Están activos, pero no tienen su enlace. Apruébalos de uno en uno
-                            para reenviárselo.
-                          </div>
-                        </div>
-                      )}
-
-                      {resumenMasivo.fallidos.length > 0 && (
-                        <div style={{ marginTop: 11, backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 13px', fontSize: 12.5, color: '#991b1b', lineHeight: 1.6 }}>
-                          <strong>❌ No se pudieron activar ({resumenMasivo.fallidos.length}):</strong>
-                          <div style={{ marginTop: 5 }}>{resumenMasivo.fallidos.join(' · ')}</div>
-                          <div style={{ marginTop: 6 }}>Siguen pendientes. Vuelve a intentarlo con ellos.</div>
-                        </div>
-                      )}
-
-                      {resumenMasivo.sinCorreo.length === 0 && resumenMasivo.fallidos.length === 0 && (
-                        <div style={{ fontSize: 12.5, color: '#166534', marginTop: 6 }}>
-                          Todos han recibido su enlace de activación.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {pendientes.map(p => {
-                      const sel = seleccionados.has(p.id);
-                      return (
-                        <div key={p.id}
-                          onClick={() => toggleSeleccion(p.id)}
-                          style={{
-                            backgroundColor: sel ? '#f0fdf4' : 'white',
-                            border: '1.5px solid ' + (sel ? '#86efac' : '#e5e7eb'),
-                            borderRadius: 10, padding: '12px 16px',
-                            display: 'flex', alignItems: 'center', gap: 14, cursor: 'pointer',
-                            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-                          }}
-                        >
-                          <input type="checkbox" checked={sel} onChange={() => toggleSeleccion(p.id)}
-                            onClick={e => e.stopPropagation()}
-                            style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }} />
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: 700, fontSize: 14, color: '#1e293b' }}>
-                              {p.apellidos}, {p.nombre}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                              <span>📧 {p.email}</span>
-                              {p.departamento && <span>🏫 {p.departamento}</span>}
-                            </div>
-                          </div>
-                          <button
-                            onClick={e => { e.stopPropagation(); aprobar(p.id); }}
-                            style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 12, flexShrink: 0 }}
-                          >✅ Activar</button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })()}
 
 
 
