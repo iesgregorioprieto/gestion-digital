@@ -60,7 +60,10 @@ export default function Actividades() {
     horas: [], hora_salida: '', hora_regreso: '',
     grupos: [], acompanantes: [],
     lugar: '', transporte: '', coste_alumno: '',
+    en_pga: null,          // null = sin elegir todavía
+    pga_seleccionada: '',  // id de la actividad de la PGA
   });
+  const [pgaLista, setPgaLista] = useState([]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const aviso = (texto, tipo = 'ok') => {
@@ -79,15 +82,17 @@ export default function Actividades() {
   async function cargar(id) {
     setCargando(true);
     try {
-      const [{ data: acts }, { data: gs }, { data: profs }, { data: yo }] = await Promise.all([
+      const [{ data: acts }, { data: gs }, { data: pga }, { data: profs }, { data: yo }] = await Promise.all([
         getSupabase().from('actividades').select('*').order('fecha_inicio', { ascending: true }),
         getSupabase().from('grupos').select('codigo').order('codigo'),
+        getSupabase().from('actividades_pga').select('id, actividad, localidad').order('actividad'),
         getSupabase().from('profesores').select('id, nombre, apellidos').eq('estado', 'activo').order('apellidos'),
         getSupabase().from('profesores').select('departamento').eq('id', id),
       ]);
 
       setActividades(acts || []);
       setGrupos((gs || []).map(g => g.codigo).filter(Boolean));
+      setPgaLista(pga || []);
       setProfesores(profs || []);
       setDepto((yo || [])[0]?.departamento || '');
     } catch (e) {
@@ -123,6 +128,8 @@ export default function Actividades() {
   }
 
   async function enviar() {
+    if (form.en_pga === null)  return aviso('Indica si la actividad está aprobada en la PGA.', 'error');
+    if (form.en_pga === true && !form.pga_seleccionada) return aviso('Elige la actividad de la PGA.', 'error');
     if (!form.titulo.trim())   return aviso('Ponle un título a la actividad.', 'error');
     if (!form.fecha_inicio)    return aviso('Indica la fecha.', 'error');
     if (form.grupos.length === 0)       return aviso('Selecciona al menos un grupo.', 'error');
@@ -136,6 +143,7 @@ export default function Actividades() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tabla: 'actividades', accion: 'crear', datos: {
         titulo: form.titulo.trim(),
+        en_pga: form.en_pga === true,
         tipo: form.tipo,
         departamento: departamento || null,
         relacion_curricular: form.relacion_curricular.trim() || null,
@@ -159,7 +167,7 @@ export default function Actividades() {
 
       aviso('📨 Propuesta enviada a jefatura de estudios');
       setForm({
-        titulo: '', tipo: 'salida', relacion_curricular: '',
+        titulo: '', tipo: 'salida', relacion_curricular: '', en_pga: null, pga_seleccionada: '',
         fecha_inicio: '', fecha_fin: '', horas: [], hora_salida: '', hora_regreso: '',
         grupos: [], acompanantes: [], lugar: '', transporte: '', coste_alumno: '',
       });
@@ -281,10 +289,69 @@ export default function Actividades() {
             <div style={tarjeta}>
               <Sub2>Qué actividad es</Sub2>
 
-              <Campo label="Título *">
-                <input value={form.titulo} onChange={e => set('titulo', e.target.value)}
-                  placeholder="Ej: Visita a la feria del automóvil" style={input} />
+              <Campo label="¿Está aprobada en la PGA? *">
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, en_pga: true, pga_seleccionada: '', titulo: '', lugar: '' }))}
+                    style={{ flex: 1, minWidth: 150, padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13.5,
+                      border: `2px solid ${form.en_pga === true ? '#166534' : '#ddd'}`,
+                      backgroundColor: form.en_pga === true ? '#f0fdf4' : 'white',
+                      color: form.en_pga === true ? '#166534' : '#666' }}>
+                    ✅ Sí, está en la PGA
+                  </button>
+                  <button type="button" onClick={() => setForm(f => ({ ...f, en_pga: false, pga_seleccionada: '' }))}
+                    style={{ flex: 1, minWidth: 150, padding: '12px', borderRadius: 10, cursor: 'pointer', fontWeight: 700, fontSize: 13.5,
+                      border: `2px solid ${form.en_pga === false ? '#b45309' : '#ddd'}`,
+                      backgroundColor: form.en_pga === false ? '#fffbeb' : 'white',
+                      color: form.en_pga === false ? '#b45309' : '#666' }}>
+                    ⚠️ No está en la PGA
+                  </button>
+                </div>
               </Campo>
+
+              {form.en_pga === false && (
+                <div style={{ marginBottom: 14, padding: '13px 15px', borderRadius: 10, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 13, color: '#78350f', lineHeight: 1.6 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>⚠️ Necesita autorización del director</div>
+                  Las actividades que no figuran en la Programación General Anual no están
+                  aprobadas por el Consejo Escolar. Al enviar la propuesta se avisará a dirección
+                  para que la autorice expresamente. Explica bien la relación con el currículo:
+                  es lo que justifica la salida.
+                </div>
+              )}
+
+              {form.en_pga === true && (
+                <Campo label="Actividad de la PGA *">
+                  {pgaLista.length === 0 ? (
+                    <div style={{ padding: '11px 13px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', fontSize: 13, color: '#991b1b' }}>
+                      Todavía no hay actividades de la PGA cargadas. Avisa a Secretaría.
+                    </div>
+                  ) : (
+                    <select value={form.pga_seleccionada} style={input}
+                      onChange={e => {
+                        const elegida = pgaLista.find(a => String(a.id) === e.target.value);
+                        setForm(f => ({
+                          ...f,
+                          pga_seleccionada: e.target.value,
+                          titulo: elegida ? elegida.actividad : '',
+                          lugar: elegida?.localidad || f.lugar,
+                        }));
+                      }}>
+                      <option value="">-- Elige la actividad --</option>
+                      {pgaLista.map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.actividad}{a.localidad ? ` · ${a.localidad}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </Campo>
+              )}
+
+              {form.en_pga !== true && (
+                <Campo label="Título *">
+                  <input value={form.titulo} onChange={e => set('titulo', e.target.value)}
+                    placeholder="Ej: Visita a la feria del automóvil" style={input} />
+                </Campo>
+              )}
 
               <Campo label="Tipo">
                 <select value={form.tipo} onChange={e => set('tipo', e.target.value)} style={input}>
