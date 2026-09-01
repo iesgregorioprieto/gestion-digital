@@ -378,7 +378,7 @@ export default function Guardias() {
             break;
           }
           if (!cubre) {
-            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector);
+            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
             if (libres.length > 0) {
               const primero = libres[0];
               asignadosAbrev.add(normAbrev(primero.abrev));
@@ -405,7 +405,7 @@ export default function Guardias() {
   // Profesores FP libres esta hora (no dan clase, no ausentes, no ya asignados)
   // Ordenados por menos apoyos previos
   // SOLO cuentan sectores FP reales (no BIBLIOTECA, no ACOMPAÑAMIENTO, no GENERAL)
-  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null) {
+  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null, sectorSolicitante = null) {
     if (porSector === null) porSector = ausenciasPorSector();
 
     const ocupadosEnClase = new Set(
@@ -415,15 +415,12 @@ export default function Guardias() {
     );
     const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
-    // Sectores FP que NO tienen ausencia esta hora (no pueden apoyar si están ocupados con los suyos)
-    const sectoresFPLibres = sectores.filter(s => {
-      if (!esSectorFP(s)) return false;
-      const sup = s.toUpperCase();
-      return !porSector[sup];
-    });
+    // Todos los sectores sin ausencias propias esa hora: familias de FP
+    // y también guardias generales. El apoyo es recíproco en ambos sentidos.
+    const sectoresLibres = sectores.filter(s => !porSector[s.toUpperCase()]);
 
     const libres = [];
-    for (const sector of sectoresFPLibres) {
+    for (const sector of sectoresLibres) {
       const guardiasFP = guardiasDeSector(sector);
       guardiasFP.forEach(p => {
         const key = normAbrev(p);
@@ -442,9 +439,22 @@ export default function Guardias() {
         }
       });
     }
-    // Rotación justa: primero quien menos apoyos ha hecho personalmente,
-    // luego el sector con menos apoyos acumulados, luego alfabético
+    // Mismo orden que en gestión (dirección, agosto 2026):
+    //   Falta alguien de FP:        1º su departamento  2º otro de FP   3º generales
+    //   Falta alguien de generales: 1º su departamento  2º generales    3º FP
+    // Dentro de cada escalón manda la rotación: quien menos apoyos lleva.
+    const sectorAusente = (sectorSolicitante || '').toUpperCase();
+    const ausenteEsFP = esSectorFP(sectorAusente);
+    const prioridadDe = p => {
+      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;
+      const candidatoEsFP = esSectorFP(p.sectorOriginal);
+      if (ausenteEsFP) return candidatoEsFP ? 1 : 2;
+      return candidatoEsFP ? 2 : 1;
+    };
+
     libres.sort((a, b) => {
+      const pa = prioridadDe(a), pb = prioridadDe(b);
+      if (pa !== pb) return pa - pb;
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
       if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
       return a.nombre.localeCompare(b.nombre);
@@ -455,6 +465,30 @@ export default function Guardias() {
   // === Registro automático DESACTIVADO en /guardias ===
   // El registro de apoyos solo ocurre en /gestion/guardias donde los jefes de estudio 
   // pueden revisar y modificar antes de que se cuente en el contador
+
+  // El profesor confirma la guardia que le han preasignado.
+  // El servidor comprueba que el apoyo es suyo antes de aceptarlo.
+  async function confirmarMiApoyo(apoyoId) {
+    try {
+      const r = await fetch('/api/apoyos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'confirmar', id: apoyoId }),
+      });
+      if (!r.ok) {
+        const e = await r.json().catch(() => ({}));
+        alert(e.error === 'apoyo_ajeno'
+          ? 'Esa guardia no está asignada a tu nombre.'
+          : 'No se ha podido confirmar. Inténtalo de nuevo.');
+        return;
+      }
+      setApAsig(prev => prev.map(a =>
+        a.id === apoyoId ? { ...a, estado: 'confirmado', confirmado_at: new Date().toISOString() } : a
+      ));
+    } catch (e) {
+      alert('No se ha podido confirmar. Comprueba la conexión.');
+    }
+  }
 
   // Cambiar el profesor asignado a un apoyo (solo directivos)
   async function cambiarApoyo(apoyoId, nuevoProfesor) {
@@ -516,6 +550,82 @@ export default function Guardias() {
         <button onClick={() => setFecha(hoyLocal())}
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
+
+      {/* MIS GUARDIAS DE HOY */}
+      {!esFinde && (() => {
+        const mias = apoyosAsignados
+          .filter(a => a.profesor_id && String(a.profesor_id) === String(profesorId))
+          .sort((a, b) => (a.hora || '').localeCompare(b.hora || ''));
+        if (mias.length === 0) return null;
+        const pendientes = mias.filter(a => a.estado !== 'confirmado').length;
+        return (
+          <div style={{ padding: '12px 16px 0' }}>
+            <div style={{
+              borderRadius: 12, overflow: 'hidden',
+              border: `2px solid ${pendientes > 0 ? '#f59e0b' : '#16a34a'}`,
+              backgroundColor: 'white',
+            }}>
+              <div style={{
+                padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                backgroundColor: pendientes > 0 ? '#fffbeb' : '#f0fdf4',
+              }}>
+                <strong style={{ fontSize: 14.5, color: pendientes > 0 ? '#92400e' : '#166534' }}>
+                  🛡️ Tus guardias de este día
+                </strong>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: pendientes > 0 ? '#92400e' : '#166534' }}>
+                  {pendientes > 0
+                    ? `${pendientes} sin confirmar`
+                    : 'todas confirmadas'}
+                </span>
+              </div>
+
+              {mias.map(a => {
+                const confirmada = a.estado === 'confirmado';
+                const etiquetaHora = (HORAS.find(h => h.id === normHora(a.hora))?.label) || a.hora || '';
+                return (
+                  <div key={a.id} style={{
+                    padding: '11px 14px', borderTop: '1px solid #e5e7eb',
+                    display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
+                  }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: '#333' }}>
+                        {etiquetaHora}
+                        {a.grupo ? ` · ${a.grupo}` : ''}
+                        {a.aula ? ` · aula ${a.aula}` : ''}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>
+                        {a.materia ? `${a.materia} · ` : ''}
+                        cubre a {a.sector_destino || '—'}
+                      </div>
+                      {a.tarea && (
+                        <div style={{ fontSize: 12.5, color: '#1e40af', marginTop: 4, lineHeight: 1.4 }}>
+                          📝 {a.tarea}
+                        </div>
+                      )}
+                    </div>
+                    {confirmada ? (
+                      <span style={{
+                        fontSize: 12, fontWeight: 800, color: '#166534',
+                        backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 20,
+                      }}>
+                        ✅ Confirmada
+                      </span>
+                    ) : (
+                      <button onClick={() => confirmarMiApoyo(a.id)} style={{
+                        padding: '8px 16px', borderRadius: 9, border: 'none',
+                        backgroundColor: '#166534', color: 'white',
+                        fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
+                      }}>
+                        Confirmar
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* SELECTOR DE HORAS */}
       {!esFinde && (
