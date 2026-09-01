@@ -12,15 +12,8 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { DEPARTAMENTOS } from '@/lib/sectores';
 
-const DEPARTAMENTOS = [
-
-  'TMV/Carrocería','Hostelería','Informática','Electricidad / Electrónica','Comercio',
-  'Administración','Industrias Alimentarias','FOL','Física y Química',
-  'Ciencias Naturales/Biología','Matemáticas','Lengua y Literatura','Inglés',
-  'Educación Física','Dibujo/Plástica','Geografía e Historia','Filosofía',
-  'Música','Tecnología','Orientación','PT/AL'
-];
 
 export { DEPARTAMENTOS };
 
