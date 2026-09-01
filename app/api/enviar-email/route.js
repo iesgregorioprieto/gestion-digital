@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'actividad_sin_pga'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -189,6 +189,55 @@ export async function POST(request) {
             </p>
             ${datos.rol_gestion ? `<p>Permisos asignados: <strong>${e(datos.rol_gestion)}</strong></p>` : ''}
             <p style="color:#666;font-size:13px">Si tienes algún problema para acceder, contacta con la secretaría del centro.</p>
+          </div>
+          <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
+    } else if (tipo === 'actividad_sin_pga') {
+      subject = `⚠️ Actividad fuera de la PGA — ${e(datos.titulo)}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e3a5f;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">IES Gregorio Prieto</h1>
+            <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
+          </div>
+          <div style="padding:30px;background:#f9f9f9">
+            <h2 style="color:#b45309">Actividad no aprobada en la PGA</h2>
+            <p>
+              <strong>${e(datos.profesor)}</strong> ha propuesto una actividad que
+              <strong>no figura en la Programación General Anual</strong>, por lo que
+              necesita tu autorización expresa.
+            </p>
+            <table style="width:100%;border-collapse:collapse;margin:20px 0">
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold;width:40%">Actividad</td>
+                <td style="padding:10px">${e(datos.titulo)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Fechas</td>
+                <td style="padding:10px">${e(datos.fechas)}</td>
+              </tr>
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold">Grupos</td>
+                <td style="padding:10px">${e(datos.grupos)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Lugar</td>
+                <td style="padding:10px">${e(datos.lugar)}</td>
+              </tr>
+              <tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold">Relación con el currículo</td>
+                <td style="padding:10px">${e(datos.curriculo)}</td>
+              </tr>
+            </table>
+            <div style="text-align:center;margin:30px 0">
+              <a href="${BASE_URL}/gestion/autorizaciones"
+                 style="background:#b45309;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
+                Revisar la propuesta
+              </a>
+            </div>
           </div>
           <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
             IES Gregorio Prieto · Valdepeñas · Ciudad Real
