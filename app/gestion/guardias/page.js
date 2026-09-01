@@ -655,7 +655,10 @@ export default function GestionGuardias() {
           <div style={{ fontSize:16, fontWeight:800 }}>🛡️ Gestión de Guardias</div>
           <div style={{ fontSize:11, opacity:0.85 }}>{usuario.nombre}</div>
         </div>
-        <a href="/gestion" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>← Volver</a>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <a href="/gestion/guardias/informe" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>📄 Informe</a>
+                  <a href="/gestion" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>← Volver</a>
+        </div>
       </div>
 
       {/* CONTADOR ROTATORIO DE APOYOS DEL CURSO */}
