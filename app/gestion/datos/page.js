@@ -61,6 +61,8 @@ export default function GestionDatos() {
 
   // Alumnos
   const [previewAlumnos, setPreviewAlumnos] = useState([]);
+  const [pgaLista, setPgaLista] = useState([]);
+  const [previewPGA, setPreviewPGA] = useState(null);
   const [modalAlumnos, setModalAlumnos] = useState(false);
   const fileRefAlumnos = useRef(null);
 
@@ -178,6 +180,7 @@ export default function GestionDatos() {
       guardias: guards?.length > 0,
       cursoActual: curso,
     });
+    cargarPGA();
     setCargando(false);
   }
 
@@ -232,6 +235,102 @@ export default function GestionDatos() {
     setModalAlumnos(true);
     setProcesando(false);
     e.target.value = '';
+  }
+
+  // ─── Actividades aprobadas en la PGA ───
+
+  async function cargarPGA() {
+    const { data } = await getSupabase()
+      .from('actividades_pga')
+      .select('id, actividad, localidad, curso_academico')
+      .order('actividad');
+    setPgaLista(data || []);
+  }
+
+  async function procesarCSVPGA(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setProcesando(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      // Los CSV de Excel en español suelen venir en ISO-8859-1
+      let texto = new TextDecoder('utf-8').decode(buffer);
+      if (texto.includes('\uFFFD')) texto = new TextDecoder('iso-8859-1').decode(buffer);
+
+      const sep = texto.includes(';') ? ';' : ',';
+      const lineas = texto.split(/\r?\n/).filter(l => l.trim());
+      if (lineas.length < 2) {
+        mostrarMensaje('❌ El archivo no tiene filas de datos.', 'error');
+        setProcesando(false); e.target.value = ''; return;
+      }
+
+      const limpia = c => (c || '').trim().replace(/^"|"$/g, '').trim();
+      const cabecera = lineas[0].split(sep).map(c => limpia(c).toUpperCase());
+      const iAct = cabecera.findIndex(c => c.startsWith('ACTIVIDAD') || c.startsWith('VISITA'));
+      const iLoc = cabecera.findIndex(c => c.startsWith('LOCALIDAD') || c.startsWith('LUGAR'));
+
+      if (iAct === -1) {
+        mostrarMensaje('❌ Falta la columna ACTIVIDAD (o VISITA) en la primera fila.', 'error');
+        setProcesando(false); e.target.value = ''; return;
+      }
+
+      const vistas = new Set();
+      const filas = [];
+      for (let i = 1; i < lineas.length; i++) {
+        const cols = lineas[i].split(sep).map(limpia);
+        const actividad = cols[iAct];
+        if (!actividad) continue;
+        const localidad = iLoc !== -1 ? (cols[iLoc] || '') : '';
+        const clave = `${actividad}|${localidad}`.toLowerCase();
+        if (vistas.has(clave)) continue;
+        vistas.add(clave);
+        filas.push({ actividad, localidad, curso_academico: cursoNuevo || stats.cursoActual });
+      }
+
+      if (filas.length === 0) {
+        mostrarMensaje('❌ No se ha encontrado ninguna actividad en el archivo.', 'error');
+        setProcesando(false); e.target.value = ''; return;
+      }
+      setPreviewPGA(filas);
+    } catch (err) {
+      mostrarMensaje('❌ No se ha podido leer el archivo.', 'error');
+    }
+    setProcesando(false);
+    e.target.value = '';
+  }
+
+  async function confirmarPGA(reemplazar) {
+    if (!previewPGA) return;
+    const curso = previewPGA[0]?.curso_academico;
+    if (!curso || curso === '—') {
+      mostrarMensaje('❌ Indica antes el curso académico.', 'error');
+      return;
+    }
+    setProcesando(true);
+
+    if (reemplazar) {
+      await fetch('/api/centro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabla: 'actividades_pga', accion: 'borrar', filtro: { curso_academico: curso } }),
+      });
+    }
+
+    const r = await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'actividades_pga', accion: 'crear', lista: previewPGA }),
+    });
+
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      mostrarMensaje('❌ Error: ' + (err.error || 'no se pudo guardar'), 'error');
+    } else {
+      mostrarMensaje(`✅ ${previewPGA.length} actividades guardadas.`, 'ok');
+      setPreviewPGA(null);
+      await cargarPGA();
+    }
+    setProcesando(false);
   }
 
   async function confirmarAlumnos() {
@@ -890,6 +989,7 @@ export default function GestionDatos() {
             { id: 'horarios', label: '🕐 Horarios' },
             { id: 'guardias', label: '🛡️ Guardias' },
             { id: 'calendario', label: '📆 Calendario escolar' },
+            { id: 'pga', label: '🚌 Actividades PGA' },
             { id: 'cambio', label: '🔄 Cambio de curso' },
           ].map(t => (
             <button key={t.id} onClick={() => setVistaTab(t.id)} style={{ padding: '9px 16px', borderRadius: 10, border: `2px solid ${vistaTab === t.id ? azul : '#ddd'}`, backgroundColor: vistaTab === t.id ? azul : 'white', color: vistaTab === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
@@ -897,6 +997,82 @@ export default function GestionDatos() {
             </button>
           ))}
         </div>
+
+        {/* ===== ACTIVIDADES APROBADAS EN LA PGA ===== */}
+        {vistaTab === 'pga' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 17, color: azul }}>🚌 Actividades aprobadas en la PGA</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#666', lineHeight: 1.6 }}>
+              Las actividades que los departamentos propusieron y que aprobó el Consejo Escolar.
+              Una vez subidas, el profesorado las elige de una lista al proponer una salida,
+              sin tener que pedir autorización a dirección.
+            </p>
+
+            <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 18, fontSize: 13, color: '#475569', lineHeight: 1.7 }}>
+              <strong>El archivo debe ser un CSV</strong> con la primera fila de títulos y dos columnas:
+              <br />· <strong>ACTIVIDAD</strong> — qué se visita (obligatoria)
+              <br />· <strong>LOCALIDAD</strong> — dónde (opcional)
+              <br /><span style={{ color: '#94a3b8' }}>En Excel: Archivo → Guardar como → CSV.</span>
+            </div>
+
+            {pgaLista.length > 0 && (
+              <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 12, padding: 16, marginBottom: 18 }}>
+                <div style={{ fontWeight: 800, color: '#166534', marginBottom: 8, fontSize: 15 }}>
+                  ✅ {pgaLista.length} actividades cargadas
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 13, color: '#333' }}>
+                  {pgaLista.map(a => (
+                    <div key={a.id} style={{ padding: '5px 0', borderBottom: '1px solid #dcfce7' }}>
+                      {a.actividad}{a.localidad ? <span style={{ color: '#666' }}> · {a.localidad}</span> : null}
+                      <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>{a.curso_academico}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {previewPGA ? (
+              <div style={{ border: '1.5px solid #fde68a', backgroundColor: '#fffbeb', borderRadius: 12, padding: 16 }}>
+                <div style={{ fontWeight: 800, color: '#92400e', marginBottom: 8, fontSize: 15 }}>
+                  Se van a guardar {previewPGA.length} actividades — curso {previewPGA[0]?.curso_academico}
+                </div>
+                <div style={{ maxHeight: 200, overflowY: 'auto', fontSize: 13, marginBottom: 14, backgroundColor: 'white', borderRadius: 8, padding: 10 }}>
+                  {previewPGA.map((a, i) => (
+                    <div key={i} style={{ padding: '4px 0' }}>
+                      {a.actividad}{a.localidad ? <span style={{ color: '#666' }}> · {a.localidad}</span> : null}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button onClick={() => confirmarPGA(false)} disabled={procesando}
+                    style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: '#166534', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    ➕ Añadir a las existentes
+                  </button>
+                  <button onClick={() => confirmarPGA(true)} disabled={procesando}
+                    style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: '#b45309', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    🔄 Reemplazar las de este curso
+                  </button>
+                  <button onClick={() => setPreviewPGA(null)} disabled={procesando}
+                    style={{ padding: '10px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ borderTop: '1px solid #eee', paddingTop: 18 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#333' }}>
+                  Subir el listado de la PGA
+                </div>
+                <input type="file" accept=".csv,text/csv" onChange={procesarCSVPGA} disabled={procesando}
+                  style={{ fontSize: 13 }} />
+                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+                  Se guardarán para el curso <strong>{cursoNuevo || stats.cursoActual || '—'}</strong>.
+                  Podrás revisarlas antes de confirmar.
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ===== CAMBIO DE CURSO ===== */}
         {vistaTab === 'calendario' && (
