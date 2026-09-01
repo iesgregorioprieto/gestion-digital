@@ -179,6 +179,7 @@ export default function Autorizaciones() {
   }
 
   const esJefeEstudios = rolGestion === 'jefe_estudios' || rolGestion === 'secretario' || rolGestion === 'director';
+  const esTutor = roles.includes('tutor');
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
@@ -205,6 +206,13 @@ export default function Autorizaciones() {
         <button onClick={() => setVista('consulta')} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === 'consulta' ? azul : '#ddd'}`, backgroundColor: vista === 'consulta' ? azul : 'white', color: vista === 'consulta' ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
           🔍 Consultar alumno
         </button>
+        {(esTutor || esJefeEstudios) && (
+          <button onClick={() => { window.location.href = '/autorizaciones/gestion'; }}
+            style={{ padding: '9px 18px', borderRadius: 10, border: '2px solid #ddd', backgroundColor: 'white',
+              color: '#555', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+            📋 {esTutor && !esJefeEstudios ? 'Mi tutoría' : 'Gestionar autorizaciones'}
+          </button>
+        )}
       </div>
 
       <div style={{ padding: 16 }}>
