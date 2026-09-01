@@ -116,6 +116,30 @@ export async function POST(request) {
         return Response.json({ error: 'Nada que actualizar' }, { status: 400 });
       }
 
+      // Quién puede tocar a quién. La pantalla ya se lo enseña al tutor
+      // limitado a su grupo, pero eso es solo lo que se ve: la comprobación
+      // de verdad tiene que estar aquí, porque una petición se puede
+      // enviar a mano sin pasar por la pantalla. Son autorizaciones de
+      // imágenes y salidas de menores.
+      if (!esDirectivo(sesion)) {
+        const [{ data: alumnos }, { data: profes }] = await Promise.all([
+          supa().from('alumnos').select('grupo').eq('id', id),
+          supa().from('profesores').select('grupo_tutoria, rol').eq('id', sesion.id),
+        ]);
+
+        const grupoAlumno = (alumnos || [])[0]?.grupo;
+        const profe = (profes || [])[0];
+        const esTutor = Array.isArray(profe?.rol) && profe.rol.includes('tutor');
+        const suGrupo = profe?.grupo_tutoria;
+
+        if (!esTutor || !suGrupo) {
+          return Response.json({ error: 'Sin permisos' }, { status: 403 });
+        }
+        if (!grupoAlumno || grupoAlumno.trim().toUpperCase() !== suGrupo.trim().toUpperCase()) {
+          return Response.json({ error: 'Ese alumno no es de tu tutoría' }, { status: 403 });
+        }
+      }
+
       const { error } = await supa().from('alumnos').update(limpio).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
