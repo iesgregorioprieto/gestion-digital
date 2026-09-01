@@ -9,7 +9,7 @@ import TamanoLetra from '@/components/TamanoLetra';
 const VERDE = '#1e6b2e';
 
 const DEPARTAMENTOS = [
-  'TMV/Carrocería', 'Hostelería', 'Informática', 'Electricidad', 'Comercio',
+  'TMV/Carrocería', 'Hostelería', 'Informática', 'Electricidad / Electrónica', 'Comercio',
   'Administración', 'Industrias Alimentarias', 'FOL', 'Física y Química',
   'Ciencias Naturales/Biología', 'Matemáticas', 'Lengua y Literatura', 'Inglés',
   'Educación Física', 'Dibujo/Plástica', 'Geografía e Historia', 'Filosofía',
