@@ -17,6 +17,8 @@ import { claveServidor } from '@/lib/claveServidor';
  * complementarias, que las propone cualquier profesor.
  */
 
+import { avisarDireccion } from '@/lib/notificaciones';
+
 const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
 
 // Solo las actividades las puede crear cualquiera; el resto es de gestión
@@ -68,6 +70,24 @@ export async function POST(request) {
 
       const { data, error } = await supa().from(tabla).insert(conAutor).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // Actividad que no viene de la PGA: dirección tiene que autorizarla
+      if (tabla === 'actividades') {
+        const sinPga = conAutor.filter(f => f.en_pga === false);
+        for (const act of sinPga) {
+          avisarDireccion(supa(), 'actividad_sin_pga', {
+            profesor: act.profesor_nombre || sesion.nombre || 'Un profesor/a',
+            titulo: act.titulo || '',
+            fechas: act.fecha_inicio === act.fecha_fin || !act.fecha_fin
+              ? (act.fecha_inicio || '')
+              : `${act.fecha_inicio} a ${act.fecha_fin}`,
+            grupos: Array.isArray(act.grupos) ? act.grupos.join(', ') : '',
+            lugar: act.lugar || '',
+            curriculo: act.relacion_curricular || 'No indicada',
+          }).catch(err => console.error('aviso actividad sin PGA:', err?.message));
+        }
+      }
+
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
