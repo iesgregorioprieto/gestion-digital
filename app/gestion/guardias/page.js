@@ -5,7 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
-import { departamentoASector } from '@/lib/sectores';
+import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1e3a5f';
@@ -24,12 +24,9 @@ const HORAS = [
   { id: '6',      label: '6ª',     horario: '13:35–14:30' },
 ];
 
-const SECTORES_FP = ['TMV', 'COMERCIO', 'ELECTRICIDAD', 'INFORMÁTICA', 'HOSTELERÍA', 'INDUSTRIAS ALIMENTARIAS', 'ADMINISTRACIÓN'];
-
-function esSectorFP(sector) {
-  const sup = (sector || '').toUpperCase();
-  return SECTORES_FP.includes(sup);
-}
+// La lista viene de lib/sectores para que gestión y el módulo del
+// profesorado usen exactamente la misma. La copia que había aquí se
+// había quedado sin FOL, y por eso FOL contaba como guardia general.
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
@@ -363,11 +360,23 @@ export default function GestionGuardias() {
     //
     // Dentro de cada grupo manda la rotación: quien menos apoyos ha
     // prestado, después el sector con menos apoyos acumulados.
+    // Orden de preferencia fijado por dirección (agosto 2026):
+    //
+    //   Si falta alguien de FP (p. ej. Hostelería):
+    //     1º su propio departamento  2º otro departamento de FP  3º generales
+    //
+    //   Si falta alguien de guardias generales (p. ej. Matemáticas):
+    //     1º su propio departamento  2º generales  3º departamentos de FP
+    //
+    // Es decir: primero los suyos, después los de su mismo mundo, y
+    // en último lugar el otro bloque.
     const sectorAusente = (sectorSolicitante || '').toUpperCase();
+    const ausenteEsFP = esSectorFP(sectorAusente);
     const prioridadDe = p => {
-      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;  // su familia
-      if (!esSectorFP(p.sectorOriginal)) return 1;                        // generales
-      return 2;                                                          // otras familias
+      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;
+      const candidatoEsFP = esSectorFP(p.sectorOriginal);
+      if (ausenteEsFP) return candidatoEsFP ? 1 : 2;
+      return candidatoEsFP ? 2 : 1;
     };
 
     libres.sort((a, b) => {
