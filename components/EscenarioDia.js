@@ -18,10 +18,10 @@ const BLOQUES = [
 
 const TIPOS_DLD = {
   canoso:      '🦳 CANOSO',
-  no_lectivo:  '🌙 Moscoso no lectivo',
-  '1_lectivo': '📚 1º Moscoso lectivo',
-  '2_lectivo': '📖 2º Moscoso lectivo',
-  '3_lectivo': '📗 3º Moscoso lectivo',
+  no_lectivo:  '🌙 DLD no lectivo',
+  '1_lectivo': '📚 1º DLD lectivo',
+  '2_lectivo': '📖 2º DLD lectivo',
+  '3_lectivo': '📗 3º DLD lectivo',
 };
 
 export default function EscenarioDia({ fecha, compacto = false }) {
