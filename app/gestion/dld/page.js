@@ -224,6 +224,10 @@ export default function PanelDirector() {
   const [regTipo, setRegTipo] = useState('');
   const [regFecha, setRegFecha] = useState('');
   const [regGuardando, setRegGuardando] = useState(false);
+  const [regEnPortal, setRegEnPortal] = useState(true);   // ¿está ya en el portal?
+  const [regApellidos, setRegApellidos] = useState('');
+  const [regNombre, setRegNombre] = useState('');
+  const [regEmail, setRegEmail] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
   const [mesActual, setMesActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
@@ -272,25 +276,36 @@ export default function PanelDirector() {
   }
 
   async function registrarEnPapel() {
-    if (!regProfesor) return mostrarMensaje('Selecciona el profesor.', 'error');
-    if (!regTipo)     return mostrarMensaje('Selecciona el tipo.', 'error');
-    if (!regFecha)    return mostrarMensaje('Indica el día solicitado.', 'error');
+    if (!regTipo)  return mostrarMensaje('Selecciona el tipo.', 'error');
+    if (!regFecha) return mostrarMensaje('Indica el día solicitado.', 'error');
+
+    const datos = { tipo_dld: regTipo, fecha_solicitada: regFecha };
+    if (regEnPortal) {
+      if (!regProfesor) return mostrarMensaje('Selecciona el profesor.', 'error');
+      datos.profesor_id = regProfesor;
+    } else {
+      if (!regApellidos.trim() || !regNombre.trim()) return mostrarMensaje('Pon el nombre y los apellidos.', 'error');
+      if (!regEmail.trim())     return mostrarMensaje('Pon el correo: es lo que enlazará la solicitud con su ficha.', 'error');
+      datos.apellidos = regApellidos.trim();
+      datos.nombre = regNombre.trim();
+      datos.email_solicitante = regEmail.trim();
+    }
 
     setRegGuardando(true);
     const r = await fetch('/api/dld', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'registrar_por_otro',
-        datos: { profesor_id: regProfesor, tipo_dld: regTipo, fecha_solicitada: regFecha },
-      }),
+      body: JSON.stringify({ accion: 'registrar_por_otro', datos }),
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       mostrarMensaje('❌ ' + (e.error || 'No se ha podido registrar'), 'error');
     } else {
-      mostrarMensaje('✅ Solicitud registrada. Ya aparece para resolver.', 'ok');
+      mostrarMensaje(regEnPortal
+        ? '✅ Solicitud registrada. Ya aparece para resolver.'
+        : '✅ Registrada. Se enlazará con su ficha en cuanto entre en el portal.', 'ok');
       setRegProfesor(''); setRegTipo(''); setRegFecha('');
+      setRegApellidos(''); setRegNombre(''); setRegEmail('');
       cargarSolicitudes();
     }
     setRegGuardando(false);
@@ -950,16 +965,53 @@ export default function PanelDirector() {
               igual que el resto.
             </p>
 
-            <div style={{ marginBottom: 14 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Profesor/a *</label>
-              <select value={regProfesor} onChange={e => setRegProfesor(e.target.value)}
-                style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
-                <option value="">— Selecciona —</option>
-                {profesoresLista.map(p => (
-                  <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre}{p.departamento ? ` · ${p.departamento}` : ''}</option>
-                ))}
-              </select>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+              <button type="button" onClick={() => setRegEnPortal(true)}
+                style={{ flex: 1, minWidth: 150, padding: '10px', borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  border: `2px solid ${regEnPortal ? azul : '#ddd'}`, backgroundColor: regEnPortal ? '#eff6ff' : 'white',
+                  color: regEnPortal ? azul : '#666' }}>
+                Ya está en el portal
+              </button>
+              <button type="button" onClick={() => setRegEnPortal(false)}
+                style={{ flex: 1, minWidth: 150, padding: '10px', borderRadius: 9, cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  border: `2px solid ${!regEnPortal ? '#b45309' : '#ddd'}`, backgroundColor: !regEnPortal ? '#fffbeb' : 'white',
+                  color: !regEnPortal ? '#b45309' : '#666' }}>
+                Todavía no lo usa
+              </button>
             </div>
+
+            {regEnPortal ? (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Profesor/a *</label>
+                <select value={regProfesor} onChange={e => setRegProfesor(e.target.value)}
+                  style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
+                  <option value="">— Selecciona —</option>
+                  {profesoresLista.map(p => (
+                    <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre}{p.departamento ? ` · ${p.departamento}` : ''}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 14, padding: 14, borderRadius: 10, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d' }}>
+                <div style={{ fontSize: 12.5, color: '#78350f', marginBottom: 12, lineHeight: 1.55 }}>
+                  No se le da de alta como profesor. La solicitud se guarda con estos datos
+                  y <strong>se enlazará sola con su ficha</strong> cuando entre en el portal,
+                  usando el correo. Entonces le contará en su cupo.
+                </div>
+                {[
+                  { l: 'Apellidos *', v: regApellidos, set: setRegApellidos, tipo: 'text' },
+                  { l: 'Nombre *',    v: regNombre,    set: setRegNombre,    tipo: 'text' },
+                  { l: 'Correo *',    v: regEmail,     set: setRegEmail,     tipo: 'email' },
+                ].map(c => (
+                  <div key={c.l} style={{ marginBottom: 9 }}>
+                    <label style={{ fontSize: 12, fontWeight: 700, color: '#78350f', display: 'block', marginBottom: 4 }}>{c.l}</label>
+                    <input type={c.tipo} value={c.v} onChange={e => c.set(e.target.value)}
+                      placeholder={c.tipo === 'email' ? 'nombre@educastillalamancha.es' : ''}
+                      style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box' }} />
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Tipo *</label>
@@ -1092,6 +1144,12 @@ export default function PanelDirector() {
                           {s.registrada_por && (
                             <div style={{ fontSize: 10.5, color: '#92400e', backgroundColor: '#fef3c7', padding: '1px 8px', borderRadius: 20, display: 'inline-block', marginTop: 3, fontWeight: 700 }}>
                               📝 En papel · {s.registrada_por}
+                            </div>
+                          )}
+                          {!s.profesor_id && s.email_solicitante && (
+                            <div style={{ fontSize: 10.5, color: '#1e40af', backgroundColor: '#eff6ff', padding: '1px 8px', borderRadius: 20, display: 'inline-block', marginTop: 3, marginLeft: 5, fontWeight: 700 }}
+                              title="Se enlazará con su ficha cuando entre en el portal">
+                              🔗 Sin enlazar · {s.email_solicitante}
                             </div>
                           )}
                           <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{etiquetaTipoDLD(s.tipo_dld)} · {s.tipo_contrato}</div>
