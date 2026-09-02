@@ -196,7 +196,9 @@ export async function POST(request) {
         </div>`;
 
     } else if (tipo === 'actividad_sin_pga') {
-      subject = `⚠️ Actividad fuera de la PGA — ${e(datos.titulo)}`;
+      subject = datos.enPga
+        ? `🏒 Nueva actividad complementaria — ${e(datos.titulo)}`
+        : `⚠️ Actividad fuera de la PGA — ${e(datos.titulo)}`;
       html = `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
           <div style="background:#1e3a5f;padding:20px;text-align:center">
@@ -204,12 +206,19 @@ export async function POST(request) {
             <p style="color:#adc8e8;margin:5px 0">Portal de Gestión</p>
           </div>
           <div style="padding:30px;background:#f9f9f9">
-            <h2 style="color:#b45309">Actividad no aprobada en la PGA</h2>
-            <p>
-              <strong>${e(datos.profesor)}</strong> ha propuesto una actividad que
-              <strong>no figura en la Programación General Anual</strong>, por lo que
-              necesita tu autorización expresa.
-            </p>
+            ${datos.enPga ? `
+              <h2 style="color:#1e6b2e">Nueva actividad complementaria</h2>
+              <p>
+                <strong>${e(datos.profesor)}</strong> ha propuesto una actividad
+                <strong>aprobada en la Programación General Anual</strong>.
+                Queda pendiente de revisión en el portal.
+              </p>` : `
+              <h2 style="color:#b45309">Actividad no aprobada en la PGA</h2>
+              <p>
+                <strong>${e(datos.profesor)}</strong> ha propuesto una actividad que
+                <strong>no figura en la Programación General Anual</strong>, por lo que
+                necesita autorización expresa de dirección.
+              </p>`}
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8eef4">
                 <td style="padding:10px;font-weight:bold;width:40%">Actividad</td>
@@ -233,8 +242,8 @@ export async function POST(request) {
               </tr>
             </table>
             <div style="text-align:center;margin:30px 0">
-              <a href="${BASE_URL}/gestion/autorizaciones"
-                 style="background:#b45309;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
+              <a href="${BASE_URL}/gestion/actividades"
+                 style="background:${datos.enPga ? '#1e6b2e' : '#b45309'};color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
                 Revisar la propuesta
               </a>
             </div>
