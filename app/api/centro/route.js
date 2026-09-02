@@ -17,7 +17,7 @@ import { claveServidor } from '@/lib/claveServidor';
  * complementarias, que las propone cualquier profesor.
  */
 
-import { avisarDireccion } from '@/lib/notificaciones';
+import { enviarAviso, AVISOS_ACTIVIDADES } from '@/lib/notificaciones';
 
 const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
 
@@ -71,11 +71,12 @@ export async function POST(request) {
       const { data, error } = await supa().from(tabla).insert(conAutor).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
-      // Actividad que no viene de la PGA: dirección tiene que autorizarla
+      // Toda propuesta de actividad se comunica a dirección y a jefatura,
+      // esté o no en la PGA. Las que no figuran en ella se marcan aparte
+      // en el correo, porque además necesitan autorización expresa.
       if (tabla === 'actividades') {
-        const sinPga = conAutor.filter(f => f.en_pga === false);
-        for (const act of sinPga) {
-          avisarDireccion(supa(), 'actividad_sin_pga', {
+        for (const act of conAutor) {
+          enviarAviso('actividad_sin_pga', AVISOS_ACTIVIDADES, {
             profesor: act.profesor_nombre || sesion.nombre || 'Un profesor/a',
             titulo: act.titulo || '',
             fechas: act.fecha_inicio === act.fecha_fin || !act.fecha_fin
@@ -84,7 +85,8 @@ export async function POST(request) {
             grupos: Array.isArray(act.grupos) ? act.grupos.join(', ') : '',
             lugar: act.lugar || '',
             curriculo: act.relacion_curricular || 'No indicada',
-          }).catch(err => console.error('aviso actividad sin PGA:', err?.message));
+            enPga: act.en_pga === true,
+          }).catch(err => console.error('aviso de actividad:', err?.message));
         }
       }
 
