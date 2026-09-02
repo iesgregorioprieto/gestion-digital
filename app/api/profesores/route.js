@@ -113,6 +113,46 @@ export async function POST(request) {
     // El token de activación es lo que permite dar por verificado un
     // correo, así que el navegador no debe poder escribirlo. Antes lo
     // generaba la página y lo guardaba ella misma.
+    // Vincula a su ficha los DLD que secretaría registró en papel antes
+    // de que esta persona estuviera en el portal. Se cruzan por el correo.
+    // Sin esto, esos días no le contarían en su cupo.
+    async function vincularDldPendientes(profesorId) {
+      try {
+        const { data: profes } = await supa()
+          .from('profesores')
+          .select('email, nombre, apellidos, departamento, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+          .eq('id', profesorId);
+        const p = (profes || [])[0];
+        if (!p?.email) return 0;
+
+        const { data: sueltas } = await supa()
+          .from('dld')
+          .select('id')
+          .is('profesor_id', null)
+          .ilike('email_solicitante', p.email.trim());
+
+        if (!sueltas || sueltas.length === 0) return 0;
+
+        const { error } = await supa()
+          .from('dld')
+          .update({
+            profesor_id: profesorId,
+            profesor_nombre: `${p.apellidos}, ${p.nombre}`,
+            departamento: p.departamento || null,
+            tipo_contrato: p.tipo_contrato || null,
+            antiguedad_centro: p.antiguedad_centro ?? null,
+            antiguedad_cuerpo: p.antiguedad_cuerpo ?? null,
+          })
+          .in('id', sueltas.map(x => x.id));
+
+        if (error) { console.error('vincular DLD:', error.message); return 0; }
+        return sueltas.length;
+      } catch (e) {
+        console.error('vincular DLD:', e?.message);
+        return 0;
+      }
+    }
+
     if (accion === 'aprobar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
@@ -123,7 +163,9 @@ export async function POST(request) {
 
       const { error } = await supa().from('profesores').update(cambios).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true, token });
+
+      const vinculados = await vincularDldPendientes(id);
+      return Response.json({ ok: true, token, dldVinculados: vinculados });
     }
 
     // ─── Cambiar el estado (activo / inactivo) ───
@@ -164,9 +206,12 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!datos?.email) return Response.json({ error: 'Falta el correo' }, { status: 400 });
 
-      const { error } = await supa().from('profesores').insert([datos]);
+      const { data: creado, error } = await supa().from('profesores').insert([datos]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true });
+
+      const nuevoId = (creado || [])[0]?.id;
+      const vinculados = nuevoId ? await vincularDldPendientes(nuevoId) : 0;
+      return Response.json({ ok: true, dldVinculados: vinculados });
     }
 
     // ─── Marcar inactivos al cambiar de curso ───
