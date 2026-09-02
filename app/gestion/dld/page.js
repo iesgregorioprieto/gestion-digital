@@ -218,6 +218,12 @@ export default function PanelDirector() {
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState('calendario');
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
+  // Registro de solicitudes llegadas en papel
+  const [profesoresLista, setProfesoresLista] = useState([]);
+  const [regProfesor, setRegProfesor] = useState('');
+  const [regTipo, setRegTipo] = useState('');
+  const [regFecha, setRegFecha] = useState('');
+  const [regGuardando, setRegGuardando] = useState(false);
   const [filtroEstado, setFiltroEstado] = useState('pendiente');
   const [mesActual, setMesActual] = useState(new Date());
   const [diaSeleccionado, setDiaSeleccionado] = useState(null);
@@ -254,6 +260,41 @@ export default function PanelDirector() {
   useEffect(() => {
     if (vista === 'lista') cargarSolicitudes();
   }, [filtroEstado]);
+
+  async function cargarProfesoresLista() {
+    if (profesoresLista.length > 0) return;
+    const { data } = await getSupabase()
+      .from('profesores')
+      .select('id, nombre, apellidos, departamento')
+      .eq('estado', 'activo')
+      .order('apellidos');
+    setProfesoresLista(data || []);
+  }
+
+  async function registrarEnPapel() {
+    if (!regProfesor) return mostrarMensaje('Selecciona el profesor.', 'error');
+    if (!regTipo)     return mostrarMensaje('Selecciona el tipo.', 'error');
+    if (!regFecha)    return mostrarMensaje('Indica el día solicitado.', 'error');
+
+    setRegGuardando(true);
+    const r = await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'registrar_por_otro',
+        datos: { profesor_id: regProfesor, tipo_dld: regTipo, fecha_solicitada: regFecha },
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      mostrarMensaje('❌ ' + (e.error || 'No se ha podido registrar'), 'error');
+    } else {
+      mostrarMensaje('✅ Solicitud registrada. Ya aparece para resolver.', 'ok');
+      setRegProfesor(''); setRegTipo(''); setRegFecha('');
+      cargarSolicitudes();
+    }
+    setRegGuardando(false);
+  }
 
   async function cargarSolicitudes() {
     setCargando(true);
@@ -896,8 +937,54 @@ export default function PanelDirector() {
           <button onClick={() => setVista('calendario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'calendario' ? azul : '#ddd'}`, backgroundColor: vista === 'calendario' ? azul : 'white', color: vista === 'calendario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Calendario</button>
           <button onClick={() => setVista('lista')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'lista' ? azul : '#ddd'}`, backgroundColor: vista === 'lista' ? azul : 'white', color: vista === 'lista' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📋 Lista</button>
           <button onClick={() => setVista('resolver')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'resolver' ? verde : '#ddd'}`, backgroundColor: vista === 'resolver' ? verde : 'white', color: vista === 'resolver' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>⚖️ Resolver día</button>
+          <button onClick={() => { setVista('registrar'); cargarProfesoresLista(); }} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'registrar' ? azul : '#ddd'}`, backgroundColor: vista === 'registrar' ? azul : 'white', color: vista === 'registrar' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📝 Registrar en papel</button>
           <button onClick={() => setVista('escenario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'escenario' ? verde : '#ddd'}`, backgroundColor: vista === 'escenario' ? verde : 'white', color: vista === 'escenario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Escenario del día</button>
         </div>
+
+        {vista === 'registrar' && (
+          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', maxWidth: 620 }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 16, color: azul }}>📝 Registrar una solicitud llegada en papel</h3>
+            <p style={{ margin: '0 0 18px', fontSize: 13, color: '#666', lineHeight: 1.6 }}>
+              Para los compañeros que todavía no usan el portal. Queda a su nombre, así que
+              le contará en su cupo y la verá en cuanto entre. Dirección la resuelve
+              igual que el resto.
+            </p>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Profesor/a *</label>
+              <select value={regProfesor} onChange={e => setRegProfesor(e.target.value)}
+                style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
+                <option value="">— Selecciona —</option>
+                {profesoresLista.map(p => (
+                  <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre}{p.departamento ? ` · ${p.departamento}` : ''}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Tipo *</label>
+              <select value={regTipo} onChange={e => setRegTipo(e.target.value)}
+                style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
+                <option value="">— Selecciona —</option>
+                <option value="no_lectivo">🌙 Día de libre disposición en período no lectivo</option>
+                <option value="1_lectivo">📚 1º día de libre disposición en período lectivo</option>
+                <option value="2_lectivo">📖 2º día de libre disposición en período lectivo</option>
+                <option value="canoso">🦳 CANOSO</option>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 6 }}>Día solicitado *</label>
+              <input type="date" value={regFecha} onChange={e => setRegFecha(e.target.value)}
+                style={{ width: '100%', maxWidth: 240, padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+            </div>
+
+            <button onClick={registrarEnPapel} disabled={regGuardando}
+              style={{ padding: '11px 22px', borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+              {regGuardando ? 'Guardando...' : '✅ Registrar solicitud'}
+            </button>
+          </div>
+        )}
 
         {vista === 'escenario' && (
           <div>
@@ -1002,6 +1089,11 @@ export default function PanelDirector() {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{s.profesor_nombre}</div>
+                          {s.registrada_por && (
+                            <div style={{ fontSize: 10.5, color: '#92400e', backgroundColor: '#fef3c7', padding: '1px 8px', borderRadius: 20, display: 'inline-block', marginTop: 3, fontWeight: 700 }}>
+                              📝 En papel · {s.registrada_por}
+                            </div>
+                          )}
                           <div style={{ fontSize: 13, color: '#555', marginTop: 2 }}>{etiquetaTipoDLD(s.tipo_dld)} · {s.tipo_contrato}</div>
                           {grupos.length > 0 && (
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }}>
