@@ -36,13 +36,17 @@ function supa() {
  * pensado para el navegador y aquí estamos en el servidor.
  */
 async function cursoActivo(cliente) {
-  const { data } = await cliente
+  // select('*') a propósito: la tabla no tiene siempre las mismas
+  // columnas, y pedir uno que no existe hace fallar toda la consulta.
+  const { data, error } = await cliente
     .from('config_centro')
-    .select('curso, config')
+    .select('*')
     .eq('activo', true)
     .limit(1);
+  if (error) console.error('leer config_centro:', error.message);
+
   const fila = (data || [])[0];
-  const curso = fila?.config?.curso || fila?.curso;
+  const curso = fila?.config?.curso || fila?.curso || fila?.curso_academico;
   if (curso) return curso;
   // Sin configuración: se deduce de la fecha (de septiembre a agosto)
   const hoy = new Date();
