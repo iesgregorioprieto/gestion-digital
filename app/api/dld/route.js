@@ -128,6 +128,58 @@ export async function POST(request) {
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
+    // ─── Registrar una solicitud llegada en papel ───
+    // Mientras no todo el claustro use el portal, secretaría necesita
+    // meter aquí las que llegan en formulario impreso. Si no, dirección
+    // no ve el total del día y el límite de un tercio de la plantilla
+    // se calcula sobre datos incompletos.
+    //
+    // Va a nombre del profesor, así que le cuenta en su cupo y la verá
+    // en cuanto entre en el portal.
+    if (accion === 'registrar_por_otro') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!datos?.fecha_solicitada) return Response.json({ error: 'Falta la fecha' }, { status: 400 });
+      if (!datos?.profesor_id)      return Response.json({ error: 'Falta el profesor' }, { status: 400 });
+
+      const { data: profes } = await supa()
+        .from('profesores')
+        .select('id, nombre, apellidos, departamento, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+        .eq('id', datos.profesor_id);
+      const profe = (profes || [])[0];
+      if (!profe) return Response.json({ error: 'Ese profesor no existe' }, { status: 400 });
+
+      // No dejar dos solicitudes del mismo día para la misma persona
+      const { data: repes } = await supa()
+        .from('dld')
+        .select('id')
+        .eq('profesor_id', profe.id)
+        .eq('fecha_solicitada', datos.fecha_solicitada)
+        .neq('estado', 'rechazada');
+      if ((repes || []).length > 0) {
+        return Response.json({ error: 'Esa persona ya tiene una solicitud para ese día' }, { status: 400 });
+      }
+
+      const fila = {
+        profesor_id: profe.id,
+        profesor_nombre: `${profe.apellidos}, ${profe.nombre}`,
+        departamento: profe.departamento || null,
+        tipo_contrato: profe.tipo_contrato || null,
+        antiguedad_centro: profe.antiguedad_centro ?? null,
+        antiguedad_cuerpo: profe.antiguedad_cuerpo ?? null,
+        tipo_dld: datos.tipo_dld,
+        fecha_solicitada: datos.fecha_solicitada,
+        causa_sobrevenida: datos.causa_sobrevenida || false,
+        descripcion_causa: datos.descripcion_causa || null,
+        estado: 'pendiente',
+        // Queda constancia de que no la metió el interesado
+        registrada_por: sesion.nombre || 'Secretaría',
+      };
+
+      const { data, error } = await supa().from('dld').insert([fila]).select('id');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true, id: (data || [])[0]?.id });
+    }
+
     // ─── Resolver: aprobar o denegar ───
     if (accion === 'resolver') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
