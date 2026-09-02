@@ -81,6 +81,16 @@ export default function PanelGestion() {
       color: '#15803d',
     },
     {
+      id: 'actividades',
+      emoji: '🎒',
+      titulo: 'Actividades Complementarias',
+      descripcion: 'Revisa y aprueba las salidas propuestas por el profesorado',
+      href: '/gestion/actividades',
+      bg: '#eff6ff',
+      border: '#bfdbfe',
+      color: '#1e40af',
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones del Alumnado',
