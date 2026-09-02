@@ -139,33 +139,56 @@ export async function POST(request) {
     if (accion === 'registrar_por_otro') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!datos?.fecha_solicitada) return Response.json({ error: 'Falta la fecha' }, { status: 400 });
-      if (!datos?.profesor_id)      return Response.json({ error: 'Falta el profesor' }, { status: 400 });
 
-      const { data: profes } = await supa()
-        .from('profesores')
-        .select('id, nombre, apellidos, departamento, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
-        .eq('id', datos.profesor_id);
-      const profe = (profes || [])[0];
-      if (!profe) return Response.json({ error: 'Ese profesor no existe' }, { status: 400 });
+      const email = (datos.email_solicitante || '').trim().toLowerCase();
+      let profe = null;
+
+      // Puede venir por dos vías: alguien que ya está en el portal, o
+      // alguien que todavía no. En el segundo caso se guardan sus datos
+      // y el correo, y la solicitud se vincula sola en cuanto se dé de
+      // alta. Nunca se crea aquí una ficha de profesor.
+      if (datos.profesor_id) {
+        const { data: profes } = await supa()
+          .from('profesores')
+          .select('id, nombre, apellidos, departamento, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+          .eq('id', datos.profesor_id);
+        profe = (profes || [])[0];
+        if (!profe) return Response.json({ error: 'Ese profesor no existe' }, { status: 400 });
+      } else {
+        if (!datos.apellidos?.trim() || !datos.nombre?.trim()) {
+          return Response.json({ error: 'Faltan el nombre y los apellidos' }, { status: 400 });
+        }
+        if (!email) return Response.json({ error: 'Falta el correo' }, { status: 400 });
+
+        // Si esa dirección ya está en el portal, se usa su ficha
+        const { data: porEmail } = await supa()
+          .from('profesores')
+          .select('id, nombre, apellidos, departamento, tipo_contrato, antiguedad_centro, antiguedad_cuerpo')
+          .ilike('email', email);
+        profe = (porEmail || [])[0] || null;
+      }
 
       // No dejar dos solicitudes del mismo día para la misma persona
-      const { data: repes } = await supa()
-        .from('dld')
-        .select('id')
-        .eq('profesor_id', profe.id)
+      const repetida = supa().from('dld').select('id')
         .eq('fecha_solicitada', datos.fecha_solicitada)
         .neq('estado', 'rechazada');
+      const { data: repes } = profe
+        ? await repetida.eq('profesor_id', profe.id)
+        : await repetida.ilike('email_solicitante', email);
       if ((repes || []).length > 0) {
         return Response.json({ error: 'Esa persona ya tiene una solicitud para ese día' }, { status: 400 });
       }
 
       const fila = {
-        profesor_id: profe.id,
-        profesor_nombre: `${profe.apellidos}, ${profe.nombre}`,
-        departamento: profe.departamento || null,
-        tipo_contrato: profe.tipo_contrato || null,
-        antiguedad_centro: profe.antiguedad_centro ?? null,
-        antiguedad_cuerpo: profe.antiguedad_cuerpo ?? null,
+        profesor_id: profe?.id || null,
+        profesor_nombre: profe
+          ? `${profe.apellidos}, ${profe.nombre}`
+          : `${datos.apellidos.trim()}, ${datos.nombre.trim()}`,
+        email_solicitante: email || null,
+        departamento: profe?.departamento || datos.departamento || null,
+        tipo_contrato: profe?.tipo_contrato || null,
+        antiguedad_centro: profe?.antiguedad_centro ?? null,
+        antiguedad_cuerpo: profe?.antiguedad_cuerpo ?? null,
         tipo_dld: datos.tipo_dld,
         fecha_solicitada: datos.fecha_solicitada,
         causa_sobrevenida: datos.causa_sobrevenida || false,
