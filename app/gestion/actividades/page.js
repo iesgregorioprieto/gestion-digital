@@ -251,7 +251,8 @@ export default function GestionActividades() {
                         )}
                         {a.comision_servicio && (
                           <div style={{ marginTop: 6 }}>
-                            <a href={a.comision_servicio} target="_blank" rel="noopener noreferrer"
+                            <a href={`/api/documento?url=${encodeURIComponent(a.comision_servicio)}`}
+                              target="_blank" rel="noopener noreferrer"
                               style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'none' }}>
                               📎 Ver comisiones de servicio
                             </a>
