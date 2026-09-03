@@ -80,12 +80,14 @@ export default function Actividades() {
     fecha_inicio: '', fecha_fin: '',
     horas: [], hora_salida: '', hora_regreso: '',
     grupos: [], acompanantes: [],
-    lugar: '', transporte: '', coste_alumno: '',
+    lugar: '', transporte: '', coste_alumno: '', descripcion: '', financiacion: '',
     profesor_guardia: '',
     en_pga: null,          // null = sin elegir todavía
     pga_seleccionada: '',  // id de la actividad de la PGA
   });
   const [pgaLista, setPgaLista] = useState([]);
+  const [comision, setComision] = useState(null);   // documento de comisiones de servicio
+  const [subiendoDoc, setSubiendoDoc] = useState(false);
   const [alumnosPorGrupo, setAlumnosPorGrupo] = useState({});
   const [asistentes, setAsistentes] = useState({});
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
@@ -198,10 +200,22 @@ export default function Actividades() {
     set(campo, lista.includes(valor) ? lista.filter(x => x !== valor) : [...lista, valor]);
   }
 
+  async function subirComision() {
+    if (!comision) return null;
+    const ext = comision.name.split('.').pop();
+    const nombre = `comisiones/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await getSupabase().storage.from('actividades-docs').upload(nombre, comision);
+    if (error) { console.error('subir comisión:', error.message); return null; }
+    const { data } = getSupabase().storage.from('actividades-docs').getPublicUrl(nombre);
+    return data.publicUrl;
+  }
+
   async function enviar() {
     if (form.en_pga === null)  return aviso('Indica si la actividad está aprobada en la PGA.', 'error');
     if (form.en_pga === true && !form.pga_seleccionada) return aviso('Elige la actividad de la PGA.', 'error');
-    if (!form.titulo.trim())   return aviso('Ponle un título a la actividad.', 'error');
+    if (!form.titulo.trim())      return aviso('Ponle un título a la actividad.', 'error');
+    if (!form.descripcion.trim()) return aviso('Describe en qué consiste la actividad.', 'error');
+    if (!form.financiacion)       return aviso('Indica quién financia la actividad.', 'error');
     if (!form.fecha_inicio)    return aviso('Indica la fecha.', 'error');
     if (form.grupos.length === 0)       return aviso('Selecciona al menos un grupo.', 'error');
     if (form.acompanantes.length === 0) return aviso('Indica quién acompaña.', 'error');
@@ -211,6 +225,14 @@ export default function Actividades() {
     }
 
     setEnviando(true);
+    setSubiendoDoc(!!comision);
+    const urlComision = await subirComision();
+    setSubiendoDoc(false);
+    if (comision && !urlComision) {
+      setEnviando(false);
+      return aviso('No se ha podido subir el documento. Inténtalo de nuevo o envía la actividad sin él.', 'error');
+    }
+
     try {
       const cfg = await getConfigCurso();
       const _ra = await fetch('/api/centro', {
@@ -222,6 +244,9 @@ export default function Actividades() {
         tipo: form.tipo,
         departamento: departamento || null,
         relacion_curricular: form.relacion_curricular.trim() || null,
+        descripcion: form.descripcion.trim(),
+        financiacion: form.financiacion,
+        comision_servicio: urlComision,
         fecha_inicio: form.fecha_inicio,
         fecha_fin: form.fecha_fin || form.fecha_inicio,
         horas: form.horas,
@@ -249,8 +274,9 @@ export default function Actividades() {
       setForm({
         titulo: '', tipo: 'salida', relacion_curricular: '', en_pga: null, pga_seleccionada: '', profesor_guardia: '',
         fecha_inicio: '', fecha_fin: '', horas: [], hora_salida: '', hora_regreso: '',
-        grupos: [], acompanantes: [], lugar: '', transporte: '', coste_alumno: '',
+        grupos: [], acompanantes: [], lugar: '', transporte: '', coste_alumno: '', descripcion: '', financiacion: '',
       });
+      setComision(null);
       setAsistentes({});
       setAlumnosPorGrupo({});
       setAvisoFecha(null);
@@ -422,6 +448,13 @@ export default function Actividades() {
                 <select value={form.tipo} onChange={e => set('tipo', e.target.value)} style={input}>
                   {TIPOS.map(t => <option key={t.valor} value={t.valor}>{t.emoji} {t.label}</option>)}
                 </select>
+              </Campo>
+
+              <Campo label="Descripción de la actividad *">
+                <textarea value={form.descripcion} rows={3}
+                  onChange={e => set('descripcion', e.target.value)}
+                  placeholder="En qué consiste: qué se va a ver, qué se va a hacer, cómo se desarrolla."
+                  style={{ ...input, resize: 'vertical' }} />
               </Campo>
 
               <Campo label="Relación con el currículo">
@@ -621,13 +654,38 @@ export default function Actividades() {
                     placeholder="0" style={input} />
                 </Campo>
               </div>
+
+              <Campo label="¿Quién la financia? *">
+                <select value={form.financiacion} onChange={e => set('financiacion', e.target.value)} style={input}>
+                  <option value="">— Selecciona —</option>
+                  <option value="gratuita">Gratuita</option>
+                  <option value="alumnado">La paga el alumnado</option>
+                  <option value="centro">La paga el centro</option>
+                  <option value="mixta">Mixta: alumnado y centro</option>
+                </select>
+              </Campo>
+
+              <Campo label="Comisiones de servicio">
+                <input type="file" accept=".pdf,.doc,.docx,image/*"
+                  onChange={e => setComision(e.target.files[0] || null)}
+                  style={{ fontSize: 13 }} />
+                <Pista>
+                  Opcional. Si ya tienes el documento de comisiones de servicio, adjúntalo
+                  aquí y quedará junto a la actividad.
+                </Pista>
+                {comision && (
+                  <div style={{ marginTop: 6, fontSize: 12.5, color: VERDE, fontWeight: 600 }}>
+                    📎 {comision.name}
+                  </div>
+                )}
+              </Campo>
             </div>
 
             <button onClick={enviar} disabled={enviando} style={{
               ...boton, width: '100%', padding: 14, fontSize: 15,
               cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1,
             }}>
-              {enviando ? '⏳ Enviando...' : '📨 Enviar a jefatura de estudios'}
+              {subiendoDoc ? '⏳ Subiendo el documento...' : enviando ? '⏳ Enviando...' : '📨 Enviar a jefatura de estudios'}
             </button>
           </div>
         )}
