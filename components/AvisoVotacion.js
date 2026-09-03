@@ -35,18 +35,30 @@ export default function AvisoVotacion() {
     || ruta.startsWith('/sala')
     || ruta === '/';
 
+  // El sondeo se hace siempre, aunque en ese momento no toque enseñar
+  // nada. Antes dependía de la ruta, y si alguien abría la aplicación
+  // directamente en una pantalla excluida no llegaba a arrancar.
   useEffect(() => {
-    if (fuera) { setVotacion(null); return; }
     if (typeof window === 'undefined') return;
-    if (!sessionStorage.getItem('profesor_id')) return;
 
     let vivo = true;
     const mirar = () => {
+      // Sin sesión no hay nada que mirar, pero se sigue intentando por
+      // si acaba de iniciarla en otra pestaña.
+      if (!sessionStorage.getItem('profesor_id')) { setVotacion(null); return; }
       fetch('/api/votaciones')
         .then(r => r.ok ? r.json() : { votaciones: [] })
         .then(d => {
           if (!vivo) return;
           const vs = d.votaciones || [];
+          // Deja rastro en la consola del navegador: si algún día no
+          // salta, aquí se ve si el problema es que no llegan datos o
+          // que no hay ninguna abierta.
+          if (typeof window !== 'undefined' && window.localStorage?.getItem('depurar_votaciones') === '1') {
+            console.log('[votaciones]', vs.length, 'en total ·',
+              vs.filter(v => v.abierta).length, 'abiertas ·',
+              vs.filter(v => v.abierta && !v.yaVote).length, 'sin votar por mí');
+          }
           // Primero, alguna abierta en la que aún no ha votado
           const abierta = vs.find(v => v.abierta && !v.yaVote);
           if (abierta) { setVotacion(abierta); return; }
@@ -61,10 +73,11 @@ export default function AvisoVotacion() {
         .catch(() => {});
     };
     mirar();
-    const t = setInterval(mirar, 15000);
+    // Cada 10 segundos: en un claustro, esperar más se hace largo.
+    const t = setInterval(mirar, 10000);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
     return () => { vivo = false; clearInterval(t); clearInterval(reloj); };
-  }, [fuera, ruta]);
+  }, []);
 
   if (fuera || !votacion) return null;
   if (cerradoAMano === votacion.id) return null;
