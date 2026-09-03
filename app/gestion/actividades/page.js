@@ -44,6 +44,7 @@ export default function GestionActividades() {
   const [abierta, setAbierta] = useState(null);
   const [usuario, setUsuario] = useState('');
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
+  const [alumnosDe, setAlumnosDe] = useState({});   // id de actividad -> alumnado por grupo
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -69,6 +70,32 @@ export default function GestionActividades() {
   function aviso(texto, tipo) {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 4000);
+  }
+
+  // De la actividad solo vienen los identificadores del alumnado, no los
+  // nombres. Se piden al desplegar, no antes, para no cargar listados
+  // enteros cada vez que se abre la pantalla.
+  async function cargarAlumnos(a) {
+    if (alumnosDe[a.id] || !a.alumnos_asistentes) return;
+    const porGrupo = {};
+    for (const g of Object.keys(a.alumnos_asistentes)) {
+      const seleccion = a.alumnos_asistentes[g];
+      try {
+        const r = await fetch(`/api/alumnos?grupo=${encodeURIComponent(g)}`);
+        const d = await r.json();
+        const todos = d.alumnos || [];
+        porGrupo[g] = seleccion === 'todos'
+          ? { todos: true, total: todos.length, nombres: [] }
+          : {
+              todos: false, total: todos.length,
+              nombres: todos.filter(al => (seleccion || []).includes(al.id))
+                            .map(al => `${al.apellidos || ''}, ${al.nombre || ''}`.trim()),
+            };
+      } catch (e) {
+        porGrupo[g] = { todos: seleccion === 'todos', total: 0, nombres: [] };
+      }
+    }
+    setAlumnosDe(prev => ({ ...prev, [a.id]: porGrupo }));
   }
 
   async function resolver(id, nuevoEstado) {
@@ -194,7 +221,7 @@ export default function GestionActividades() {
                   border: '1px solid #e5e7eb', borderLeft: `5px solid ${est.borde}`,
                   overflow: 'hidden',
                 }}>
-                  <div onClick={() => setAbierta(abiertaEsta ? null : a.id)}
+                  <div onClick={() => { setAbierta(abiertaEsta ? null : a.id); if (!abiertaEsta) cargarAlumnos(a); }}
                     style={{ padding: '13px 16px', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: 200 }}>
@@ -241,29 +268,71 @@ export default function GestionActividades() {
                             <strong>Descripción</strong><br />{a.descripcion}
                           </div>
                         )}
-                        {a.lugar &&        <div><strong>Lugar:</strong> {a.lugar}</div>}
-                        {a.financiacion && (
-                          <div><strong>Financiación:</strong> {
-                            { gratuita: 'Gratuita', alumnado: 'La paga el alumnado',
-                              centro: 'La paga el centro', mixta: 'Mixta: alumnado y centro'
-                            }[a.financiacion] || a.financiacion
-                          }</div>
-                        )}
-                        {a.comision_servicio && (
-                          <div style={{ marginTop: 6 }}>
-                            <a href={`/api/documento?url=${encodeURIComponent(a.comision_servicio)}`}
-                              target="_blank" rel="noopener noreferrer"
-                              style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'none' }}>
-                              📎 Ver comisiones de servicio
-                            </a>
+                        {/* Datos de un vistazo */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 9, marginBottom: 12 }}>
+                          {[
+                            a.hora_salida  && { i: '🕗', et: 'Salida',      v: String(a.hora_salida).slice(0, 5) },
+                            a.hora_regreso && { i: '🕘', et: 'Regreso',     v: String(a.hora_regreso).slice(0, 5) },
+                            a.lugar        && { i: '📍', et: 'Lugar',       v: a.lugar },
+                            a.transporte   && { i: '🚌', et: 'Transporte',  v: a.transporte },
+                            a.financiacion && { i: '💶', et: 'Financia',    v: {
+                              gratuita: 'Gratuita', alumnado: 'El alumnado',
+                              centro: 'El centro', mixta: 'Mixta' }[a.financiacion] || a.financiacion },
+                            a.coste_alumno && { i: '🎟️', et: 'Por alumno',  v: `${a.coste_alumno} €` },
+                          ].filter(Boolean).map((d, k) => (
+                            <div key={k} style={{ padding: '9px 12px', borderRadius: 9, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                              <div style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>
+                                {d.i} {d.et}
+                              </div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: '#334155', marginTop: 2 }}>{d.v}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Alumnado que asiste */}
+                        {a.alumnos_asistentes && (
+                          <div style={{ marginBottom: 12, padding: '11px 13px', borderRadius: 9, backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                            <div style={{ fontWeight: 800, color: '#075985', marginBottom: 7, fontSize: 13 }}>
+                              👥 Alumnado que asiste
+                            </div>
+                            {!alumnosDe[a.id] ? (
+                              <div style={{ fontSize: 12.5, color: '#64748b' }}>Cargando...</div>
+                            ) : (
+                              Object.entries(alumnosDe[a.id]).map(([g, info]) => (
+                                <div key={g} style={{ marginBottom: 7 }}>
+                                  <div style={{ fontSize: 12.5, fontWeight: 700, color: '#334155' }}>
+                                    {g} — {info.todos ? `va el grupo entero (${info.total})` : `${info.nombres.length} de ${info.total}`}
+                                  </div>
+                                  {!info.todos && info.nombres.length > 0 && (
+                                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.6, marginTop: 2 }}>
+                                      {info.nombres.join(' · ')}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )}
                           </div>
                         )}
-                        {a.hora_salida &&  <div><strong>Salida:</strong> {a.hora_salida}{a.hora_regreso ? ` · Regreso: ${a.hora_regreso}` : ''}</div>}
-                        {a.transporte &&   <div><strong>Transporte:</strong> {a.transporte}</div>}
-                        {a.coste_alumno && <div><strong>Coste por alumno:</strong> {a.coste_alumno} €</div>}
+
+                        {/* Documentación */}
+                        <div style={{ marginBottom: 10 }}>
+                          {a.comision_servicio ? (
+                            <a href={`/api/documento?url=${encodeURIComponent(a.comision_servicio)}`}
+                              target="_blank" rel="noopener noreferrer"
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px',
+                                borderRadius: 9, textDecoration: 'none', backgroundColor: '#eff6ff',
+                                border: '1.5px solid #bfdbfe', color: '#1e40af', fontWeight: 700, fontSize: 13.5 }}>
+                              📎 Ver comisiones de servicio
+                            </a>
+                          ) : (
+                            <div style={{ fontSize: 12.5, color: '#94a3b8' }}>📎 Sin documento de comisiones de servicio</div>
+                          )}
+                        </div>
+
                         {a.necesita_guardia && (
-                          <div style={{ marginTop: 6, color: AMBAR }}>
-                            <strong>⚠️ No va el grupo entero.</strong> Profesor de guardia: {a.profesor_guardia || 'sin asignar'}
+                          <div style={{ padding: '10px 13px', borderRadius: 9, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', color: '#78350f', fontSize: 13, lineHeight: 1.55 }}>
+                            <strong>⚠️ No va el grupo entero.</strong> Se queda alumnado en el centro.
+                            <br />Profesor de guardia: <strong>{a.profesor_guardia || 'sin asignar'}</strong>
                           </div>
                         )}
                       </div>
