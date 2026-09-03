@@ -85,6 +85,7 @@ function normAbrev(str) { return (str || '').toLowerCase().replace(/\s/g, ''); }
 export default function GestionGuardias() {
   const [usuario, setUsuario] = useState(null);
   const [fecha, setFecha] = useState(hoyLocal());
+  const [cursoRotulo, setCursoRotulo] = useState('');
   const [horaActiva, setHoraActiva] = useState('1');
   const [horariosClase, setHC] = useState([]);
   const [sectores, setSectores] = useState([]);
@@ -183,6 +184,8 @@ export default function GestionGuardias() {
     setHG(porSector);
     setCargando(false);
   }
+
+  useEffect(() => { getCursoActual().then(c => setCursoRotulo(c || '')); }, []);
 
   async function cargarDia(f) {
     setCargandoDia(true);
@@ -664,7 +667,7 @@ export default function GestionGuardias() {
       {/* CONTADOR ROTATORIO DE APOYOS DEL CURSO */}
       <details open style={{ backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb' }}>
         <summary style={{ padding:'12px 16px', cursor:'pointer', fontSize:11, fontWeight:800, color:'#555', textTransform:'uppercase', letterSpacing:0.5, userSelect:'none' }}>
-          🔄 Rotación de apoyos al cuadrante general — curso 2025/26
+          🔄 Rotación de apoyos al cuadrante general{cursoRotulo ? ` — curso ${cursoRotulo}` : ''}
         </summary>
         <div style={{ padding:'0 16px 14px' }}>
           <div style={{ fontSize:11, color:'#6b7280', marginBottom:10 }}>
