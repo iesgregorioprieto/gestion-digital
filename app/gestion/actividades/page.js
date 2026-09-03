@@ -236,7 +236,27 @@ export default function GestionActividades() {
                             <strong>Relación con el currículo</strong><br />{a.relacion_curricular}
                           </div>
                         )}
+                        {a.descripcion && (
+                          <div style={{ marginBottom: 8, padding: '9px 12px', borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                            <strong>Descripción</strong><br />{a.descripcion}
+                          </div>
+                        )}
                         {a.lugar &&        <div><strong>Lugar:</strong> {a.lugar}</div>}
+                        {a.financiacion && (
+                          <div><strong>Financiación:</strong> {
+                            { gratuita: 'Gratuita', alumnado: 'La paga el alumnado',
+                              centro: 'La paga el centro', mixta: 'Mixta: alumnado y centro'
+                            }[a.financiacion] || a.financiacion
+                          }</div>
+                        )}
+                        {a.comision_servicio && (
+                          <div style={{ marginTop: 6 }}>
+                            <a href={a.comision_servicio} target="_blank" rel="noopener noreferrer"
+                              style={{ color: '#1e40af', fontWeight: 700, textDecoration: 'none' }}>
+                              📎 Ver comisiones de servicio
+                            </a>
+                          </div>
+                        )}
                         {a.hora_salida &&  <div><strong>Salida:</strong> {a.hora_salida}{a.hora_regreso ? ` · Regreso: ${a.hora_regreso}` : ''}</div>}
                         {a.transporte &&   <div><strong>Transporte:</strong> {a.transporte}</div>}
                         {a.coste_alumno && <div><strong>Coste por alumno:</strong> {a.coste_alumno} €</div>}
