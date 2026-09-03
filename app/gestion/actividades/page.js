@@ -45,6 +45,7 @@ export default function GestionActividades() {
   const [usuario, setUsuario] = useState('');
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [alumnosDe, setAlumnosDe] = useState({});   // id de actividad -> alumnado por grupo
+  const [ausenciasPorFecha, setAusenciasPorFecha] = useState(null);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -64,6 +65,20 @@ export default function GestionActividades() {
       .select('*')
       .order('fecha_inicio', { ascending: true });
     setActividades(data || []);
+
+    // Ausencias registradas, para saber qué actividades aprobadas
+    // todavía no tienen la suya. Sin ella, el cuadrante de guardias
+    // no sabe que ese profesor falta y sus grupos quedan sin cubrir.
+    try {
+      const { data: aus } = await getSupabase()
+        .from('ausencias')
+        .select('profesor_id, fecha_inicio, fecha_fin')
+        .gte('fecha_fin', hoyLocal());
+      setAusenciasPorFecha(aus || []);
+    } catch (e) {
+      setAusenciasPorFecha([]);
+    }
+
     setCargando(false);
   }
 
@@ -121,6 +136,19 @@ export default function GestionActividades() {
     setProcesando(null);
   }
 
+  // ¿Ha registrado su ausencia quien va a esta actividad?
+  function faltaAusencia(a) {
+    if (a.estado !== 'aprobada' || !ausenciasPorFecha) return false;
+    if (a.fecha_inicio < hoyLocal()) return false;
+    const gente = [a.profesor_id, ...(Array.isArray(a.acompanantes) ? a.acompanantes : [])].filter(Boolean);
+    if (gente.length === 0) return false;
+    return gente.some(id => !ausenciasPorFecha.some(au =>
+      au.profesor_id === id &&
+      au.fecha_inicio <= a.fecha_inicio &&
+      (au.fecha_fin || au.fecha_inicio) >= a.fecha_inicio
+    ));
+  }
+
   const pendientes = actividades.filter(a => (a.estado || 'pendiente') === 'pendiente');
   const resueltas  = actividades.filter(a => (a.estado || 'pendiente') !== 'pendiente');
   const sinPga     = pendientes.filter(a => a.en_pga === false);
@@ -159,6 +187,29 @@ export default function GestionActividades() {
             color: mensaje.tipo === 'ok' ? VERDE : ROJO,
           }}>{mensaje.texto}</div>
         )}
+
+        {/* SIN AUSENCIA REGISTRADA */}
+        {(() => {
+          const flojas = actividades.filter(faltaAusencia);
+          if (flojas.length === 0) return null;
+          return (
+            <div style={{ padding: '13px 16px', borderRadius: 10, backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', marginBottom: 14, fontSize: 13.5, color: ROJO, lineHeight: 1.6 }}>
+              <div style={{ fontWeight: 800, marginBottom: 5 }}>
+                🚨 {flojas.length === 1 ? 'Una actividad aprobada sin ausencia registrada' : `${flojas.length} actividades aprobadas sin ausencia registrada`}
+              </div>
+              El cuadrante de guardias no sabe que ese profesorado falta, así que sus
+              grupos se quedarán sin cubrir. Recuérdales que registren la ausencia con
+              las tareas para el alumnado.
+              <div style={{ marginTop: 8 }}>
+                {flojas.map(a => (
+                  <div key={a.id} style={{ fontSize: 12.5, marginTop: 3 }}>
+                    · <strong>{a.titulo}</strong> — {fechaTexto(a.fecha_inicio)} — {a.profesor_nombre}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })()}
 
         {/* AVISO DE LO QUE REQUIERE AUTORIZACIÓN EXPRESA */}
         {sinPga.length > 0 && vista === 'pendientes' && (
@@ -243,6 +294,13 @@ export default function GestionActividades() {
                         <span style={{ fontSize: 11.5, fontWeight: 800, color: est.color, backgroundColor: est.bg, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>
                           {est.emoji} {est.label}
                         </span>
+                        {faltaAusencia(a) && (
+                          <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 9px', borderRadius: 20,
+                            color: ROJO, backgroundColor: '#fef2f2', border: `1px solid #fecaca`, whiteSpace: 'nowrap' }}
+                            title="El cuadrante de guardias no sabe que falta">
+                            🚨 Sin ausencia
+                          </span>
+                        )}
                         <span style={{
                           fontSize: 10.5, fontWeight: 700, padding: '2px 9px', borderRadius: 20, whiteSpace: 'nowrap',
                           color: enPga ? VERDE : AMBAR,
