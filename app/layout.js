@@ -1,4 +1,5 @@
 import "./globals.css";
+import AvisoVotacion from "@/components/AvisoVotacion";
 
 export const metadata = {
   title: "APrieto · IES Gregorio Prieto",
@@ -47,6 +48,7 @@ export default function RootLayout({ children }) {
           `
         }} />
         {children}
+        <AvisoVotacion />
 
         <script dangerouslySetInnerHTML={{
           __html: `
