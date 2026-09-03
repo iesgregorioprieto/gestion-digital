@@ -18,6 +18,23 @@ export default function PanelProfesor() {
 
 
   useEffect(() => {
+    let vivo = true;
+    const mirarVotacion = () => {
+      fetch('/api/votaciones')
+        .then(r => r.json())
+        .then(d => {
+          if (!vivo) return;
+          const abierta = (d.votaciones || []).find(v => v.abierta && !v.yaVote);
+          setVotacionAbierta(abierta || null);
+        })
+        .catch(() => {});
+    };
+    mirarVotacion();
+    const t = setInterval(mirarVotacion, 30000);
+    return () => { vivo = false; clearInterval(t); };
+  }, []);
+
+  useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const nombreGuardado = sessionStorage.getItem('profesor_nombre');
     const rolGestionGuardado = sessionStorage.getItem('profesor_rol_gestion');
@@ -71,6 +88,9 @@ export default function PanelProfesor() {
   }
 
   const [actualizando, setActualizando] = useState(false);
+  // Votación en marcha, para avisar en grande. Fuera de los claustros
+  // esto está vacío y no se enseña nada.
+  const [votacionAbierta, setVotacionAbierta] = useState(null);
 
   async function forzarActualizacion() {
     setActualizando(true);
@@ -226,7 +246,9 @@ export default function PanelProfesor() {
       titulo: 'Votaciones',
       descripcion: 'Vota en las cuestiones que plantea el claustro',
       href: '/votaciones',
-      disponible: true,
+      // Solo cuando hay algo que votar: el resto del curso no pinta nada
+      disponible: !!votacionAbierta,
+      oculto: !votacionAbierta,
       roles: ['todos'],
       color: '#7e22ce', bg: '#faf5ff', border: '#d8b4fe',
     },
@@ -259,7 +281,8 @@ export default function PanelProfesor() {
   const esDirector = rolGestion === 'director';
 
   const modulosVisibles = MODULOS.filter(m =>
-    esDirector || m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion)
+    !m.oculto &&
+    (esDirector || m.roles.includes('todos') || m.roles.some(r => roles.includes(r)) || m.roles.includes(rolGestion))
   );
 
   function tieneAcceso(m) {
@@ -410,6 +433,34 @@ export default function PanelProfesor() {
               </div>
             ))}
           </div>
+        )}
+
+        {/* VOTACIÓN EN MARCHA — lo primero y sin competencia */}
+        {votacionAbierta && (
+          <a href="/votaciones" style={{ textDecoration: 'none', display: 'block' }}>
+            <div style={{
+              background: 'linear-gradient(135deg, #7e22ce, #a855f7)',
+              color: 'white', borderRadius: 16, padding: '26px 24px', marginBottom: 18,
+              boxShadow: '0 6px 20px rgba(126,34,206,0.35)', textAlign: 'center',
+            }}>
+              <div style={{ fontSize: 42, marginBottom: 6 }}>🗳️</div>
+              <div style={{ fontSize: 13, fontWeight: 800, letterSpacing: 1, opacity: 0.9, marginBottom: 8 }}>
+                VOTACIÓN EN MARCHA
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, lineHeight: 1.35, marginBottom: 16 }}>
+                {votacionAbierta.pregunta}
+              </div>
+              <div style={{
+                display: 'inline-block', padding: '13px 34px', borderRadius: 10,
+                backgroundColor: 'white', color: '#7e22ce', fontWeight: 800, fontSize: 16,
+              }}>
+                Votar ahora →
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.85, marginTop: 12 }}>
+                Tu voto es secreto
+              </div>
+            </div>
+          </a>
         )}
 
         {/* BIENVENIDA */}
