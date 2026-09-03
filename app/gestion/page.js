@@ -172,6 +172,16 @@ export default function PanelGestion() {
       aviso: avisoCopia,
     },
     {
+      id: 'votaciones',
+      emoji: '🗳️',
+      titulo: 'Votaciones del claustro',
+      descripcion: 'Plantea cuestiones, lánzalas y genera el acta con los resultados',
+      href: '/gestion/votaciones',
+      bg: '#faf5ff',
+      border: '#d8b4fe',
+      color: '#7e22ce',
+    },
+    {
       id: 'incidencias',
       emoji: '🐞',
       titulo: 'Incidencias de la app',
