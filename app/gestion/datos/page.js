@@ -242,7 +242,7 @@ export default function GestionDatos() {
   async function cargarPGA() {
     const { data } = await getSupabase()
       .from('actividades_pga')
-      .select('id, actividad, localidad, curso_academico')
+      .select('id, actividad, localidad, departamento, curso_academico')
       .order('actividad');
     setPgaLista(data || []);
   }
@@ -268,6 +268,7 @@ export default function GestionDatos() {
       const cabecera = lineas[0].split(sep).map(c => limpia(c).toUpperCase());
       const iAct = cabecera.findIndex(c => c.startsWith('ACTIVIDAD') || c.startsWith('VISITA'));
       const iLoc = cabecera.findIndex(c => c.startsWith('LOCALIDAD') || c.startsWith('LUGAR'));
+      const iDep = cabecera.findIndex(c => c.startsWith('DEPARTAMENTO') || c.startsWith('DPTO'));
 
       if (iAct === -1) {
         mostrarMensaje('❌ Falta la columna ACTIVIDAD (o VISITA) en la primera fila.', 'error');
@@ -284,7 +285,11 @@ export default function GestionDatos() {
         const clave = `${actividad}|${localidad}`.toLowerCase();
         if (vistas.has(clave)) continue;
         vistas.add(clave);
-        filas.push({ actividad, localidad, curso_academico: cursoNuevo || stats.cursoActual });
+        filas.push({
+          actividad, localidad,
+          departamento: iDep !== -1 ? (cols[iDep] || null) : null,
+          curso_academico: cursoNuevo || stats.cursoActual,
+        });
       }
 
       if (filas.length === 0) {
@@ -1012,6 +1017,8 @@ export default function GestionDatos() {
               <strong>El archivo debe ser un CSV</strong> con la primera fila de títulos y dos columnas:
               <br />· <strong>ACTIVIDAD</strong> — qué se visita (obligatoria)
               <br />· <strong>LOCALIDAD</strong> — dónde (opcional)
+              <br />· <strong>DEPARTAMENTO</strong> — qué departamento la propone (opcional, pero
+              ayuda: el profesorado las verá agrupadas)
               <br /><span style={{ color: '#94a3b8' }}>En Excel: Archivo → Guardar como → CSV.</span>
             </div>
 
@@ -1024,7 +1031,7 @@ export default function GestionDatos() {
                   {pgaLista.map(a => (
                     <div key={a.id} style={{ padding: '5px 0', borderBottom: '1px solid #dcfce7' }}>
                       {a.actividad}{a.localidad ? <span style={{ color: '#666' }}> · {a.localidad}</span> : null}
-                      <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>{a.curso_academico}</span>
+                      {a.departamento ? <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>{a.departamento}</span> : null}
                     </div>
                   ))}
                 </div>
@@ -1040,6 +1047,7 @@ export default function GestionDatos() {
                   {previewPGA.map((a, i) => (
                     <div key={i} style={{ padding: '4px 0' }}>
                       {a.actividad}{a.localidad ? <span style={{ color: '#666' }}> · {a.localidad}</span> : null}
+                      {a.departamento ? <span style={{ color: '#94a3b8', fontSize: 11, marginLeft: 6 }}>· {a.departamento}</span> : null}
                     </div>
                   ))}
                 </div>
