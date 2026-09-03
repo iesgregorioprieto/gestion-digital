@@ -695,9 +695,18 @@ export default function Actividades() {
               </Campo>
 
               <Campo label="Comisiones de servicio">
-                <input type="file" accept=".pdf,.doc,.docx,image/*"
-                  onChange={e => setComision(e.target.files[0] || null)}
-                  style={{ fontSize: 13 }} />
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 9,
+                  padding: '12px 22px', borderRadius: 10, cursor: 'pointer',
+                  backgroundColor: '#eff6ff', color: '#1e40af',
+                  border: '1.5px solid #bfdbfe', fontWeight: 700, fontSize: 14,
+                }}>
+                  <span style={{ fontSize: 18 }}>📎</span>
+                  {comision ? 'Cambiar el documento' : 'Adjuntar documento'}
+                  <input type="file" accept=".pdf,.doc,.docx,image/*"
+                    onChange={e => setComision(e.target.files[0] || null)}
+                    style={{ display: 'none' }} />
+                </label>
                 <Pista>
                   Opcional. Si ya tienes el documento de comisiones de servicio, adjúntalo
                   aquí y quedará junto a la actividad.
