@@ -1059,13 +1059,26 @@ export default function GestionDatos() {
                 </div>
               </div>
             ) : (
-              <div style={{ borderTop: '1px solid #eee', paddingTop: 18 }}>
-                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8, color: '#333' }}>
+              <div style={{ borderTop: '1px solid #eee', paddingTop: 20 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12, color: '#333' }}>
                   Subir el listado de la PGA
                 </div>
-                <input type="file" accept=".csv,text/csv" onChange={procesarCSVPGA} disabled={procesando}
-                  style={{ fontSize: 13 }} />
-                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>
+
+                {/* El selector de archivo del navegador pasa desapercibido,
+                    así que va oculto detrás de un botón normal. */}
+                <label style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 10,
+                  padding: '14px 26px', borderRadius: 10, cursor: procesando ? 'wait' : 'pointer',
+                  backgroundColor: procesando ? '#94a3b8' : azul, color: 'white',
+                  fontWeight: 800, fontSize: 15, boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                }}>
+                  <span style={{ fontSize: 19 }}>📂</span>
+                  {procesando ? 'Leyendo el archivo...' : 'Elegir archivo CSV'}
+                  <input type="file" accept=".csv,text/csv" onChange={procesarCSVPGA} disabled={procesando}
+                    style={{ display: 'none' }} />
+                </label>
+
+                <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 12, lineHeight: 1.55 }}>
                   Se guardarán para el curso <strong>{cursoNuevo || stats.cursoActual || '—'}</strong>.
                   Podrás revisarlas antes de confirmar.
                 </div>
