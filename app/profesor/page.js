@@ -221,6 +221,16 @@ export default function PanelProfesor() {
       color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
     {
+      id: 'votaciones',
+      emoji: '🗳️',
+      titulo: 'Votaciones',
+      descripcion: 'Vota en las cuestiones que plantea el claustro',
+      href: '/votaciones',
+      disponible: true,
+      roles: ['todos'],
+      color: '#7e22ce', bg: '#faf5ff', border: '#d8b4fe',
+    },
+    {
       id: 'incidencias',
       emoji: '🐞',
       titulo: 'Avisar de un fallo',
