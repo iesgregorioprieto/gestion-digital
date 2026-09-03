@@ -186,6 +186,12 @@ export default function GestionDatos() {
 
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
+    // Los avisos salen arriba y estas pantallas son largas: sin esto,
+    // un error puede quedarse fuera de la vista y parecer que el botón
+    // no hace nada.
+    if (tipo === 'error') {
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+    }
     setTimeout(() => setMensaje(null), 6000);
   }
 
