@@ -220,6 +220,16 @@ export default function PanelProfesor() {
       roles: ['tutor'],
       color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
+    {
+      id: 'incidencias',
+      emoji: '🐞',
+      titulo: 'Avisar de un fallo',
+      descripcion: 'Cuéntanos qué no funciona o qué echas de menos en la aplicación',
+      href: '/incidencias',
+      disponible: true,
+      roles: ['todos'],
+      color: '#9f1239', bg: '#fff1f2', border: '#fda4af',
+    },
   ];
 
   const PANELES_DIRECTIVOS = [
