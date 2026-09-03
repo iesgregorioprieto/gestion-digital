@@ -33,6 +33,15 @@ export default function Votaciones() {
     return () => { clearInterval(t); clearInterval(reloj); };
   }, []);
 
+  // Cuando a una votación abierta se le acaba el tiempo, se recarga
+  // en el acto para que salgan los resultados sin esperar al refresco.
+  useEffect(() => {
+    const vencida = votaciones.some(v =>
+      v.abierta && v.cierre && new Date(v.cierre).getTime() <= ahora
+    );
+    if (vencida) cargar();
+  }, [ahora, votaciones]);
+
   async function cargar() {
     try {
       const r = await fetch('/api/votaciones');
