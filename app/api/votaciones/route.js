@@ -65,6 +65,25 @@ export async function GET(request) {
   const directivo = esDirectivo(sesion);
   const salida = [];
 
+  // Las que se les ha pasado el tiempo se cierran solas aquí. No hay
+  // proceso de fondo: se cierran en cuanto alguien mira la pantalla, y
+  // como se refresca sola cada pocos segundos, ocurre al momento. De
+  // todas formas el reloj del servidor ya rechazaba los votos tardíos,
+  // así que ninguno se cuela por el camino.
+  const vencidas = (votaciones || []).filter(
+    v => v.estado === 'abierta' && cierreDe(v) && new Date() >= cierreDe(v)
+  );
+  if (vencidas.length > 0) {
+    await cliente
+      .from('votaciones')
+      .update({ estado: 'cerrada', cerrada_at: new Date().toISOString() })
+      .in('id', vencidas.map(v => v.id));
+    vencidas.forEach(v => {
+      v.estado = 'cerrada';
+      v.cerrada_at = new Date().toISOString();
+    });
+  }
+
   for (const v of votaciones || []) {
     // Las que están en borrador solo las ve dirección
     if (v.estado === 'borrador' && !directivo) continue;
