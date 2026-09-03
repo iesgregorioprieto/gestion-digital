@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { useState, useEffect } from 'react';
+import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -34,6 +35,8 @@ export default function Incidencias() {
   const [modulo, setModulo] = useState('');
   const [descripcion, setDescripcion] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [foto, setFoto] = useState(null);
+  const [subiendoFoto, setSubiendoFoto] = useState(false);
   const [mias, setMias] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
@@ -58,22 +61,43 @@ export default function Incidencias() {
     setTimeout(() => setMensaje(null), 4500);
   }
 
+  async function subirFoto() {
+    if (!foto) return null;
+    const ext = (foto.name.split('.').pop() || 'png').toLowerCase();
+    const nombre = `capturas/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+    const { error } = await getSupabase().storage
+      .from('incidencias-docs')
+      .upload(nombre, foto, { contentType: foto.type || 'image/png' });
+    if (error) { console.error('subir captura:', error.message); return null; }
+    const { data } = getSupabase().storage.from('incidencias-docs').getPublicUrl(nombre);
+    return data.publicUrl;
+  }
+
   async function enviar() {
     if (descripcion.trim().length < 10) {
       return aviso('Cuéntanos un poco más: qué hacías y qué ha pasado.', 'error');
     }
     setEnviando(true);
+    setSubiendoFoto(!!foto);
+    let foto_url = null;
+    try { foto_url = await subirFoto(); } catch (e) { console.error(e); }
+    setSubiendoFoto(false);
+    if (foto && !foto_url) {
+      setEnviando(false);
+      return aviso('No se ha podido subir la imagen. Prueba otra vez o envíalo sin ella.', 'error');
+    }
+
     const r = await fetch('/api/incidencias', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'crear', datos: { tipo, modulo, descripcion } }),
+      body: JSON.stringify({ accion: 'crear', datos: { tipo, modulo, descripcion, foto_url } }),
     });
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
       aviso('No se ha podido enviar: ' + (e.error || 'error'), 'error');
     } else {
       aviso('✅ Enviado. Gracias por avisar.', 'ok');
-      setDescripcion(''); setModulo(''); setTipo('fallo');
+      setDescripcion(''); setModulo(''); setTipo('fallo'); setFoto(null);
       cargar();
       setVista('mias');
     }
@@ -165,9 +189,39 @@ export default function Incidencias() {
                 style={{ width: '100%', padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box', resize: 'vertical', lineHeight: 1.5 }} />
             </div>
 
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 8 }}>
+                Una captura ayuda mucho
+              </label>
+              <label style={{
+                display: 'inline-flex', alignItems: 'center', gap: 9,
+                padding: '11px 20px', borderRadius: 9, cursor: 'pointer',
+                backgroundColor: '#eff6ff', color: '#1e40af',
+                border: '1.5px solid #bfdbfe', fontWeight: 700, fontSize: 13.5,
+              }}>
+                <span style={{ fontSize: 17 }}>📷</span>
+                {foto ? 'Cambiar la imagen' : 'Adjuntar una captura'}
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                  onChange={e => setFoto(e.target.files[0] || null)} />
+              </label>
+              {foto && (
+                <div style={{ marginTop: 8, fontSize: 12.5, color: VERDE, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  📎 {foto.name}
+                  <button type="button" onClick={() => setFoto(null)}
+                    style={{ border: 'none', background: 'none', color: '#991b1b', cursor: 'pointer', fontSize: 12.5, fontWeight: 700 }}>
+                    quitar
+                  </button>
+                </div>
+              )}
+              <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6, lineHeight: 1.5 }}>
+                En el móvil puedes hacer la captura y elegirla aquí. En el ordenador,
+                con la tecla Impr Pant y luego pegándola en Paint para guardarla.
+              </div>
+            </div>
+
             <button onClick={enviar} disabled={enviando}
               style={{ padding: '12px 24px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
-              {enviando ? 'Enviando...' : '📨 Enviar'}
+              {subiendoFoto ? 'Subiendo la imagen...' : enviando ? 'Enviando...' : '📨 Enviar'}
             </button>
           </div>
         )}
@@ -204,6 +258,15 @@ export default function Incidencias() {
                   <div style={{ fontSize: 13.5, color: '#333', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                     {i.descripcion}
                   </div>
+                  {i.foto_url && (
+                    <div style={{ marginTop: 9 }}>
+                      <a href={`/api/documento?url=${encodeURIComponent(i.foto_url)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 12.5, color: '#1e40af', fontWeight: 700, textDecoration: 'none' }}>
+                        📷 Ver la captura
+                      </a>
+                    </div>
+                  )}
                   {i.respuesta && (
                     <div style={{ marginTop: 10, padding: '10px 13px', borderRadius: 8, backgroundColor: est.bg, border: `1px solid ${est.borde}`, fontSize: 13, color: '#333', lineHeight: 1.55 }}>
                       <div style={{ fontWeight: 800, marginBottom: 3, color: est.color }}>Respuesta</div>
