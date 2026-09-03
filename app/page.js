@@ -217,7 +217,10 @@ export default function Home() {
             </div>
             <div style={{ fontSize: 14, color: '#555', display: 'flex', gap: 10 }}>
               <span>🌐</span>
-              <span>iesgregorioprieto.centros.castillalamancha.es</span>
+              <a href="https://somosdelprieto.com" target="_blank" rel="noopener noreferrer"
+                style={{ color: '#1e6b2e', textDecoration: 'none', fontWeight: 600 }}>
+                somosdelprieto.com
+              </a>
             </div>
           </div>
         </div>
