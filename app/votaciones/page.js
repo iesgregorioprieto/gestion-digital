@@ -35,12 +35,19 @@ export default function Votaciones() {
 
   // Cuando a una votación abierta se le acaba el tiempo, se recarga
   // en el acto para que salgan los resultados sin esperar al refresco.
+  const [yaRecargadas, setYaRecargadas] = useState([]);
   useEffect(() => {
-    const vencida = votaciones.some(v =>
-      v.abierta && v.cierre && new Date(v.cierre).getTime() <= ahora
+    const vencida = votaciones.find(v =>
+      v.abierta && v.cierre && new Date(v.cierre).getTime() <= ahora &&
+      !yaRecargadas.includes(v.id)
     );
-    if (vencida) cargar();
-  }, [ahora, votaciones]);
+    // Una sola recarga por votación: si no, el efecto se dispara cada
+    // segundo mientras siga marcada como abierta y machaca el servidor.
+    if (vencida) {
+      setYaRecargadas(prev => [...prev, vencida.id]);
+      cargar();
+    }
+  }, [ahora, votaciones, yaRecargadas]);
 
   async function cargar() {
     try {
