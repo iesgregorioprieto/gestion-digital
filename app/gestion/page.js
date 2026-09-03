@@ -171,6 +171,16 @@ export default function PanelGestion() {
       color: avisoCopia ? '#b45309' : '#475569',
       aviso: avisoCopia,
     },
+    {
+      id: 'incidencias',
+      emoji: '🐞',
+      titulo: 'Incidencias de la app',
+      descripcion: 'Atiende los fallos y sugerencias que avisa el profesorado',
+      href: '/gestion/incidencias',
+      bg: '#fff1f2',
+      border: '#fda4af',
+      color: '#9f1239',
+    },
   ];
 
   return (
