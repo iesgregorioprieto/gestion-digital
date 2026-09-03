@@ -141,6 +141,9 @@ export default function Actividades() {
   const totalVan = () => form.grupos.reduce((t, g) => t + (asistentes[g] || []).length, 0);
   const aviso = (texto, tipo = 'ok') => {
     setMensaje({ texto, tipo });
+    // El aviso se dibuja al principio de la página y el botón de enviar
+    // está al final: sin esto el profesor no ve por qué no se envía.
+    try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
     setTimeout(() => setMensaje(null), 5000);
   };
 
@@ -158,7 +161,7 @@ export default function Actividades() {
       const [{ data: acts }, { data: gs }, { data: pga }, { data: profs }, { data: yo }] = await Promise.all([
         getSupabase().from('actividades').select('*').order('fecha_inicio', { ascending: true }),
         getSupabase().from('grupos').select('codigo').order('codigo'),
-        getSupabase().from('actividades_pga').select('id, actividad, localidad').order('actividad'),
+        getSupabase().from('actividades_pga').select('id, actividad, localidad, departamento').order('departamento').order('actividad'),
         getSupabase().from('profesores').select('id, nombre, apellidos').eq('estado', 'activo').order('apellidos'),
         getSupabase().from('profesores').select('departamento').eq('id', id),
       ]);
@@ -226,7 +229,12 @@ export default function Actividades() {
 
     setEnviando(true);
     setSubiendoDoc(!!comision);
-    const urlComision = await subirComision();
+    let urlComision = null;
+    try {
+      urlComision = await subirComision();
+    } catch (e) {
+      console.error('subir comisión:', e);
+    }
     setSubiendoDoc(false);
     if (comision && !urlComision) {
       setEnviando(false);
@@ -427,11 +435,32 @@ export default function Actividades() {
                         }));
                       }}>
                       <option value="">-- Elige la actividad --</option>
-                      {pgaLista.map(a => (
-                        <option key={a.id} value={a.id}>
-                          {a.actividad}{a.localidad ? ` · ${a.localidad}` : ''}
-                        </option>
-                      ))}
+                      {(() => {
+                        // Agrupadas por departamento: con muchas actividades,
+                        // una lista plana es imposible de recorrer.
+                        const porDpto = {};
+                        pgaLista.forEach(a => {
+                          const d = a.departamento?.trim() || 'Sin departamento';
+                          (porDpto[d] = porDpto[d] || []).push(a);
+                        });
+                        // El departamento propio primero, el resto alfabético
+                        const nombres = Object.keys(porDpto).sort((x, y) => {
+                          if (x === departamento) return -1;
+                          if (y === departamento) return 1;
+                          if (x === 'Sin departamento') return 1;
+                          if (y === 'Sin departamento') return -1;
+                          return x.localeCompare(y);
+                        });
+                        return nombres.map(d => (
+                          <optgroup key={d} label={d === departamento ? `${d} (el tuyo)` : d}>
+                            {porDpto[d].map(a => (
+                              <option key={a.id} value={a.id}>
+                                {a.actividad}{a.localidad ? ` · ${a.localidad}` : ''}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ));
+                      })()}
                     </select>
                   )}
                 </Campo>
