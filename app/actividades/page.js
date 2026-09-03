@@ -86,6 +86,7 @@ export default function Actividades() {
     pga_seleccionada: '',  // id de la actividad de la PGA
   });
   const [pgaLista, setPgaLista] = useState([]);
+  const [misAusencias, setMisAusencias] = useState([]);
   const [comision, setComision] = useState(null);   // documento de comisiones de servicio
   const [subiendoDoc, setSubiendoDoc] = useState(false);
   const [alumnosPorGrupo, setAlumnosPorGrupo] = useState({});
@@ -169,6 +170,15 @@ export default function Actividades() {
       setActividades(acts || []);
       setGrupos((gs || []).map(g => g.codigo).filter(Boolean));
       setPgaLista(pga || []);
+
+      // Para saber de qué actividades falta por registrar la ausencia.
+      // El sistema no la crea solo a propósito: las tareas para el
+      // alumnado solo las sabe quien falta.
+      try {
+        const rAus = await fetch('/api/ausencias?mias=1');
+        const dAus = await rAus.json();
+        setMisAusencias(dAus.ausencias || []);
+      } catch (e) { /* si falla, simplemente no se avisa */ }
       setProfesores(profs || []);
       setDepto((yo || [])[0]?.departamento || '');
     } catch (e) {
@@ -298,6 +308,20 @@ export default function Actividades() {
 
   const hoy = hoyLocal();
   const proximas = actividades.filter(a => a.fecha_inicio >= hoy && a.estado !== 'rechazada');
+  // Va a la actividad quien la propone y quien acompaña
+  const voyYo = a => a.profesor_id === profId ||
+    (Array.isArray(a.acompanantes) && a.acompanantes.includes(profId));
+
+  const tieneAusencia = a => (misAusencias || []).some(au =>
+    au.fecha_inicio <= a.fecha_inicio && (au.fecha_fin || au.fecha_inicio) >= a.fecha_inicio
+  );
+
+  // Aprobadas, futuras, en las que participo y sin ausencia registrada
+  const sinRegistrar = actividades.filter(a =>
+    a.estado === 'aprobada' && voyYo(a) &&
+    a.fecha_inicio >= hoyLocal() && !tieneAusencia(a)
+  );
+
   const mias     = actividades.filter(a => a.profesor_id === profId);
 
   if (cargando) {
@@ -366,6 +390,42 @@ export default function Actividades() {
                 <Sub>Próximas actividades</Sub>
                 {proximas.map(a => <Tarjeta key={a.id} a={a} />)}
               </>
+            )}
+
+            {sinRegistrar.length > 0 && (
+              <div style={{
+                backgroundColor: '#fffbeb', border: '2px solid #fcd34d', borderRadius: 12,
+                padding: '16px 18px', marginBottom: 18,
+              }}>
+                <div style={{ fontWeight: 800, fontSize: 15, color: '#78350f', marginBottom: 6 }}>
+                  ⚠️ Te falta registrar tu ausencia
+                </div>
+                <div style={{ fontSize: 13.5, color: '#78350f', lineHeight: 1.6, marginBottom: 12 }}>
+                  Tienes {sinRegistrar.length === 1 ? 'una actividad aprobada' : `${sinRegistrar.length} actividades aprobadas`} y
+                  el cuadrante de guardias todavía no sabe que faltas. Registra tu ausencia
+                  indicando las horas y, sobre todo, <strong>las tareas que dejas a tus grupos</strong>:
+                  es lo que verá quien te cubra.
+                </div>
+                {sinRegistrar.map(a => (
+                  <a key={a.id} href={`/ausencias?fecha=${a.fecha_inicio}`}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      gap: 10, padding: '11px 14px', borderRadius: 9, marginBottom: 7,
+                      backgroundColor: 'white', border: '1.5px solid #fcd34d',
+                      textDecoration: 'none', flexWrap: 'wrap',
+                    }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: '#334155' }}>
+                      {a.titulo} · {new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })}
+                    </span>
+                    <span style={{
+                      padding: '7px 15px', borderRadius: 8, backgroundColor: '#b45309',
+                      color: 'white', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap',
+                    }}>
+                      Registrar ausencia →
+                    </span>
+                  </a>
+                ))}
+              </div>
             )}
 
             {mias.length > 0 && (
