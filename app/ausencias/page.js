@@ -149,6 +149,19 @@ export default function Ausencias() {
 
   useEffect(() => { getConfigCurso().then(setConfigCurso).catch(() => {}); }, []);
 
+  // Se puede llegar aquí desde otro sitio con el día ya puesto, por
+  // ejemplo desde el recordatorio de una actividad aprobada.
+  useEffect(() => {
+    try {
+      const f = new URLSearchParams(window.location.search).get('fecha');
+      if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+        setFechaInicio(f);
+        setFechaFin(f);
+        setVista('formulario');
+      }
+    } catch (e) { /* si no se puede leer, se empieza en blanco */ }
+  }, []);
+
   // ¿Hay clases el día elegido? Fuera del periodo lectivo o en vacaciones
   // no las hay, pero la ausencia se registra igual: el profesorado tiene
   // jornada (claustros, evaluaciones, preparación) aunque no haya alumnado.
