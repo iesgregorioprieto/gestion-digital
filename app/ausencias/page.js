@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
-import { getCursoActual, cursoPorFecha } from '@/lib/curso';
+import { getCursoActual, cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
@@ -67,6 +67,8 @@ export default function Ausencias() {
   const [tipo, setTipo] = useState('');
   const [subtipo, setSubtipo] = useState('');
   const [datosExtra, setDatosExtra] = useState({});
+  // Configuración del curso, para saber si el día elegido tiene clases
+  const [configCurso, setConfigCurso] = useState(null);
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
@@ -144,6 +146,13 @@ export default function Ausencias() {
     unicos.forEach(u => { bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '', archivo: null, archivoNombre: '' }; });
     setTareasBloque(bloque);
   }
+
+  useEffect(() => { getConfigCurso().then(setConfigCurso).catch(() => {}); }, []);
+
+  // ¿Hay clases el día elegido? Fuera del periodo lectivo o en vacaciones
+  // no las hay, pero la ausencia se registra igual: el profesorado tiene
+  // jornada (claustros, evaluaciones, preparación) aunque no haya alumnado.
+  const diaLectivo = esDiaLectivo(fechaInicio, configCurso);
 
   async function cargarHorarioDelDia(fecha, nPdfParam) {
     if (!fecha || !profesorId) return;
@@ -312,7 +321,8 @@ export default function Ausencias() {
       }
     }
 
-    if (labelsSinTarea) {
+    // En un día sin clases no hay tareas que dejar: no se avisa.
+    if (labelsSinTarea && diaLectivo.lectivo) {
       const seguir = confirm(
         `Vas a enviar la ausencia sin tareas en: ${labelsSinTarea}.\n\n` +
         `Tu ausencia aparecerá igualmente en el cuadrante de guardias, pero el profesorado de guardia ` +
@@ -727,6 +737,18 @@ export default function Ausencias() {
                 placeholder={subtipo === 'otros' ? 'Especifica el motivo de la ausencia...' : 'Añade cualquier detalle adicional si lo necesitas...'}
                 rows={3} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${subtipo === 'otros' && !motivo.trim() ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
+
+            {/* AVISO DE DÍA SIN CLASES */}
+            {fechaInicio && !diaLectivo.lectivo && (
+              <div style={{ marginBottom: 18, padding: '13px 15px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', fontSize: 13, color: '#1e40af', lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 800, marginBottom: 3 }}>
+                  📅 Ese día no hay clases con alumnado
+                </div>
+                {diaLectivo.motivo}. Registra la ausencia igual: queda constancia para
+                dirección. No hace falta indicar horario ni dejar tareas, porque no hay
+                nada que cubrir en el cuadrante de guardias.
+              </div>
+            )}
 
             {/* HORARIO / GRUPOS EN BLOQUE */}
 
