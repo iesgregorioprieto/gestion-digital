@@ -74,6 +74,7 @@ export async function POST(request) {
         modulo: datos.modulo || null,
         tipo: datos.tipo === 'sugerencia' ? 'sugerencia' : 'fallo',
         descripcion,
+        foto_url: datos.foto_url || null,
         estado: 'nueva',
       }]);
       if (error) return Response.json({ error: error.message }, { status: 500 });
