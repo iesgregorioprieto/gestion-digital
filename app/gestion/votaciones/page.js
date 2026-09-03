@@ -94,7 +94,7 @@ export default function GestionVotaciones() {
     setProcesando(null);
   }
 
-  async function crear() {
+  async function crear(lanzarYa = false) {
     const ops = opciones.map(o => o.trim()).filter(Boolean);
     if (!pregunta.trim()) return aviso('Escribe la cuestión que se somete a votación.', 'error');
     if (ops.length < 2)   return aviso('Pon al menos dos opciones.', 'error');
@@ -112,7 +112,17 @@ export default function GestionVotaciones() {
       const e = await r.json().catch(() => ({}));
       aviso(e.error || 'No se ha podido crear', 'error');
     } else {
-      aviso('✅ Votación preparada. Lánzala cuando quieras.', 'ok');
+      const creada = await r.json().catch(() => ({}));
+      if (lanzarYa && creada.id) {
+        await fetch('/api/votaciones', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'abrir', id: creada.id }),
+        });
+        aviso('🚀 Votación lanzada. Ya le ha saltado a todo el claustro.', 'ok');
+      } else {
+        aviso('✅ Votación preparada. Lánzala cuando quieras.', 'ok');
+      }
       setPregunta(''); setDescripcion(''); setOpciones(['', '']); setDuracion('5');
       setVista('lista');
       cargar();
@@ -302,12 +312,21 @@ export default function GestionVotaciones() {
               </div>
             </div>
 
-            <button onClick={crear} disabled={guardando}
-              style={{ padding: '12px 24px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 14.5, cursor: 'pointer' }}>
-              {guardando ? 'Preparando...' : '✅ Preparar votación'}
-            </button>
-            <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 9 }}>
-              Queda preparada pero cerrada. Nadie la ve hasta que la lances.
+            <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+              <button onClick={() => crear(true)} disabled={guardando}
+                style={{ padding: '14px 26px', borderRadius: 10, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 800, fontSize: 15.5, cursor: 'pointer', boxShadow: '0 2px 8px rgba(126,34,206,0.3)' }}>
+                {guardando ? 'Lanzando...' : '🚀 Lanzar votación'}
+              </button>
+              <button onClick={() => crear(false)} disabled={guardando}
+                style={{ padding: '14px 22px', borderRadius: 10, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#555', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                Guardar para luego
+              </button>
+            </div>
+            <div style={{ fontSize: 12.5, color: '#94a3b8', marginTop: 10, lineHeight: 1.55 }}>
+              <strong>Lanzar</strong> la abre ahora mismo: le salta a todo el claustro y
+              empieza la cuenta atrás.<br />
+              <strong>Guardar para luego</strong> la deja preparada sin que nadie la vea,
+              para lanzarla en su momento.
             </div>
           </div>
         )}
