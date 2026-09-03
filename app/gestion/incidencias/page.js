@@ -165,6 +165,16 @@ export default function GestionIncidencias() {
                   <div style={{ fontSize: 13.5, color: '#444', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
                     {i.descripcion}
                   </div>
+                  {i.foto_url && (
+                    <div style={{ marginTop: 9 }}>
+                      <a href={`/api/documento?url=${encodeURIComponent(i.foto_url)}`}
+                        target="_blank" rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ fontSize: 12.5, color: '#1e40af', fontWeight: 700, textDecoration: 'none' }}>
+                        📷 Ver la captura
+                      </a>
+                    </div>
+                  )}
                 </div>
 
                 {abiertaEsta && (
