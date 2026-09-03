@@ -17,7 +17,7 @@ import { claveServidor } from '@/lib/claveServidor';
  * Se devuelve un enlace temporal que caduca en 60 segundos.
  */
 
-const BUCKETS_PRIVADOS = ['ausencias-docs', 'dld-archivos'];
+const BUCKETS_PRIVADOS = ['ausencias-docs', 'dld-archivos', 'actividades-docs'];
 
 function supa() {
   return createClient(
@@ -71,6 +71,19 @@ export async function GET(request) {
       .select('profesor_id')
       .ilike('justificacion_url', `%${ruta}%`);
     autorizado = (data || []).some(a => a.profesor_id === sesion.id);
+  }
+
+  if (!autorizado && bucket === 'actividades-docs') {
+    // Las comisiones de servicio las ve dirección y quien propuso la
+    // actividad. También quien va de acompañante, que le afectan.
+    const { data } = await supa()
+      .from('actividades')
+      .select('profesor_id, acompanantes')
+      .ilike('comision_servicio', `%${ruta}%`);
+    autorizado = (data || []).some(a =>
+      a.profesor_id === sesion.id ||
+      (Array.isArray(a.acompanantes) && a.acompanantes.includes(sesion.id))
+    );
   }
 
   if (!autorizado && bucket === 'dld-archivos') {
