@@ -5,8 +5,6 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
-import EscenarioDia from '@/components/EscenarioDia';
-import { hoyLocal } from '@/lib/fechas';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -78,8 +76,7 @@ function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
 }
 
 export default function DLD() {
-  const [vista, setVista] = useState('historial'); // 'historial' | 'nueva' | 'escenario'
-  const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
+  const [vista, setVista] = useState('historial'); // 'historial' | 'nueva'
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
   const [msgOk, setMsgOk] = useState('');
@@ -510,26 +507,7 @@ export default function DLD() {
           <button onClick={() => setVista('normativa')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'normativa' ? '#1d4ed8' : '#ddd'}`, backgroundColor: vista === 'normativa' ? '#1d4ed8' : 'white', color: vista === 'normativa' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>
             📖 Normativa
           </button>
-          <button onClick={() => setVista('escenario')} style={{ flex: 1, padding: '10px', borderRadius: 10, border: `1.5px solid ${vista === 'escenario' ? verde : '#ddd'}`, backgroundColor: vista === 'escenario' ? verde : 'white', color: vista === 'escenario' ? 'white' : '#666', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-            📅 Escenario
-          </button>
         </div>
-
-        {vista === 'escenario' && (
-          <div>
-            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 14, border: '1px solid #e5e7eb' }}>
-              <label style={{ fontSize: 13, fontWeight: 700, display: 'block', marginBottom: 8 }}>
-                📅 ¿Qué día quieres consultar?
-              </label>
-              <input type="date" value={fechaEscenario} onChange={e => setFechaEscenario(e.target.value)}
-                style={{ padding: '11px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, width: '100%', maxWidth: 260, boxSizing: 'border-box' }} />
-              <div style={{ marginTop: 8, fontSize: 12, color: '#666', lineHeight: 1.5 }}>
-                Todo lo previsto ese día por orden de prioridad: ausencias, extraescolares, formación y DLD.
-              </div>
-            </div>
-            <EscenarioDia fecha={fechaEscenario} />
-          </div>
-        )}
 
         {/* ═══ CALENDARIO DE CARGA ═══ */}
         {vista === 'calendario' && (
