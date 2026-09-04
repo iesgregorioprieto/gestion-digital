@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
-import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
+import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
 import { getSupabase } from '@/lib/supabase';
 import { getCursoActual } from '@/lib/curso';
@@ -111,10 +111,14 @@ export default function GestionAusencias() {
     return true;
   });
 
+  // Los DLD y las extraescolares se registran para el cuadrante de
+  // guardias, pero no son faltas: no entran en estos recuentos.
+  const soloFaltas = ausencias.filter(a => !a.subtipo || computaComoFalta(a.subtipo));
+
   const contadores = {
-    pendiente:      ausencias.filter(a => a.estado === 'pendiente').length,
-    justificada:    ausencias.filter(a => a.estado === 'justificada').length,
-    sin_justificar: ausencias.filter(a => a.estado === 'sin_justificar').length,
+    pendiente:      soloFaltas.filter(a => a.estado === 'pendiente').length,
+    justificada:    soloFaltas.filter(a => a.estado === 'justificada').length,
+    sin_justificar: soloFaltas.filter(a => a.estado === 'sin_justificar').length,
   };
 
   // ===== MÉTRICAS DEL DASHBOARD =====
@@ -131,8 +135,8 @@ export default function GestionAusencias() {
       // Activa: es baja y (no tiene fecha fin O la fecha fin es futura)
       return esBaja && (!fin || fin >= hoyStr);
     }).length,
-    pendientesJustificar: ausencias.filter(a => !a.justificado && a.estado !== 'justificada').length,
-    fueraDePlazo: ausencias.filter(a => {
+    pendientesJustificar: soloFaltas.filter(a => !a.justificado && a.estado !== 'justificada').length,
+    fueraDePlazo: soloFaltas.filter(a => {
       if (a.justificado || a.estado === 'justificada') return false;
       if (!a.created_at) return false;
       const limite = new Date(a.created_at);
@@ -817,7 +821,7 @@ ${a.observaciones_directivo ? `
 
                   {/* Informe oficial para la Delegación */}
                   <button
-                    onClick={() => generarInformeMensual(ausenciasFiltradas)}
+                    onClick={() => generarInformeMensual(ausenciasFiltradas.filter(a => !a.subtipo || computaComoFalta(a.subtipo)))}
                     style={{ width: '100%', marginTop: 6, padding: '10px', borderRadius: 7, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}
                   >🖨️ Informe para la Delegación (PDF)</button>
                 </div>
