@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { computaComoFalta } from '@/lib/motivosAusencia';
 import { claveServidor } from '@/lib/claveServidor';
 
 /**
@@ -115,6 +116,14 @@ export async function POST(request) {
         delete fila.estado;
         delete fila.observaciones_directivo;
         delete fila.comentario_secretario;
+      }
+
+      // Días de libre disposición y actividades complementarias: ya
+      // están autorizados por otra vía, así que la ausencia se registra
+      // para el cuadrante de guardias pero no queda pendiente de
+      // justificar ni cuenta como falta.
+      if (fila.subtipo && !computaComoFalta(fila.subtipo)) {
+        fila.estado = 'justificada';
       }
 
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
