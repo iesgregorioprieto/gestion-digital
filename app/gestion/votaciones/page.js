@@ -66,7 +66,8 @@ export default function GestionVotaciones() {
     try {
       const r = await fetch('/api/votaciones');
       const d = await r.json();
-      setVotaciones(d.votaciones || []);
+      // Las de las reuniones se gestionan desde la propia convocatoria
+      setVotaciones((d.votaciones || []).filter(v => !v.comunicacion_id));
     } catch (e) { /* mantiene lo anterior */ }
     setCargando(false);
   }
@@ -238,6 +239,16 @@ export default function GestionVotaciones() {
             color: mensaje.tipo === 'ok' ? VERDE : ROJO,
           }}>{mensaje.texto}</div>
         )}
+
+        <div style={{ padding: '12px 15px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', marginBottom: 16, fontSize: 13, color: '#1e3a5f', lineHeight: 1.6 }}>
+          <strong>Consultas al claustro sin reunión.</strong> Para elegir los días de libre
+          disposición del centro, decidir una fecha o cualquier cosa que no requiera
+          convocar a nadie. Puede votar todo el profesorado.
+          <br />
+          Si lo que quieres es votar <strong>dentro de un claustro o una CCP</strong>, hazlo
+          desde <a href="/gestion/comunicaciones" style={{ color: '#1e40af', fontWeight: 700 }}>Comunicaciones
+          y convocatorias</a>: allí solo vota quien haya pasado lista.
+        </div>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button onClick={() => setVista('lista')} style={btnVista(vista === 'lista')}>📋 Votaciones</button>
