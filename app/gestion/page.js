@@ -185,7 +185,7 @@ export default function PanelGestion() {
       id: 'votaciones',
       emoji: '🗳️',
       titulo: 'Votaciones del claustro',
-      descripcion: 'Plantea cuestiones, lánzalas y genera el acta con los resultados',
+      descripcion: 'Consulta al claustro sin reunión: días de libre elección, fechas, sondeos',
       href: '/gestion/votaciones',
       bg: '#faf5ff',
       border: '#d8b4fe',
