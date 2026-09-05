@@ -243,6 +243,14 @@ export default function PanelSecretario() {
     return etiquetas.join(' · ');
   }
 
+  // La antigüedad guardada como número se queda congelada en el momento
+  // en que se rellenó la ficha. Si hay año de incorporación, se calcula
+  // al vuelo: así no miente al pasar los cursos.
+  function antiguedadReal(anio, guardada) {
+    if (anio) return Math.max(0, new Date().getFullYear() - parseInt(anio, 10));
+    return guardada || 0;
+  }
+
   function badgeEstado(estado) {
     if (estado === 'activo') return { bg: '#d1fae5', color: '#065f46', texto: '✅ Activo' };
     if (estado === 'pendiente') return { bg: '#fef3c7', color: '#92400e', texto: '⏳ Pendiente' };
@@ -685,8 +693,14 @@ export default function PanelSecretario() {
             <FilaInfo label="Tipo contrato" valor={profesorSeleccionado.tipo_contrato} />
             <FilaInfo label="Roles" valor={etiquetaRoles(profesorSeleccionado)} />
             <FilaInfo label="Rol gestión" valor={profesorSeleccionado.rol_gestion || '—'} />
-            <FilaInfo label="Antigüedad centro" valor={profesorSeleccionado.antiguedad_centro ? `${profesorSeleccionado.antiguedad_centro} años` : '—'} />
-            <FilaInfo label="Antigüedad cuerpo" valor={profesorSeleccionado.antiguedad_cuerpo ? `${profesorSeleccionado.antiguedad_cuerpo} años` : '—'} />
+            <FilaInfo label="Antigüedad centro" valor={(() => {
+              const a = antiguedadReal(profesorSeleccionado.anio_centro, profesorSeleccionado.antiguedad_centro);
+              return a ? `${a} años${profesorSeleccionado.anio_centro ? ` (desde ${profesorSeleccionado.anio_centro})` : ''}` : '—';
+            })()} />
+            <FilaInfo label="Antigüedad cuerpo" valor={(() => {
+              const a = antiguedadReal(profesorSeleccionado.anio_cuerpo, profesorSeleccionado.antiguedad_cuerpo);
+              return a ? `${a} años${profesorSeleccionado.anio_cuerpo ? ` (desde ${profesorSeleccionado.anio_cuerpo})` : ''}` : '—';
+            })()} />
             <FilaInfo label="Estado" valor={badgeEstado(profesorSeleccionado.estado).texto} />
             <FilaInfo label="Registrado" valor={new Date(profesorSeleccionado.created_at).toLocaleDateString('es-ES')} />
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
