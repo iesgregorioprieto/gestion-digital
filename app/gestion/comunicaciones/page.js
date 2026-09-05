@@ -60,6 +60,12 @@ export default function GestionComunicaciones() {
   const [lugar, setLugar] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [minutosFichaje, setMinutosFichaje] = useState('10');
+  // Votaciones de la reunión
+  const [votaciones, setVotaciones] = useState([]);
+  const [nuevaVot, setNuevaVot] = useState(null);   // id de la convocatoria en la que se está creando
+  const [vPregunta, setVPregunta] = useState('');
+  const [vOpciones, setVOpciones] = useState(['A favor', 'En contra', 'Abstención']);
+  const [vMinutos, setVMinutos] = useState('3');
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -70,6 +76,7 @@ export default function GestionComunicaciones() {
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
     cargar();
     cargarProfesores();
+    cargarVotaciones();
     const t = setInterval(cargar, 15000);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
     return () => { clearInterval(t); clearInterval(reloj); };
@@ -82,6 +89,61 @@ export default function GestionComunicaciones() {
       setLista(d.comunicaciones || []);
     } catch (e) { /* mantiene lo anterior */ }
     setCargando(false);
+  }
+
+  async function cargarVotaciones() {
+    try {
+      const r = await fetch('/api/votaciones');
+      const d = await r.json();
+      setVotaciones(d.votaciones || []);
+    } catch (e) { /* se queda con lo anterior */ }
+  }
+
+  async function accionVotacion(nombre, id) {
+    const r = await fetch('/api/votaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: nombre, id }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      aviso(e.error || 'No se ha podido completar', 'error');
+    } else { cargarVotaciones(); }
+  }
+
+  async function lanzarVotacion(comunicacionId) {
+    const ops = vOpciones.map(o => o.trim()).filter(Boolean);
+    if (!vPregunta.trim()) return aviso('Escribe la cuestión.', 'error');
+    if (ops.length < 2)    return aviso('Pon al menos dos opciones.', 'error');
+
+    const r = await fetch('/api/votaciones', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'crear',
+        datos: {
+          pregunta: vPregunta, opciones: ops,
+          duracion_minutos: vMinutos || null,
+          comunicacion_id: comunicacionId,
+        },
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      return aviso(e.error || 'No se ha podido crear', 'error');
+    }
+    const creada = await r.json().catch(() => ({}));
+    if (creada.id) {
+      await fetch('/api/votaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'abrir', id: creada.id }),
+      });
+    }
+    aviso('🗳️ Votación lanzada a quienes han pasado lista.', 'ok');
+    setNuevaVot(null); setVPregunta(''); setVMinutos('3');
+    setVOpciones(['A favor', 'En contra', 'Abstención']);
+    cargarVotaciones();
   }
 
   async function cargarProfesores() {
@@ -391,6 +453,113 @@ export default function GestionComunicaciones() {
                           </div>
                         </div>
                       )}
+
+                      {/* Votaciones de la reunión */}
+                      {esConv && (() => {
+                        const suyas = votaciones.filter(v => v.comunicacion_id === c.id);
+                        return (
+                          <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#faf5ff', border: '1px solid #d8b4fe', marginBottom: 14 }}>
+                            <div style={{ fontWeight: 800, fontSize: 13, color: '#7e22ce', marginBottom: 10 }}>
+                              🗳️ Votaciones de esta reunión
+                            </div>
+
+                            {suyas.map(v => {
+                              const total = v.totalVotos || 0;
+                              return (
+                                <div key={v.id} style={{ backgroundColor: 'white', borderRadius: 9, padding: '11px 13px', marginBottom: 8, border: '1px solid #e9d5ff' }}>
+                                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 6 }}>
+                                    <div style={{ flex: 1, minWidth: 160, fontWeight: 700, fontSize: 13.5, color: '#333' }}>
+                                      {v.pregunta}
+                                    </div>
+                                    <span style={{ fontSize: 11, fontWeight: 800, color: v.abierta ? VERDE : '#64748b' }}>
+                                      {v.abierta ? '🟢 ABIERTA' : '🔒 CERRADA'}
+                                    </span>
+                                  </div>
+                                  {v.abierta ? (
+                                    <>
+                                      <div style={{ fontSize: 12.5, color: '#475569' }}>
+                                        {v.participantes} {v.participantes === 1 ? 'voto emitido' : 'votos emitidos'}
+                                      </div>
+                                      <button onClick={() => accionVotacion('cerrar', v.id)}
+                                        style={{ marginTop: 8, padding: '7px 14px', borderRadius: 8, border: 'none', backgroundColor: AMBAR, color: 'white', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+                                        🔒 Cerrar ahora
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <>
+                                      {(v.opciones || []).map(o => {
+                                        const n = v.recuento?.[o] || 0;
+                                        const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                                        return (
+                                          <div key={o} style={{ marginBottom: 5 }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                                              <span>{o}</span><span><strong>{n}</strong> · {pct}%</span>
+                                            </div>
+                                            <div style={{ height: 7, borderRadius: 4, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+                                              <div style={{ height: '100%', width: `${pct}%`, backgroundColor: '#7e22ce', borderRadius: 4 }} />
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>
+                                        {total} {total === 1 ? 'voto' : 'votos'} · {v.participantes} participantes
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {nuevaVot === c.id ? (
+                              <div style={{ backgroundColor: 'white', borderRadius: 9, padding: 13, border: '1.5px solid #d8b4fe' }}>
+                                <input value={vPregunta} onChange={e => setVPregunta(e.target.value)}
+                                  placeholder="¿Qué se somete a votación?"
+                                  style={{ ...campo, marginBottom: 9 }} />
+                                {vOpciones.map((o, i) => (
+                                  <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                                    <input value={o} onChange={e => setVOpciones(ops => ops.map((x, j) => j === i ? e.target.value : x))}
+                                      style={{ ...campo, padding: '9px 11px', fontSize: 13 }} />
+                                    {vOpciones.length > 2 && (
+                                      <button type="button" onClick={() => setVOpciones(ops => ops.filter((_, j) => j !== i))}
+                                        style={{ padding: '0 12px', borderRadius: 8, border: '1.5px solid #fecaca', backgroundColor: 'white', color: ROJO, cursor: 'pointer' }}>✕</button>
+                                    )}
+                                  </div>
+                                ))}
+                                <button type="button" onClick={() => setVOpciones(ops => [...ops, ''])}
+                                  style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px dashed #cbd5e1', backgroundColor: 'white', color: '#64748b', cursor: 'pointer', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>
+                                  + Otra opción
+                                </button>
+                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 11 }}>
+                                  <input type="number" min="1" max="60" value={vMinutos} onChange={e => setVMinutos(e.target.value)}
+                                    style={{ width: 72, padding: '9px 11px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+                                  <span style={{ fontSize: 12.5, color: '#555' }}>minutos</span>
+                                </div>
+                                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                                  <button onClick={() => lanzarVotacion(c.id)}
+                                    style={{ padding: '11px 20px', borderRadius: 9, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                                    🚀 Lanzar votación
+                                  </button>
+                                  <button onClick={() => setNuevaVot(null)}
+                                    style={{ padding: '11px 16px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                <button onClick={() => setNuevaVot(c.id)}
+                                  style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
+                                  ➕ Nueva votación
+                                </button>
+                                <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
+                                  Solo podrán votar quienes hayan pasado lista en esta reunión.
+                                  El voto es secreto.
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Quién ha respondido */}
                       {resp.length > 0 && (
