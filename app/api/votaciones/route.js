@@ -103,8 +103,19 @@ export async function GET(request) {
       .select('*', { count: 'exact', head: true })
       .eq('votacion_id', v.id);
 
+    let puedeVotar = true;
+    if (v.comunicacion_id) {
+      const { data: fichaje } = await cliente
+        .from('comunicaciones_respuestas')
+        .select('fichado_at')
+        .eq('comunicacion_id', v.comunicacion_id)
+        .eq('profesor_id', sesion.id);
+      puedeVotar = !!(fichaje || [])[0]?.fichado_at;
+    }
+
     const fila = {
       ...v,
+      puedeVotar,
       abierta,
       cierre: cierreDe(v),
       yaVote,
@@ -147,6 +158,23 @@ export async function POST(request) {
         return Response.json({ error: 'Esa opción no es válida' }, { status: 400 });
       }
 
+      // Votación de una reunión: solo vota quien haya fichado. Se
+      // comprueba aquí, no en la pantalla: si no, bastaría con enviar
+      // la petición a mano para votar sin haber estado.
+      if (v.comunicacion_id) {
+        const { data: fichaje } = await supa()
+          .from('comunicaciones_respuestas')
+          .select('fichado_at')
+          .eq('comunicacion_id', v.comunicacion_id)
+          .eq('profesor_id', sesion.id);
+        if (!(fichaje || [])[0]?.fichado_at) {
+          return Response.json(
+            { error: 'Esta votación es de la reunión y solo pueden votar quienes pasaron lista' },
+            { status: 403 }
+          );
+        }
+      }
+
       // Se apunta primero quién vota. Si ya estaba, la clave primaria
       // lo rechaza y no llega a contarse el voto: nadie vota dos veces.
       const { error: eVotante } = await cliente
@@ -179,6 +207,7 @@ export async function POST(request) {
         descripcion: (datos.descripcion || '').trim() || null,
         opciones,
         duracion_minutos: datos.duracion_minutos ? parseInt(datos.duracion_minutos, 10) : null,
+        comunicacion_id: datos.comunicacion_id || null,
         estado: 'borrador',
         creada_por: sesion.nombre || 'Dirección',
       }]).select('id');
