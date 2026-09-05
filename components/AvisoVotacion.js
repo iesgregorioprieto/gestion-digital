@@ -60,7 +60,7 @@ export default function AvisoVotacion() {
               vs.filter(v => v.abierta && !v.yaVote).length, 'sin votar por mí');
           }
           // Primero, alguna abierta en la que aún no ha votado
-          const abierta = vs.find(v => v.abierta && !v.yaVote);
+          const abierta = vs.find(v => v.abierta && !v.yaVote && v.puedeVotar !== false);
           if (abierta) { setVotacion(abierta); return; }
           // Si no, una que acabe de cerrarse y en la que participó,
           // para que vea los resultados sin buscarlos
