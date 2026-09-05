@@ -208,7 +208,12 @@ export default function Votaciones() {
                     </div>
                   )}
 
-                  {v.yaVote ? (
+                  {v.puedeVotar === false ? (
+                    <div style={{ padding: '14px 16px', borderRadius: 10, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 13.5, color: '#78350f', lineHeight: 1.6 }}>
+                      ✋ Esta votación es de una reunión y solo pueden votar quienes
+                      pasaron lista. Si estás en la reunión, ficha primero.
+                    </div>
+                  ) : v.yaVote ? (
                     <div style={{ padding: '14px 16px', borderRadius: 10, backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0', fontSize: 14, color: VERDE, fontWeight: 700 }}>
                       ✅ Ya has votado. Tu voto es anónimo y no se puede modificar.
                     </div>
