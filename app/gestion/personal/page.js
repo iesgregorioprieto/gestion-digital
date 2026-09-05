@@ -907,6 +907,13 @@ export default function PanelSecretario() {
             <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
           </div>
 
+          <div style={{ padding: '11px 14px', borderRadius: 9, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12, color: '#1e3a5f', lineHeight: 1.65, marginTop: -6, marginBottom: 14 }}>
+            <strong>Antigüedad en el cuerpo:</strong> todo el tiempo de servicio docente
+            reconocido, incluidos los años de interinidad. Es el mismo que cuenta para
+            trienios y sexenios, y se ve en la nómina. Sirve para desempatar las
+            solicitudes de días de libre disposición.
+          </div>
+
           {/* CHECKBOXES ROLES DOCENTES */}
           <div style={{ marginTop: 16, padding: 14, backgroundColor: '#f8fdf8', borderRadius: 10, border: '1.5px solid #c8e6c9' }}>
             <div style={{ fontWeight: 700, fontSize: 13, color: verde, marginBottom: 10 }}>🎭 Roles docentes (puedes marcar varios)</div>
