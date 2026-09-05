@@ -142,12 +142,20 @@ export async function GET(request) {
         .eq('comunicacion_id', c.id);
       fila.respuestas = todasResp || [];
 
-      // Y cuántas personas deberían recibirla
+      // Quiénes deberían recibirla, para poder listar también a los
+      // que no han respondido en el informe.
       const { data: profes } = await cliente
         .from('profesores')
-        .select('id, departamento, rol, rol_gestion')
-        .eq('estado', 'activo');
-      fila.totalDestinatarios = (profes || []).filter(p => esDestinatario(c, p)).length;
+        .select('id, nombre, apellidos, departamento, rol, rol_gestion')
+        .eq('estado', 'activo')
+        .order('apellidos');
+      const destinatarios = (profes || []).filter(p => esDestinatario(c, p));
+      fila.totalDestinatarios = destinatarios.length;
+      fila.listaDestinatarios = destinatarios.map(p => ({
+        id: p.id,
+        nombre: `${p.apellidos}, ${p.nombre}`,
+        departamento: p.departamento || '',
+      }));
     }
 
     salida.push(fila);
