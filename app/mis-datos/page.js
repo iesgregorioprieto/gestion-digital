@@ -35,6 +35,7 @@ export default function MisDatos() {
   const [mensaje,  setMensaje]  = useState(null);
 
   const [email, setEmail] = useState('');
+  const [verAyudaCuerpo, setVerAyudaCuerpo] = useState(false);
   const [form, setForm] = useState({
     nombre: '', apellidos: '', departamento: '', especialidad: '',
     tipo_contrato: 'Funcionario de carrera',
@@ -285,8 +286,45 @@ export default function MisDatos() {
                 <input type="number" min="1970" max={new Date().getFullYear()}
                   value={form.anio_cuerpo} placeholder="Ej: 2010"
                   onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo} />
+                <button type="button" onClick={() => setVerAyudaCuerpo(v => !v)}
+                  style={{
+                    marginTop: 5, padding: 0, border: 'none', background: 'none',
+                    color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 5,
+                  }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 16, height: 16, borderRadius: '50%',
+                    backgroundColor: '#1e40af', color: 'white', fontSize: 11, fontWeight: 800,
+                  }}>i</span>
+                  ¿Qué año pongo aquí?
+                </button>
               </Campo>
             </div>
+
+            {verAyudaCuerpo && (
+              <div style={{
+                backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', borderRadius: 9,
+                padding: '13px 15px', marginBottom: 12, fontSize: 12.5, color: '#1e3a5f', lineHeight: 1.7,
+              }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>Año de ingreso en el cuerpo</div>
+                <p style={{ margin: '0 0 9px' }}>
+                  Cuenta <strong>todo el tiempo de servicio docente</strong>, incluidos los años
+                  como interino, no solo desde que aprobaste la oposición. Es el mismo tiempo
+                  que se te reconoce para trienios y sexenios.
+                </p>
+                <p style={{ margin: '0 0 9px' }}>
+                  <strong>La forma más fácil de saberlo:</strong> míralo en tu nómina. Los
+                  trienios y sexenios que cobras reflejan ese tiempo reconocido. Resta esos
+                  años al actual y ese es tu año de ingreso.
+                </p>
+                <p style={{ margin: 0, fontSize: 11.5, color: '#475569' }}>
+                  Se usa para ordenar las solicitudes de días de libre disposición cuando hay
+                  más peticiones que permisos para un mismo día. Es el último criterio de
+                  desempate que marca la Resolución de 18/07/2024.
+                </p>
+              </div>
+            )}
 
             <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 13 }}>
               💡 Indica el <strong>año</strong>, no los años que llevas. Así no hay que
