@@ -172,6 +172,16 @@ export default function PanelGestion() {
       aviso: avisoCopia,
     },
     {
+      id: 'comunicaciones',
+      emoji: '📢',
+      titulo: 'Comunicaciones y convocatorias',
+      descripcion: 'Avisa al claustro o convoca reuniones con control de asistencia',
+      href: '/gestion/comunicaciones',
+      bg: '#fffbeb',
+      border: '#fde68a',
+      color: '#b45309',
+    },
+    {
       id: 'votaciones',
       emoji: '🗳️',
       titulo: 'Votaciones del claustro',
