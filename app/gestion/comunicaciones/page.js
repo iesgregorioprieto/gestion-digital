@@ -82,6 +82,29 @@ export default function GestionComunicaciones() {
     return () => { clearInterval(t); clearInterval(reloj); };
   }, []);
 
+  function hoyISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  async function borrarViejas(viejas) {
+    const ok = confirm(
+      `Se van a eliminar ${viejas.length} comunicaciones ya cerradas o de reuniones pasadas.\n\n` +
+      `Se borran también las respuestas y los fichajes, y no se puede deshacer.\n\n` +
+      `Descarga antes las actas que necesites conservar.\n\n¿Continuar?`
+    );
+    if (!ok) return;
+    for (const c of viejas) {
+      await fetch('/api/comunicaciones', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'eliminar', id: c.id }),
+      });
+    }
+    aviso(`🗑️ ${viejas.length} eliminadas`, 'ok');
+    cargar();
+  }
+
   async function cargar() {
     try {
       const r = await fetch('/api/comunicaciones?todas=1');
@@ -89,6 +112,139 @@ export default function GestionComunicaciones() {
       setLista(d.comunicaciones || []);
     } catch (e) { /* mantiene lo anterior */ }
     setCargando(false);
+  }
+
+  /** Cruza destinatarios con respuestas: quien no contestó también sale */
+  function filasInforme(c) {
+    const resp = c.respuestas || [];
+    const lista = c.listaDestinatarios || [];
+    return lista.map(d => {
+      const r = resp.find(x => x.profesor_id === d.id);
+      return {
+        nombre: d.nombre,
+        departamento: d.departamento,
+        leida: r?.leida_at ? 'Sí' : 'No',
+        asistira: r?.asistira === true ? 'Sí' : r?.asistira === false ? 'No' : '—',
+        fichado: r?.fichado_at ? 'Sí' : 'No',
+        horaFichaje: r?.fichado_at
+          ? new Date(r.fichado_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
+          : '',
+        aMano: r?.a_mano_por || '',
+      };
+    });
+  }
+
+  function informeCSV(c) {
+    const filas = filasInforme(c);
+    const esConv = c.tipo === 'convocatoria';
+    const cab = esConv
+      ? ['Profesor/a', 'Departamento', 'Leída', 'Asistirá', 'Presente', 'Hora', 'Fichado a mano por']
+      : ['Profesor/a', 'Departamento', 'Leída'];
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const lineas = [cab.map(esc).join(';')];
+    filas.forEach(f => {
+      const fila = esConv
+        ? [f.nombre, f.departamento, f.leida, f.asistira, f.fichado, f.horaFichaje, f.aMano]
+        : [f.nombre, f.departamento, f.leida];
+      lineas.push(fila.map(esc).join(';'));
+    });
+    const blob = new Blob(['\uFEFF' + lineas.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${esConv ? 'convocatoria' : 'aviso'}_${(c.fecha_reunion || c.created_at || '').slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function informePDF(c) {
+    const e = t => String(t ?? '').replace(/[&<>]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x]));
+    const filas = filasInforme(c);
+    const esConv = c.tipo === 'convocatoria';
+    const suyas = votaciones.filter(v => v.comunicacion_id === c.id);
+
+    const presentes = filas.filter(f => f.fichado === 'Sí');
+    const ausentes  = filas.filter(f => f.fichado !== 'Sí');
+
+    const filasHtml = filas.map(f => esConv
+      ? `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td><td class="c">${f.asistira}</td><td class="c">${f.fichado}</td><td class="c">${e(f.horaFichaje)}</td></tr>`
+      : `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td></tr>`
+    ).join('');
+
+    const votHtml = suyas.map(v => {
+      const total = v.totalVotos || 0;
+      const ops = (v.opciones || []).map(o => {
+        const n = v.recuento?.[o] || 0;
+        const pct = total > 0 ? ((n / total) * 100).toFixed(1) : '0,0';
+        return `<tr><td>${e(o)}</td><td class="c">${n}</td><td class="c">${pct}%</td></tr>`;
+      }).join('');
+      return `<div class="votacion">
+        <div class="vpreg">${e(v.pregunta)}</div>
+        <table><tr><th>Opción</th><th class="c">Votos</th><th class="c">%</th></tr>${ops}</table>
+        <div class="vpie">${total} ${total === 1 ? 'voto' : 'votos'} · ${v.participantes} participantes</div>
+      </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+<title>${esConv ? 'Acta de reunión' : 'Registro de aviso'}</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 11.5px; color: #222; margin: 32px; }
+  h1 { font-size: 17px; color: #1e3a5f; margin: 0 0 4px; }
+  h2 { font-size: 13px; color: #1e3a5f; margin: 22px 0 8px; border-bottom: 1.5px solid #1e3a5f; padding-bottom: 3px; }
+  .sub { color: #666; margin-bottom: 16px; }
+  .datos { background: #f1f5f9; padding: 11px 15px; border-radius: 6px; margin-bottom: 16px; line-height: 1.7; }
+  .mensaje { padding: 12px 15px; border-left: 4px solid #cbd5e1; color: #444; margin-bottom: 16px; white-space: pre-wrap; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+  th { background: #1e3a5f; color: white; padding: 7px; text-align: left; font-size: 10.5px; }
+  td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; }
+  tr:nth-child(even) td { background: #f8fafc; }
+  .c { text-align: center; }
+  .votacion { margin-bottom: 18px; padding: 12px 14px; background: #faf5ff; border-radius: 6px; }
+  .vpreg { font-weight: bold; font-size: 13px; margin-bottom: 6px; }
+  .vpie { font-size: 10.5px; color: #666; }
+  .nota { margin-top: 22px; padding: 12px 15px; background: #eff6ff; border-left: 4px solid #1e40af; font-size: 10.5px; color: #1e3a5f; line-height: 1.65; }
+  .pie { margin-top: 28px; padding-top: 9px; border-top: 1px solid #ccc; color: #888; font-size: 10px; }
+</style></head><body>
+  <h1>${esConv ? 'Acta de reunión' : 'Registro de comunicación'}</h1>
+  <div class="sub">IES Gregorio Prieto · Valdepeñas (Ciudad Real)</div>
+
+  <h2>${e(c.titulo)}</h2>
+  <div class="mensaje">${e(c.mensaje)}</div>
+
+  <div class="datos">
+    <strong>Convocados:</strong> ${e(AMBITOS.find(a => a.valor === c.ambito)?.label.replace(/^[^\s]+\s/, '') || c.ambito)}${c.departamento ? ` — ${e(c.departamento)}` : ''}<br>
+    ${c.fecha_reunion ? `<strong>Fecha:</strong> ${e(fechaLarga(c.fecha_reunion))}${c.hora_reunion ? ` · ${e(c.hora_reunion)}` : ''}<br>` : ''}
+    ${c.lugar ? `<strong>Lugar:</strong> ${e(c.lugar)}<br>` : ''}
+    <strong>Destinatarios:</strong> ${filas.length}
+    ${esConv ? `<br><strong>Asistentes:</strong> ${presentes.length} · <strong>Ausentes:</strong> ${ausentes.length}` : ''}
+  </div>
+
+  <h2>${esConv ? 'Control de asistencia' : 'Lectura'}</h2>
+  <table>
+    <tr><th>Profesor/a</th><th>Departamento</th><th class="c">Leída</th>${esConv ? '<th class="c">Asistirá</th><th class="c">Presente</th><th class="c">Hora</th>' : ''}</tr>
+    ${filasHtml}
+  </table>
+
+  ${suyas.length > 0 ? `<h2>Votaciones</h2>${votHtml}
+  <div class="nota">
+    <strong>Sobre el secreto del voto.</strong>
+    La aplicación registra por separado, en dos almacenamientos que no pueden cruzarse,
+    la opción votada y la identidad de quien participa. Ninguno conserva la hora de
+    emisión, lo que impide emparejarlos por orden de llegada. No es posible determinar
+    el sentido del voto de ninguna persona. Solo pudieron votar quienes constan como
+    presentes en el control de asistencia.
+  </div>` : ''}
+
+  <div class="pie">
+    Generado el ${e(new Date().toLocaleString('es-ES'))} por ${e(usuario)} ·
+    APrieto, portal de gestión del IES Gregorio Prieto
+  </div>
+</body></html>`;
+
+    const w = window.open('', '_blank');
+    if (!w) { aviso('El navegador ha bloqueado la ventana. Permite las ventanas emergentes.', 'error'); return; }
+    w.document.write(html);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
   }
 
   async function cargarVotaciones() {
@@ -243,6 +399,22 @@ export default function GestionComunicaciones() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>📋 Publicadas</button>
           <button onClick={() => setVista('nueva')} style={btn(vista === 'nueva')}>➕ Nueva</button>
+          {(() => {
+            // Las de reuniones ya pasadas o cerradas se acumulan; se
+            // pueden borrar de golpe, pero descargando el acta antes.
+            const viejas = lista.filter(c =>
+              c.estado === 'cerrada' ||
+              (c.fecha_reunion && c.fecha_reunion < hoyISO())
+            );
+            if (viejas.length === 0) return null;
+            return (
+              <button onClick={() => borrarViejas(viejas)}
+                style={{ padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                  border: `1.5px solid ${ROJO}`, backgroundColor: 'white', color: ROJO, marginLeft: 'auto' }}>
+                🗑️ Limpiar {viejas.length} obsoleta{viejas.length !== 1 ? 's' : ''}
+              </button>
+            );
+          })()}
         </div>
 
         {/* ─── NUEVA ─── */}
@@ -599,6 +771,14 @@ export default function GestionComunicaciones() {
                       )}
 
                       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+                        <button onClick={() => informePDF(c)}
+                          style={{ padding: '9px 16px', borderRadius: 9, border: 'none', backgroundColor: AZUL, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                          📄 {esConv ? 'Acta en PDF' : 'Informe en PDF'}
+                        </button>
+                        <button onClick={() => informeCSV(c)}
+                          style={{ padding: '9px 16px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                          📊 CSV
+                        </button>
                         {c.estado !== 'cerrada' && (
                           <button onClick={() => accion('cerrar', c.id, {}, '¿Cerrarla? Dejará de saltarle a nadie.')}
                             style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
