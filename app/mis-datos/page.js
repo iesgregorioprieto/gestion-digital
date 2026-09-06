@@ -36,10 +36,11 @@ export default function MisDatos() {
 
   const [email, setEmail] = useState('');
   const [verAyudaCuerpo, setVerAyudaCuerpo] = useState(false);
+  const [verAyudaEdad, setVerAyudaEdad] = useState(false);
   const [form, setForm] = useState({
     nombre: '', apellidos: '', departamento: '', especialidad: '',
     tipo_contrato: 'Funcionario de carrera',
-    anio_centro: '', anio_cuerpo: '', telefono: '',
+    anio_centro: '', anio_cuerpo: '', anio_nacimiento: '', telefono: '',
     esTutor: false, grupoTutoria: '', rolOriginal: ['profesor'],
   });
   const [guardando, setGuardando] = useState(false);
@@ -75,6 +76,7 @@ export default function MisDatos() {
           tipo_contrato:     p.tipo_contrato || 'Funcionario de carrera',
           anio_centro: p.anio_centro?.toString()
             || (p.antiguedad_centro ? (new Date().getFullYear() - p.antiguedad_centro).toString() : ''),
+          anio_nacimiento: p.anio_nacimiento?.toString() || '',
           anio_cuerpo: p.anio_cuerpo?.toString()
             || (p.antiguedad_cuerpo ? (new Date().getFullYear() - p.antiguedad_cuerpo).toString() : ''),
           telefono:          p.telefono      || '',
@@ -116,6 +118,7 @@ export default function MisDatos() {
             tipo_contrato:     form.tipo_contrato,
             anio_centro: form.anio_centro ? parseInt(form.anio_centro) : null,
             anio_cuerpo: form.anio_cuerpo ? parseInt(form.anio_cuerpo) : null,
+            anio_nacimiento: form.anio_nacimiento ? parseInt(form.anio_nacimiento) : null,
             antiguedad_centro: form.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_centro)) : null,
             antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
             telefono:          form.telefono.trim() || null,
@@ -282,6 +285,40 @@ export default function MisDatos() {
                   value={form.anio_centro} placeholder="Ej: 2018"
                   onChange={e => set('anio_centro', e.target.value)} style={inputEstilo} />
               </Campo>
+              <Campo label="Año de nacimiento">
+                <input type="number" min="1940" max={new Date().getFullYear() - 18}
+                  value={form.anio_nacimiento} placeholder="Ej: 1975"
+                  onChange={e => set('anio_nacimiento', e.target.value)} style={inputEstilo} />
+                <button type="button" onClick={() => setVerAyudaEdad(v => !v)}
+                  style={{ marginTop: 5, padding: 0, border: 'none', background: 'none',
+                    color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 16, height: 16, borderRadius: '50%', backgroundColor: '#1e40af',
+                    color: 'white', fontSize: 11, fontWeight: 800 }}>i</span>
+                  ¿Para qué se pide?
+                </button>
+                {verAyudaEdad && (
+                  <div style={{ marginTop: 8, padding: '12px 14px', borderRadius: 9,
+                    backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe',
+                    fontSize: 12.5, color: '#1e3a5f', lineHeight: 1.7 }}>
+                    <p style={{ margin: '0 0 8px' }}>
+                      El día CANOSO se tiene por dos vías, y basta con cumplir una:
+                      <strong> tener 55 años o más</strong>, o <strong>llevar 18 años o
+                      más de servicio</strong>.
+                    </p>
+                    <p style={{ margin: '0 0 8px' }}>
+                      Sin el año de nacimiento solo se puede comprobar la segunda, y quien
+                      pasa de 55 con menos antigüedad se quedaba sin ese día.
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: '#475569' }}>
+                      Solo se guarda el año, no la fecha completa, y únicamente se usa para
+                      esto.
+                    </p>
+                  </div>
+                )}
+              </Campo>
+
               <Campo label="Año de ingreso en el cuerpo">
                 <input type="number" min="1970" max={new Date().getFullYear()}
                   value={form.anio_cuerpo} placeholder="Ej: 2010"
