@@ -25,9 +25,14 @@ function supa() {
   );
 }
 
-export async function GET() {
+export async function GET(request) {
   try {
-    const hoy = hoyLocal();
+    // Se puede pedir otro día para ver cómo queda el escenario. Solo la
+    // fecha: nunca llega de aquí un motivo de ausencia ni nada personal,
+    // igual que en el día de hoy. La pantalla no tiene sesión.
+    const pedida = new URL(request.url).searchParams.get('fecha');
+    const valida = pedida && /^\d{4}-\d{2}-\d{2}$/.test(pedida) && !isNaN(new Date(pedida + 'T12:00:00'));
+    const hoy = valida ? pedida : hoyLocal();
     const cliente = supa();
 
     // Semana en curso, de lunes a domingo, para las extraescolares
