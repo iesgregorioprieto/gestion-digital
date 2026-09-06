@@ -59,9 +59,19 @@ const TIPOS_DLD = [
   { valor: 'canoso',      emoji: '🦳', label: 'CANOSO (+55 años o +18 años servicio)' },
 ];
 
-// Días según tipo de contrato (Resolución 07/07/2026)
-function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
-  const tieneDerechoCanoso = antiguedadCuerpo >= 18;
+/**
+ * Días que le corresponden a cada persona.
+ *
+ * El CANOSO se tiene por dos vías y basta con cumplir una: tener 55
+ * años o más, o llevar 18 o más de servicio. Antes solo se miraba la
+ * antigüedad, así que quien pasaba de 55 con menos de 18 años en el
+ * cuerpo se quedaba sin él.
+ */
+function calcularDiasDLD(tipoContrato, antiguedadCuerpo, anioNacimiento) {
+  const edad = anioNacimiento ? new Date().getFullYear() - anioNacimiento : null;
+  const porEdad = edad !== null && edad >= 55;
+  const porServicio = (antiguedadCuerpo || 0) >= 18;
+  const tieneDerechoCanoso = porEdad || porServicio;
   let moscosos = 0;
   if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') {
     moscosos = 3;
@@ -72,7 +82,7 @@ function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
     moscosos = 1;
   }
   const canosos = tieneDerechoCanoso ? 1 : 0;
-  return { moscosos, canosos, total: moscosos + canosos, tieneDerechoCanoso };
+  return { moscosos, canosos, total: moscosos + canosos, tieneDerechoCanoso, porEdad, porServicio, edad };
 }
 
 export default function DLD() {
@@ -85,6 +95,7 @@ export default function DLD() {
   const [tipoContrato, setTipoContrato] = useState('');
   const [antiguedadCentro, setAntiguedadCentro] = useState(0);
   const [antiguedadCuerpo, setAntiguedadCuerpo] = useState(0);
+  const [anioNacimiento, setAnioNacimiento] = useState(null);
   const [departamento, setDepartamento] = useState('');
   const [misSolicitudes, setMisSolicitudes] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -122,7 +133,7 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, departamento').eq('id', id);
+    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, departamento, anio_nacimiento').eq('id', id);
     const prof = profRows?.[0];
     if (prof) {
       setTipoContrato(prof.tipo_contrato || '');
@@ -132,6 +143,7 @@ export default function DLD() {
       const cfg = await getConfigCurso();
       setAntiguedadCentro(calcularAntiguedad(prof.anio_centro, prof.antiguedad_centro, cfg));
       setAntiguedadCuerpo(calcularAntiguedad(prof.anio_cuerpo, prof.antiguedad_cuerpo, cfg));
+      setAnioNacimiento(prof.anio_nacimiento || null);
     }
     const _rm = await fetch('/api/dld?modo=mias');
     const sols = (await _rm.json()).solicitudes;
@@ -140,7 +152,7 @@ export default function DLD() {
   }
 
   function diasCorrespondientes() {
-    const { total } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+    const { total } = calcularDiasDLD(tipoContrato, antiguedadCuerpo, anioNacimiento);
     return total;
   }
 
@@ -148,7 +160,7 @@ export default function DLD() {
   // uno de período no lectivo y dos del resto del curso. El tercer
   // moscoso lectivo que había aquí no existe en la norma.
   function tieneDerecho(tipoDld) {
-    const { moscosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+    const { moscosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo, anioNacimiento);
     if (tipoDld === 'canoso') return tieneDerechoCanoso;
     // El segundo día lectivo solo lo tiene quien disponga de dos o más
     // moscosos: carrera, interino con vacante, y sin vacante con 8+ meses.
@@ -157,7 +169,7 @@ export default function DLD() {
   }
 
   const diasAprobados = misSolicitudes.filter(s => s.estado === 'aprobada').length;
-  const { moscosos: maxMoscosos, canosos: maxCanosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo);
+  const { moscosos: maxMoscosos, canosos: maxCanosos, tieneDerechoCanoso } = calcularDiasDLD(tipoContrato, antiguedadCuerpo, anioNacimiento);
   const canososUsados = misSolicitudes.filter(s => s.estado === 'aprobada' && s.tipo_dld === 'canoso').length;
   const moscososUsados = diasAprobados - canososUsados;
   const diasRestantes = diasCorrespondientes() - diasAprobados;
