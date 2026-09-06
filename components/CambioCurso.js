@@ -244,7 +244,7 @@ export default function CambioCurso() {
           </a>
 
           <a
-            href="https://drive.google.com/drive/folders/1eEYOlqW9KoKSVyYqXnz_hL6tyBQIcFv3"
+            href="https://drive.google.com/drive/folders/1tFYGMxqae2aYFmboIlk0binDOr6yd4WT"
             target="_blank"
             rel="noopener noreferrer"
             style={{
