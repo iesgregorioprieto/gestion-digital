@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { getConfigCurso, calcularAntiguedad } from '@/lib/curso';
+import { avisarDireccion } from '@/lib/notificaciones';
 
 /**
  * SOLICITUDES DE DLD
@@ -173,6 +174,20 @@ export async function POST(request) {
 
       const { data, error } = await supa().from('dld').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // Aviso al director. Si el correo falla, la solicitud ya está
+      // guardada: no se devuelve error por eso.
+      try {
+        await avisarDireccion(supa(), 'dld_solicitada', {
+          profesor: fila.profesor_nombre || sesion.nombre || '',
+          fecha: fila.fecha_solicitada,
+          tipo_dld: fila.tipo_dld || '',
+          departamento: fila.departamento || '',
+        });
+      } catch (e) {
+        console.error('aviso dld_solicitada:', e?.message);
+      }
+
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
@@ -248,6 +263,20 @@ export async function POST(request) {
 
       const { data, error } = await supa().from('dld').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // También avisa: para dirección es una solicitud más, aunque haya
+      // entrado en papel.
+      try {
+        await avisarDireccion(supa(), 'dld_solicitada', {
+          profesor: fila.profesor_nombre,
+          fecha: fila.fecha_solicitada,
+          tipo_dld: fila.tipo_dld || '',
+          departamento: fila.departamento || '',
+        });
+      } catch (e) {
+        console.error('aviso dld_solicitada (papel):', e?.message);
+      }
+
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
