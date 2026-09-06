@@ -86,7 +86,7 @@ export async function POST(request) {
       const permitidos = [
         'nombre', 'apellidos', 'telefono', 'departamento', 'especialidad',
         'tipo_contrato', 'antiguedad_centro', 'antiguedad_cuerpo',
-        'anio_centro', 'anio_cuerpo', 'rol', 'grupo_tutoria',
+        'anio_centro', 'anio_cuerpo', 'anio_nacimiento', 'rol', 'grupo_tutoria',
       ];
       const limpio = {};
       for (const k of permitidos) {
