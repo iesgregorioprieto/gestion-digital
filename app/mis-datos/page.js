@@ -48,6 +48,7 @@ export default function MisDatos() {
   const [mensaje,  setMensaje]  = useState(null);
 
   const [email, setEmail] = useState('');
+  const [verAyudaCentro, setVerAyudaCentro] = useState(false);
   const [verAyudaCuerpo, setVerAyudaCuerpo] = useState(false);
   const [verAyudaEdad, setVerAyudaEdad] = useState(false);
   const [form, setForm] = useState({
@@ -299,6 +300,34 @@ export default function MisDatos() {
                   <option value="">— Elige el año —</option>
                   {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
+                <button type="button" onClick={() => setVerAyudaCentro(v => !v)}
+                  style={{ marginTop: 5, padding: 0, border: 'none', background: 'none',
+                    color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 16, height: 16, borderRadius: '50%', backgroundColor: '#1e40af',
+                    color: 'white', fontSize: 11, fontWeight: 800 }}>i</span>
+                  ¿Y si ya estuve antes aquí?
+                </button>
+                {verAyudaCentro && (
+                  <div style={{ marginTop: 8, padding: '12px 14px', borderRadius: 9,
+                    backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe',
+                    fontSize: 12.5, color: '#1e3a5f', lineHeight: 1.7 }}>
+                    <p style={{ margin: '0 0 8px' }}>
+                      Se cuenta <strong>el periodo actual, sin interrupciones</strong>. Si
+                      estuviste hace años, te fuiste y has vuelto, pon <strong>el año de tu
+                      vuelta</strong>, no el de la primera vez.
+                    </p>
+                    <p style={{ margin: '0 0 8px' }}>
+                      Ejemplo: estuviste de 2005 a 2009 y volviste en 2024 → pon 2024.
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11.5, color: '#475569' }}>
+                      La antigüedad en el centro solo se usa como criterio de desempate
+                      cuando hay más solicitudes de días de libre disposición que permisos
+                      disponibles para esa fecha.
+                    </p>
+                  </div>
+                )}
               </Campo>
               <Campo label="Año de nacimiento">
                 <select value={form.anio_nacimiento}
