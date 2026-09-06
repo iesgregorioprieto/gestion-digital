@@ -412,6 +412,11 @@ export default function GestionVotaciones() {
                         El recuento no se muestra hasta que se cierre: si se viera cómo va,
                         quien vote al final lo haría sabiéndolo.
                       </div>
+                      <a href={`/gestion/votaciones/tablero?id=${v.id}`} target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-block', marginTop: 10, padding: '8px 14px', borderRadius: 8,
+                          backgroundColor: VERDE, color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                        📺 Abrir tablero para proyectar
+                      </a>
                     </div>
                   )}
 
