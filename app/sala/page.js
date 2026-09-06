@@ -42,16 +42,32 @@ export default function SalaProfesores() {
   const [ultimaCarga, setUltimaCarga] = useState(null);
 
   const hoy = hoyLocal();
-  const diaIdx = new Date().getDay();
+
+  // Día que se está mirando. Normalmente hoy, pero se puede adelantar o
+  // retrasar para ver cómo queda el escenario otro día. Al volver a
+  // "Hoy" la pantalla sigue sola con sus refrescos, como siempre.
+  const [dia, setDia] = useState(hoyLocal());
+  const esHoy = dia === hoy;
+
+  const diaIdx = new Date(dia + 'T12:00:00').getDay();
   const diaNombre = DIAS[diaIdx];
   const horaAct = horaActual();
+
+  function moverDia(saltos) {
+    const d = new Date(dia + 'T12:00:00');
+    d.setDate(d.getDate() + saltos);
+    // Sábados y domingos se saltan: en la sala no interesan
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + (saltos >= 0 ? 1 : -1));
+    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), n = String(d.getDate()).padStart(2, '0');
+    setDia(`${y}-${m}-${n}`);
+  }
 
   const cargarDatos = useCallback(async () => {
     // Todo llega de una sola llamada al servidor. Esta pantalla no tiene
     // sesión (la enciende cualquiera por la mañana), así que el servidor
     // devuelve solo lo del día y sin motivos ni justificaciones.
     try {
-      const r = await fetch('/api/sala');
+      const r = await fetch(`/api/sala?fecha=${dia}`);
       const d = await r.json();
       setAusencias(d.ausencias || []);
       setDlds(d.dlds || []);
@@ -64,7 +80,7 @@ export default function SalaProfesores() {
     }
 
     setUltimaCarga(new Date());
-  }, []);
+  }, [dia]);
 
   useEffect(() => {
     cargarDatos();
@@ -119,6 +135,14 @@ export default function SalaProfesores() {
     return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); clearInterval(intervaloNoticias); clearInterval(alternancia); };
   }, [cargarDatos]);
 
+  // Si alguien se va y deja la pantalla en otro día, vuelve sola a hoy
+  // a los tres minutos. Está en la pared: nadie va a acordarse.
+  useEffect(() => {
+    if (esHoy) return;
+    const t = setTimeout(() => setDia(hoy), 180000);
+    return () => clearTimeout(t);
+  }, [esHoy, dia, hoy]);
+
   // Profesores ausentes con sus horas
   const profesAusentes = {};
   for (const a of ausencias) {
@@ -165,11 +189,19 @@ export default function SalaProfesores() {
 
   const formatFecha = () => {
     const opciones = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date().toLocaleDateString('es-ES', opciones);
+    return new Date(dia + 'T12:00:00').toLocaleDateString('es-ES', opciones);
   };
 
   const azul = '#1e3a5f';
   const verde = '#16a34a';
+
+  const btnDia = {
+    width: 34, height: 34, borderRadius: 9, cursor: 'pointer',
+    backgroundColor: 'rgba(255,255,255,0.10)', color: 'white',
+    border: '1px solid rgba(255,255,255,0.28)',
+    fontSize: 20, fontWeight: 800, lineHeight: 1,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  };
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
@@ -178,7 +210,29 @@ export default function SalaProfesores() {
       <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
-          <p style={{ margin: '4px 0 0', fontSize: 18, opacity: 0.8, textTransform: 'capitalize' }}>{formatFecha()}</p>
+
+          {/* Fecha y paso de día. En la pared se queda siempre en hoy;
+              los botones son para quien se acerca a consultar. */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
+            <button onClick={() => moverDia(-1)} aria-label="Día anterior" style={btnDia}>‹</button>
+            <span style={{ fontSize: 18, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</span>
+            <button onClick={() => moverDia(1)} aria-label="Día siguiente" style={btnDia}>›</button>
+            {!esHoy && (
+              <button onClick={() => setDia(hoy)}
+                style={{ ...btnDia, width: 'auto', padding: '0 13px', fontSize: 13, fontWeight: 700,
+                  backgroundColor: '#f59e0b', color: '#0f172a', borderColor: '#f59e0b' }}>
+                ← Volver a hoy
+              </button>
+            )}
+          </div>
+
+          {!esHoy && (
+            <div style={{ marginTop: 7, display: 'inline-block', padding: '4px 11px', borderRadius: 7,
+              backgroundColor: 'rgba(245,158,11,0.18)', border: '1px solid #f59e0b',
+              fontSize: 13.5, fontWeight: 700, color: '#fbbf24' }}>
+              👁️ Estás viendo otro día, no el de hoy
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 96, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
@@ -199,20 +253,22 @@ export default function SalaProfesores() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #334155' }}>
               <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>Ausentes hoy</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>{esHoy ? 'Ausentes hoy' : 'Ausentes ese día'}</div>
             </div>
             <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#ef4444' }}>{totalAusentesAhora}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>Ausentes ahora ({HORAS.find(h => h.id === horaAct)?.label || ''})</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: esHoy ? '#ef4444' : '#475569' }}>{esHoy ? totalAusentesAhora : '—'}</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                {esHoy ? `Ausentes ahora (${HORAS.find(h => h.id === horaAct)?.label || ''})` : 'Solo cuenta en el día de hoy'}
+              </div>
             </div>
           </div>
 
           {/* LISTA DE AUSENTES */}
           <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes hoy</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes {esHoy ? 'hoy' : 'ese día'}</h2>
             {totalAusentesHoy === 0 ? (
               <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                ✅ Sin ausencias hoy
+                ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
