@@ -50,11 +50,82 @@ function sigueAbierta(v) {
   return !cierre || new Date() < cierre;
 }
 
+/**
+ * Nombre corto para el tablero: "Luis Javier Cárdenas Calcerrada"
+ * queda en "Luis J. Cárdenas". En una pared con 150 nombres, el nombre
+ * completo no cabe y no hace falta para reconocerse.
+ */
+function nombreCorto(nombre, apellidos) {
+  const nombres = (nombre || '').trim().split(/\s+/).filter(Boolean);
+  const pila = (apellidos || '').trim().split(/\s+/).filter(Boolean);
+  const pilaPrimero = pila[0] || '';
+  if (nombres.length === 0) return pilaPrimero;
+  const primero = nombres[0];
+  const inicial = nombres[1] ? ` ${nombres[1][0]}.` : '';
+  return `${primero}${inicial} ${pilaPrimero}`.trim();
+}
+
 export async function GET(request) {
   const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion', votaciones: [] }, { status: 401 });
 
   const cliente = supa();
+
+  // ── Tablero de participación ──
+  //
+  // Devuelve quién ha votado y quién no, NUNCA qué se ha votado. Se
+  // puede saber lo uno sin lo otro porque son dos tablas distintas.
+  // El recuento sigue saliendo solo al cerrar: si se viera a la vez que
+  // alguien se pone en verde, se ataría el nombre con el voto.
+  const url = new URL(request.url);
+  if (url.searchParams.get('modo') === 'tablero') {
+    if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+
+    const idV = url.searchParams.get('id');
+    if (!idV) return Response.json({ error: 'falta_id' }, { status: 400 });
+
+    const { data: vs } = await cliente.from('votaciones').select('*').eq('id', idV);
+    const v = (vs || [])[0];
+    if (!v) return Response.json({ error: 'no_encontrada' }, { status: 404 });
+
+    // El censo: en una votación de reunión son los que pasaron lista;
+    // en una suelta, el claustro activo.
+    let ids = null;
+    if (v.comunicacion_id) {
+      const { data: fichajes } = await cliente
+        .from('comunicaciones_respuestas')
+        .select('profesor_id, fichado_at')
+        .eq('comunicacion_id', v.comunicacion_id);
+      ids = (fichajes || []).filter(f => f.fichado_at).map(f => f.profesor_id);
+    }
+
+    let consulta = cliente.from('profesores')
+      .select('id, nombre, apellidos')
+      .eq('estado', 'activo')
+      .order('apellidos', { ascending: true });
+    if (ids) consulta = consulta.in('id', ids.length ? ids : ['-']);
+    const { data: censo } = await consulta;
+
+    const { data: votantes } = await cliente
+      .from('votantes').select('profesor_id').eq('votacion_id', v.id);
+    const yaVotaron = new Set((votantes || []).map(x => String(x.profesor_id)));
+
+    const personas = (censo || []).map(p => ({
+      id: p.id,
+      nombre: nombreCorto(p.nombre, p.apellidos),
+      votado: yaVotaron.has(String(p.id)),
+    }));
+
+    return Response.json({
+      pregunta: v.pregunta,
+      abierta: sigueAbierta(v),
+      cierre: cierreDe(v),
+      de_reunion: !!v.comunicacion_id,
+      personas,
+      votados: personas.filter(p => p.votado).length,
+      total: personas.length,
+    });
+  }
   const { data: votaciones, error } = await cliente
     .from('votaciones')
     .select('*')
