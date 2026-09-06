@@ -103,14 +103,40 @@ export async function POST(request) {
     }
 
     // ─── Guardar creando o actualizando (configuración del curso) ───
+    //
+    // Antes se hacía con `upsert` y `onConflict`, que exige que la
+    // columna tenga una restricción de unicidad en la base de datos. Si
+    // no la tiene, PostgreSQL rechaza la operación entera y el portal
+    // decía que ya existía, sin dejar actualizar nada. Ahora se mira si
+    // la fila está y se actualiza o se inserta, que funciona haya o no
+    // esa restricción.
     if (accion === 'guardar') {
       if (!datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
 
-      const { error } = await supa().from(tabla)
-        .upsert(datos, onConflict ? { onConflict } : undefined);
+      const clave = onConflict || null;
 
+      if (clave && datos[clave] !== undefined && datos[clave] !== null) {
+        const { data: existentes, error: eBuscar } = await supa()
+          .from(tabla).select('id').eq(clave, datos[clave]);
+        if (eBuscar) return Response.json({ error: eBuscar.message }, { status: 500 });
+
+        if ((existentes || []).length > 0) {
+          // Ya estaba: se actualiza. Si por lo que sea hubiera más de
+          // una fila con el mismo curso, se actualizan todas y quedan
+          // coherentes en vez de dejar una vieja por ahí.
+          const { error } = await supa().from(tabla).update(datos).eq(clave, datos[clave]);
+          if (error) return Response.json({ error: error.message }, { status: 500 });
+          return Response.json({ ok: true, accion_real: 'actualizado' });
+        }
+
+        const { error } = await supa().from(tabla).insert([datos]);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        return Response.json({ ok: true, accion_real: 'creado' });
+      }
+
+      const { error } = await supa().from(tabla).insert([datos]);
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, accion_real: 'creado' });
     }
 
     // ─── Desactivar el resto de cursos al activar uno ───
