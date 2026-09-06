@@ -496,6 +496,81 @@ export async function POST(request) {
           </div>
         </div>`;
 
+    } else if (tipo === 'dld_solicitada') {
+      subject = `\uD83D\uDCC4 Nueva solicitud de día de libre disposición — ${datos.profesor}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e6b2e;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#a7f3d0;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:30px;background:#f9f9f9">
+            <h2 style="color:#1e6b2e;margin:0 0 16px">Nueva solicitud de día de libre disposición</h2>
+            <table style="width:100%;border-collapse:collapse;margin:0 0 20px">
+              <tr style="background:#e8f5e9">
+                <td style="padding:10px;font-weight:bold">Profesor</td>
+                <td style="padding:10px">${e(datos.profesor)}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">Fecha solicitada</td>
+                <td style="padding:10px">${e(datos.fecha)}</td>
+              </tr>
+              <tr style="background:#e8f5e9">
+                <td style="padding:10px;font-weight:bold">Tipo</td>
+                <td style="padding:10px">${e(datos.tipo_dld || '—')}</td>
+              </tr>
+              ${datos.departamento ? `<tr>
+                <td style="padding:10px;font-weight:bold">Departamento</td>
+                <td style="padding:10px">${e(datos.departamento)}</td>
+              </tr>` : ''}
+            </table>
+            <div style="text-align:center;margin:26px 0">
+              <a href="${BASE_URL}/gestion/dld"
+                 style="background:#1e6b2e;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+                Resolver la solicitud
+              </a>
+            </div>
+          </div>
+          <div style="background:#e8f5e9;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
+    } else if (tipo === 'dld_sin_resolver') {
+      const lista = Array.isArray(datos.solicitudes) ? datos.solicitudes : [];
+      subject = `\u23F0 ${lista.length} solicitud${lista.length === 1 ? '' : 'es'} de libre disposición sin resolver`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#b45309;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#fde68a;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:26px;background:#f9f9f9">
+            <h2 style="color:#b45309;margin:0 0 6px">Solicitudes pendientes de resolver</h2>
+            <p style="color:#666;font-size:13.5px;margin:0 0 18px">
+              Quedan menos de 3 días para la fecha solicitada y siguen sin resolución.
+            </p>
+            ${lista.map(x => `
+              <div style="background:white;border-left:4px solid #b45309;border-radius:8px;padding:14px;margin-bottom:10px">
+                <div style="font-weight:bold;color:#1e3a5f;font-size:15px">${e(x.profesor)}</div>
+                <div style="color:#555;font-size:13.5px;margin-top:4px">
+                  Para el <strong>${e(x.fecha)}</strong>${x.dias_restantes !== undefined
+                    ? ` · ${x.dias_restantes === 0 ? 'es mañana o antes' : `faltan ${e(String(x.dias_restantes))} días`}` : ''}
+                </div>
+                ${x.tipo_dld ? `<div style="color:#777;font-size:12.5px;margin-top:3px">${e(x.tipo_dld)}</div>` : ''}
+              </div>`).join('')}
+            <div style="text-align:center;margin:26px 0">
+              <a href="${BASE_URL}/gestion/dld"
+                 style="background:#b45309;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+                Resolverlas ahora
+              </a>
+            </div>
+          </div>
+          <div style="background:#fef3c7;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
     } else if (tipo === 'sugerencias_del_dia') {
       const lista = Array.isArray(datos.sugerencias) ? datos.sugerencias : [];
       subject = `💬 ${lista.length} sugerencia${lista.length === 1 ? '' : 's'} sobre los módulos en prueba`;
