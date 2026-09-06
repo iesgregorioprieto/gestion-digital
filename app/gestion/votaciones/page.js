@@ -216,17 +216,34 @@ export default function GestionVotaciones() {
     backgroundColor: activo ? AZUL : 'white', color: activo ? 'white' : '#555',
   });
 
+  // Pestañas del módulo. La activa se une a la página; la otra queda
+  // apagada y lleva a la otra mitad sin pasar por el panel.
+  const pestana = (activo) => ({
+    padding: '9px 15px', borderRadius: '10px 10px 0 0', fontSize: 13.5, fontWeight: 700,
+    textDecoration: 'none', display: 'inline-block',
+    border: '1px solid #e2e8f0', borderBottom: activo ? '1px solid #f0f4f0' : '1px solid #e2e8f0',
+    marginBottom: -1,
+    backgroundColor: activo ? '#f0f4f0' : '#f8fafc',
+    color: activo ? VERDE : '#64748b',
+  });
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif', paddingBottom: 50 }}>
 
       <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 19, fontWeight: 800 }}>🗳️ Votaciones del claustro</div>
+          <div style={{ fontSize: 19, fontWeight: 800 }}>🏛️ Claustro</div>
           <div style={{ fontSize: 12.5, opacity: 0.85 }}>IES Gregorio Prieto · {usuario}</div>
         </div>
         <a href="/gestion" style={{ color: 'white', padding: '6px 13px', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 7, fontSize: 13.5, textDecoration: 'none' }}>
           ← Inicio
         </a>
+      </div>
+
+      {/* Barra del módulo: las dos caras del claustro */}
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '9px 16px 0', display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
+        <a href="/gestion/comunicaciones" style={pestana(false)}>📢 Avisos y convocatorias</a>
+        <a href="/gestion/votaciones" style={pestana(true)}>🗳️ Votaciones sueltas</a>
       </div>
 
       <div style={{ maxWidth: 850, margin: '0 auto', padding: 16 }}>
