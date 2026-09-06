@@ -15,7 +15,6 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 const SOLO_DIRECTIVOS = [
   '/gestion',
   '/jefe-estudios',
-  '/demo',
 ];
 
 export async function middleware(request) {
@@ -58,6 +57,5 @@ export const config = {
     '/gestion/:path*',
     '/director/:path*',
     '/jefe-estudios/:path*',
-    '/demo/:path*',
   ],
 };
