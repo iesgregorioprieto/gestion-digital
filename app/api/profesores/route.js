@@ -41,7 +41,7 @@ export async function GET(request) {
   if (mia) {
     const { data, error } = await supa()
       .from('profesores')
-      .select('id, nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, telefono, rol, rol_gestion, grupo_tutoria')
+      .select('id, nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento, telefono, rol, rol_gestion, grupo_tutoria')
       .eq('id', sesion.id);
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
@@ -59,7 +59,7 @@ export async function GET(request) {
   // columna de la base de datos.
   const COLUMNAS = 'id, nombre, apellidos, email, email_corporativo, telefono, ' +
     'departamento, especialidad, estado, rol, rol_gestion, grupo_tutoria, ' +
-    'tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, ' +
+    'tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento, ' +
     'autorizado, solicitud_acceso, email_verificado, en_baja, tipo_baja, fecha_baja, ' +
     'sustituto_id, titular_id, created_at';
 
