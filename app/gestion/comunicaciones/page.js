@@ -52,8 +52,8 @@ export default function GestionComunicaciones() {
   const [tipo, setTipo] = useState('aviso');
   const [titulo, setTitulo] = useState('');
   const [texto, setTexto] = useState('');
-  const [ambito, setAmbito] = useState('claustro');
-  const [dpto, setDpto] = useState('');
+  const [ambitos, setAmbitos] = useState(['claustro']);
+  const [dptos, setDptos] = useState([]);
   const [elegidos, setElegidos] = useState([]);
   const [fecha, setFecha] = useState('');
   const [hora, setHora] = useState('');
@@ -165,6 +165,10 @@ export default function GestionComunicaciones() {
     const presentes = filas.filter(f => f.fichado === 'Sí');
     const ausentes  = filas.filter(f => f.fichado !== 'Sí');
 
+    const _ambs = Array.isArray(c.ambito) ? c.ambito : [c.ambito];
+    const ambitoLabel = _ambs.map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(', ')
+      + (c.departamento ? ' \u2014 ' + (Array.isArray(c.departamento) ? c.departamento.join(', ') : c.departamento) : '');
+
     const filasHtml = filas.map(f => esConv
       ? `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td><td class="c">${f.asistira}</td><td class="c">${f.fichado}</td><td class="c">${e(f.horaFichaje)}</td></tr>`
       : `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td></tr>`
@@ -211,7 +215,7 @@ export default function GestionComunicaciones() {
   <div class="mensaje">${e(c.mensaje)}</div>
 
   <div class="datos">
-    <strong>Convocados:</strong> ${e(AMBITOS.find(a => a.valor === c.ambito)?.label.replace(/^[^\s]+\s/, '') || c.ambito)}${c.departamento ? ` — ${e(c.departamento)}` : ''}<br>
+    <strong>Convocados:</strong> ${e(ambitoLabel)}<br>
     ${c.fecha_reunion ? `<strong>Fecha:</strong> ${e(fechaLarga(c.fecha_reunion))}${c.hora_reunion ? ` · ${e(c.hora_reunion)}` : ''}<br>` : ''}
     ${c.lugar ? `<strong>Lugar:</strong> ${e(c.lugar)}<br>` : ''}
     <strong>Destinatarios:</strong> ${filas.length}
@@ -334,8 +338,8 @@ export default function GestionComunicaciones() {
   async function publicar() {
     if (!titulo.trim()) return aviso('Ponle un título.', 'error');
     if (!texto.trim())  return aviso('Escribe el mensaje.', 'error');
-    if (ambito === 'departamento' && !dpto) return aviso('Elige el departamento.', 'error');
-    if (ambito === 'manual' && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
+    if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
+    if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
     if (tipo === 'convocatoria' && !fecha) return aviso('Indica el día de la reunión.', 'error');
 
     setGuardando(true);
@@ -345,8 +349,9 @@ export default function GestionComunicaciones() {
       body: JSON.stringify({
         accion: 'crear',
         datos: {
-          tipo, titulo, mensaje: texto, ambito,
-          departamento: dpto, destinatarios: elegidos,
+          tipo, titulo, mensaje: texto, ambito: ambitos,
+          departamento: ambitos.includes('departamento') ? dptos : null,
+          destinatarios: ambitos.includes('manual') ? elegidos : null,
           fecha_reunion: fecha || null, hora_reunion: hora || null, lugar: lugar || null,
         },
       }),
@@ -359,7 +364,7 @@ export default function GestionComunicaciones() {
         ? '📅 Convocatoria publicada. Ya le ha saltado a los convocados.'
         : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
       setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar('');
-      setElegidos([]); setAmbito('claustro'); setDpto(''); setTipo('aviso');
+      setElegidos([]); setAmbitos(['claustro']); setDptos([]); setTipo('aviso');
       setVista('lista');
       cargar();
     }
@@ -476,22 +481,50 @@ export default function GestionComunicaciones() {
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>¿A quién? *</label>
-              <select value={ambito} onChange={e => setAmbito(e.target.value)} style={campo}>
-                {AMBITOS.map(a => <option key={a.valor} value={a.valor}>{a.label}</option>)}
-              </select>
+              <div style={{ border: '1.5px solid #ddd', borderRadius: 8, padding: 8 }}>
+                {AMBITOS.map(a => {
+                  const marcado = ambitos.includes(a.valor);
+                  return (
+                    <label key={a.valor} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 4px', cursor: 'pointer', fontSize: 13.5,
+                      fontWeight: marcado ? 700 : 400, color: marcado ? AZUL : '#333' }}>
+                      <input type="checkbox" checked={marcado}
+                        onChange={() => {
+                          if (a.valor === 'claustro') {
+                            setAmbitos(['claustro']);
+                            setDptos([]); setElegidos([]);
+                          } else {
+                            setAmbitos(prev => {
+                              const sin = prev.filter(x => x !== 'claustro' && x !== a.valor);
+                              if (marcado) return sin.length === 0 ? ['claustro'] : sin;
+                              return [...sin, a.valor];
+                            });
+                          }
+                        }} />
+                      {a.label}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
-            {ambito === 'departamento' && (
+            {ambitos.includes('departamento') && (
               <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>Departamento *</label>
-                <select value={dpto} onChange={e => setDpto(e.target.value)} style={campo}>
-                  <option value="">— Elige —</option>
-                  {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
+                <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>
+                  Departamentos ({dptos.length} elegidos) *
+                </label>
+                <div style={{ maxHeight: 220, overflowY: 'auto', border: '1.5px solid #ddd', borderRadius: 8, padding: 8 }}>
+                  {DEPARTAMENTOS.map(d => (
+                    <label key={d} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 4px', cursor: 'pointer', fontSize: 13 }}>
+                      <input type="checkbox" checked={dptos.includes(d)}
+                        onChange={() => setDptos(prev => prev.includes(d) ? prev.filter(x => x !== d) : [...prev, d])} />
+                      {d}
+                    </label>
+                  ))}
+                </div>
               </div>
             )}
 
-            {ambito === 'manual' && (
+            {ambitos.includes('manual') && (
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>
                   Personas ({elegidos.length} elegidas) *
@@ -585,8 +618,8 @@ export default function GestionComunicaciones() {
                         </div>
                         <div style={{ fontSize: 16, fontWeight: 800, color: '#222', lineHeight: 1.35 }}>{c.titulo}</div>
                         <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
-                          {AMBITOS.find(a => a.valor === c.ambito)?.label.replace(/^[^\s]+\s/, '') || c.ambito}
-                          {c.departamento ? ` · ${c.departamento}` : ''}
+                          {(Array.isArray(c.ambito) ? c.ambito : [c.ambito]).map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(', ')}
+                          {c.departamento ? ` · ${Array.isArray(c.departamento) ? c.departamento.join(', ') : c.departamento}` : ''}
                           {c.fecha_reunion ? ` · ${fechaLarga(c.fecha_reunion)}` : ''}
                         </div>
                       </div>
