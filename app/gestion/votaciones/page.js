@@ -412,11 +412,19 @@ export default function GestionVotaciones() {
                         El recuento no se muestra hasta que se cierre: si se viera cómo va,
                         quien vote al final lo haría sabiéndolo.
                       </div>
-                      <a href={`/gestion/votaciones/tablero?id=${v.id}`} target="_blank" rel="noreferrer"
-                        style={{ display: 'inline-block', marginTop: 10, padding: '8px 14px', borderRadius: 8,
-                          backgroundColor: VERDE, color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
-                        📺 Abrir tablero para proyectar
-                      </a>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                        <a href={`/gestion/votaciones/tablero?id=${v.id}`} target="_blank" rel="noreferrer"
+                          style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 8,
+                            backgroundColor: VERDE, color: 'white', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                          📺 Abrir tablero para proyectar
+                        </a>
+                        <a href="/urna" target="_blank" rel="noreferrer"
+                          style={{ display: 'inline-block', padding: '8px 14px', borderRadius: 8,
+                            backgroundColor: 'white', color: AZUL, border: '1.5px solid #cbd5e1',
+                            fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
+                          🗳️ Abrir urna en la tablet
+                        </a>
+                      </div>
                     </div>
                   )}
 
