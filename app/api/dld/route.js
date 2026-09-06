@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { getConfigCurso, calcularAntiguedad } from '@/lib/curso';
 
 /**
  * SOLICITUDES DE DLD
@@ -57,11 +58,35 @@ export async function GET(request) {
   const modo = url.searchParams.get('modo');
 
   // ── Las mías ──
+  //
+  // Devuelve también el perfil que hace falta para calcular los días que
+  // le corresponden. Antes la pantalla lo leía de `profesores` desde el
+  // navegador, pero ahí los permisos están cerrados: si la lectura
+  // fallaba, la antigüedad se quedaba en 0 y a un funcionario de carrera
+  // con 27 años de servicio le salía 1 día y sin derecho a CANOSO.
   if (modo === 'mias') {
     const { data, error } = await supa().from('dld').select('*')
       .eq('profesor_id', sesion.id).order('created_at', { ascending: false });
     if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
-    return Response.json({ solicitudes: data || [] });
+
+    const { data: profRows } = await supa().from('profesores')
+      .select('tipo_contrato, departamento, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento')
+      .eq('id', sesion.id);
+    const prof = (profRows || [])[0] || null;
+
+    let perfil = null;
+    if (prof) {
+      const cfg = await getConfigCurso();
+      perfil = {
+        tipo_contrato: prof.tipo_contrato || '',
+        departamento: prof.departamento || '',
+        anio_nacimiento: prof.anio_nacimiento || null,
+        antiguedad_centro: calcularAntiguedad(prof.anio_centro, prof.antiguedad_centro, cfg),
+        antiguedad_cuerpo: calcularAntiguedad(prof.anio_cuerpo, prof.antiguedad_cuerpo, cfg),
+      };
+    }
+
+    return Response.json({ solicitudes: data || [], perfil });
   }
 
   // ── Calendario de carga: lo ve todo el claustro, sin motivos ──
@@ -97,7 +122,30 @@ export async function GET(request) {
   const { data, error } = await supa().from('dld').select('*')
     .order('created_at', { ascending: false });
   if (error) return Response.json({ error: error.message, solicitudes: [] }, { status: 500 });
-  return Response.json({ solicitudes: data || [] });
+
+  // El contrato y la antigüedad se refrescan desde la ficha. En la fila
+  // quedó una copia del día en que se pidió, con la antigüedad congelada
+  // en años; si luego se corrige la ficha, dirección seguiría viendo lo
+  // viejo y le saldrían días distintos a los que ve el profesor.
+  const { data: profes } = await supa().from('profesores')
+    .select('id, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento');
+  const cfg = await getConfigCurso();
+  const porId = {};
+  for (const p of profes || []) porId[p.id] = p;
+
+  const solicitudes = (data || []).map(s => {
+    const p = porId[s.profesor_id];
+    if (!p) return s;
+    return {
+      ...s,
+      tipo_contrato: p.tipo_contrato || s.tipo_contrato,
+      anio_nacimiento: p.anio_nacimiento || null,
+      antiguedad_centro: calcularAntiguedad(p.anio_centro, p.antiguedad_centro, cfg),
+      antiguedad_cuerpo: calcularAntiguedad(p.anio_cuerpo, p.antiguedad_cuerpo, cfg),
+    };
+  });
+
+  return Response.json({ solicitudes });
 }
 
 export async function POST(request) {
