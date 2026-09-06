@@ -265,7 +265,7 @@ export default function CopiaSeguridad() {
               </div>
 
               <a
-                href="https://drive.google.com/drive/folders/1eEYOlqW9KoKSVyYqXnz_hL6tyBQIcFv3"
+                href="https://drive.google.com/drive/folders/1tFYGMxqae2aYFmboIlk0binDOr6yd4WT"
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{
@@ -278,7 +278,7 @@ export default function CopiaSeguridad() {
               </a>
 
               <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 10, lineHeight: 1.6, textAlign: 'center' }}>
-                El archivo se llama <strong>copia_ies_AAAA-MM-DD.json</strong>,
+                El archivo se llama <strong>copia-portal-ies-AAAA-MM-DD.json</strong>,
                 así que quedan ordenados por fecha.
               </div>
             </div>
