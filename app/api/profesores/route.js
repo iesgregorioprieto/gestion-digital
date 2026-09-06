@@ -236,7 +236,7 @@ export async function POST(request) {
     // tabla. Con la clave pública a la vista, cualquiera podía vaciar el
     // claustro entero desde la consola del navegador.
     if (accion === 'eliminar' || accion === 'eliminar_interinos'
-        || accion === 'eliminar_inactivos' || accion === 'eliminar_demo') {
+        || accion === 'eliminar_inactivos') {
 
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
@@ -251,10 +251,8 @@ export async function POST(request) {
         consulta = consulta.eq('id', id);
       } else if (accion === 'eliminar_interinos') {
         consulta = consulta.like('tipo_contrato', 'Interino%');
-      } else if (accion === 'eliminar_inactivos') {
-        consulta = consulta.eq('estado', 'inactivo');
       } else {
-        consulta = consulta.like('email', '%test%');
+        consulta = consulta.eq('estado', 'inactivo');
       }
 
       const { error } = await consulta;
