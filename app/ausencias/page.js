@@ -731,10 +731,21 @@ export default function Ausencias() {
                     <label style={{ fontSize: 12, fontWeight: 600, color: '#475569', display: 'block', marginBottom: 4 }}>
                       {c.label}{c.requerido ? ' *' : ''}
                     </label>
-                    <input type={c.tipo === 'number' ? 'number' : 'text'} min={c.tipo === 'number' ? '0' : undefined} value={datosExtra[c.id] || ''}
-                      onChange={e => setDatosExtra(d => ({ ...d, [c.id]: e.target.value }))}
-                      style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
-                        border: `1.5px solid ${c.requerido && !(datosExtra[c.id] || '').trim() ? '#fca5a5' : '#ddd'}` }} />
+                    {c.tipo === 'select' ? (
+                      <select value={datosExtra[c.id] || ''}
+                        onChange={e => setDatosExtra(d => ({ ...d, [c.id]: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
+                          border: `1.5px solid ${c.requerido && !(datosExtra[c.id] || '').trim() ? '#fca5a5' : '#ddd'}` }}>
+                        <option value="">— Elige —</option>
+                        {(c.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}
+                      </select>
+                    ) : (
+                      <input type={c.tipo === 'number' ? 'number' : c.tipo === 'date' ? 'date' : 'text'}
+                        min={c.tipo === 'number' ? '0' : undefined} value={datosExtra[c.id] || ''}
+                        onChange={e => setDatosExtra(d => ({ ...d, [c.id]: e.target.value }))}
+                        style={{ width: '100%', padding: '9px 11px', borderRadius: 8, fontSize: 13, boxSizing: 'border-box',
+                          border: `1.5px solid ${c.requerido && !(datosExtra[c.id] || '').trim() ? '#fca5a5' : '#ddd'}` }} />
+                    )}
                     {c.ayuda && <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 3 }}>{c.ayuda}</div>}
                   </div>
                 ))}
