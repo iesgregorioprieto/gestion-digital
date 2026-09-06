@@ -28,6 +28,19 @@ async function hashPassword(password) {
   return hex(salt) + ':' + hex(new Uint8Array(bits));
 }
 
+/**
+ * Listas de años para los desplegables.
+ *
+ * Se escribían a mano y llegaban fichas con el año a medio teclear o con
+ * el de nacimiento puesto donde iba el de ingreso. Eligiendo de una lista
+ * no hay forma de equivocarse.
+ */
+function anios(desde, hasta) {
+  const salida = [];
+  for (let a = hasta; a >= desde; a--) salida.push(a);
+  return salida;
+}
+
 export default function MisDatos() {
   const [profId,   setProfId]   = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -281,14 +294,18 @@ export default function MisDatos() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <Campo label="Año de llegada al centro">
-                <input type="number" min="1970" max={new Date().getFullYear()}
-                  value={form.anio_centro} placeholder="Ej: 2018"
-                  onChange={e => set('anio_centro', e.target.value)} style={inputEstilo} />
+                <select value={form.anio_centro}
+                  onChange={e => set('anio_centro', e.target.value)} style={inputEstilo}>
+                  <option value="">— Elige el año —</option>
+                  {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
               </Campo>
               <Campo label="Año de nacimiento">
-                <input type="number" min="1940" max={new Date().getFullYear() - 18}
-                  value={form.anio_nacimiento} placeholder="Ej: 1975"
-                  onChange={e => set('anio_nacimiento', e.target.value)} style={inputEstilo} />
+                <select value={form.anio_nacimiento}
+                  onChange={e => set('anio_nacimiento', e.target.value)} style={inputEstilo}>
+                  <option value="">— Elige el año —</option>
+                  {anios(1940, new Date().getFullYear() - 18).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
                 <button type="button" onClick={() => setVerAyudaEdad(v => !v)}
                   style={{ marginTop: 5, padding: 0, border: 'none', background: 'none',
                     color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -320,9 +337,11 @@ export default function MisDatos() {
               </Campo>
 
               <Campo label="Año de ingreso en el cuerpo">
-                <input type="number" min="1970" max={new Date().getFullYear()}
-                  value={form.anio_cuerpo} placeholder="Ej: 2010"
-                  onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo} />
+                <select value={form.anio_cuerpo}
+                  onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo}>
+                  <option value="">— Elige el año —</option>
+                  {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
+                </select>
                 <button type="button" onClick={() => setVerAyudaCuerpo(v => !v)}
                   style={{
                     marginTop: 5, padding: 0, border: 'none', background: 'none',
