@@ -17,6 +17,13 @@ const ESPECIALIDADES = [
   { valor: 'ESO/BACHILLERATO',        emoji: '🎓' },
 ];
 
+// Años para los desplegables: se elige, no se teclea.
+function anios(desde, hasta) {
+  const salida = [];
+  for (let a = hasta; a >= desde; a--) salida.push(a);
+  return salida;
+}
+
 export default function CompletarPerfil() {
   const [profId,   setProfId]   = useState(null);
   const [cargando, setCargando] = useState(true);
@@ -197,21 +204,27 @@ export default function CompletarPerfil() {
           </Campo>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <Campo label="Año de llegada al centro">
-              <input type="number" min="1970" max={new Date().getFullYear()}
-                value={form.anio_centro} placeholder="Ej: 2018"
-                onChange={e => set('anio_centro', e.target.value)} style={inputEstilo} />
+            <Campo label="Año de tu incorporación actual al centro">
+              <select value={form.anio_centro}
+                onChange={e => set('anio_centro', e.target.value)} style={inputEstilo}>
+                <option value="">— Elige el año —</option>
+                {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             </Campo>
             <Campo label="Año de ingreso en el cuerpo">
-              <input type="number" min="1970" max={new Date().getFullYear()}
-                value={form.anio_cuerpo} placeholder="Ej: 2010"
-                onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo} />
+              <select value={form.anio_cuerpo}
+                onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo}>
+                <option value="">— Elige el año —</option>
+                {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
             </Campo>
           </div>
 
           <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 13 }}>
-            💡 Indica el <strong>año</strong>, no los años que llevas. La antigüedad
-            se calcula sola cada curso.
+            💡 Indica el <strong>año</strong>, no los años que llevas: la antigüedad
+            se calcula sola cada curso. Si ya estuviste aquí hace tiempo, te fuiste
+            y has vuelto, pon <strong>el año de tu vuelta</strong>. En el cuerpo cuenta
+            todo el servicio reconocido, también los años de interino.
           </div>
 
           <Campo label="Teléfono de contacto (opcional)">
