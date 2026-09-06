@@ -294,7 +294,7 @@ export default function MisDatos() {
             </Campo>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <Campo label="Año de llegada al centro">
+              <Campo label="Año de tu incorporación actual al centro">
                 <select value={form.anio_centro}
                   onChange={e => set('anio_centro', e.target.value)} style={inputEstilo}>
                   <option value="">— Elige el año —</option>
