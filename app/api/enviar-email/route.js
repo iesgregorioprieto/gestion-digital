@@ -496,6 +496,70 @@ export async function POST(request) {
           </div>
         </div>`;
 
+    } else if (tipo === 'baja_medica') {
+      subject = `\uD83C\uDFE5 Baja médica comunicada — ${datos.nombre}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#1e3a5f;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#adc8e8;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">
+            <h2 style="color:#1e3a5f;margin:0 0 6px">Baja médica comunicada</h2>
+            <p style="color:#666;font-size:13px;margin:0 0 18px">
+              Un profesor ha registrado una licencia por enfermedad en el portal.
+              Estos son los datos administrativos que ha aportado.
+            </p>
+            <table style="width:100%;border-collapse:collapse;margin:0 0 18px">
+              <tr style="background:#eef2f7">
+                <td style="padding:10px;font-weight:bold;width:42%">Profesor</td>
+                <td style="padding:10px">${e(datos.nombre)}</td>
+              </tr>
+              ${datos.departamento ? `<tr>
+                <td style="padding:10px;font-weight:bold">Departamento</td>
+                <td style="padding:10px">${e(datos.departamento)}</td>
+              </tr>` : ''}
+              ${datos.contrato ? `<tr style="background:#eef2f7">
+                <td style="padding:10px;font-weight:bold">Tipo de contrato</td>
+                <td style="padding:10px">${e(datos.contrato)}</td>
+              </tr>` : ''}
+              <tr>
+                <td style="padding:10px;font-weight:bold">Inicio de la baja</td>
+                <td style="padding:10px">${e(datos.inicio_baja || datos.fecha_ausencia)}</td>
+              </tr>
+              <tr style="background:#eef2f7">
+                <td style="padding:10px;font-weight:bold">Duración probable</td>
+                <td style="padding:10px">${e(datos.duracion || 'No indicada')}</td>
+              </tr>
+              <tr>
+                <td style="padding:10px;font-weight:bold">¿Recomienda sustitución?</td>
+                <td style="padding:10px"><strong>${e(datos.sustitucion || 'No indicado')}</strong></td>
+              </tr>
+              ${datos.observaciones ? `<tr style="background:#eef2f7">
+                <td style="padding:10px;font-weight:bold">Observaciones</td>
+                <td style="padding:10px">${e(datos.observaciones)}</td>
+              </tr>` : ''}
+            </table>
+
+            <div style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:8px;padding:13px 15px;font-size:13px;color:#78350f;line-height:1.6">
+              El portal <strong>no envía nada a Inspección Médica</strong>. La comunicación
+              a <em>inspeccionmedica.cr@jccm.es</em>, <em>bajasmedicas@jccm.es</em> y al correo
+              oficial del centro la hacéis vosotros desde vuestro correo, con el parte oficial
+              si procede.
+            </div>
+
+            <div style="text-align:center;margin:26px 0">
+              <a href="${BASE_URL}/gestion/ausencias"
+                 style="background:#1e3a5f;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">
+                Ver en el portal
+              </a>
+            </div>
+          </div>
+          <div style="background:#eef2f7;padding:15px;text-align:center;font-size:12px;color:#666">
+            IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
     } else if (tipo === 'dld_solicitada') {
       subject = `\uD83D\uDCC4 Nueva solicitud de día de libre disposición — ${datos.profesor}`;
       html = `
