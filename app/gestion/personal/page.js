@@ -930,7 +930,7 @@ export default function PanelSecretario() {
             <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
             <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
             <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
-            <CampoSelect label="Año de llegada al centro" value={formEdicion.anio_centro} onChange={v => setFormEdicion(f => ({ ...f, anio_centro: v }))} opciones={ANIOS_INCORPORACION} />
+            <CampoSelect label="Año de incorporación actual al centro" value={formEdicion.anio_centro} onChange={v => setFormEdicion(f => ({ ...f, anio_centro: v }))} opciones={ANIOS_INCORPORACION} />
             <CampoSelect label="Año de ingreso en el cuerpo" value={formEdicion.anio_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, anio_cuerpo: v }))} opciones={ANIOS_INCORPORACION} />
           </div>
 
