@@ -14,6 +14,15 @@ const TIPOS_CONTRATO = [
   'Comisión de servicios'
 ];
 
+// Años para los desplegables. Se pide el AÑO, nunca el número de años:
+// el número se calcula solo y así no envejece en la ficha.
+function anios(desde, hasta) {
+  const salida = [];
+  for (let a = hasta; a >= desde; a--) salida.push(String(a));
+  return salida;
+}
+const ANIOS_INCORPORACION = ['', ...anios(1970, new Date().getFullYear())];
+
 const ROLES_DOCENTES = [
   { valor: 'profesor', etiqueta: '📚 Profesor/a' },
   { valor: 'tutor', etiqueta: '🤝 Tutor/a' },
@@ -151,8 +160,12 @@ export default function PanelSecretario() {
       email: formEdicion.email,
       departamento: formEdicion.departamento,
       tipo_contrato: formEdicion.tipo_contrato,
-      antiguedad_centro: formEdicion.antiguedad_centro || 0,
-      antiguedad_cuerpo: formEdicion.antiguedad_cuerpo || 0,
+      anio_centro: formEdicion.anio_centro ? parseInt(formEdicion.anio_centro, 10) : null,
+      anio_cuerpo: formEdicion.anio_cuerpo ? parseInt(formEdicion.anio_cuerpo, 10) : null,
+      // El número de años se deriva del año y se guarda solo para lo que
+      // todavía lo lea. No se teclea en ningún sitio.
+      antiguedad_centro: formEdicion.anio_centro ? Math.max(0, new Date().getFullYear() - parseInt(formEdicion.anio_centro, 10)) : null,
+      antiguedad_cuerpo: formEdicion.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(formEdicion.anio_cuerpo, 10)) : null,
       rol: rolesFinales,
       rol_gestion: formEdicion.rol_gestion || null,
       grupo_tutoria: rolesFinales.includes('tutor') ? (formEdicion.grupo_tutoria || null) : null,
@@ -198,8 +211,8 @@ export default function PanelSecretario() {
       email: profesor.email,
       departamento: profesor.departamento,
       tipo_contrato: profesor.tipo_contrato,
-      antiguedad_centro: profesor.antiguedad_centro || '',
-      antiguedad_cuerpo: profesor.antiguedad_cuerpo || '',
+      anio_centro: profesor.anio_centro ? String(profesor.anio_centro) : '',
+      anio_cuerpo: profesor.anio_cuerpo ? String(profesor.anio_cuerpo) : '',
       rol: rolesActuales,
       rol_gestion: profesor.rol_gestion || '',
       grupo_tutoria: profesor.grupo_tutoria || '',
@@ -917,8 +930,8 @@ export default function PanelSecretario() {
             <Campo label="Email" value={formEdicion.email} onChange={v => setFormEdicion(f => ({ ...f, email: v }))} tipo="email" />
             <CampoSelect label="Departamento" value={formEdicion.departamento} onChange={v => setFormEdicion(f => ({ ...f, departamento: v }))} opciones={DEPARTAMENTOS} />
             <CampoSelect label="Tipo contrato" value={formEdicion.tipo_contrato} onChange={v => setFormEdicion(f => ({ ...f, tipo_contrato: v }))} opciones={TIPOS_CONTRATO} />
-            <Campo label="Antigüedad centro (años)" value={formEdicion.antiguedad_centro} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_centro: v }))} tipo="number" />
-            <Campo label="Antigüedad cuerpo (años)" value={formEdicion.antiguedad_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, antiguedad_cuerpo: v }))} tipo="number" />
+            <CampoSelect label="Año de llegada al centro" value={formEdicion.anio_centro} onChange={v => setFormEdicion(f => ({ ...f, anio_centro: v }))} opciones={ANIOS_INCORPORACION} />
+            <CampoSelect label="Año de ingreso en el cuerpo" value={formEdicion.anio_cuerpo} onChange={v => setFormEdicion(f => ({ ...f, anio_cuerpo: v }))} opciones={ANIOS_INCORPORACION} />
           </div>
 
           <div style={{ padding: '11px 14px', borderRadius: 9, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12, color: '#1e3a5f', lineHeight: 1.65, marginTop: -6, marginBottom: 14 }}>
