@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { computaComoFalta } from '@/lib/motivosAusencia';
+import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 
 /**
@@ -135,6 +136,13 @@ export async function POST(request) {
         avisarFormacion(fila).catch(err => console.error('aviso formacion:', err?.message));
       }
 
+      // Licencia por enfermedad: aviso a dirección y jefatura de estudios
+      // con lo administrativo, para que valoren la sustitución y lo
+      // tramiten ellos con Inspección. El portal no escribe a Inspección.
+      if (fila.subtipo === 'lic_enfermedad') {
+        avisarBaja(fila).catch(err => console.error('aviso baja:', err?.message));
+      }
+
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
@@ -218,6 +226,36 @@ export async function POST(request) {
  * permiso de formación. No bloquea el guardado: se lanza en segundo
  * plano y si falla solo se registra en el log.
  */
+/**
+ * Aviso de baja médica a dirección y jefatura de estudios.
+ *
+ * Va con lo administrativo y nada clínico: quién, desde cuándo, cuánto
+ * se prevé y si el interesado ve recomendable sustituir. Ellos deciden
+ * qué se manda a Inspección y por dónde.
+ */
+async function avisarBaja(fila) {
+  const cliente = supa();
+
+  const { data: profs } = await cliente
+    .from('profesores')
+    .select('nombre, apellidos, departamento, tipo_contrato')
+    .eq('id', fila.profesor_id);
+  const prof = (profs || [])[0];
+  const nombre = prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : 'Un profesor/a';
+
+  const ex = fila.datos_extra || {};
+  await enviarAviso('baja_medica', AVISOS_BAJAS, {
+    nombre,
+    departamento: prof?.departamento || '',
+    contrato: prof?.tipo_contrato || '',
+    fecha_ausencia: fila.fecha_inicio || '',
+    inicio_baja: ex.fecha_inicio_baja || '',
+    duracion: ex.duracion_probable ? `${ex.duracion_probable} días` : '',
+    sustitucion: ex.sustitucion || '',
+    observaciones: fila.observaciones || '',
+  });
+}
+
 async function avisarFormacion(fila) {
   const cliente = supa();
 
