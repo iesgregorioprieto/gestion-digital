@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
-import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -59,32 +59,6 @@ const TIPOS_DLD = [
   { valor: 'canoso',      emoji: '🦳', label: 'CANOSO (+55 años o +18 años servicio)' },
 ];
 
-/**
- * Días que le corresponden a cada persona.
- *
- * El CANOSO se tiene por dos vías y basta con cumplir una: tener 55
- * años o más, o llevar 18 o más de servicio. Antes solo se miraba la
- * antigüedad, así que quien pasaba de 55 con menos de 18 años en el
- * cuerpo se quedaba sin él.
- */
-function calcularDiasDLD(tipoContrato, antiguedadCuerpo, anioNacimiento) {
-  const edad = anioNacimiento ? new Date().getFullYear() - anioNacimiento : null;
-  const porEdad = edad !== null && edad >= 55;
-  const porServicio = (antiguedadCuerpo || 0) >= 18;
-  const tieneDerechoCanoso = porEdad || porServicio;
-  let moscosos = 0;
-  if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') {
-    moscosos = 3;
-  } else if (tipoContrato === 'Interino sin vacante') {
-    // Depende de meses trabajados — ponemos 2 como base (8+ meses)
-    moscosos = 2;
-  } else {
-    moscosos = 1;
-  }
-  const canosos = tieneDerechoCanoso ? 1 : 0;
-  return { moscosos, canosos, total: moscosos + canosos, tieneDerechoCanoso, porEdad, porServicio, edad };
-}
-
 export default function DLD() {
   const [vista, setVista] = useState('historial'); // 'historial' | 'nueva'
   const [enviando, setEnviando] = useState(false);
@@ -133,21 +107,23 @@ export default function DLD() {
 
   async function cargarDatos(id) {
     setCargando(true);
-    const { data: profRows } = await getSupabase().from('profesores').select('tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, departamento, anio_nacimiento').eq('id', id);
-    const prof = profRows?.[0];
-    if (prof) {
-      setTipoContrato(prof.tipo_contrato || '');
-      setDepartamento(prof.departamento || '');
-      // La antigüedad se calcula desde el año de incorporación (si lo tiene);
-      // si no, se usa el valor antiguo en años.
-      const cfg = await getConfigCurso();
-      setAntiguedadCentro(calcularAntiguedad(prof.anio_centro, prof.antiguedad_centro, cfg));
-      setAntiguedadCuerpo(calcularAntiguedad(prof.anio_cuerpo, prof.antiguedad_cuerpo, cfg));
-      setAnioNacimiento(prof.anio_nacimiento || null);
-    }
+
+    // El perfil viene del servidor junto con las solicitudes. Leerlo aquí
+    // de `profesores` no vale: los permisos del navegador están cerrados y
+    // una lectura fallida dejaba la antigüedad a 0 sin avisar de nada.
     const _rm = await fetch('/api/dld?modo=mias');
-    const sols = (await _rm.json()).solicitudes;
-    setMisSolicitudes(sols || []);
+    const resp = await _rm.json();
+    setMisSolicitudes(resp.solicitudes || []);
+
+    const perfil = resp.perfil;
+    if (perfil) {
+      setTipoContrato(perfil.tipo_contrato || '');
+      setDepartamento(perfil.departamento || '');
+      setAntiguedadCentro(perfil.antiguedad_centro || 0);
+      setAntiguedadCuerpo(perfil.antiguedad_cuerpo || 0);
+      setAnioNacimiento(perfil.anio_nacimiento || null);
+    }
+
     setCargando(false);
   }
 
