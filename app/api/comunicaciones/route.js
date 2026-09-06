@@ -57,30 +57,38 @@ function cargoDe(ficha) {
   return null;
 }
 
-/** ¿Le toca a esta persona? */
+/** ¿Le toca a esta persona? Acepta ambito como string (antiguo) o array (nuevo) */
 export function esDestinatario(c, ficha) {
   if (!ficha) return false;
+
+  // Si el ámbito es un array, basta con encajar en cualquiera de ellos
+  const lista = Array.isArray(c.ambito) ? c.ambito : [c.ambito];
+  const dptos = Array.isArray(c.departamento) ? c.departamento : (c.departamento ? [c.departamento] : []);
+
   const roles = Array.isArray(ficha.rol) ? ficha.rol : [];
   const cargo = cargoDe(ficha);
   const directivo = !!cargo;
+  const fichaDpto = (ficha.departamento || '').trim().toLowerCase();
 
-  switch (c.ambito) {
-    case 'claustro':       return true;
-    case 'jefes_dpto':     return roles.includes('jefe_departamento');
-    case 'tutores':        return roles.includes('tutor');
-    case 'jefes_estudios': return cargo === 'jefe_estudios';
-    case 'director':       return cargo === 'director';
-    case 'secretario':     return cargo === 'secretario';
-    case 'equipo_directivo': return directivo;
-    // La CCP la forman los jefes de departamento y el equipo directivo
-    case 'ccp':            return roles.includes('jefe_departamento') || directivo;
-    case 'departamento':
-      return (ficha.departamento || '').trim().toLowerCase()
-           === (c.departamento || '').trim().toLowerCase();
-    case 'manual':
-      return Array.isArray(c.destinatarios) && c.destinatarios.includes(ficha.id);
-    default: return false;
+  for (const amb of lista) {
+    switch (amb) {
+      case 'claustro':        return true;
+      case 'jefes_dpto':      if (roles.includes('jefe_departamento')) return true; break;
+      case 'tutores':         if (roles.includes('tutor')) return true; break;
+      case 'jefes_estudios':  if (cargo === 'jefe_estudios') return true; break;
+      case 'director':        if (cargo === 'director') return true; break;
+      case 'secretario':      if (cargo === 'secretario') return true; break;
+      case 'equipo_directivo':if (directivo) return true; break;
+      case 'ccp':             if (roles.includes('jefe_departamento') || directivo) return true; break;
+      case 'departamento':
+        if (dptos.some(d => d.trim().toLowerCase() === fichaDpto)) return true;
+        break;
+      case 'manual':
+        if (Array.isArray(c.destinatarios) && c.destinatarios.includes(ficha.id)) return true;
+        break;
+    }
   }
+  return false;
 }
 
 /** ¿Sigue abierto el fichaje? Lo decide el reloj del servidor */
@@ -215,8 +223,8 @@ export async function POST(request) {
         titulo: datos.titulo.trim(),
         mensaje: datos.mensaje.trim(),
         ambito: datos.ambito || 'claustro',
-        departamento: datos.ambito === 'departamento' ? (datos.departamento || null) : null,
-        destinatarios: datos.ambito === 'manual' ? (datos.destinatarios || []) : null,
+        departamento: datos.departamento || null,
+        destinatarios: datos.destinatarios || null,
         fecha_reunion: datos.fecha_reunion || null,
         hora_reunion: datos.hora_reunion || null,
         lugar: datos.lugar || null,
