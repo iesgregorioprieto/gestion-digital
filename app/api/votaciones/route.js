@@ -116,11 +116,27 @@ export async function GET(request) {
       votado: yaVotaron.has(String(p.id)),
     }));
 
+    const abiertaAun = sigueAbierta(v);
+
+    // El recuento solo cuando ya no se puede votar. Mientras esté
+    // abierta no viaja al navegador siquiera: si viajara, estaría en la
+    // consola del que abra la pantalla.
+    let recuento = null;
+    if (!abiertaAun) {
+      const { data: votos } = await cliente
+        .from('votos').select('opcion').eq('votacion_id', v.id);
+      recuento = {};
+      for (const o of v.opciones || []) recuento[o] = 0;
+      for (const x of votos || []) recuento[x.opcion] = (recuento[x.opcion] || 0) + 1;
+    }
+
     return Response.json({
       pregunta: v.pregunta,
-      abierta: sigueAbierta(v),
+      abierta: abiertaAun,
       cierre: cierreDe(v),
       de_reunion: !!v.comunicacion_id,
+      opciones: v.opciones || [],
+      recuento,
       personas,
       votados: personas.filter(p => p.votado).length,
       total: personas.length,
