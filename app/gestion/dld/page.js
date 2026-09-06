@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import ResolverDiaDLD from '@/components/ResolverDiaDLD';
-import { getConfigCurso, numProfesores, plazoSolicitudDLD } from '@/lib/curso';
+import { getConfigCurso, numProfesores, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import EscenarioDia from '@/components/EscenarioDia';
 import { hoyLocal } from '@/lib/fechas';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -19,20 +19,6 @@ function etiquetaTipoDLD(tipo) {
   if (tipo === '3_lectivo') return '📗 3º DLD lectivo (retirado)';
   if (tipo === 'canoso') return '🦳 Canoso (+55 años o +18 años servicio)';
   return tipo;
-}
-
-// Calcular días DLD según normativa 07/07/2026
-function calcularDiasDLD(tipoContrato, antiguedadCuerpo) {
-  const tieneDerechoCanoso = (antiguedadCuerpo || 0) >= 18;
-  let moscosos = 0;
-  if (tipoContrato === 'Funcionario de carrera' || tipoContrato === 'Interino con vacante') {
-    moscosos = 3;
-  } else if (tipoContrato === 'Interino sin vacante') {
-    moscosos = 2;
-  } else {
-    moscosos = 1;
-  }
-  return { moscosos, canosos: tieneDerechoCanoso ? 1 : 0, tieneDerechoCanoso };
 }
 
 function Fila({ label, valor }) {
@@ -451,7 +437,7 @@ export default function PanelDirector() {
     });
 
     // Días disfrutados vs derecho
-    const { moscosos: maxMoscosos, canosos: maxCanosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo);
+    const { moscosos: maxMoscosos, canosos: maxCanosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo, solicitud.anio_nacimiento);
     const totalMax = maxMoscosos + maxCanosos;
     const diasDisfrutados = todasSolicitudes.filter(s =>
       s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada'
@@ -536,7 +522,7 @@ export default function PanelDirector() {
     const diasDisfrutados = todasSolicitudes.filter(s =>
       s.profesor_id === solicitud.profesor_id && s.id !== solicitud.id && s.estado === 'aprobada'
     ).length;
-    const { moscosos, canosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo);
+    const { moscosos, canosos } = calcularDiasDLD(solicitud.tipo_contrato, solicitud.antiguedad_cuerpo, solicitud.anio_nacimiento);
     if (diasDisfrutados >= moscosos + canosos) {
       motivos.push(`Ha agotado los días de libre disposición que le corresponden en el presente curso escolar (${diasDisfrutados} de ${moscosos + canosos}).`);
     }
