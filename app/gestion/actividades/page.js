@@ -14,6 +14,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { hoyLocal } from '@/lib/fechas';
 import EscenarioDia from '@/components/EscenarioDia';
 
@@ -60,8 +61,7 @@ export default function GestionActividades() {
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase()
-      .from('actividades')
+    const { data } = await consulta('actividades')
       .select('*')
       .order('fecha_inicio', { ascending: true });
     setActividades(data || []);
@@ -70,8 +70,7 @@ export default function GestionActividades() {
     // todavía no tienen la suya. Sin ella, el cuadrante de guardias
     // no sabe que ese profesor falta y sus grupos quedan sin cubrir.
     try {
-      const { data: aus } = await getSupabase()
-        .from('ausencias')
+      const { data: aus } = await consulta('ausencias')
         .select('profesor_id, fecha_inicio, fecha_fin')
         .gte('fecha_fin', hoyLocal());
       setAusenciasPorFecha(aus || []);
