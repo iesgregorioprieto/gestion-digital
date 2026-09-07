@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 
 const VERDE = '#1e6b2e';
 
@@ -54,8 +55,7 @@ export default function AvisoNotificaciones({ profesorId }) {
 
         // b) ¿La tiene registrada en algún dispositivo?
         try {
-          const { data } = await getSupabase()
-            .from('push_suscripciones')
+          const { data } = await consulta('push_suscripciones')
             .select('id')
             .eq('profesor_id', profesorId)
             .limit(1);
