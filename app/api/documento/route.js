@@ -120,3 +120,34 @@ export async function GET(request) {
   // Redirigir directamente al archivo
   return Response.redirect(data.signedUrl, 302);
 }
+
+export async function POST(request) {
+  const sesion = await sesionDe(request);
+  if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
+
+  const form = await request.formData();
+  const archivo = form.get('archivo');
+  const carpeta = form.get('carpeta') || 'justificantes';
+  const bucket = form.get('bucket') || 'ausencias-docs';
+
+  if (!archivo || typeof archivo === 'string') {
+    return Response.json({ error: 'Falta el archivo' }, { status: 400 });
+  }
+
+  const ext = (archivo.name || 'bin').split('.').pop();
+  const nombre = `${carpeta}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const buffer = Buffer.from(await archivo.arrayBuffer());
+  const { error } = await supa().storage.from(bucket).upload(nombre, buffer, {
+    contentType: archivo.type || 'application/octet-stream',
+  });
+
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+
+  // Devolver la ruta interna, no la URL pública. Las descargas siempre
+  // pasan por GET /api/documento, que comprueba permisos y firma.
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const url = `${base}/storage/v1/object/public/${bucket}/${nombre}`;
+
+  return Response.json({ url });
+}
