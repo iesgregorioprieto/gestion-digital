@@ -6,6 +6,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
@@ -90,7 +91,7 @@ export default function GestionAusencias() {
     setCargando(true);
     const [{ data: aus }, { data: profs }] = await Promise.all([
       fetch('/api/ausencias').then(r => r.json()).then(d => ({ data: d.ausencias || [] })),
-      getSupabase().from('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
+      consulta('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
     ]);
     setAusencias(aus || []);
     setProfesores(profs || []);
@@ -561,16 +562,14 @@ function descargarInforme() {
     if (diaSem === 'sabado' || diaSem === 'domingo') { setCargandoHorario(false); return; }
     
     // Buscar nombre en horarios_profesores usando unaccent
-    const { data: fnResult } = await getSupabase()
-      .rpc('buscar_profesor_horario', { 
+    const { data: fnResult } = await consultaRpc('buscar_profesor_horario', { 
         p_nombre: prof.nombre.split(' ')[0], 
         p_apellido: prof.apellidos.split(' ')[0] 
       });
     
     if (!fnResult) { setCargandoHorario(false); return; }
     
-    const { data: horas } = await getSupabase()
-      .from('horarios_profesores')
+    const { data: horas } = await consulta('horarios_profesores')
       .select('hora_id, tipo, grupo, materia')
       .eq('profesor_nombre_pdf', fnResult)
       .eq('dia', diaSem)
