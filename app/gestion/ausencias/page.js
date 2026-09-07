@@ -412,7 +412,7 @@ ${just ? `
 <div class="justif">
   ${esImagen(just) ? `<img src="${justVer}" alt="Justificante">`
     : esPdf(just) ? `<embed src="${justVer}" type="application/pdf">`
-    : `<div class="aviso">El justificante está disponible en el siguiente enlace:<br><br><a href="${just}">${just}</a></div>`}
+    : `<div class="aviso">El justificante está disponible en el siguiente enlace:<br><br><a href="${justDescarga}">${justDescarga}</a></div>`}
 </div>
 <div class="aviso noprint" style="margin-top:10px;font-size:12px">
   Si el documento no se ve aquí arriba, usa el botón de descarga.
@@ -658,7 +658,7 @@ ${a.justificacion_texto || a.justificacion_url ? `
 <div class="seccion">
   <h2>JUSTIFICACIÓN APORTADA POR EL PROFESOR</h2>
   ${a.justificacion_texto ? `<div class="fila"><span class="label">Texto:</span><span class="valor">${a.justificacion_texto}</span></div>` : ''}
-  ${a.justificacion_url ? `<div class="fila"><span class="label">Documento:</span><span class="valor"><a href="${a.justificacion_url}" target="_blank">📎 Ver documento adjunto</a></span></div>` : ''}
+  ${a.justificacion_url ? `<div class="fila"><span class="label">Documento:</span><span class="valor"><a href="/api/documento?url=${encodeURIComponent(a.justificacion_url)}" target="_blank">📎 Ver documento adjunto</a></span></div>` : ''}
   ${a.comentario_secretario ? `<div class="fila"><span class="label">Comentario secretaría:</span><span class="valor">${a.comentario_secretario}</span></div>` : ''}
 </div>` : '<div class="seccion"><h2>JUSTIFICACIÓN</h2><p style="color:#aaa;font-style:italic">El profesor aún no ha aportado justificación.</p></div>'}
 
