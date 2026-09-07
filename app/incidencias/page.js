@@ -65,12 +65,15 @@ export default function Incidencias() {
     if (!foto) return null;
     const ext = (foto.name.split('.').pop() || 'png').toLowerCase();
     const nombre = `capturas/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await getSupabase().storage
-      .from('incidencias-docs')
-      .upload(nombre, foto, { contentType: foto.type || 'image/png' });
-    if (error) { console.error('subir captura:', error.message); return null; }
-    const { data } = getSupabase().storage.from('incidencias-docs').getPublicUrl(nombre);
-    return data.publicUrl;
+    const fd = new FormData();
+    fd.append('archivo', foto);
+    fd.append('carpeta', 'capturas');
+    fd.append('bucket', 'incidencias-docs');
+    try {
+      const r = await fetch('/api/documento', { method: 'POST', body: fd });
+      const d = await r.json();
+      return d.url || null;
+    } catch { return null; }
   }
 
   async function enviar() {
