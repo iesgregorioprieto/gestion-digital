@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import ValoracionModulo from '@/components/ValoracionModulo';
 
@@ -59,8 +60,7 @@ export default function PanelProfesor() {
     // sumarDias trabaja en hora local. Con toISOString, de madrugada
     // en España el cálculo se iba un día y dejaba fuera avisos.
     const dentroDe7 = sumarDias(hoy, 7);
-    const { data } = await getSupabase()
-      .from('apoyos_asignados')
+    const { data } = await consulta('apoyos_asignados')
       .select('*')
       .eq('profesor_id', id)
       .eq('estado', 'pendiente')
