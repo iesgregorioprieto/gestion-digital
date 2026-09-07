@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
@@ -192,12 +193,11 @@ export default function DLD() {
     let nPdf = nombrePdf;
     if (!nPdf) {
       const id = sessionStorage.getItem('profesor_id');
-      const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
+      const { data: rows0 } = await consulta('profesores').select('nombre, apellidos').eq('id', id);
       if (rows0?.[0]) {
         const { nombre, apellidos } = rows0[0];
         // Usar función SQL unaccent para ignorar acentos
-        const { data: fnResult } = await getSupabase()
-          .rpc('buscar_profesor_horario', { p_nombre: nombre.split(' ')[0], p_apellido: apellidos.split(' ')[0] });
+        const { data: fnResult } = await consultaRpc('buscar_profesor_horario', { p_nombre: nombre.split(' ')[0], p_apellido: apellidos.split(' ')[0] });
         if (fnResult) {
           nPdf = fnResult;
           setNombrePdf(nPdf);
@@ -209,7 +209,7 @@ export default function DLD() {
       setCargandoHorario(false);
       return;
     }
-    const { data: horas } = await getSupabase().from('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', await getCursoActual());
+    const { data: horas } = await consulta('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', await getCursoActual());
     if (horas?.length > 0) {
       const nuevoHorario = {};
       horas.forEach(h => { 
@@ -334,19 +334,21 @@ export default function DLD() {
         if (val.archivo instanceof File) {
           const ext = val.archivo.name.split('.').pop();
           const nombreArchivo = `dld_${profesorId}_${Date.now()}_${horaId}.${ext}`;
-          const { data: uploadData, error: uploadError } = await getSupabase().storage
-            .from('dld-archivos')
-            .upload(nombreArchivo, val.archivo);
-          if (uploadError) {
-            setError(`⚠️ Error al subir el archivo de ${horaId}: ${uploadError.message}`);
+          const fd = new FormData();
+          fd.append('archivo', val.archivo);
+          fd.append('carpeta', 'dld_tareas');
+          fd.append('bucket', 'dld-archivos');
+          const uploadResp = await fetch('/api/documento', { method: 'POST', body: fd });
+          const uploadData = await uploadResp.json();
+          if (!uploadData.url) {
+            setError(`⚠️ Error al subir el archivo de ${horaId}: ${uploadData.error || 'fallo'}`);
             setEnviando(false);
             return;
           }
-          const { data: urlData } = getSupabase().storage.from('dld-archivos').getPublicUrl(nombreArchivo);
           horarioConUrls[horaId] = {
             ...val,
-            archivo: null, // no guardar el File en la BD
-            archivoUrl: urlData.publicUrl,
+            archivo: null,
+            archivoUrl: uploadData.url,
             archivoNombre: val.archivoNombre,
           };
         }
