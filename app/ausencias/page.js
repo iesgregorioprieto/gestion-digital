@@ -83,35 +83,9 @@ export default function Ausencias() {
   // Días de la semana
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
-  async function buscarNombrePdf(id) {
-    const { data: rows0 } = await getSupabase().from('profesores').select('nombre, apellidos').eq('id', id);
-    if (!rows0?.[0]) return null;
-    const { nombre, apellidos } = rows0[0];
-    const primerNombre = nombre.split(' ')[0];
-    const primerApellido = apellidos.split(' ')[0];
-    
-    // Intentar con función SQL unaccent
-    const { data: fnResult } = await getSupabase()
-      .rpc('buscar_profesor_horario', { p_nombre: primerNombre, p_apellido: primerApellido });
-    if (fnResult) return fnResult;
-    
-    // Fallback: buscar con nombre de sesión (que tiene acento correcto)
-    const nombreSesion = sessionStorage.getItem('profesor_nombre') || '';
-    const partes = nombreSesion.split(' ');
-    const apellidoConAcento = partes.length > 2 ? partes[2] : primerApellido;
-    
-    const { data: rows2 } = await getSupabase()
-      .from('horarios_profesores')
-      .select('profesor_nombre_pdf')
-      .ilike('profesor_nombre_pdf', '%' + apellidoConAcento + '%')
-      .limit(5);
-    
-    if (rows2?.length > 0) {
-      const mejor = rows2.find(r => r.profesor_nombre_pdf.toLowerCase().includes(partes[0].toLowerCase()));
-      return mejor ? mejor.profesor_nombre_pdf : rows2[0].profesor_nombre_pdf;
-    }
-    return null;
-  }
+  // buscarNombrePdf ya no existe: el servidor lo resuelve dentro de
+  // /api/ausencias?horario_dia=1. Si hace falta el nombre por separado,
+  // viene en la respuesta.
 
   function calcularDiasAusencia(inicio, fin) {
     if (!inicio || !fin) return 0;
@@ -120,32 +94,7 @@ export default function Ausencias() {
     return Math.round((d2 - d1) / (1000 * 60 * 60 * 24)) + 1;
   }
 
-  async function cargarGruposUnicos(nPdf) {
-    if (!nPdf) return;
-    const { data } = await getSupabase()
-      .from('horarios_profesores')
-      .select('grupo, materia, tipo')
-      .eq('profesor_nombre_pdf', nPdf)
-      .eq('tipo', 'clase')
-      .eq('curso_academico', await getCursoActual());
-    if (!data) return;
-    // Grupos únicos por grupo+materia
-    const vistos = new Set();
-    const unicos = [];
-    data.forEach(h => {
-      if (!h.grupo) return;
-      const key = `${h.grupo}|${h.materia || ''}`;
-      if (!vistos.has(key)) {
-        vistos.add(key);
-        unicos.push({ grupo: h.grupo, materia: h.materia || '' });
-      }
-    });
-    setGruposUnicos(unicos);
-    // Inicializar tareasBloque
-    const bloque = {};
-    unicos.forEach(u => { bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '', archivo: null, archivoNombre: '' }; });
-    setTareasBloque(bloque);
-  }
+  // cargarGruposUnicos fusionado en cargarHorarioDelDia
 
   useEffect(() => { getConfigCurso().then(setConfigCurso).catch(() => {}); }, []);
 
@@ -167,46 +116,43 @@ export default function Ausencias() {
   // jornada (claustros, evaluaciones, preparación) aunque no haya alumnado.
   const diaLectivo = esDiaLectivo(fechaInicio, configCurso);
 
-  async function cargarHorarioDelDia(fecha, nPdfParam) {
+  async function cargarHorarioDelDia(fecha) {
     if (!fecha || !profesorId) return;
-    const diaSemana = DIAS_SEMANA[new Date(fecha + 'T12:00:00').getDay()];
-    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') return;
 
     setCargandoHorario(true);
-    // Usar el parámetro si se pasa, si no buscar
-    let nPdf = nPdfParam || nombrePdf;
-    if (!nPdf) {
-      nPdf = await buscarNombrePdf(profesorId);
-      if (nPdf) setNombrePdf(nPdf);
-    }
-    if (!nPdf) { setCargandoHorario(false); return; }
+    try {
+      const r = await fetch(`/api/ausencias?horario_dia=1&fecha=${fecha}`);
+      const d = await r.json();
 
-    const { data: horas } = await getSupabase()
-      .from('horarios_profesores')
-      .select('hora_id, hora_label, tipo, grupo, materia')
-      .eq('profesor_nombre_pdf', nPdf)
-      .eq('dia', diaSemana)
-      .eq('curso_academico', await getCursoActual());
+      if (d.nombrePdf) setNombrePdf(d.nombrePdf);
 
-    if (!horas || horas.length === 0) { setCargandoHorario(false); return; }
+      // Grupos únicos (para el modo de varios días)
+      if (d.gruposUnicos?.length > 0) {
+        setGruposUnicos(d.gruposUnicos);
+        const bloque = {};
+        d.gruposUnicos.forEach(u => { bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '', archivo: null, archivoNombre: '' }; });
+        setTareasBloque(bloque);
+      }
 
-    // Precargar el horario
-    const nuevoHorario = {};
-    horas.forEach(h => {
-      // Normalizar hora_id: "1a" → "1", "2a" → "2", etc.
-      const horaIdNorm = h.hora_id.replace(/a$/, '').replace(/ª$/, '');
-      nuevoHorario[horaIdNorm] = {
-        tipo: h.tipo,
-        grupo: h.grupo || '',
-        materia: h.materia || '',
-        instrucciones: '',
-        archivo: null,
-        archivoNombre: '',
-        archivoUrl: null,
-        precargado: true,
-      };
-    });
-    setHorario(nuevoHorario);
+      // Horario del día concreto
+      if (d.horas?.length > 0) {
+        const nuevoHorario = {};
+        d.horas.forEach(h => {
+          const horaIdNorm = h.hora_id.replace(/a$/, '').replace(/ª$/, '');
+          nuevoHorario[horaIdNorm] = {
+            tipo: h.tipo,
+            grupo: h.grupo || '',
+            materia: h.materia || '',
+            instrucciones: '',
+            archivo: null,
+            archivoNombre: '',
+            archivoUrl: null,
+            precargado: true,
+          };
+        });
+        setHorario(nuevoHorario);
+      }
+    } catch { /* fallo de red: se deja en modo manual */ }
     setCargandoHorario(false);
   }
 
@@ -641,17 +587,9 @@ export default function Ausencias() {
                 setFechaInicio(nuevaFechaInicio);
                 setModoManual(false);
                 if (!fechaFin) setFechaFin(nuevaFechaInicio);
-                const dias = calcularDiasAusencia(nuevaFechaInicio, fechaFin || nuevaFechaInicio);
-                if (dias >= 2) {
-                  setHorario({});
-                  let nPdf = nombrePdf;
-                  if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
-                  if (nPdf) cargarGruposUnicos(nPdf);
-                } else {
-                  setGruposUnicos([]);
-                  setHorario({});
-                  let nPdf1 = nombrePdf; if (!nPdf1) nPdf1 = await buscarNombrePdf(profesorId); if (nPdf1) cargarHorarioDelDia(nuevaFechaInicio, nPdf1);
-                }
+                setHorario({});
+                setGruposUnicos([]);
+                cargarHorarioDelDia(nuevaFechaInicio);
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -659,17 +597,9 @@ export default function Ausencias() {
                 <input type="date" value={fechaFin} min={fechaInicio} onChange={async e => {
                 const nuevaFechaFin = e.target.value;
                 setFechaFin(nuevaFechaFin);
-                const dias = calcularDiasAusencia(fechaInicio, nuevaFechaFin);
-                if (dias >= 2) {
-                  setHorario({});
-                  let nPdf = nombrePdf;
-                  if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
-                  if (nPdf) cargarGruposUnicos(nPdf);
-                } else {
-                  setGruposUnicos([]);
-                  setHorario({});
-                  let nPdf2 = nombrePdf; if (!nPdf2) nPdf2 = await buscarNombrePdf(profesorId); if (fechaInicio && nPdf2) cargarHorarioDelDia(fechaInicio, nPdf2);
-                }
+                setHorario({});
+                setGruposUnicos([]);
+                if (fechaInicio) cargarHorarioDelDia(fechaInicio);
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
             </div>
