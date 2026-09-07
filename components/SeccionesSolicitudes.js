@@ -12,6 +12,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 
 
@@ -33,7 +34,7 @@ export function SeccionMantenimiento() {
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase().from('mantenimiento').select('*').order('created_at', { ascending: false });
+    const { data } = await consulta('mantenimiento').select('*').order('created_at', { ascending: false });
     setIncidencias(data || []);
     setCargando(false);
   }
