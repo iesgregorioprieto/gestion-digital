@@ -313,7 +313,7 @@ export default function Ausencias() {
     }
 
     const diasAusencia = calcularDiasAusencia(fechaInicio, fechaFin);
-    const esAusenciaLarga = diasAusencia >= 3;
+    const esAusenciaLarga = diasAusencia >= 2;
 
     // Aviso (no bloqueante) si faltan tareas: la ausencia puede ser imprevista
     let labelsSinTarea = '';
@@ -639,7 +639,7 @@ export default function Ausencias() {
                 setModoManual(false);
                 if (!fechaFin) setFechaFin(nuevaFechaInicio);
                 const dias = calcularDiasAusencia(nuevaFechaInicio, fechaFin || nuevaFechaInicio);
-                if (dias >= 3) {
+                if (dias >= 2) {
                   setHorario({});
                   let nPdf = nombrePdf;
                   if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
@@ -657,7 +657,7 @@ export default function Ausencias() {
                 const nuevaFechaFin = e.target.value;
                 setFechaFin(nuevaFechaFin);
                 const dias = calcularDiasAusencia(fechaInicio, nuevaFechaFin);
-                if (dias >= 3) {
+                if (dias >= 2) {
                   setHorario({});
                   let nPdf = nombrePdf;
                   if (!nPdf) nPdf = await buscarNombrePdf(profesorId);
