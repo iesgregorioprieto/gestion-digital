@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 
 const VERDE = '#1e6b2e';
 
@@ -50,8 +51,7 @@ export default function CompletarPerfil() {
       if (!id) { window.location.href = '/login'; return; }
       setProfId(id);
 
-      const { data: rows } = await getSupabase()
-        .from('profesores')
+      const { data: rows } = await consulta('profesores')
         .select('nombre, apellidos, email, departamento, grupo_tutoria, especialidad, tipo_contrato, anio_centro, anio_cuerpo')
         .eq('id', id);
 
