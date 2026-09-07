@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -47,7 +48,7 @@ export default function Compras() {
     setEsDirectivo(directivo);
     setProfesorId(id);
     setProfesorNombre(nombre || '');
-    getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
+    consulta('profesores').select('departamento').eq('id', id).then(({ data }) => {
       if (data && data[0]) setDepartamento(data[0].departamento || '');
     });
     cargarHistorial(id, directivo);
@@ -83,12 +84,15 @@ export default function Compras() {
 
   async function subirArchivo(archivo, carpeta) {
     if (!archivo) return null;
-    const ext = archivo.name.split('.').pop();
-    const nombre = `${carpeta}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await getSupabase().storage.from('compras-docs').upload(nombre, archivo);
-    if (error) return null;
-    const { data } = getSupabase().storage.from('compras-docs').getPublicUrl(nombre);
-    return data.publicUrl;
+    const fd = new FormData();
+    fd.append('archivo', archivo);
+    fd.append('carpeta', carpeta);
+    fd.append('bucket', 'compras-docs');
+    try {
+      const r = await fetch('/api/documento', { method: 'POST', body: fd });
+      const d = await r.json();
+      return d.url || null;
+    } catch { return null; }
   }
 
   async function enviar() {
