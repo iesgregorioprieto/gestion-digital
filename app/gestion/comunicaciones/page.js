@@ -12,6 +12,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 
 const VERDE = '#1e6b2e';
@@ -307,8 +308,7 @@ export default function GestionComunicaciones() {
   }
 
   async function cargarProfesores() {
-    const { data } = await getSupabase()
-      .from('profesores').select('id, nombre, apellidos, departamento')
+    const { data } = await consulta('profesores').select('id, nombre, apellidos, departamento')
       .eq('estado', 'activo').order('apellidos');
     setProfesores(data || []);
   }
