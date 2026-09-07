@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { limpiarCacheCurso } from '@/lib/curso';
 
 const AZUL  = '#1e3a5f';
@@ -59,8 +60,7 @@ export default function ConfigCurso() {
 
   async function cargar() {
     setCargando(true);
-    const { data } = await getSupabase()
-      .from('config_centro').select('*').order('curso', { ascending: false });
+    const { data } = await consulta('config_centro').select('*').order('curso', { ascending: false });
 
     const lista = data || [];
     setCursos(lista);
@@ -89,8 +89,7 @@ export default function ConfigCurso() {
   }
 
   async function cargarPeriodos(curso) {
-    const { data } = await getSupabase()
-      .from('periodos_no_lectivos').select('*').eq('curso', curso).order('fecha_inicio');
+    const { data } = await consulta('periodos_no_lectivos').select('*').eq('curso', curso).order('fecha_inicio');
     setPeriodos(data || []);
   }
 
