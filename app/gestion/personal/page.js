@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 
@@ -108,7 +109,7 @@ export default function PanelSecretario() {
     mostrarMensaje('✅ Aprobado — se le ha enviado el enlace de activación', 'ok');
 
     try {
-      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
+      const rows = await consulta('profesores').select('nombre,apellidos,email,rol_gestion').eq('id', id);
       const prof = (rows.data || [])[0];
       if (prof?.email) {
         await fetch('/api/enviar-email', {
@@ -447,8 +448,7 @@ export default function PanelSecretario() {
 
       // 3. Copiar horario del titular al sustituto
       // Primero obtenemos el nombre PDF del titular para buscar su horario
-      const { data: horariosTitular } = await getSupabase()
-        .from('horarios_profesores')
+      const { data: horariosTitular } = await consulta('horarios_profesores')
         .select('*')
         .eq('curso_academico', await getCursoActual())
         .ilike('profesor_nombre_pdf', `%${titular.apellidos.split(' ')[0]}%`);
