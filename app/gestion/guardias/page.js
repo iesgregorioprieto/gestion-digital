@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 
@@ -129,8 +130,7 @@ export default function GestionGuardias() {
     let offset = 0;
     const limit = 1000;
     while (true) {
-      const { data } = await getSupabase()
-        .from('horarios_profesores')
+      const { data } = await consulta('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
         .eq('curso_academico',await getCursoActual())
         .range(offset, offset + limit - 1);
@@ -142,8 +142,7 @@ export default function GestionGuardias() {
     setHC(horarios);
 
     // Profesores
-    const { data: profes } = await getSupabase()
-      .from('profesores')
+    const { data: profes } = await consulta('profesores')
       .select('id,nombre,apellidos,departamento,especialidad');
     const mapa = {};
     (profes || []).forEach(p => {
@@ -153,8 +152,7 @@ export default function GestionGuardias() {
     setProfsList(profes || []);
 
     // Contador de apoyos por sector del curso
-    const { data: apoyos } = await getSupabase()
-      .from('apoyos_asignados')
+    const { data: apoyos } = await consulta('apoyos_asignados')
       .select('sector_apoyo,profesor_id,estado')
       .eq('curso_academico', await getCursoActual());
     const cont = {};
@@ -253,8 +251,7 @@ export default function GestionGuardias() {
     ];
 
     try {
-      const r = await getSupabase()
-        .from('apoyos_asignados')
+      const r = await consulta('apoyos_asignados')
         .select('*')
         .eq('fecha', f)
         .eq('curso_academico', await getCursoActual());
@@ -553,7 +550,7 @@ export default function GestionGuardias() {
     // Email al profesor avisando de la guardia asignada
     if (data && data[0] && profesorSeleccionado.profesorId) {
       try {
-        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', profesorSeleccionado.profesorId);
+        const pRows = await consulta('profesores').select('nombre,apellidos,email').eq('id', profesorSeleccionado.profesorId);
         const prof = (pRows.data || [])[0];
         if (prof?.email) {
           const HORAS_LABEL = { '1': '1ª (8:30–9:25)', '2': '2ª (9:25–10:20)', '3': '3ª (10:20–11:15)', 'recreo': 'Recreo (11:15–11:45)', '4': '4ª (11:45–12:40)', '5': '5ª (12:40–13:35)', '6': '6ª (13:35–14:30)' };
@@ -605,7 +602,7 @@ export default function GestionGuardias() {
       }),
     });
     if (!_rc.ok) { alert('No se pudo cambiar el apoyo'); return; }
-    const r = await getSupabase().from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico',await getCursoActual());
+    const r = await consulta('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico',await getCursoActual());
     setApAsig(r.data || []);
     setModalActivar(null);
   }
