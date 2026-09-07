@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
@@ -133,11 +134,15 @@ export default function GestionDatos() {
       const ext = file.name.split('.').pop().toLowerCase();
       const nombre = `calendario_${cursoNuevo || 'curso'}_${Date.now()}.${ext}`;
 
-      const { error: errSubida } = await getSupabase().storage
-        .from('calendario').upload(nombre, file, { upsert: true });
-      if (errSubida) throw new Error(errSubida.message);
+      const fd = new FormData();
+      fd.append('archivo', file);
+      fd.append('carpeta', `calendario_${cursoNuevo || 'curso'}`);
+      fd.append('bucket', 'calendario');
+      const subResp = await fetch('/api/documento', { method: 'POST', body: fd });
+      const subData = await subResp.json();
+      if (!subData.url) throw new Error(subData.error || 'Error al subir');
 
-      const { data: pub } = getSupabase().storage.from('calendario').getPublicUrl(nombre);
+      const pub = { publicUrl: subData.url };
 
       const r = await fetch('/api/calendario', {
         method: 'POST',
@@ -163,11 +168,11 @@ export default function GestionDatos() {
   async function cargarStats() {
     setCargando(true);
     const [{ data: gs }, { data: als }, { data: hrs }, { data: profs }, { data: guards }] = await Promise.all([
-      getSupabase().from('grupos').select('codigo, curso_academico').order('codigo'),
+      consulta('grupos').select('codigo, curso_academico').order('codigo'),
       fetch('/api/alumnos?recuento=1').then(r => r.json()).then(d => ({ data: d.alumnos || [] })),
-      getSupabase().from('horarios_profesores').select('id, curso_academico'),
-      getSupabase().from('profesores').select('id, estado'),
-      getSupabase().from('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
+      consulta('horarios_profesores').select('id, curso_academico'),
+      consulta('profesores').select('id, estado'),
+      consulta('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
     ]);
     const curso = gs?.[0]?.curso_academico || '—';
     setGrupos(gs || []);
@@ -246,8 +251,7 @@ export default function GestionDatos() {
   // ─── Actividades aprobadas en la PGA ───
 
   async function cargarPGA() {
-    const { data } = await getSupabase()
-      .from('actividades_pga')
+    const { data } = await consulta('actividades_pga')
       .select('id, actividad, localidad, departamento, curso_academico')
       .order('actividad');
     setPgaLista(data || []);
