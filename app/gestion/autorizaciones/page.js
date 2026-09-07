@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 const rojo = '#991b1b';
@@ -91,7 +92,7 @@ export default function GestionAutorizaciones() {
 
     // Si es tutor, cargar su grupo automáticamente
     if (tutor && !esDirectivoLocal) {
-      getSupabase().from('profesores').select('grupo_tutoria').eq('id', id).then(({ data }) => {
+      consulta('profesores').select('grupo_tutoria').eq('id', id).then(({ data }) => {
         if (data?.[0]?.grupo_tutoria) {
           setGrupoTutor(data[0].grupo_tutoria);
           setGrupoSeleccionado(data[0].grupo_tutoria);
