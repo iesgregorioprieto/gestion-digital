@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 
@@ -129,8 +130,7 @@ export default function Guardias() {
     let offset = 0;
     const limit = 1000;
     while (true) {
-      const { data } = await getSupabase()
-        .from('horarios_profesores')
+      const { data } = await consulta('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
         .eq('curso_academico',await getCursoActual())
         .range(offset, offset + limit - 1);
@@ -141,8 +141,7 @@ export default function Guardias() {
     }
     setHC(horarios);
 
-    const { data: profes } = await getSupabase()
-      .from('profesores')
+    const { data: profes } = await consulta('profesores')
       .select('id,nombre,apellidos,departamento,especialidad');
 
     const mapa = {};
@@ -154,8 +153,7 @@ export default function Guardias() {
     setProfsList(profes || []);
 
     // Contador de apoyos por sector del curso (necesario para la rotación)
-    const { data: apoyosCurso } = await getSupabase()
-      .from('apoyos_asignados')
+    const { data: apoyosCurso } = await consulta('apoyos_asignados')
       .select('sector_apoyo,profesor_id,estado')
       .eq('curso_academico', await getCursoActual());
     const contSector = {};
@@ -174,8 +172,7 @@ export default function Guardias() {
     setMiEsp(yo?.especialidad || '');
 
     // Contador de apoyos por sector
-    const { data: apoyos } = await getSupabase()
-      .from('apoyos_asignados')
+    const { data: apoyos } = await consulta('apoyos_asignados')
       .select('sector_apoyo,estado')
       .eq('curso_academico', await getCursoActual());
     const cont = {};
@@ -268,8 +265,7 @@ export default function Guardias() {
 
     // Cargar apoyos para esta fecha
     try {
-      const r = await getSupabase()
-        .from('apoyos_asignados')
+      const r = await consulta('apoyos_asignados')
         .select('*')
         .eq('fecha', f)
         .eq('curso_academico', await getCursoActual());
@@ -516,8 +512,7 @@ export default function Guardias() {
       }),
     });
     if (!_rc.ok) { alert('No se pudo cambiar el apoyo'); return; }
-    const r = await getSupabase()
-      .from('apoyos_asignados')
+    const r = await consulta('apoyos_asignados')
       .select('*')
       .eq('fecha', fecha)
       .eq('curso_academico', await getCursoActual());
