@@ -117,8 +117,18 @@ export default function Ausencias() {
   // jornada (claustros, evaluaciones, preparación) aunque no haya alumnado.
   const diaLectivo = esDiaLectivo(fechaInicio, configCurso);
 
-  async function cargarHorarioDelDia(fecha) {
+  /**
+   * Carga lo necesario para poner tareas.
+   *
+   * Las fechas se pasan como parámetro a propósito: esta función se
+   * llama justo después de un setState, y en ese momento fechaInicio y
+   * fechaFin todavía valen lo de antes. Leerlas del estado elegiría el
+   * modo con la fecha vieja.
+   */
+  async function cargarHorarioDelDia(fecha, inicio, fin) {
     if (!fecha || !profesorId) return;
+    const desde = inicio || fecha;
+    const hasta = fin || inicio || fecha;
 
     setCargandoHorario(true);
     try {
@@ -127,15 +137,26 @@ export default function Ausencias() {
 
       if (d.nombrePdf) setNombrePdf(d.nombrePdf);
 
-      // Grupos únicos (para el modo de varios días)
-      if (d.gruposUnicos?.length > 0) {
+      // El modo lo decide la duración, no lo que devuelva el servidor.
+      // La API manda siempre las dos cosas; aquí se usa la que toca.
+      // Con un solo día se dejan tareas hora por hora; con dos o más,
+      // por grupo y materia, porque cada día tiene horas distintas.
+      const porBloques = calcularDiasAusencia(desde, hasta) >= 2;
+
+      if (porBloques && d.gruposUnicos?.length > 0) {
         setGruposUnicos(d.gruposUnicos);
         const bloque = {};
         d.gruposUnicos.forEach(u => { bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '', archivo: null, archivoNombre: '' }; });
         setTareasBloque(bloque);
+        setHorario({});
+        setCargandoHorario(false);
+        return;
       }
 
-      // Horario del día concreto
+      setGruposUnicos([]);
+      setTareasBloque({});
+
+      // Horario del día concreto (modo de un solo día)
       if (d.horas?.length > 0) {
         const nuevoHorario = {};
         d.horas.forEach(h => {
@@ -590,7 +611,7 @@ export default function Ausencias() {
                 if (!fechaFin) setFechaFin(nuevaFechaInicio);
                 setHorario({});
                 setGruposUnicos([]);
-                cargarHorarioDelDia(nuevaFechaInicio);
+                cargarHorarioDelDia(nuevaFechaInicio, nuevaFechaInicio, fechaFin || nuevaFechaInicio);
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -600,7 +621,7 @@ export default function Ausencias() {
                 setFechaFin(nuevaFechaFin);
                 setHorario({});
                 setGruposUnicos([]);
-                if (fechaInicio) cargarHorarioDelDia(fechaInicio);
+                if (fechaInicio) cargarHorarioDelDia(fechaInicio, fechaInicio, nuevaFechaFin);
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
             </div>
@@ -815,7 +836,7 @@ export default function Ausencias() {
                     onClick={() => {
                       setModoManual(false);
                       setHorario({});
-                      if (fechaInicio) cargarHorarioDelDia(fechaInicio);
+                      if (fechaInicio) cargarHorarioDelDia(fechaInicio, fechaInicio, fechaFin);
                     }}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 8,
