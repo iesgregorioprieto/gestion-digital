@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import ResolverDiaDLD from '@/components/ResolverDiaDLD';
 import { getConfigCurso, numProfesores, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -285,7 +286,7 @@ export default function PanelDirector() {
     setCargando(true);
     const [{ data }, { data: profData, count }] = await Promise.all([
       fetch('/api/dld').then(r => r.json()).then(j => ({ data: j.solicitudes || [] })),
-      getSupabase().from('profesores').select('id, titular_id', { count: 'exact' }).eq('estado', 'activo'),
+      consulta('profesores').select('id, titular_id', { count: 'exact' }).eq('estado', 'activo'),
     ]);
     setTodasSolicitudes(data || []);
 
@@ -604,7 +605,7 @@ export default function PanelDirector() {
       const rows = await fetch('/api/dld').then(r => r.json()).then(j => ({ data: (j.solicitudes || []).filter(s => s.id === id) }));
       const sol = (rows.data || [])[0];
       if (sol) {
-        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
+        const pRows = await consulta('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
         const prof = (pRows.data || [])[0];
         if (prof?.email) {
           await fetch('/api/enviar-email', {
@@ -657,7 +658,7 @@ export default function PanelDirector() {
             });
 
             // Email al desplazado
-            const dRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', desplazado.profesor_id);
+            const dRows = await consulta('profesores').select('nombre,apellidos,email').eq('id', desplazado.profesor_id);
             const profDesplazado = (dRows.data || [])[0];
             if (profDesplazado?.email) {
               await fetch('/api/enviar-email', {
@@ -721,7 +722,7 @@ export default function PanelDirector() {
       const rows = await fetch('/api/dld').then(r => r.json()).then(j => ({ data: (j.solicitudes || []).filter(s => s.id === id) }));
       const sol = (rows.data || [])[0];
       if (sol) {
-        const pRows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
+        const pRows = await consulta('profesores').select('nombre,apellidos,email').eq('id', sol.profesor_id);
         const prof = (pRows.data || [])[0];
         if (prof?.email) {
           await fetch('/api/enviar-email', {
@@ -779,7 +780,7 @@ export default function PanelDirector() {
 
     // Avisar al profesor por email
     try {
-      const rows = await getSupabase().from('profesores').select('nombre,apellidos,email').eq('id', s.profesor_id);
+      const rows = await consulta('profesores').select('nombre,apellidos,email').eq('id', s.profesor_id);
       const prof = (rows.data || [])[0];
       if (prof?.email) {
         await fetch('/api/enviar-email', {
