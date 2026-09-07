@@ -1,4 +1,5 @@
 "use client";
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -60,8 +61,7 @@ function HorarioContenido() {
 
     try {
       // Paso 1: obtener nombre y apellidos separados (igual que DLD)
-      const { data: profRows } = await getSupabase()
-        .from('profesores')
+      const { data: profRows } = await consulta('profesores')
         .select('nombre, apellidos')
         .eq('id', profId);
       const prof = (profRows || [])[0];
@@ -73,8 +73,7 @@ function HorarioContenido() {
       }
 
       // Paso 2: buscar profesor_nombre_pdf con RPC (igual que DLD)
-      const { data: nPdf } = await getSupabase()
-        .rpc('buscar_profesor_horario', {
+      const { data: nPdf } = await consultaRpc('buscar_profesor_horario', {
           p_nombre: prof.nombre.split(' ')[0],
           p_apellido: prof.apellidos.split(' ')[0]
         });
@@ -86,8 +85,7 @@ function HorarioContenido() {
       }
 
       // Paso 3: cargar horario completo con ese nombre (igual que DLD)
-      const { data } = await getSupabase()
-        .from('horarios_profesores')
+      const { data } = await consulta('horarios_profesores')
         .select('dia, hora_id, tipo, grupo, materia, aula')
         .eq('profesor_nombre_pdf', nPdf)
         .eq('curso_academico', await getCursoActual());
