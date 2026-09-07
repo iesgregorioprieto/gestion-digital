@@ -67,9 +67,17 @@ const TABLAS = {
     columns: 'id, actividad, localidad, departamento, curso_academico',
     directivo: false,
   },
+  // Personal: cada uno ve las suyas. Dirección las ve todas.
+  // Antes el filtro por profesor_id lo ponía el navegador, y el rol
+  // salía de sessionStorage, que se edita desde la consola. Con la
+  // clave de servicio saltándose el RLS, eso dejaba las incidencias de
+  // todo el claustro al alcance de cualquiera. Ahora lo impone el
+  // servidor con el id de la sesión firmada.
   mantenimiento: {
     columns: '*',
     directivo: false,
+    propio: 'profesor_id',
+    salvoDirectivo: true,
   },
   config_centro: {
     columns: '*',
@@ -102,9 +110,13 @@ const TABLAS = {
   },
 
   // Suscripciones a los avisos push: cada uno comprueba la suya.
+  // Cada uno comprueba la suya, y solo la suya: ni dirección necesita
+  // ver los endpoints de avisos de los demás.
   push_suscripciones: {
     columns: 'id, endpoint, profesor_id',
     directivo: false,
+    propio: 'profesor_id',
+    salvoDirectivo: false,
   },
 };
 
@@ -153,6 +165,13 @@ export async function POST(request) {
 
   const opcionesSelect = contar ? { count: 'exact' } : undefined;
   let query = supa().from(tablaReal).select(columnas, opcionesSelect);
+
+  // Filtro por persona impuesto por el servidor, con el id de la sesión
+  // firmada. No se puede evitar desde el navegador.
+  if (cfg.propio) {
+    const puedeVerTodo = cfg.salvoDirectivo && esDirectivo(sesion);
+    if (!puedeVerTodo) query = query.eq(cfg.propio, sesion.id);
+  }
 
   // Filtros: [{ col, op, val }]
   for (const f of filtros) {
