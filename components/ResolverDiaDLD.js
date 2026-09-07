@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 
 const VERDE  = '#1e6b2e';
 const ROJO   = '#991b1b';
@@ -190,8 +191,7 @@ export default function ResolverDiaDLD({ totalProfesores = 150, nombreUsuario = 
   async function avisar(s, aprobada) {
     // Email
     try {
-      const { data: rows } = await getSupabase()
-        .from('profesores').select('nombre,apellidos,email').eq('id', s.profesor_id);
+      const { data: rows } = await consulta('profesores').select('nombre,apellidos,email').eq('id', s.profesor_id);
       const prof = (rows || [])[0];
       if (prof?.email) {
         await fetch('/api/enviar-email', {
