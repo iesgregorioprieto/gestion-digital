@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { computaComoFalta } from '@/lib/motivosAusencia';
 import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
+import { getCursoActual } from '@/lib/curso';
 
 /**
  * LECTURA DE AUSENCIAS
@@ -42,6 +43,75 @@ export async function GET(request) {
   const url = new URL(request.url);
   const soloMias = url.searchParams.get('mias') === '1';
   const cuadrante = url.searchParams.get('cuadrante');
+
+  // ── Horario del día (para las tareas de la ausencia) ──
+  // Antes se leía desde el navegador y fallaba por RLS.
+  const modoHorario = url.searchParams.get('horario_dia');
+  if (modoHorario) {
+    const fecha = url.searchParams.get('fecha');
+    if (!fecha) return Response.json({ error: 'falta_fecha' }, { status: 400 });
+
+    const DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
+    const diaSemana = DIAS[new Date(fecha + 'T12:00:00').getDay()];
+    if (!diaSemana || diaSemana === 'sabado' || diaSemana === 'domingo') {
+      return Response.json({ horas: [], gruposUnicos: [], nombrePdf: null });
+    }
+
+    const curso = await getCursoActual();
+
+    // Buscar el nombre PDF del profesor
+    const { data: prof } = await supa().from('profesores').select('nombre, apellidos').eq('id', sesion.id);
+    let nombrePdf = null;
+    if (prof?.[0]) {
+      const { nombre, apellidos } = prof[0];
+      const p1 = nombre.split(' ')[0];
+      const a1 = apellidos.split(' ')[0];
+
+      // Intentar con la función SQL
+      const { data: fn } = await supa().rpc('buscar_profesor_horario', { p_nombre: p1, p_apellido: a1 });
+      if (fn) { nombrePdf = fn; }
+      else {
+        // Fallback: buscar por apellido
+        const { data: rows } = await supa()
+          .from('horarios_profesores')
+          .select('profesor_nombre_pdf')
+          .ilike('profesor_nombre_pdf', '%' + a1 + '%')
+          .limit(5);
+        if (rows?.length > 0) {
+          const mejor = rows.find(r => r.profesor_nombre_pdf.toLowerCase().includes(p1.toLowerCase()));
+          nombrePdf = mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
+        }
+      }
+    }
+
+    if (!nombrePdf) return Response.json({ horas: [], gruposUnicos: [], nombrePdf: null });
+
+    // Horario del día concreto
+    const { data: horas } = await supa()
+      .from('horarios_profesores')
+      .select('hora_id, hora_label, tipo, grupo, materia')
+      .eq('profesor_nombre_pdf', nombrePdf)
+      .eq('dia', diaSemana)
+      .eq('curso_academico', curso);
+
+    // Grupos únicos (para ausencias de varios días)
+    const { data: todos } = await supa()
+      .from('horarios_profesores')
+      .select('grupo, materia, tipo')
+      .eq('profesor_nombre_pdf', nombrePdf)
+      .eq('tipo', 'clase')
+      .eq('curso_academico', curso);
+
+    const vistos = new Set();
+    const gruposUnicos = [];
+    (todos || []).forEach(h => {
+      if (!h.grupo) return;
+      const key = h.grupo + '|' + (h.materia || '');
+      if (!vistos.has(key)) { vistos.add(key); gruposUnicos.push({ grupo: h.grupo, materia: h.materia || '' }); }
+    });
+
+    return Response.json({ horas: horas || [], gruposUnicos, nombrePdf });
+  }
 
   // ── Cuadrante de guardias ──
   // Lo consulta todo el profesorado para saber a quién cubre. Devuelve
