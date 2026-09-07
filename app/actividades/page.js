@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
 
 const FAMILIAS = {
@@ -160,11 +161,11 @@ export default function Actividades() {
     setCargando(true);
     try {
       const [{ data: acts }, { data: gs }, { data: pga }, { data: profs }, { data: yo }] = await Promise.all([
-        getSupabase().from('actividades').select('*').order('fecha_inicio', { ascending: true }),
-        getSupabase().from('grupos').select('codigo').order('codigo'),
-        getSupabase().from('actividades_pga').select('id, actividad, localidad, departamento').order('departamento').order('actividad'),
-        getSupabase().from('profesores').select('id, nombre, apellidos').eq('estado', 'activo').order('apellidos'),
-        getSupabase().from('profesores').select('departamento').eq('id', id),
+        consulta('actividades').select('*').order('fecha_inicio', { ascending: true }),
+        consulta('grupos').select('codigo').order('codigo'),
+        consulta('actividades_pga').select('id, actividad, localidad, departamento').order('departamento').order('actividad'),
+        consulta('profesores').select('id, nombre, apellidos').eq('estado', 'activo').order('apellidos'),
+        consulta('profesores').select('departamento').eq('id', id),
       ]);
 
       setActividades(acts || []);
@@ -215,12 +216,15 @@ export default function Actividades() {
 
   async function subirComision() {
     if (!comision) return null;
-    const ext = comision.name.split('.').pop();
-    const nombre = `comisiones/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await getSupabase().storage.from('actividades-docs').upload(nombre, comision);
-    if (error) { console.error('subir comisión:', error.message); return null; }
-    const { data } = getSupabase().storage.from('actividades-docs').getPublicUrl(nombre);
-    return data.publicUrl;
+    const form = new FormData();
+    form.append('archivo', comision);
+    form.append('carpeta', 'comisiones');
+    form.append('bucket', 'actividades-docs');
+    try {
+      const r = await fetch('/api/documento', { method: 'POST', body: form });
+      const d = await r.json();
+      return d.url || null;
+    } catch { return null; }
   }
 
   async function enviar() {
