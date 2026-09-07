@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -84,7 +85,7 @@ export default function GestionAusencias() {
     setCargando(true);
     const [{ data: aus }, { data: profs }] = await Promise.all([
       fetch('/api/ausencias').then(r => r.json()).then(d => ({ data: d.ausencias || [] })),
-      getSupabase().from('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
+      consulta('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
     ]);
     setAusencias(aus || []);
     setProfesores(profs || []);
