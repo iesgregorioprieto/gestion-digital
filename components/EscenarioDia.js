@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
-import { etiquetaMotivo } from '@/lib/motivosAusencia';
+// La lectura va por /api/escenario con clave de servicio.
 
 // Escenario de un dia concreto: quien falta y por que.
 // Orden de prioridad fijado por direccion:
@@ -37,72 +36,17 @@ export default function EscenarioDia({ fecha, compacto = false }) {
       setCargando(true);
       setError('');
       try {
-        const sb = getSupabase();
-        const [rAus, rAct, rDld] = await Promise.all([
-          sb.from('ausencias')
-            .select('id, profesor_nombre, fecha_inicio, fecha_fin, subtipo, motivo, horas, estado, datos_extra')
-            .lte('fecha_inicio', fecha).gte('fecha_fin', fecha),
-          sb.from('actividades')
-            .select('id, titulo, profesor_nombre, acompanantes, grupos, fecha_inicio, fecha_fin, estado')
-            .lte('fecha_inicio', fecha).gte('fecha_fin', fecha),
-          sb.from('dld')
-            .select('id, profesor_nombre, tipo_dld, fecha_solicitada, horas, estado')
-            .eq('fecha_solicitada', fecha),
-        ]);
-
+        const r = await fetch(`/api/escenario?fecha=${fecha}`);
         if (cancelado) return;
-        if (rAus.error || rAct.error || rDld.error) {
-          setError('No se ha podido cargar el escenario del día.');
+        const d = await r.json();
+
+        if (!r.ok || d.error) {
+          setError(d.error || 'No se ha podido cargar el escenario del día.');
           setCargando(false);
           return;
         }
 
-        const lista = [];
-
-        // 1 y 3. Ausencias -> las de formacion van a su propio bloque
-        (rAus.data || []).forEach(a => {
-          const esFormacion = a.subtipo === 'permiso_formacion';
-          const ex = a.datos_extra || {};
-          const detalleFormacion = [ex.curso, ex.entidad, ex.horario].filter(Boolean).join(' · ');
-          lista.push({
-            bloque: esFormacion ? 'formacion' : 'ausencias',
-            profesor: a.profesor_nombre || '—',
-            detalle: (esFormacion && detalleFormacion)
-              ? detalleFormacion
-              : (a.subtipo ? etiquetaMotivo(a.subtipo) : (a.motivo || 'Sin especificar')),
-            nHoras: Array.isArray(a.horas) ? a.horas.length : 0,
-            estado: a.estado,
-          });
-        });
-
-        // 2. Extraescolares: cuenta al responsable y a los acompanantes
-        (rAct.data || []).filter(a => a.estado !== 'rechazada').forEach(a => {
-          const acomp = Array.isArray(a.acompanantes) ? a.acompanantes : [];
-          const nombres = [a.profesor_nombre, ...acomp].filter(Boolean);
-          const grupos = Array.isArray(a.grupos) && a.grupos.length ? ` · ${a.grupos.join(', ')}` : '';
-          nombres.forEach(n => {
-            lista.push({
-              bloque: 'extraescolar',
-              profesor: typeof n === 'string' ? n : (n?.nombre || '—'),
-              detalle: `${a.titulo || 'Actividad'}${grupos}`,
-              nHoras: 0,
-              estado: a.estado,
-            });
-          });
-        });
-
-        // 4. DLD: solo los que cuentan (aprobados y pendientes de resolver)
-        (rDld.data || []).filter(d => d.estado === 'aprobada' || d.estado === 'pendiente').forEach(d => {
-          lista.push({
-            bloque: 'dld',
-            profesor: d.profesor_nombre || '—',
-            detalle: TIPOS_DLD[d.tipo_dld] || d.tipo_dld || 'DLD',
-            nHoras: Array.isArray(d.horas) ? d.horas.length : 0,
-            estado: d.estado,
-          });
-        });
-
-        setItems(lista);
+        setItems(d.items || []);
       } catch (e) {
         if (!cancelado) setError('No se ha podido cargar el escenario del día.');
       }
