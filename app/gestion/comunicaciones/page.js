@@ -338,6 +338,7 @@ export default function GestionComunicaciones() {
   async function publicar() {
     if (!titulo.trim()) return aviso('Ponle un título.', 'error');
     if (!texto.trim())  return aviso('Escribe el mensaje.', 'error');
+    if (ambitos.length === 0) return aviso('Elige a quién va dirigida.', 'error');
     if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
     if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
     if (tipo === 'convocatoria' && !fecha) return aviso('Indica el día de la reunión.', 'error');
