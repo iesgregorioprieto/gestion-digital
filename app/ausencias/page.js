@@ -292,12 +292,15 @@ export default function Ausencias() {
   // ===== SUBIR ARCHIVO =====
   async function subirArchivo(archivo, carpeta) {
     if (!archivo) return null;
-    const ext = archivo.name.split('.').pop();
-    const nombre = `${carpeta}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await getSupabase().storage.from('ausencias-docs').upload(nombre, archivo);
-    if (error) return null;
-    const { data } = getSupabase().storage.from('ausencias-docs').getPublicUrl(nombre);
-    return data.publicUrl;
+    const form = new FormData();
+    form.append('archivo', archivo);
+    form.append('carpeta', carpeta);
+    form.append('bucket', 'ausencias-docs');
+    try {
+      const r = await fetch('/api/documento', { method: 'POST', body: form });
+      const d = await r.json();
+      return d.url || null;
+    } catch { return null; }
   }
 
   // ===== ENVIAR AUSENCIA =====
