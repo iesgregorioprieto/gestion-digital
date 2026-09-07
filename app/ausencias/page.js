@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual, cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
@@ -163,7 +164,7 @@ export default function Ausencias() {
     setEsDirectivo(['secretario', 'director', 'jefe_estudios'].includes(rolGestion));
     setProfesorId(id);
     setProfesorNombre(sessionStorage.getItem('profesor_nombre') || '');
-    getSupabase().from('profesores').select('departamento').eq('id', id).then(({ data }) => {
+    consulta('profesores').select('departamento').eq('id', id).then(({ data }) => {
       if (data?.[0]) setDepartamento(data[0].departamento || '');
     });
     cargarHistorial(id);
