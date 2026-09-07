@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 
 const AZUL   = '#1e3a5f';
 const VERDE  = '#1e6b2e';
@@ -35,8 +36,8 @@ export default function CambioCurso() {
     setCargando(true);
     try {
       const [{ data: cfgs }, { data: profs }, { count: nDld }, { count: nAus }] = await Promise.all([
-        getSupabase().from('config_centro').select('*').eq('activo', true),
-        getSupabase().from('profesores').select('id, nombre, apellidos, email, departamento, estado, titular_id').eq('estado', 'activo').order('apellidos'),
+        consulta('config_centro').select('*').eq('activo', true),
+        consulta('profesores').select('id, nombre, apellidos, email, departamento, estado, titular_id').eq('estado', 'activo').order('apellidos'),
         fetch('/api/dld').then(r => r.json()).then(j => ({ count: (j.solicitudes || []).length })),
         fetch('/api/ausencias').then(r => r.json()).then(j => ({ count: (j.ausencias || []).length })),
       ]);
