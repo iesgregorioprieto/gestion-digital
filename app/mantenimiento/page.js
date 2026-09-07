@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
+import { consulta, consultaRpc } from '@/lib/consulta';
 const ESTANCIAS = [
   { valor: 'aula', emoji: '🏫', etiqueta: 'Aula' },
   { valor: 'taller', emoji: '🔧', etiqueta: 'Taller' },
@@ -56,7 +57,7 @@ export default function Mantenimiento() {
   async function cargarHistorial() {
     if (!profesorId) return;
     setCargandoHistorial(true);
-    let query = getSupabase().from('mantenimiento').select('*');
+    let query = consulta('mantenimiento').select('*');
     // Directivo ve todas las incidencias; profesor solo las suyas
     if (!esDirectivo) query = query.eq('profesor_id', profesorId);
     const { data } = await query.order('created_at', { ascending: false }).limit(20);
@@ -99,19 +100,18 @@ export default function Mantenimiento() {
       // Subir foto si hay una
       if (form.foto) {
         const nombreArchivo = `${Date.now()}_${form.foto.name}`;
-        const { data: uploadData, error: uploadError } = await getSupabase().storage
-          .from('mantenimiento-fotos')
-          .upload(nombreArchivo, form.foto, { contentType: form.foto.type || 'application/octet-stream', upsert: false });
-        if (uploadError) {
-          console.error('Error subiendo archivo:', uploadError.message);
-          setError('Error al subir el archivo: ' + uploadError.message);
+        const fd = new FormData();
+        fd.append('archivo', form.foto);
+        fd.append('carpeta', 'fotos');
+        fd.append('bucket', 'mantenimiento-fotos');
+        const upResp = await fetch('/api/documento', { method: 'POST', body: fd });
+        const upData = await upResp.json();
+        if (!upData.url) {
+          setError('Error al subir el archivo: ' + (upData.error || 'fallo'));
           setEnviando(false);
           return;
         }
-        const { data: urlData } = getSupabase().storage
-          .from('mantenimiento-fotos')
-          .getPublicUrl(nombreArchivo);
-        foto_url = urlData.publicUrl;
+        foto_url = upData.url;
       }
 
       const _r = await fetch('/api/solicitudes', {
