@@ -1,4 +1,5 @@
 "use client";
+import { consulta, consultaRpc } from '@/lib/consulta';
 import { useState, useEffect } from "react";
 import { getSupabase } from "../../../lib/supabase";
 
@@ -31,8 +32,7 @@ export default function GestionSala() {
 
   async function cargarAvisos() {
     setCargando(true);
-    const { data } = await getSupabase()
-      .from('avisos_sala')
+    const { data } = await consulta('avisos_sala')
       .select('*')
       .order('created_at', { ascending: false });
     setAvisos(data || []);
