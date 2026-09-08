@@ -528,8 +528,46 @@ export default function Guardias() {
 
   if (cargando) return <div style={{ padding:40, textAlign:'center', fontFamily:'system-ui' }}>Cargando cuadrante…</div>;
 
-  return (
+  // ── Modal de incidencia ──
+  const modalIncidencia = incidenciaId ? (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={() => setIncidenciaId(null)}>
+      <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440,
+        boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#ea580c', marginBottom: 12 }}>
+          {'⚠️'} Registrar incidencia
+        </div>
+        <p style={{ fontSize: 14, color: '#555', marginBottom: 14, lineHeight: 1.5 }}>
+          Has ido a cubrir la guardia pero no se ha podido realizar con normalidad.
+          Explica brevemente qué ha pasado.
+        </p>
+        <p style={{ fontSize: 12.5, color: '#ea580c', marginBottom: 14 }}>
+          La guardia quedará registrada pero <strong>no contará para el reparto proporcional</strong>.
+        </p>
+        <textarea value={incidenciaTexto} onChange={e => setIncidenciaTexto(e.target.value)}
+          placeholder="Describe la incidencia..."
+          rows={3} style={{ width: '100%', padding: '11px 12px', borderRadius: 8,
+            border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
+        <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+          <button onClick={() => setIncidenciaId(null)} style={{
+            padding: '10px 18px', borderRadius: 9, border: '1.5px solid #cbd5e1',
+            backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+          }}>Cancelar</button>
+          <button onClick={confirmarConIncidencia}
+            disabled={enviandoInc || !incidenciaTexto.trim()} style={{
+            padding: '10px 18px', borderRadius: 9, border: 'none',
+            backgroundColor: (enviandoInc || !incidenciaTexto.trim()) ? '#94a3b8' : '#ea580c',
+            color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer',
+          }}>{enviandoInc ? 'Enviando...' : 'Registrar incidencia'}</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+    return (
     <div style={{ minHeight:'100vh', backgroundColor:'#f9fafb', fontFamily:'system-ui,sans-serif', paddingBottom:60 }}>
+      {modalIncidencia}
 
       {/* HEADER */}
       <div style={{ backgroundColor:marron, color:'white', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -589,11 +627,16 @@ export default function Guardias() {
               </div>
 
               {mias.map(a => {
-                const confirmada = a.estado === 'confirmado';
+                const esConfirmada = a.estado === 'confirmado';
+                const esIncidencia = a.estado === 'incidencia';
+                const esPendiente = !esConfirmada && !esIncidencia;
                 const etiquetaHora = (HORAS.find(h => h.id === normHora(a.hora))?.label) || a.hora || '';
+                const colorBorde = esConfirmada ? '#16a34a' : esIncidencia ? '#ea580c' : '#dc2626';
+
                 return (
                   <div key={a.id} style={{
                     padding: '11px 14px', borderTop: '1px solid #e5e7eb',
+                    borderLeft: `4px solid ${colorBorde}`,
                     display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
                   }}>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -611,22 +654,42 @@ export default function Guardias() {
                           📝 {a.tarea}
                         </div>
                       )}
+                      {esIncidencia && a.incidencia && (
+                        <div style={{ fontSize: 12, color: '#ea580c', marginTop: 4, lineHeight: 1.4, fontStyle: 'italic' }}>
+                          ⚠️ {a.incidencia}
+                        </div>
+                      )}
                     </div>
-                    {confirmada ? (
-                      <span style={{
-                        fontSize: 12, fontWeight: 800, color: '#166534',
-                        backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 20,
-                      }}>
-                        ✅ Confirmada
+
+                    {esConfirmada && (
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#166534',
+                        backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 20 }}>
+                        ✅ Cubierta
                       </span>
-                    ) : (
-                      <button onClick={() => confirmarMiApoyo(a.id)} style={{
-                        padding: '8px 16px', borderRadius: 9, border: 'none',
-                        backgroundColor: '#166534', color: 'white',
-                        fontWeight: 800, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap',
-                      }}>
-                        Confirmar
-                      </button>
+                    )}
+                    {esIncidencia && (
+                      <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',
+                        backgroundColor: '#fff7ed', padding: '6px 12px', borderRadius: 20 }}>
+                        ⚠️ Incidencia
+                      </span>
+                    )}
+                    {esPendiente && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        <button onClick={() => confirmarMiApoyo(a.id)} style={{
+                          padding: '8px 14px', borderRadius: 9, border: 'none',
+                          backgroundColor: '#166534', color: 'white',
+                          fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}>
+                          ✅ Asumir
+                        </button>
+                        <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
+                          padding: '8px 14px', borderRadius: 9,
+                          border: '1.5px solid #ea580c', backgroundColor: 'white', color: '#ea580c',
+                          fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                        }}>
+                          ⚠️ Incidencia
+                        </button>
+                      </div>
                     )}
                   </div>
                 );
