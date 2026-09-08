@@ -266,9 +266,17 @@ export async function POST(request) {
             <p><strong>${e(datos.nombre)}</strong> ha comunicado un permiso de formación.</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
               <tr style="background:#e8eef4">
-                <td style="padding:10px;font-weight:bold;width:40%">Fecha de la ausencia</td>
+                <td style="padding:10px;font-weight:bold;width:40%">Fecha de inicio</td>
                 <td style="padding:10px">${e(datos.fecha)}</td>
               </tr>
+              ${datos.fecha_fin ? `<tr>
+                <td style="padding:10px;font-weight:bold">Fecha de fin</td>
+                <td style="padding:10px">${e(datos.fecha_fin)}</td>
+              </tr>` : ''}
+              ${datos.dias ? `<tr style="background:#e8eef4">
+                <td style="padding:10px;font-weight:bold">Duración</td>
+                <td style="padding:10px"><strong>${e(datos.dias)}</strong></td>
+              </tr>` : ''}
               <tr>
                 <td style="padding:10px;font-weight:bold">Curso</td>
                 <td style="padding:10px">${e(datos.curso)}</td>
