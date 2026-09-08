@@ -92,7 +92,7 @@ export default function GestionIncidencias() {
 
       <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 19, fontWeight: 800 }}>🐞 Incidencias de la aplicación</div>
+          <div style={{ fontSize: 19, fontWeight: 800 }}>🐞 Incidencias y sugerencias de la aplicación</div>
           <div style={{ fontSize: 12.5, opacity: 0.85 }}>IES Gregorio Prieto · {usuario}</div>
         </div>
         <a href="/gestion" style={{ color: 'white', padding: '6px 13px', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 7, fontSize: 13.5, textDecoration: 'none' }}>
