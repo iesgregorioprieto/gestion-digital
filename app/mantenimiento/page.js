@@ -180,7 +180,7 @@ export default function Mantenimiento() {
       {/* HEADER */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700 }}>🔧 Mantenimiento</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>🔧 Incidencias de mantenimiento</div>
           <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto · {profesorNombre}</div>
         </div>
         <a href="/profesor" style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Volver</a>
