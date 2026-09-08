@@ -122,8 +122,8 @@ export default function PanelGestion() {
     {
       id: 'mantenimiento',
       emoji: '🔧',
-      titulo: 'Mantenimiento',
-      descripcion: 'Gestiona los reportes de desperfectos del centro',
+      titulo: 'Incidencias de mantenimiento',
+      descripcion: 'Gestiona los reportes de desperfectos y averías del centro',
       href: '/gestion/mantenimiento',
       bg: '#fef3c7',
       border: '#fde047',
@@ -183,7 +183,7 @@ export default function PanelGestion() {
     {
       id: 'incidencias',
       emoji: '🐞',
-      titulo: 'Incidencias de la app',
+      titulo: 'Incidencias y sugerencias de la app',
       descripcion: 'Atiende los fallos y sugerencias que avisa el profesorado',
       href: '/gestion/incidencias',
       bg: '#fff1f2',
