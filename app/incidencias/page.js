@@ -18,7 +18,7 @@ const AZUL  = '#1e3a5f';
 const MODULOS = [
   'Ausencias', 'Guardias', 'Días de libre disposición',
   'Actividades complementarias', 'Autorizaciones', 'Horarios',
-  'Compras', 'Mantenimiento', 'Panel de la sala', 'Mis datos',
+  'Compras', 'Incidencias de mantenimiento', 'Panel de la sala', 'Mis datos',
   'Otro / no sabría decir',
 ];
 
