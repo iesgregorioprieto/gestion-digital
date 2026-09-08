@@ -363,6 +363,12 @@ async function avisarFormacion(fila) {
           email,
           nombre,
           fecha: fila.fecha_inicio || '',
+          fecha_fin: fila.fecha_fin || '',
+          dias: (() => {
+            if (!fila.fecha_inicio || !fila.fecha_fin) return '';
+            const d = Math.round((new Date(fila.fecha_fin + 'T12:00:00') - new Date(fila.fecha_inicio + 'T12:00:00')) / 86400000) + 1;
+            return d > 1 ? `${d} días` : '1 día';
+          })(),
           curso: ex.curso || '',
           entidad: ex.entidad || '',
           lugar: ex.lugar || '',
