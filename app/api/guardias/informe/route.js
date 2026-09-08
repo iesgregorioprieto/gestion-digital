@@ -61,7 +61,7 @@ export async function GET(request) {
 
   const [{ data: apoyos, error }, { data: profesores }] = await Promise.all([
     cliente.from('apoyos_asignados')
-      .select('fecha, hora, grupo, aula, materia, sector_apoyo, sector_destino, profesor_id, profesor_ausente_id, estado, tipo_apoyo, confirmado_at')
+      .select('fecha, hora, grupo, aula, materia, sector_apoyo, sector_destino, profesor_id, profesor_ausente_id, estado, tipo_apoyo, confirmado_at, incidencia, cuenta_reparto')
       .gte('fecha', desde).lte('fecha', hasta),
     cliente.from('profesores').select('id, nombre, apellidos, departamento'),
   ]);
@@ -85,6 +85,9 @@ export async function GET(request) {
     aula: a.aula || '',
     materia: a.materia || '',
     confirmada: a.estado === 'confirmado',
+    incidencia: a.estado === 'incidencia',
+    textoIncidencia: a.incidencia || '',
+    cuentaReparto: a.cuenta_reparto !== false && a.estado !== 'incidencia',
     propia: a.tipo_apoyo === 'sector',
   }));
 
@@ -99,6 +102,8 @@ export async function GET(request) {
     recuento[f.cubre] = recuento[f.cubre] || { total: 0, confirmadas: 0, departamento: f.departamentoCubre };
     recuento[f.cubre].total += 1;
     if (f.confirmada) recuento[f.cubre].confirmadas += 1;
+    if (f.incidencia) recuento[f.cubre].incidencias = (recuento[f.cubre].incidencias || 0) + 1;
+    if (f.cuentaReparto) recuento[f.cubre].parReparto = (recuento[f.cubre].parReparto || 0) + 1;
   });
 
   const porProfesor = Object.entries(recuento)
