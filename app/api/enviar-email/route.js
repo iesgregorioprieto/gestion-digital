@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'actividad_sin_pga'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -250,6 +250,100 @@ export async function POST(request) {
           </div>
           <div style="background:#e8eef4;padding:15px;text-align:center;font-size:12px;color:#666">
             IES Gregorio Prieto · Valdepeñas · Ciudad Real
+          </div>
+        </div>`;
+
+    } else if (tipo === 'formacion_jefe_pendiente') {
+      subject = `🎓 Permiso de formación pendiente de tu aprobación — ${e(datos.nombre)}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#b45309;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#fde68a;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">
+            <h2 style="color:#b45309;margin:0 0 12px">Permiso de formación pendiente</h2>
+            <p><strong>${e(datos.nombre)}</strong>, de tu departamento (<strong>${e(datos.departamento)}</strong>), ha solicitado un permiso de formación.</p>
+            <table style="width:100%;border-collapse:collapse;margin:18px 0">
+              <tr style="background:#fef3c7"><td style="padding:10px;font-weight:bold;width:40%">Fecha de inicio</td><td style="padding:10px">${e(datos.fecha)}</td></tr>
+              ${datos.fecha_fin ? `<tr><td style="padding:10px;font-weight:bold">Fecha de fin</td><td style="padding:10px">${e(datos.fecha_fin)}</td></tr>` : ''}
+              ${datos.dias ? `<tr style="background:#fef3c7"><td style="padding:10px;font-weight:bold">Duración</td><td style="padding:10px"><strong>${e(datos.dias)}</strong></td></tr>` : ''}
+              <tr><td style="padding:10px;font-weight:bold">Curso</td><td style="padding:10px">${e(datos.curso)}</td></tr>
+              <tr style="background:#fef3c7"><td style="padding:10px;font-weight:bold">Organiza</td><td style="padding:10px">${e(datos.entidad)}</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">Lugar</td><td style="padding:10px">${e(datos.lugar)}</td></tr>
+            </table>
+            <p style="font-size:14px;color:#78350f;font-weight:bold">Tienes 3 días laborables para aprobar o denegar esta solicitud. Si no contestas, pasará al director automáticamente.</p>
+            <div style="text-align:center;margin:24px 0">
+              <a href="${BASE_URL}/gestion/ausencias" style="background:#b45309;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">Resolver en el portal</a>
+            </div>
+          </div>
+        </div>`;
+
+    } else if (tipo === 'formacion_resuelta_jefe') {
+      const aprobada = datos.decision_jefe === 'aprobada';
+      subject = `🎓 Formación ${aprobada ? 'aprobada' : 'denegada'} por jefe de dpto. — ${e(datos.nombre)}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:${aprobada ? '#166534' : '#991b1b'};padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:${aprobada ? '#bbf7d0' : '#fecaca'};margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">
+            <h2 style="color:${aprobada ? '#166534' : '#991b1b'};margin:0 0 12px">${aprobada ? '✅ Aprobada' : '❌ Denegada'} por el jefe de departamento</h2>
+            <p><strong>${e(datos.nombre_jefe)}</strong>, jefe de <strong>${e(datos.departamento)}</strong>, ha <strong>${aprobada ? 'aprobado' : 'denegado'}</strong> el permiso de formación de <strong>${e(datos.nombre)}</strong>.</p>
+            <div style="background:${aprobada ? '#f0fdf4' : '#fef2f2'};border-left:4px solid ${aprobada ? '#16a34a' : '#dc2626'};border-radius:8px;padding:14px;margin:16px 0">
+              <div style="font-weight:bold;margin-bottom:6px">Justificación:</div>
+              <div>${e(datos.motivo_jefe)}</div>
+            </div>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0">
+              <tr style="background:#eef2f7"><td style="padding:10px;font-weight:bold;width:40%">Profesor</td><td style="padding:10px">${e(datos.nombre)}</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">Fecha</td><td style="padding:10px">${e(datos.fecha)}${datos.fecha_fin ? ' — ' + e(datos.fecha_fin) : ''}</td></tr>
+              <tr style="background:#eef2f7"><td style="padding:10px;font-weight:bold">Curso</td><td style="padding:10px">${e(datos.curso)}</td></tr>
+            </table>
+            <div style="text-align:center;margin:24px 0">
+              <a href="${BASE_URL}/gestion/ausencias" style="background:#1e3a5f;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">Ver en el portal</a>
+            </div>
+          </div>
+        </div>`;
+
+    } else if (tipo === 'formacion_denegada_profesor') {
+      subject = `❌ Tu permiso de formación ha sido denegado`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#991b1b;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#fecaca;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">
+            <h2 style="color:#991b1b;margin:0 0 12px">Permiso de formación denegado</h2>
+            <p>Tu jefe de departamento, <strong>${e(datos.jefe_nombre)}</strong>, ha denegado tu solicitud de permiso de formación para el curso <strong>${e(datos.curso)}</strong> del <strong>${e(datos.fecha)}</strong>${datos.fecha_fin ? ` al ${e(datos.fecha_fin)}` : ''}.</p>
+            <div style="background:#fef2f2;border-left:4px solid #dc2626;border-radius:8px;padding:14px;margin:16px 0">
+              <div style="font-weight:bold;margin-bottom:6px">Motivo:</div>
+              <div>${e(datos.motivo)}</div>
+            </div>
+            <p style="font-size:13px;color:#666">Si no estás de acuerdo con esta decisión, habla directamente con la dirección del centro.</p>
+          </div>
+        </div>`;
+
+    } else if (tipo === 'formacion_auto_escalada') {
+      subject = `⏰ Formación sin respuesta del jefe de dpto. — ${e(datos.nombre)}`;
+      html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:#b45309;padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#fde68a;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">
+            <h2 style="color:#b45309;margin:0 0 12px">Sin respuesta del jefe de departamento</h2>
+            <p>Han pasado 3 días laborables y el jefe de <strong>${e(datos.departamento)}</strong> no ha resuelto el permiso de formación de <strong>${e(datos.nombre)}</strong>.</p>
+            <table style="width:100%;border-collapse:collapse;margin:16px 0">
+              <tr style="background:#fef3c7"><td style="padding:10px;font-weight:bold;width:40%">Fecha</td><td style="padding:10px">${e(datos.fecha)}${datos.fecha_fin ? ' — ' + e(datos.fecha_fin) : ''}</td></tr>
+              <tr><td style="padding:10px;font-weight:bold">Curso</td><td style="padding:10px">${e(datos.curso)}</td></tr>
+            </table>
+            <p style="font-size:14px;color:#78350f;font-weight:bold">La solicitud queda ahora bajo tu decisión directa.</p>
+            <div style="text-align:center;margin:24px 0">
+              <a href="${BASE_URL}/gestion/ausencias" style="background:#b45309;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">Ver en el portal</a>
+            </div>
           </div>
         </div>`;
 
