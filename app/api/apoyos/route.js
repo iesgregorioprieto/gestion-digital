@@ -57,6 +57,29 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── El profesor confirma SU apoyo CON INCIDENCIA ───
+    // La guardia queda registrada (la asumió) pero no cuenta para el
+    // reparto proporcional, porque no se llegó a cubrir de verdad.
+    if (accion === 'confirmar_con_incidencia') {
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+      if (!datos?.incidencia?.trim()) return Response.json({ error: 'Describe la incidencia' }, { status: 400 });
+
+      const { data, error } = await supa().from('apoyos_asignados')
+        .update({
+          estado: 'incidencia',
+          confirmado_at: new Date().toISOString(),
+          incidencia: datos.incidencia.trim(),
+          cuenta_reparto: false,
+        })
+        .eq('id', id).eq('profesor_id', sesion.id).select('id');
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (!data || data.length === 0) {
+        return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
+      }
+      return Response.json({ ok: true });
+    }
+
     // ─── Asignar apoyos (uno o varios de golpe) ───
     if (accion === 'asignar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
