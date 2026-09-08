@@ -331,8 +331,16 @@ export default function SalaProfesores() {
                     }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{h.label} ({h.rango})</div>
                       {apoyosHora.map((a, i) => (
-                        <div key={i} style={{ fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '2px 0' }}>
-                          <span style={{ fontWeight: 600 }}>👤 {a.profesor_nombre || 'Profesor'}</span>
+                        <div key={i} style={{
+                          fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0',
+                          borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
+                          paddingLeft: 8, marginLeft: -4,
+                        }}>
+                          <span style={{ fontWeight: 600,
+                            color: a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#fca5a5' }}>
+                            {a.estado === 'confirmado' ? '✅' : a.estado === 'incidencia' ? '⚠️' : '🔴'}{' '}
+                            {a.profesor_nombre || 'Sin asignar'}
+                          </span>
                           <span style={{ fontSize: 11, color: '#94a3b8' }}>
                             {a.grupo ? `→ ${a.grupo}` : ''} {a.aula ? `(${a.aula})` : ''}
                           </span>
