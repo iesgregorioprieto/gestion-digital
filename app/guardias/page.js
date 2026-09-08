@@ -293,6 +293,7 @@ export default function Guardias() {
         nombrePdf,
         abrev,
         sector,
+        departamento: prof.departamento || "",
         tipo: falta.tipo_falta,
         horas: falta.horas || [],
       });
@@ -462,9 +463,28 @@ export default function Guardias() {
       return candidatoEsFP ? 2 : 1;
     };
 
+    // Afinidad por departamento dentro de cada nivel de sector.
+    // Si falta alguien de Matemáticas y hay un profesor de Matemáticas
+    // de guardia, ese cubre antes que el de Lengua, aunque los dos
+    // estén en el sector GENERAL. Lo mismo para FP: un profesor de
+    // TMV cubre antes a otro de TMV que a uno de Hostelería.
+    const ausDelSector = porSector
+      ? (porSector[sectorSolicitante] || porSector[(sectorSolicitante || '').toUpperCase()] || [])
+      : [];
+    const dptoAusente = (ausDelSector[0]?.departamento || '').toLowerCase();
+
+    const afinidadDpto = p => {
+      const profObj = profesoresList.find(pf => claveAbreviatura(pf.apellidos, pf.nombre) === normAbrev(p.abrev));
+      const dpto = (profObj?.departamento || '').toLowerCase();
+      return dpto && dpto === dptoAusente ? 0 : 1;
+    };
+
     libres.sort((a, b) => {
       const pa = prioridadDe(a), pb = prioridadDe(b);
       if (pa !== pb) return pa - pb;
+      // Mismo nivel de sector: el del mismo departamento primero
+      const da = afinidadDpto(a), db = afinidadDpto(b);
+      if (da !== db) return da - db;
       if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
       if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
       return a.nombre.localeCompare(b.nombre);
