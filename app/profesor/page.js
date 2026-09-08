@@ -202,8 +202,8 @@ export default function PanelProfesor() {
     {
       id: 'mantenimiento',
       emoji: '🔧',
-      titulo: 'Mantenimiento',
-      descripcion: 'Notifica desperfectos e incidencias del centro',
+      titulo: 'Incidencias de mantenimiento',
+      descripcion: 'Notifica desperfectos o averías del centro',
       href: '/mantenimiento',
       disponible: true,
       roles: ['todos'],
@@ -255,7 +255,7 @@ export default function PanelProfesor() {
     {
       id: 'incidencias',
       emoji: '🐞',
-      titulo: 'Avisar de un fallo',
+      titulo: 'Incidencias y sugerencias de la app',
       descripcion: 'Cuéntanos qué no funciona o qué echas de menos en la aplicación',
       href: '/incidencias',
       disponible: true,
