@@ -6,6 +6,48 @@ import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
 
 /**
+ * Departamentos de FP con cuadrante de guardias propio.
+ *
+ * Para estos departamentos, el permiso de formación pasa primero por el
+ * jefe de departamento antes de llegar al director. El resto va directo.
+ * Normalizado: minúsculas, sin acentos, sin espacios extra.
+ */
+const DPTOS_FP = [
+  'tmv/carroceria', 'tmv/carrocería', 'carroceria', 'carrocería',
+  'hosteleria', 'hostelería',
+  'informatica', 'informática',
+  'electricidad / electronica', 'electricidad / electrónica',
+  'electricidad/electronica', 'electricidad/electrónica',
+  'comercio',
+  'administracion', 'administración',
+  'industrias alimentarias',
+  'fol',
+];
+
+/**
+ * Fecha límite: X días laborables desde hoy.
+ * Salta sábados y domingos.
+ */
+function limitePlazo(diasLaborables) {
+  const d = new Date();
+  let restantes = diasLaborables;
+  while (restantes > 0) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0 && d.getDay() !== 6) restantes--;
+  }
+  return d.toISOString().slice(0, 10);
+}
+
+function esDptoFP(dpto) {
+  if (!dpto) return false;
+  const norm = dpto.trim().toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return DPTOS_FP.some(d =>
+    d.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === norm
+  );
+}
+
+/**
  * LECTURA DE AUSENCIAS
  *
  * El texto de la justificación suele contener información médica.
@@ -200,10 +242,30 @@ export async function POST(request) {
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
-      // Permiso de formación: se avisa a dirección. Si el correo falla,
-      // la ausencia ya está guardada y no se pierde nada.
+      // Permiso de formación: flujo de aprobación.
+      //
+      // Si el profesor es de un departamento de FP, el permiso pasa
+      // primero por su jefe de departamento. Si es de otro, va directo
+      // al director como hasta ahora.
       if (fila.subtipo === 'permiso_formacion') {
-        avisarFormacion(fila).catch(err => console.error('aviso formacion:', err?.message));
+        const { data: profData } = await supa()
+          .from('profesores')
+          .select('departamento')
+          .eq('id', fila.profesor_id);
+        const dpto = (profData || [])[0]?.departamento || '';
+
+        if (esDptoFP(dpto)) {
+          // Marcar como pendiente de aprobación del jefe
+          await supa().from('ausencias')
+            .update({ aprobacion_jefe: 'pendiente', aprobacion_jefe_limite: limitePlazo(3) })
+            .eq('id', (data || [])[0]?.id);
+
+          avisarJefeFormacion(fila, dpto).catch(err =>
+            console.error('aviso jefe formacion:', err?.message));
+        } else {
+          avisarFormacion(fila).catch(err =>
+            console.error('aviso formacion:', err?.message));
+        }
       }
 
       // Licencia por enfermedad: aviso a dirección y jefatura de estudios
@@ -284,6 +346,90 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Aprobación/denegación del jefe de departamento ───
+    if (accion === 'resolver_jefe') {
+      if (!id || !datos?.decision || !datos?.motivo?.trim()) {
+        return Response.json({ error: 'Falta la decisión o la justificación' }, { status: 400 });
+      }
+
+      const decision = datos.decision; // 'aprobada' o 'denegada'
+      if (!['aprobada', 'denegada'].includes(decision)) {
+        return Response.json({ error: 'Decisión no válida' }, { status: 400 });
+      }
+
+      // Comprobar que es el jefe del departamento del profesor
+      const { data: ausRows } = await supa().from('ausencias')
+        .select('id, profesor_id, subtipo, aprobacion_jefe, datos_extra, fecha_inicio, fecha_fin')
+        .eq('id', id);
+      const aus = (ausRows || [])[0];
+      if (!aus || aus.subtipo !== 'permiso_formacion' || aus.aprobacion_jefe !== 'pendiente') {
+        return Response.json({ error: 'No se puede resolver esta solicitud' }, { status: 400 });
+      }
+
+      const { data: profAus } = await supa().from('profesores').select('departamento, nombre, apellidos').eq('id', aus.profesor_id);
+      const dptoProf = (profAus || [])[0]?.departamento || '';
+      const nombreProf = profAus?.[0] ? `${profAus[0].nombre || ''} ${profAus[0].apellidos || ''}`.trim() : '';
+
+      const { data: misDatos } = await supa().from('profesores').select('departamento, rol, nombre, apellidos').eq('id', sesion.id);
+      const miDpto = (misDatos || [])[0]?.departamento || '';
+      const misRoles = Array.isArray((misDatos || [])[0]?.rol) ? (misDatos || [])[0].rol : [];
+      const nombreJefe = misDatos?.[0] ? `${misDatos[0].nombre || ''} ${misDatos[0].apellidos || ''}`.trim() : '';
+
+      if (miDpto !== dptoProf || !misRoles.includes('jefe_departamento')) {
+        if (!esDirectivo(sesion)) {
+          return Response.json({ error: 'No eres el jefe de este departamento' }, { status: 403 });
+        }
+      }
+
+      // Guardar la resolución
+      await supa().from('ausencias').update({
+        aprobacion_jefe: decision,
+        aprobacion_jefe_por: sesion.id,
+        aprobacion_jefe_fecha: new Date().toISOString(),
+        aprobacion_jefe_motivo: datos.motivo.trim(),
+      }).eq('id', id);
+
+      const ex = aus.datos_extra || {};
+
+      // Avisar al director siempre
+      avisarFormacion({
+        ...aus,
+        _decision_jefe: decision,
+        _motivo_jefe: datos.motivo.trim(),
+        _nombre_jefe: nombreJefe,
+        _nombre_prof: nombreProf,
+        _departamento: dptoProf,
+      }).catch(err => console.error('aviso director tras jefe:', err?.message));
+
+      // Si denegada, avisar al profesor
+      if (decision === 'denegada') {
+        const { data: profEmail } = await supa().from('profesores').select('email').eq('id', aus.profesor_id);
+        const emailProf = (profEmail || [])[0]?.email;
+        if (emailProf) {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+          fetch(`${baseUrl}/api/enviar-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-clave-interna': process.env.SESSION_SECRET || '' },
+            body: JSON.stringify({
+              tipo: 'formacion_denegada_profesor',
+              datos: {
+                email: emailProf,
+                nombre: nombreProf,
+                jefe_nombre: nombreJefe,
+                departamento: dptoProf,
+                fecha: aus.fecha_inicio || '',
+                fecha_fin: aus.fecha_fin || '',
+                curso: ex.curso || '',
+                motivo: datos.motivo.trim(),
+              },
+            }),
+          }).catch(() => {});
+        }
+      }
+
+      return Response.json({ ok: true });
+    }
+
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
@@ -326,6 +472,69 @@ async function avisarBaja(fila) {
   });
 }
 
+/**
+ * Aviso al jefe de departamento de que un profesor de su departamento
+ * ha pedido un permiso de formación. El jefe tiene 3 días laborables
+ * para aprobar o denegar. Si no contesta, pasa al director.
+ */
+async function avisarJefeFormacion(fila, dpto) {
+  const cliente = supa();
+
+  // Buscar al jefe del departamento
+  const { data: jefes } = await cliente
+    .from('profesores')
+    .select('id, nombre, apellidos, email, departamento')
+    .eq('departamento', dpto)
+    .contains('rol', ['jefe_departamento']);
+
+  if (!jefes || jefes.length === 0) {
+    // Sin jefe → directo al director
+    console.error(`[formacion] Sin jefe en ${dpto}, va directo al director`);
+    return avisarFormacion(fila);
+  }
+
+  const jefe = jefes[0];
+  if (!jefe.email) return avisarFormacion(fila);
+
+  // Datos del profesor que pide
+  const { data: profs } = await cliente
+    .from('profesores').select('nombre, apellidos').eq('id', fila.profesor_id);
+  const prof = (profs || [])[0];
+  const nombre = prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : 'Un profesor/a';
+  const ex = fila.datos_extra || {};
+
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+
+  await fetch(`${baseUrl}/api/enviar-email`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-clave-interna': process.env.SESSION_SECRET || '',
+    },
+    body: JSON.stringify({
+      tipo: 'formacion_jefe_pendiente',
+      datos: {
+        email: jefe.email,
+        nombre,
+        jefe_nombre: `${jefe.nombre || ''} ${jefe.apellidos || ''}`.trim(),
+        departamento: dpto,
+        fecha: fila.fecha_inicio || '',
+        fecha_fin: fila.fecha_fin || '',
+        dias: (() => {
+          if (!fila.fecha_inicio || !fila.fecha_fin) return '';
+          const d = Math.round((new Date(fila.fecha_fin + 'T12:00:00') - new Date(fila.fecha_inicio + 'T12:00:00')) / 86400000) + 1;
+          return d > 1 ? `${d} días` : '1 día';
+        })(),
+        curso: ex.curso || '',
+        entidad: ex.entidad || '',
+        lugar: ex.lugar || '',
+        horario: ex.horario || '',
+        horas: ex.horas ? `${ex.horas} h` : '',
+      },
+    }),
+  });
+}
+
 async function avisarFormacion(fila) {
   const cliente = supa();
 
@@ -350,6 +559,9 @@ async function avisarFormacion(fila) {
   const ex = fila.datos_extra || {};
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
 
+  // Si viene con la decisión del jefe, el correo lo incluye
+  const tipoCorreo = fila._decision_jefe ? 'formacion_resuelta_jefe' : 'formacion_solicitada';
+
   for (const email of destinos) {
     await fetch(`${baseUrl}/api/enviar-email`, {
       method: 'POST',
@@ -358,10 +570,14 @@ async function avisarFormacion(fila) {
         'x-clave-interna': process.env.SESSION_SECRET || '',
       },
       body: JSON.stringify({
-        tipo: 'formacion_solicitada',
+        tipo: tipoCorreo,
         datos: {
           email,
-          nombre,
+          nombre: fila._nombre_prof || nombre,
+          decision_jefe: fila._decision_jefe || '',
+          motivo_jefe: fila._motivo_jefe || '',
+          nombre_jefe: fila._nombre_jefe || '',
+          departamento: fila._departamento || '',
           fecha: fila.fecha_inicio || '',
           fecha_fin: fila.fecha_fin || '',
           dias: (() => {
