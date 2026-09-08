@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { verificarSesion, esDirectivo } from '@/lib/sesion';
+import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { etiquetaMotivo } from '@/lib/motivosAusencia';
 
@@ -25,10 +25,25 @@ const TIPOS_DLD = {
   '3_lectivo': '📗 3º DLD lectivo',
 };
 
+/** Lee la sesión de la cookie, igual que el resto de rutas */
+async function sesionDe(request) {
+  const secreto = process.env.SESSION_SECRET;
+  if (!secreto) return null;
+  const cookies = request.headers.get('cookie') || '';
+  const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
+  if (!m) return null;
+  return verificarSesion(m[1], secreto);
+}
+
 export async function GET(request) {
-  const sesion = await verificarSesion(request);
+  // Solo se exige sesión, no ser directivo. El escenario muestra quién
+  // falta (nombre y motivo genérico), nunca datos médicos ni justificantes.
+  // Lo usan las pantallas de gestión de ausencias, DLD, actividades y
+  // jefatura de estudios, que son de dirección; pero antes lo leía el
+  // navegador sin comprobar nada, y el dato no es más sensible que la
+  // pantalla de la sala de profesores.
+  const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
-  if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
   const fecha = new URL(request.url).searchParams.get('fecha');
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
