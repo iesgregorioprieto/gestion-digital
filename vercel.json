@@ -43,6 +43,14 @@
     {
       "path": "/api/cron/dld-pendientes",
       "schedule": "0 17 * * *"
+    },
+    {
+      "path": "/api/cron/formacion-jefe",
+      "schedule": "0 6 * * 1-5"
+    },
+    {
+      "path": "/api/cron/formacion-jefe",
+      "schedule": "0 7 * * 1-5"
     }
   ]
 }
