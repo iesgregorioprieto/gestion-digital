@@ -54,15 +54,54 @@ function HorarioContenido() {
       .eq('estado', 'activo').order('apellidos').then(({ data }) => setCompanyeros(data || []));
   }, []);
 
+  /**
+   * Busca el nombre exacto en horarios_profesores usando primero el nombre
+   * completo (nombre + ambos apellidos) para desambiguar homónimos de primer
+   * apellido. Si no hay coincidencia exacta, cae al primer apellido solo.
+   */
+  async function buscarNombrePDF(nombre, apellidos) {
+    const primerNombre = nombre.split(' ')[0];
+    const primerApellido = apellidos.split(' ')[0];
+    const segundoApellido = apellidos.split(' ')[1] || '';
+
+    // Intento 1: RPC estándar con primer nombre + primer apellido
+    const { data: nPdf1 } = await consultaRpc('buscar_profesor_horario', {
+      p_nombre: primerNombre,
+      p_apellido: primerApellido,
+    });
+
+    if (!nPdf1) return null;
+
+    // Si hay segundo apellido, verificar que el resultado lo contiene.
+    // Así "Jiménez Jiménez" y "Jiménez Núñez" no se confunden aunque
+    // la RPC devuelva el mismo primero en la lista.
+    if (segundoApellido) {
+      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (norm(nPdf1).includes(norm(segundoApellido))) return nPdf1;
+
+      // El resultado no tiene el segundo apellido correcto: buscar en
+      // el listado de horarios por las dos primeras letras del segundo apellido
+      const { data: candidatos } = await consulta('horarios_profesores')
+        .select('profesor_nombre_pdf')
+        .ilike('profesor_nombre_pdf', '%' + primerApellido + '%')
+        .limit(20);
+
+      const match = (candidatos || []).find(c =>
+        norm(c.profesor_nombre_pdf).includes(norm(primerNombre)) &&
+        norm(c.profesor_nombre_pdf).includes(norm(segundoApellido))
+      );
+      if (match) return match.profesor_nombre_pdf;
+    }
+
+    return nPdf1;
+  }
+
   async function verHorarioProf(prof) {
     setProfVista(prof);
     setBusqueda('');
     setCargando(true);
-    const { data: nPdf } = await consultaRpc('buscar_profesor_horario', {
-      p_nombre: prof.nombre.split(' ')[0],
-      p_apellido: prof.apellidos.split(' ')[0],
-    });
-    if (!nPdf) { setHorario([]); setNombre(prof.nombre + ' ' + prof.apellidos); setCargando(false); return; }
+    const nPdf = await buscarNombrePDF(prof.nombre, prof.apellidos);
+    if (!nPdf) { setHorario([]); setNombre(prof.apellidos + ', ' + prof.nombre); setCargando(false); return; }
     const { data } = await consulta('horarios_profesores')
       .select('dia, hora_id, tipo, grupo, materia, aula')
       .eq('profesor_nombre_pdf', nPdf)
@@ -85,31 +124,18 @@ function HorarioContenido() {
     }
 
     try {
-      // Paso 1: obtener nombre y apellidos separados (igual que DLD)
       const { data: profRows } = await consulta('profesores')
         .select('nombre, apellidos')
         .eq('id', profId);
       const prof = (profRows || [])[0];
 
-      if (!prof) {
-        setError('No se encontró tu perfil. Contacta con secretaría.');
-        setCargando(false);
-        return;
-      }
+      if (!prof) { setError('No se encontró tu perfil. Contacta con secretaría.'); setCargando(false); return; }
 
-      // Paso 2: buscar profesor_nombre_pdf con RPC (igual que DLD)
-      const { data: nPdf } = await consultaRpc('buscar_profesor_horario', {
-          p_nombre: prof.nombre.split(' ')[0],
-          p_apellido: prof.apellidos.split(' ')[0]
-        });
+      setNombre(prof.apellidos + ', ' + prof.nombre);
+      const nPdf = await buscarNombrePDF(prof.nombre, prof.apellidos);
 
-      if (!nPdf) {
-        setError('No se encontró tu horario. Contacta con secretaría.');
-        setCargando(false);
-        return;
-      }
+      if (!nPdf) { setError('No se encontró tu horario. Contacta con secretaría.'); setCargando(false); return; }
 
-      // Paso 3: cargar horario completo con ese nombre (igual que DLD)
       const { data } = await consulta('horarios_profesores')
         .select('dia, hora_id, tipo, grupo, materia, aula')
         .eq('profesor_nombre_pdf', nPdf)
