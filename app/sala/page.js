@@ -53,6 +53,12 @@ export default function SalaProfesores() {
   const diaNombre = DIAS[diaIdx];
   const horaAct = horaActual();
 
+  // Hora que se está mirando. Por defecto la hora actual, pero se puede
+  // cambiar para ver las guardias de otra franja sin cambiar de día.
+  // Al volver a "hoy" se resetea a la hora real.
+  const [horaVista, setHoraVista] = useState(null); // null = usar la real
+  const horaEfectiva = (esHoy && !horaVista) ? horaAct : (horaVista || horaAct);
+
   function moverDia(saltos) {
     const d = new Date(dia + 'T12:00:00');
     d.setDate(d.getDate() + saltos);
@@ -135,6 +141,9 @@ export default function SalaProfesores() {
     return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); clearInterval(intervaloNoticias); clearInterval(alternancia); };
   }, [cargarDatos]);
 
+  // Al cambiar de día, resetear la hora seleccionada
+  useEffect(() => { setHoraVista(null); }, [dia]);
+
   // Si alguien se va y deja la pantalla en otro día, vuelve sola a hoy
   // a los tres minutos. Está en la pared: nadie va a acordarse.
   useEffect(() => {
@@ -184,7 +193,7 @@ export default function SalaProfesores() {
     });
   }
 
-  const totalAusentesAhora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(horaAct)).length;
+  const totalAusentesAhora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(horaEfectiva)).length;
   const totalAusentesHoy = Object.keys(profesAusentes).length;
 
   const formatFecha = () => {
@@ -233,6 +242,17 @@ export default function SalaProfesores() {
               👁️ Estás viendo otro día, no el de hoy
             </div>
           )}
+          {esHoy && horaVista && (
+            <div style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 11px', borderRadius: 7,
+              backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid #3b82f6',
+              fontSize: 13.5, fontWeight: 700, color: '#93c5fd' }}>
+              👁️ Mostrando {HORAS.find(h => h.id === horaVista)?.label || horaVista}
+              <button onClick={() => setHoraVista(null)} style={{ background: 'none', border: 'none',
+                color: '#93c5fd', cursor: 'pointer', fontSize: 13, fontWeight: 700, padding: 0 }}>
+                ← Hora actual
+              </button>
+            </div>
+          )}
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 96, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
@@ -274,10 +294,10 @@ export default function SalaProfesores() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {Object.entries(profesAusentes).sort((a,b) => a[0].localeCompare(b[0])).map(([nombre, info]) => (
                   <div key={nombre} style={{
-                    backgroundColor: info.horas.includes(horaAct) ? '#7f1d1d' : '#0f172a',
+                    backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
                     borderRadius: 8, padding: '10px 14px',
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    border: info.horas.includes(horaAct) ? '1px solid #ef4444' : '1px solid #334155',
+                    border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
                   }}>
                     <div>
                       <span style={{ fontWeight: 600, fontSize: 14 }}>{nombre}</span>
@@ -295,9 +315,9 @@ export default function SalaProfesores() {
                           width: 26, height: 26, borderRadius: '50%',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 11, fontWeight: 700,
-                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaAct ? '#ef4444' : '#475569') : 'transparent',
+                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
                           color: info.horas.includes(h.id) ? 'white' : '#475569',
-                          border: h.id === horaAct ? '2px solid #ef4444' : '1px solid #475569',
+                          border: h.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
                         }}>
                           {h.label.replace('ª','')}
                         </span>
@@ -325,9 +345,9 @@ export default function SalaProfesores() {
                   if (apoyosHora.length === 0) return null;
                   return (
                     <div key={h.id} style={{
-                      backgroundColor: h.id === horaAct ? '#1e3a5f' : '#0f172a',
+                      backgroundColor: h.id === horaEfectiva ? '#1e3a5f' : '#0f172a',
                       borderRadius: 8, padding: '8px 12px',
-                      border: h.id === horaAct ? '1.5px solid #3b82f6' : '1px solid #334155',
+                      border: h.id === horaEfectiva ? '1.5px solid #3b82f6' : '1px solid #334155',
                     }}>
                       <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{h.label} ({h.rango})</div>
                       {apoyosHora.map((a, i) => (
@@ -362,11 +382,12 @@ export default function SalaProfesores() {
           <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
             <div style={{ display: 'flex', gap: 6 }}>
               {HORAS.map(h => (
-                <div key={h.id} style={{
+                <div key={h.id} onClick={() => setHoraVista(h.id === horaEfectiva && horaVista ? null : h.id)}
+                  style={{
                   flex: 1, textAlign: 'center', padding: '5px 3px', borderRadius: 7,
-                  backgroundColor: h.id === horaAct ? '#1d4ed8' : '#0f172a',
-                  border: h.id === horaAct ? '2px solid #3b82f6' : '1px solid #334155',
-                  transition: 'all 0.3s',
+                  backgroundColor: h.id === horaEfectiva ? '#1d4ed8' : '#0f172a',
+                  border: h.id === horaEfectiva ? '2px solid #3b82f6' : '1px solid #334155',
+                  transition: 'all 0.3s', cursor: 'pointer',
                 }}>
                   <div style={{ fontSize: 15, fontWeight: 800 }}>{h.label}</div>
                   <div style={{ fontSize: 10, opacity: 0.55 }}>{h.rango}</div>
