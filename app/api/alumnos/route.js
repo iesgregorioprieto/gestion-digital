@@ -145,6 +145,30 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // Importar grupos (vacía todo y crea los nuevos, en orden correcto)
+    if (accion === 'importar_grupos') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'Sin permisos' }, { status: 403 });
+      const { grupos, curso } = cuerpo;
+      if (!Array.isArray(grupos) || !curso) return Response.json({ error: 'Datos incorrectos' }, { status: 400 });
+
+      // 1. Vaciar alumnos (todos los cursos: la matrícula se reimporta entera)
+      const { error: eA } = await supa().from('alumnos').delete().gte('id', 0);
+      if (eA) return Response.json({ error: 'Alumnos: ' + eA.message }, { status: 500 });
+
+      // 2. Vaciar grupos (todos los cursos)
+      const { error: eG } = await supa().from('grupos').delete().gte('id', 0);
+      if (eG) return Response.json({ error: 'Grupos: ' + eG.message }, { status: 500 });
+
+      // 3. Insertar grupos nuevos en lotes
+      const LOTE = 100;
+      const lista = grupos.map(g => ({ ...g, curso_academico: curso }));
+      for (let i = 0; i < lista.length; i += LOTE) {
+        const { error } = await supa().from('grupos').insert(lista.slice(i, i + LOTE));
+        if (error) return Response.json({ error: 'Insertar grupos: ' + error.message }, { status: 500 });
+      }
+      return Response.json({ ok: true, grupos: lista.length });
+    }
+
     // Importar la matrícula del curso (solo equipo directivo)
     if (accion === 'importar') {
       if (!esDirectivo(sesion)) {
