@@ -54,7 +54,7 @@ export async function POST(request) {
 
     // Quien no es directivo solo puede crear en las tablas abiertas
     const puede = esDirectivo(sesion)
-      || (accion === 'crear' && ABIERTAS_A_PROFESORADO.includes(tabla));
+      || ((accion === 'crear' || accion === 'insertar_lista') && ABIERTAS_A_PROFESORADO.includes(tabla));
     if (!puede) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
     // ─── Crear (uno o varios) ───
