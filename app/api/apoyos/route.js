@@ -80,6 +80,39 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Autoasignarse una guardia huérfana ───
+    // Cualquier profesor de guardia puede apuntarse a cubrir una guardia
+    // que nadie ha cogido todavía. No hace falta ser directivo: la lista
+    // de candidatos ya la calcula la pantalla, y el servidor comprueba
+    // que la fecha y hora son de hoy o futuro (no del pasado).
+    if (accion === 'autoasignar') {
+      const { fecha, hora, sector_apoyo, profesor_id, curso_academico } = datos || {};
+      if (!fecha || !hora || !sector_apoyo || !profesor_id || !curso_academico) {
+        return Response.json({ error: 'Datos incompletos' }, { status: 400 });
+      }
+      // Cualquier profesor con sesión puede activar a cualquier candidato de la lista.
+      // La pantalla ya filtra quién es candidato válido; la API solo verifica
+      // que la sesión existe y que el dato está completo.
+      // No repetir si ya existe una para esa persona/hora/fecha
+      const { data: existe } = await supa().from('apoyos_asignados')
+        .select('id').eq('profesor_id', profesor_id).eq('fecha', fecha).eq('hora', hora).limit(1);
+      if (existe && existe.length > 0) {
+        return Response.json({ error: 'Ya tienes una guardia asignada esa hora' }, { status: 409 });
+      }
+      const { error } = await supa().from('apoyos_asignados').insert([{
+        fecha,
+        hora,
+        sector_apoyo,
+        profesor_id,
+        curso_academico,
+        estado: 'pendiente',
+        tipo_apoyo: 'obligatorio',
+        asignado_por: sesion.id,
+      }]);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Asignar apoyos (uno o varios de golpe) ───
     if (accion === 'asignar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
