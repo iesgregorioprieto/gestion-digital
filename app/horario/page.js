@@ -3,7 +3,6 @@ import { consulta, consultaRpc } from '@/lib/consulta';
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { getSupabase } from "../../lib/supabase";
 import { getCursoActual } from '@/lib/curso';
 
 const DIAS = ['lunes','martes','miercoles','jueves','viernes'];
@@ -38,6 +37,9 @@ function HorarioContenido() {
   const [nombre, setNombre] = useState('');
   const [error, setError] = useState('');
   const [vista, setVista] = useState(vistaParam === 'hoy' ? 'hoy' : 'semana');
+  const [busqueda, setBusqueda] = useState('');
+  const [companyeros, setCompanyeros] = useState([]);
+  const [profVista, setProfVista] = useState(null); // null = el mío propio
 
   const verde = '#0f766e';
   const azul = '#1e3a5f';
@@ -45,7 +47,30 @@ function HorarioContenido() {
   const hoyDia = DIAS[hoyIdx - 1] || '';
   const horaAct = horaActual();
 
-  useEffect(() => { cargarHorario(); }, []);
+  useEffect(() => {
+    cargarHorario();
+    // Cargar lista de profesores para el buscador
+    consulta('profesores').select('id, nombre, apellidos, departamento')
+      .eq('estado', 'activo').order('apellidos').then(({ data }) => setCompanyeros(data || []));
+  }, []);
+
+  async function verHorarioProf(prof) {
+    setProfVista(prof);
+    setBusqueda('');
+    setCargando(true);
+    const { data: nPdf } = await consultaRpc('buscar_profesor_horario', {
+      p_nombre: prof.nombre.split(' ')[0],
+      p_apellido: prof.apellidos.split(' ')[0],
+    });
+    if (!nPdf) { setHorario([]); setNombre(prof.nombre + ' ' + prof.apellidos); setCargando(false); return; }
+    const { data } = await consulta('horarios_profesores')
+      .select('dia, hora_id, tipo, grupo, materia, aula')
+      .eq('profesor_nombre_pdf', nPdf)
+      .eq('curso_academico', await getCursoActual());
+    setHorario(data || []);
+    setNombre(prof.apellidos + ', ' + prof.nombre);
+    setCargando(false);
+  }
 
   async function cargarHorario() {
     setCargando(true);
@@ -131,13 +156,52 @@ function HorarioContenido() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0fdfa', fontFamily: 'system-ui, sans-serif' }}>
 
+      {/* BUSCADOR DE COMPAÑERO */}
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #d1fae5', padding: '10px 16px', position: 'relative' }}>
+        <input
+          type="text"
+          value={busqueda}
+          onChange={e => setBusqueda(e.target.value)}
+          placeholder="🔍 Buscar horario de un compañero/a..."
+          style={{ width: '100%', padding: '10px 14px', borderRadius: 10, border: '1.5px solid #a7f3d0',
+            fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
+        />
+        {profVista && (
+          <button onClick={() => { setProfVista(null); cargarHorario(); }}
+            style={{ marginTop: 6, background: 'none', border: 'none', color: verde,
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
+            ← Ver mi horario
+          </button>
+        )}
+        {busqueda.length >= 2 && (
+          <div style={{ position: 'absolute', top: '100%', left: 16, right: 16, zIndex: 100,
+            backgroundColor: 'white', border: '1.5px solid #a7f3d0', borderRadius: 10,
+            boxShadow: '0 4px 15px rgba(0,0,0,0.1)', maxHeight: 260, overflowY: 'auto' }}>
+            {companyeros
+              .filter(c => (c.apellidos + ' ' + c.nombre).toLowerCase().includes(busqueda.toLowerCase()))
+              .slice(0, 12)
+              .map(c => (
+                <div key={c.id} onClick={() => verHorarioProf(c)}
+                  style={{ padding: '11px 14px', cursor: 'pointer', borderBottom: '1px solid #f0fdf4',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontWeight: 600, fontSize: 14 }}>{c.apellidos}, {c.nombre}</span>
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>{c.departamento || ''}</span>
+                </div>
+              ))}
+            {companyeros.filter(c => (c.apellidos + ' ' + c.nombre).toLowerCase().includes(busqueda.toLowerCase())).length === 0 && (
+              <div style={{ padding: 14, color: '#888', fontSize: 13 }}>Sin resultados</div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* HEADER */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => window.location.href = '/profesor'} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
           <span style={{ fontSize: 22 }}>🕐</span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>Mi Horario</div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>{profVista ? profVista.apellidos + ', ' + profVista.nombre : 'Mi Horario'}</div>
             <div style={{ fontSize: 12, opacity: 0.85 }}>{nombre}</div>
           </div>
         </div>
