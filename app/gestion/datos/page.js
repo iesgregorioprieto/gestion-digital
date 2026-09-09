@@ -353,20 +353,30 @@ export default function GestionDatos() {
     setProcesando(true);
 
     // Borrar e insertar grupos
-    await fetch('/api/centro', {
+    const rBorrarGrupos = await fetch('/api/centro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tabla: 'grupos', accion: 'borrar', filtro: { curso_academico: cursoNuevo } }),
     });
-    await fetch('/api/centro', {
+    if (!rBorrarGrupos.ok) {
+      const err = await rBorrarGrupos.json().catch(() => ({}));
+      mostrarMensaje('❌ Error al borrar grupos: ' + (err.error || rBorrarGrupos.status), 'error');
+      setProcesando(false); setModalAlumnos(false); return;
+    }
+    const rCrearGrupos = await fetch('/api/centro', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tabla: 'grupos',
-        accion: 'crear',
+        accion: 'insertar_lista',
         lista: gruposNuevos.map(g => ({ ...g, curso_academico: cursoNuevo })),
       }),
     });
+    if (!rCrearGrupos.ok) {
+      const err = await rCrearGrupos.json().catch(() => ({}));
+      mostrarMensaje('❌ Error al crear grupos: ' + (err.error || rCrearGrupos.status), 'error');
+      setProcesando(false); setModalAlumnos(false); return;
+    }
 
     // Borrar e insertar alumnos en lotes
     // La importación la hace el servidor: la tabla de alumnado ya no es
