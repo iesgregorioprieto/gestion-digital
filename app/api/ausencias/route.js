@@ -17,8 +17,6 @@ const DPTOS_FP = [
   'ee',
   'hosteleria', 'hostelería',
   'informatica', 'informática',
-  
-  
   'comercio',
   'administracion', 'administración',
   'industrias alimentarias',
