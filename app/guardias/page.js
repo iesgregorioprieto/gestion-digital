@@ -889,58 +889,76 @@ export default function Guardias() {
                                   El sector pierde 1 profesor de guardia. Puede necesitar un sustituto si otros profesores del sector también faltan.
                                 </div>
 
-                                {/* Lista de candidatos para asumir la guardia */}
+                                {/* Lista de candidatos — diseño a prueba de ciruelos */}
                                 {(() => {
                                   const libre = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
                                   if (libre.length === 0) return null;
-                                  const soyCandidata = libre.some(c => c.profesorId === profesorId);
                                   return (
-                                    <div style={{ marginTop:10, borderTop:'1px dashed #fbbf24', paddingTop:10 }}>
-                                      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
-                                        <span style={{ fontSize:12, fontWeight:800, color:'#78350f' }}>
-                                          💡 Asignar sustituto de guardia ({libre.length} disponibles)
-                                        </span>
-                                        <span title="La app sugiere al primero de la lista (el que menos guardias lleva). Cualquiera de los candidatos puede pulsar Activar para asumir la guardia." style={{ cursor:'help', fontSize:14, color:'#b45309' }}>ℹ️</span>
-                                        <span style={{ marginLeft:'auto', fontSize:10, color:'#92400e' }}>pulsa para ver</span>
-                                      </div>
-                                      <div style={{ fontSize:11, color:'#92400e', marginBottom:8, fontStyle:'italic' }}>
-                                        Ordenados por menos apoyos previos. Al activar contará en el contador.
-                                      </div>
-                                      {libre.map((c, i) => {
-                                        const esSugerido = i === 0;
-                                        const esMiTurno = c.profesorId === profesorId;
-                                        return (
-                                          <div key={c.abrev} style={{
-                                            display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, marginBottom:5,
-                                            backgroundColor: esSugerido ? '#fef9c3' : esMiTurno ? '#f0fdf4' : '#fafafa',
-                                            border:'1.5px solid ' + (esSugerido ? '#fbbf24' : esMiTurno ? '#86efac' : '#e5e7eb'),
-                                          }}>
-                                            <span style={{ fontSize:13, minWidth:20, fontWeight:700, color:'#78350f' }}>
-                                              {esSugerido ? '🏅' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
-                                            </span>
-                                            <div style={{ flex:1, minWidth:0 }}>
-                                              <div style={{ fontSize:13, fontWeight: esSugerido ? 800 : 600, color:'#1a1a1a' }}>
-                                                {c.nombre}
-                                              </div>
-                                              <div style={{ fontSize:11, color:'#666' }}>
-                                                {c.sectorOriginal} · {c.apoyosPrevios} apoyos
-                                              </div>
-                                            </div>
-                                            <button onClick={() => {
-                                              const apoyosFijados = asignacionAutomatica()
-                                                .filter(a => a.ausencia.sector.toUpperCase() === sectorSup)
-                                                .map(a => normAbrev(a.cubre?.abrev || ''));
-                                              activarApoyo(c, sectorSup, apoyosFijados);
-                                            }} style={{
-                                              padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer',
-                                              backgroundColor: esSugerido ? '#b45309' : (esMiTurno ? verde : '#64748b'),
-                                              color:'white', fontWeight:800, fontSize:12, whiteSpace:'nowrap',
-                                            }}>
-                                              ✅ Activar
-                                            </button>
+                                    <div style={{ marginTop:12, borderTop:'2px dashed #fbbf24', paddingTop:12 }}>
+
+                                      {libre[0]?.profesorId === profesorId ? (
+                                        /* SOY EL SUGERIDO: pantalla grande y clara */
+                                        <div style={{ backgroundColor:'#fff7ed', border:'2.5px solid #f97316', borderRadius:12, padding:16, textAlign:'center' }}>
+                                          <div style={{ fontSize:22, marginBottom:6 }}>👆 TE TOCA A TI</div>
+                                          <div style={{ fontSize:14, fontWeight:800, color:'#c2410c', marginBottom:4 }}>
+                                            Eres el/la sugerido/a para cubrir esta guardia
                                           </div>
-                                        );
-                                      })}
+                                          <div style={{ fontSize:12, color:'#7c2d12', marginBottom:14 }}>
+                                            La app te ha elegido porque llevas menos guardias que el resto
+                                          </div>
+                                          <button onClick={() => activarApoyo(libre[0], sectorSup, [])} style={{
+                                            width:'100%', padding:'14px', borderRadius:10, border:'none', cursor:'pointer',
+                                            backgroundColor:'#f97316', color:'white', fontWeight:900, fontSize:18,
+                                          }}>
+                                            ✅ ASUMIR ESTA GUARDIA
+                                          </button>
+                                          <div style={{ fontSize:11, color:'#9a3412', marginTop:8 }}>
+                                            Si no puedes, deja que lo haga otro compañero de la lista
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* NO SOY EL SUGERIDO: lista compacta */
+                                        <div>
+                                          <div style={{ fontSize:12, fontWeight:700, color:'#78350f', marginBottom:10 }}>
+                                            👥 ¿Quién cubre la guardia? — <span style={{ fontWeight:400 }}>Pulsa ✅ si eres tú o alguien te lo pide</span>
+                                          </div>
+                                          {libre.map((c, i) => {
+                                            const esSugerido = i === 0;
+                                            const esMiTurno = c.profesorId === profesorId;
+                                            return (
+                                              <div key={c.abrev} style={{
+                                                display:'flex', alignItems:'center', gap:10,
+                                                padding: esSugerido ? '12px 14px' : '8px 10px',
+                                                borderRadius:10, marginBottom:6,
+                                                backgroundColor: esSugerido ? '#fff7ed' : esMiTurno ? '#f0fdf4' : '#fafafa',
+                                                border:'2px solid ' + (esSugerido ? '#f97316' : esMiTurno ? '#86efac' : '#e5e7eb'),
+                                              }}>
+                                                <span style={{ fontSize: esSugerido ? 20 : 14, minWidth:28, textAlign:'center' }}>
+                                                  {esSugerido ? '🏅' : esMiTurno ? '🧑‍🏫' : `${i+1}.`}
+                                                </span>
+                                                <div style={{ flex:1, minWidth:0 }}>
+                                                  <div style={{ fontSize: esSugerido ? 15 : 13, fontWeight: esSugerido ? 900 : (esMiTurno ? 700 : 500), color:'#1a1a1a' }}>
+                                                    {c.nombre}
+                                                    {esSugerido && <span style={{ fontSize:11, color:'#f97316', fontWeight:700, marginLeft:8 }}>← SUGERIDO</span>}
+                                                    {!esSugerido && esMiTurno && <span style={{ fontSize:11, color:'#16a34a', fontWeight:700, marginLeft:8 }}>← ERES TÚ</span>}
+                                                  </div>
+                                                  <div style={{ fontSize:11, color:'#9ca3af' }}>
+                                                    {c.sectorOriginal}{esSugerido && <span style={{ color:'#f97316' }}> · lleva menos guardias</span>}
+                                                  </div>
+                                                </div>
+                                                <button onClick={() => activarApoyo(c, sectorSup, [])} style={{
+                                                  padding: esSugerido ? '10px 18px' : '7px 12px',
+                                                  borderRadius:9, border:'none', cursor:'pointer',
+                                                  backgroundColor: esSugerido ? '#f97316' : (esMiTurno ? verde : '#94a3b8'),
+                                                  color:'white', fontWeight:800, fontSize: esSugerido ? 14 : 12, whiteSpace:'nowrap',
+                                                }}>
+                                                  ✅ {esSugerido ? 'Asumir' : 'Activar'}
+                                                </button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
                                     </div>
                                   );
                                 })()}
