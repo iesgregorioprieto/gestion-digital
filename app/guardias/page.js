@@ -102,6 +102,9 @@ export default function Guardias() {
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
+  const [incidenciaId, setIncidenciaId] = useState(null);
+  const [incidenciaTexto, setIncidenciaTexto] = useState('');
+  const [enviandoInc, setEnviandoInc] = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -497,6 +500,31 @@ export default function Guardias() {
 
   // El profesor confirma la guardia que le han preasignado.
   // El servidor comprueba que el apoyo es suyo antes de aceptarlo.
+  async function confirmarConIncidencia() {
+    if (!incidenciaId || !incidenciaTexto.trim()) return;
+    setEnviandoInc(true);
+    try {
+      const r = await fetch('/api/apoyos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'confirmar_con_incidencia', id: incidenciaId,
+          datos: { incidencia: incidenciaTexto.trim() } }),
+      });
+      if (r.ok) {
+        setMisApoyos(prev => prev.map(a =>
+          a.id === incidenciaId
+            ? { ...a, estado: 'incidencia', confirmado_at: new Date().toISOString(), incidencia: incidenciaTexto.trim() }
+            : a
+        ));
+        setIncidenciaId(null);
+        setIncidenciaTexto('');
+      } else {
+        const d = await r.json().catch(() => ({}));
+        alert(d.error || 'No se ha podido registrar la incidencia.');
+      }
+    } catch { alert('Sin conexión.'); }
+    setEnviandoInc(false);
+  }
+
   async function confirmarMiApoyo(apoyoId) {
     try {
       const r = await fetch('/api/apoyos', {
