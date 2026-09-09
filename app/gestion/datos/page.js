@@ -62,7 +62,9 @@ export default function GestionDatos() {
 
   // Alumnos
   const [previewAlumnos, setPreviewAlumnos] = useState([]);
-  const [ultimaImportacion, setUltimaImportacion] = useState('');
+  const [ultimaImportacion, setUltimaImportacion] = useState(() => {
+    try { return localStorage.getItem('ultima_importacion_alumnos') || ''; } catch { return ''; }
+  });
   const [pgaLista, setPgaLista] = useState([]);
   const [previewPGA, setPreviewPGA] = useState(null);
   const [modalAlumnos, setModalAlumnos] = useState(false);
@@ -175,10 +177,15 @@ export default function GestionDatos() {
       consulta('profesores').select('id, estado'),
       consulta('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
     ]);
-    const curso = gs?.[0]?.curso_academico || '—';
+    // El curso que más grupos tiene (no el primero: puede haber restos del año pasado)
+    const cursoCounts = {};
+    (gs || []).forEach(g => { if (g.curso_academico) cursoCounts[g.curso_academico] = (cursoCounts[g.curso_academico] || 0) + 1; });
+    const curso = Object.entries(cursoCounts).sort((a,b) => b[1]-a[1])[0]?.[0] || '—';
+    // Contar solo los del curso principal
+    const gruposDelCurso = (gs || []).filter(g => g.curso_academico === curso);
     setGrupos(gs || []);
     setStats({
-      grupos: gs?.length || 0,
+      grupos: gruposDelCurso?.length || 0,
       alumnos: als?.length || 0,
       horarios: hrs?.length || 0,
       profesores: profs?.filter(p => p.estado === 'activo').length || 0,
@@ -391,6 +398,7 @@ export default function GestionDatos() {
     mostrarMensaje(`✅ ${alumnosNuevos.length} alumnos y ${gruposNuevos.length} grupos importados para ${cursoNuevo} — ${fechaImport}`, 'ok');
     setPreviewAlumnos([]);
     setUltimaImportacion(fechaImport);
+    try { localStorage.setItem('ultima_importacion_alumnos', fechaImport); } catch {}
     cargarStats();
   }
 
