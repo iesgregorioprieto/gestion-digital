@@ -153,7 +153,7 @@ export async function POST(request) {
 
     // ─── Insertar lista de registros (grupos, etc.) ───
     if (accion === 'insertar_lista') {
-      const { lista } = body;
+      // lista ya viene del destructuring de request.json() de arriba
       if (!Array.isArray(lista) || lista.length === 0) {
         return Response.json({ error: 'Lista vacía' }, { status: 400 });
       }
