@@ -165,6 +165,16 @@ export async function POST(request) {
       return Response.json({ ok: true, insertados: lista.length });
     }
 
+    // ─── Borrar todos (sin filtro, para limpiar al importar) ───
+    if (accion === 'borrar_todos') {
+      if (!['grupos', 'actividades_pga'].includes(tabla)) {
+        return Response.json({ error: 'No permitido sin filtro para esta tabla' }, { status: 400 });
+      }
+      const { error } = await supa().from(tabla).delete().gt('id', 0);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Borrar ───
     if (accion === 'borrar') {
       let consulta = supa().from(tabla).delete();
