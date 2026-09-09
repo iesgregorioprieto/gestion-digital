@@ -253,6 +253,16 @@ export default function PanelProfesor() {
       color: '#7e22ce', bg: '#faf5ff', border: '#d8b4fe',
     },
     {
+      id: 'horarios_companeros',
+      emoji: '🕐',
+      titulo: 'Horarios del centro',
+      descripcion: 'Consulta tu horario y el de cualquier compañero/a',
+      href: '/horario',
+      disponible: true,
+      roles: ['todos'],
+      color: '#0f766e', bg: '#f0fdfa', border: '#99f6e4',
+    },
+    {
       id: 'incidencias',
       emoji: '🐞',
       titulo: 'Incidencias y sugerencias de la app',
