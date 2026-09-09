@@ -65,6 +65,12 @@ export default function GestionDatos() {
   const [ultimaImportacion, setUltimaImportacion] = useState(() => {
     try { return localStorage.getItem('ultima_importacion_alumnos') || ''; } catch { return ''; }
   });
+  const [ultimaHorarios, setUltimaHorarios] = useState(() => {
+    try { return localStorage.getItem('ultima_importacion_horarios') || ''; } catch { return ''; }
+  });
+  const [ultimaGuardias, setUltimaGuardias] = useState(() => {
+    try { return localStorage.getItem('ultima_importacion_guardias') || ''; } catch { return ''; }
+  });
   const [pgaLista, setPgaLista] = useState([]);
   const [previewPGA, setPreviewPGA] = useState(null);
   const [modalAlumnos, setModalAlumnos] = useState(false);
@@ -663,7 +669,10 @@ export default function GestionDatos() {
         }
       }
       
-      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente` });
+      const tsHor = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
+      setUltimaHorarios(tsHor);
+      try { localStorage.setItem('ultima_importacion_horarios', tsHor); } catch {}
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}` });
       setModalHorarios(false);
       setPreviewHorarios(null);
       cargarStats();
@@ -875,7 +884,10 @@ export default function GestionDatos() {
       }
     }
 
-    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente` });
+    const tsGua = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
+    setUltimaGuardias(tsGua);
+    try { localStorage.setItem('ultima_importacion_guardias', tsGua); } catch {}
+    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}` });
     setModalGuardias(false);
     setPreviewGuardias([]);
     setProcesando(false);
@@ -931,7 +943,7 @@ export default function GestionDatos() {
                     tab: 'alumnos',
                     emoji: '👥',
                     completado: stats.alumnos > 0,
-                    detalle: stats.alumnos > 0 ? `${stats.alumnos} alumnos en ${stats.grupos} grupos` : 'Sin cargar',
+                    detalle: stats.alumnos > 0 ? `${stats.alumnos} alumnos en ${stats.grupos} grupos${ultimaImportacion ? ' · ' + ultimaImportacion : ''}` : 'Sin cargar',
                   },
                   {
                     paso: 2,
@@ -940,7 +952,7 @@ export default function GestionDatos() {
                     tab: 'horarios',
                     emoji: '🕐',
                     completado: stats.horarios > 0,
-                    detalle: stats.horarios > 0 ? `${stats.horarios} registros de horarios` : 'Sin cargar',
+                    detalle: stats.horarios > 0 ? `${stats.horarios} registros de horarios${ultimaHorarios ? ' · ' + ultimaHorarios : ''}` : 'Sin cargar',
                   },
                   {
                     paso: 3,
@@ -949,7 +961,7 @@ export default function GestionDatos() {
                     tab: 'guardias',
                     emoji: '🛡️',
                     completado: stats.guardias,
-                    detalle: stats.guardias ? 'Cuadrante cargado' : 'Sin cargar (opcional al inicio)',
+                    detalle: stats.guardias ? `Cuadrante cargado${ultimaGuardias ? ' · ' + ultimaGuardias : ''}` : 'Sin cargar (opcional al inicio)',
                   },
                 ].map(p => (
                   <div key={p.paso} onClick={() => setVistaTab(p.tab)} style={{
