@@ -62,6 +62,7 @@ export default function GestionDatos() {
 
   // Alumnos
   const [previewAlumnos, setPreviewAlumnos] = useState([]);
+  const [ultimaImportacion, setUltimaImportacion] = useState('');
   const [pgaLista, setPgaLista] = useState([]);
   const [previewPGA, setPreviewPGA] = useState(null);
   const [modalAlumnos, setModalAlumnos] = useState(false);
@@ -392,14 +393,19 @@ export default function GestionDatos() {
       }),
     });
     if (!respImp.ok) {
-      const err = await respImp.json();
-      mostrarMensaje('❌ Error: ' + (err.error || 'no se pudo importar'), 'error');
+      const err = await respImp.json().catch(() => ({}));
+      const motivo = err.error === 'Sin permisos' || respImp.status === 403
+        ? '❌ Sin permisos: tu cuenta no está configurada como directivo. Comprueba en /gestion/personal que el campo «Rol gestión» pone «director».'
+        : '❌ Error al importar alumnos: ' + (err.error || respImp.status);
+      mostrarMensaje(motivo, 'error');
       setProcesando(false); setModalAlumnos(false); return;
     }
+    const fechaImport = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
     setProcesando(false);
     setModalAlumnos(false);
-    mostrarMensaje(`✅ ${alumnosNuevos.length} alumnos y ${gruposNuevos.length} grupos importados para ${cursoNuevo}`, 'ok');
+    mostrarMensaje(`✅ ${alumnosNuevos.length} alumnos y ${gruposNuevos.length} grupos importados para ${cursoNuevo} — ${fechaImport}`, 'ok');
     setPreviewAlumnos([]);
+    setUltimaImportacion(fechaImport);
     cargarStats();
   }
 
@@ -1204,7 +1210,7 @@ export default function GestionDatos() {
             {Object.keys(gruposPorFamilia).length > 0 && (
               <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
                 <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 12 }}>
-                  📚 Grupos cargados — curso {stats.cursoActual} ({stats.grupos} grupos · {stats.alumnos} alumnos)
+                  📚 Grupos cargados — curso {stats.cursoActual} ({stats.grupos} grupos · {stats.alumnos} alumnos){ultimaImportacion ? ` · Actualizado: ${ultimaImportacion}` : ''}
                 </div>
                 {Object.entries(gruposPorFamilia).sort().map(([familia, gs]) => (
                   <div key={familia} style={{ marginBottom: 12 }}>
