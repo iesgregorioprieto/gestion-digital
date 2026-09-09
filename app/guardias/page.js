@@ -649,14 +649,8 @@ export default function Guardias() {
       {!esFinde && (() => {
         // Buscar por UUID (lo ideal) o por nombre del PDF (fallback cuando
         // el matching de nombres falló al preasignar y profesor_id quedó null)
-        const miNombrePdf = sessionStorage.getItem('profesor_nombre_pdf') || '';
         const mias = apoyosAsignados
-          .filter(a => {
-            if (a.profesor_id && String(a.profesor_id) === String(profesorId)) return true;
-            if (!a.profesor_id && miNombrePdf && a.profesor_nombre &&
-                a.profesor_nombre.trim().toLowerCase() === miNombrePdf.trim().toLowerCase()) return true;
-            return false;
-          })
+          .filter(a => a.profesor_id && String(a.profesor_id) === String(profesorId))
           .sort((a, b) => (a.hora_id || a.hora || '').localeCompare(b.hora_id || b.hora || ''));
         if (mias.length === 0) return null;
         const pendientes = mias.filter(a => a.estado !== 'confirmado').length;
