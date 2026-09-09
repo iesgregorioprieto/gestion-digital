@@ -547,6 +547,37 @@ export default function Guardias() {
     }
   }
 
+  // El propio profesor se apunta para cubrir una guardia huérfana
+  async function activarApoyo(candidato, sector, apoyosFijados) {
+    if (!candidato.profesorId && candidato.profesorId !== profesorId) {
+      alert('No se puede activar: ficha no encontrada para este compañero.');
+      return;
+    }
+    const r = await fetch('/api/apoyos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'autoasignar',
+        datos: {
+          fecha,
+          hora: horaActiva,
+          sector_apoyo: sector,
+          profesor_id: candidato.profesorId,
+          curso_academico: await getCursoActual(),
+        },
+      }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      alert(e.error || 'No se ha podido activar la guardia.');
+      return;
+    }
+    // Recargar apoyos
+    const { data } = await consulta('apoyos_asignados')
+      .select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+    setApAsig(data || []);
+  }
+
   // Cambiar el profesor asignado a un apoyo (solo directivos)
   async function cambiarApoyo(apoyoId, nuevoProfesor) {
     const _rc = await fetch('/api/apoyos', {
@@ -852,11 +883,67 @@ export default function Guardias() {
                                   {asig.ausencia.profesor}
                                 </div>
                                 <div style={{ fontSize:12, color:'#92400e', fontWeight:600 }}>
-                                  ⚠️ Tenía GUARDIA en {sectorSup} — el sector pierde capacidad de cobertura
+                                  ⚠️ Faltaba y tenía <strong>GUARDIA en {sectorSup}</strong>
                                 </div>
                                 <div style={{ fontSize:11, color:'#78350f', marginTop:4, fontStyle:'italic' }}>
-                                  El equipo directivo debe revisar si necesita asignar sustituto
+                                  El sector pierde 1 profesor de guardia. Puede necesitar un sustituto si otros profesores del sector también faltan.
                                 </div>
+
+                                {/* Lista de candidatos para asumir la guardia */}
+                                {(() => {
+                                  const libre = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
+                                  if (libre.length === 0) return null;
+                                  const soyCandidata = libre.some(c => c.profesorId === profesorId);
+                                  return (
+                                    <div style={{ marginTop:10, borderTop:'1px dashed #fbbf24', paddingTop:10 }}>
+                                      <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:6 }}>
+                                        <span style={{ fontSize:12, fontWeight:800, color:'#78350f' }}>
+                                          💡 Asignar sustituto de guardia ({libre.length} disponibles)
+                                        </span>
+                                        <span title="La app sugiere al primero de la lista (el que menos guardias lleva). Cualquiera de los candidatos puede pulsar Activar para asumir la guardia." style={{ cursor:'help', fontSize:14, color:'#b45309' }}>ℹ️</span>
+                                        <span style={{ marginLeft:'auto', fontSize:10, color:'#92400e' }}>pulsa para ver</span>
+                                      </div>
+                                      <div style={{ fontSize:11, color:'#92400e', marginBottom:8, fontStyle:'italic' }}>
+                                        Ordenados por menos apoyos previos. Al activar contará en el contador.
+                                      </div>
+                                      {libre.map((c, i) => {
+                                        const esSugerido = i === 0;
+                                        const esMiTurno = c.profesorId === profesorId;
+                                        return (
+                                          <div key={c.abrev} style={{
+                                            display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, marginBottom:5,
+                                            backgroundColor: esSugerido ? '#fef9c3' : esMiTurno ? '#f0fdf4' : '#fafafa',
+                                            border:'1.5px solid ' + (esSugerido ? '#fbbf24' : esMiTurno ? '#86efac' : '#e5e7eb'),
+                                          }}>
+                                            <span style={{ fontSize:13, minWidth:20, fontWeight:700, color:'#78350f' }}>
+                                              {esSugerido ? '🏅' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i+1}`}
+                                            </span>
+                                            <div style={{ flex:1, minWidth:0 }}>
+                                              <div style={{ fontSize:13, fontWeight: esSugerido ? 800 : 600, color:'#1a1a1a' }}>
+                                                {c.nombre}
+                                              </div>
+                                              <div style={{ fontSize:11, color:'#666' }}>
+                                                {c.sectorOriginal} · {c.apoyosPrevios} apoyos
+                                              </div>
+                                            </div>
+                                            <button onClick={() => {
+                                              const apoyosFijados = asignacionAutomatica()
+                                                .filter(a => a.ausencia.sector.toUpperCase() === sectorSup)
+                                                .map(a => normAbrev(a.cubre?.abrev || ''));
+                                              activarApoyo(c, sectorSup, apoyosFijados);
+                                            }} style={{
+                                              padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer',
+                                              backgroundColor: esSugerido ? '#b45309' : (esMiTurno ? verde : '#64748b'),
+                                              color:'white', fontWeight:800, fontSize:12, whiteSpace:'nowrap',
+                                            }}>
+                                              ✅ Activar
+                                            </button>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
                               </div>
                             );
                           }
