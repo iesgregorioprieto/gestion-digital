@@ -3,7 +3,6 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
-import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
@@ -730,7 +729,7 @@ export default function Guardias() {
 
               return (
                 <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
-                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer', border:'none',
+                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer',
                   backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
                   color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
                   border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
