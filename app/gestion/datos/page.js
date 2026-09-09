@@ -353,29 +353,14 @@ export default function GestionDatos() {
     const { alumnos: alumnosNuevos, grupos: gruposNuevos } = previewAlumnos;
     setProcesando(true);
 
-    // Borrar e insertar grupos
-    const rBorrarGrupos = await fetch('/api/centro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tabla: 'grupos', accion: 'borrar', filtro: { curso_academico: cursoNuevo } }),
+    // Un solo endpoint hace todo en orden: vacía grupos y alumnos, inserta grupos nuevos
+    const rGrupos = await fetch('/api/alumnos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'importar_grupos', grupos: gruposNuevos, curso: cursoNuevo }),
     });
-    if (!rBorrarGrupos.ok) {
-      const err = await rBorrarGrupos.json().catch(() => ({}));
-      mostrarMensaje('❌ Error al borrar grupos: ' + (err.error || rBorrarGrupos.status), 'error');
-      setProcesando(false); setModalAlumnos(false); return;
-    }
-    const rCrearGrupos = await fetch('/api/centro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        tabla: 'grupos',
-        accion: 'insertar_lista',
-        lista: gruposNuevos.map(g => ({ ...g, curso_academico: cursoNuevo })),
-      }),
-    });
-    if (!rCrearGrupos.ok) {
-      const err = await rCrearGrupos.json().catch(() => ({}));
-      mostrarMensaje('❌ Error al crear grupos: ' + (err.error || rCrearGrupos.status), 'error');
+    if (!rGrupos.ok) {
+      const err = await rGrupos.json().catch(() => ({}));
+      mostrarMensaje('❌ Error al importar grupos: ' + (err.error || rGrupos.status), 'error');
       setProcesando(false); setModalAlumnos(false); return;
     }
 
