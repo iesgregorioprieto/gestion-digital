@@ -13,11 +13,12 @@ import { getCursoActual } from '@/lib/curso';
  * Normalizado: minúsculas, sin acentos, sin espacios extra.
  */
 const DPTOS_FP = [
-  'tmv/carroceria', 'tmv/carrocería', 'carroceria', 'carrocería',
+  'tmv',
+  'ee',
   'hosteleria', 'hostelería',
   'informatica', 'informática',
-  'electricidad / electronica', 'electricidad / electrónica',
-  'electricidad/electronica', 'electricidad/electrónica',
+  
+  
   'comercio',
   'administracion', 'administración',
   'industrias alimentarias',
