@@ -151,6 +151,20 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Insertar lista de registros (grupos, etc.) ───
+    if (accion === 'insertar_lista') {
+      const { lista } = body;
+      if (!Array.isArray(lista) || lista.length === 0) {
+        return Response.json({ error: 'Lista vacía' }, { status: 400 });
+      }
+      const LOTE = 200;
+      for (let i = 0; i < lista.length; i += LOTE) {
+        const { error } = await supa().from(tabla).insert(lista.slice(i, i + LOTE));
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+      }
+      return Response.json({ ok: true, insertados: lista.length });
+    }
+
     // ─── Borrar ───
     if (accion === 'borrar') {
       let consulta = supa().from(tabla).delete();
