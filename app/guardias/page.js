@@ -722,7 +722,7 @@ export default function Guardias() {
                       const colorEstado = esConf ? '#16a34a' : esInc ? '#ea580c' : '#dc2626';
                       const iconoEstado = esConf ? '✅' : esInc ? '⚠️' : '🔴';
                       // Nombre del ausente al que cubre
-                      const ausente = ausDia.find(au =>
+                      const ausente = ausenciasDia.find(au =>
                         au.horas?.some(ah => normHora(ah.hora || ah) === h.id) &&
                         (au.profesorId === a.profesor_ausente_id || au.abrev === a.sector_destino)
                       );
