@@ -51,6 +51,14 @@
     {
       "path": "/api/cron/formacion-jefe",
       "schedule": "0 7 * * 1-5"
+    },
+    {
+      "path": "/api/cron/guardias-sin-cubrir",
+      "schedule": "0 16 * * 1-5"
+    },
+    {
+      "path": "/api/cron/guardias-sin-cubrir",
+      "schedule": "0 17 * * 1-5"
     }
   ]
 }
