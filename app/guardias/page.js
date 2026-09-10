@@ -676,101 +676,102 @@ export default function Guardias() {
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
-      {/* MIS GUARDIAS DE HOY */}
+      {/* COBERTURA DE GUARDIAS HOY */}
       {!esFinde && (() => {
-        // Buscar por UUID (lo ideal) o por nombre del PDF (fallback cuando
-        // el matching de nombres falló al preasignar y profesor_id quedó null)
-        const mias = apoyosAsignados
-          .filter(a => a.profesor_id && String(a.profesor_id) === String(profesorId))
-          .sort((a, b) => (a.hora_id || a.hora || '').localeCompare(b.hora_id || b.hora || ''));
-        if (mias.length === 0) return null;
-        const pendientes = mias.filter(a => a.estado !== 'confirmado').length;
+        // Todas las guardias del día, agrupadas por hora
+        // Muestra quién cubre a quién — visible para todos los profesores
+        const porHora = {};
+        apoyosAsignados.forEach(a => {
+          const h = normHora(a.hora);
+          if (!porHora[h]) porHora[h] = [];
+          porHora[h].push(a);
+        });
+        const horasConGuardias = HORAS.filter(h => porHora[h.id]?.length > 0);
+        if (horasConGuardias.length === 0) return (
+          <div style={{ margin: '12px 16px', padding: '14px', borderRadius: 12,
+            backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', textAlign: 'center',
+            fontSize: 13, color: '#166534', fontWeight: 600 }}>
+            ✅ No hay guardias asignadas hoy
+          </div>
+        );
+
+        // Mis guardias (para que el propio profesor pueda confirmarlas)
+        const misGuardias = apoyosAsignados.filter(a =>
+          a.profesor_id && String(a.profesor_id) === String(profesorId));
+
         return (
           <div style={{ padding: '12px 16px 0' }}>
-            <div style={{
-              borderRadius: 12, overflow: 'hidden',
-              border: `2px solid ${pendientes > 0 ? '#f59e0b' : '#16a34a'}`,
-              backgroundColor: 'white',
-            }}>
-              <div style={{
-                padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-                backgroundColor: pendientes > 0 ? '#fffbeb' : '#f0fdf4',
-              }}>
-                <strong style={{ fontSize: 14.5, color: pendientes > 0 ? '#92400e' : '#166534' }}>
-                  🛡️ Tus guardias de este día
-                </strong>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: pendientes > 0 ? '#92400e' : '#166534' }}>
-                  {pendientes > 0
-                    ? `${pendientes} sin confirmar`
-                    : 'todas confirmadas'}
-                </span>
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
+              <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
               </div>
 
-              {mias.map(a => {
-                const esConfirmada = a.estado === 'confirmado';
-                const esIncidencia = a.estado === 'incidencia';
-                const esPendiente = !esConfirmada && !esIncidencia;
-                const etiquetaHora = (HORAS.find(h => h.id === normHora(a.hora))?.label) || a.hora || '';
-                const colorBorde = esConfirmada ? '#16a34a' : esIncidencia ? '#ea580c' : '#dc2626';
-
+              {horasConGuardias.map(h => {
+                const asignados = porHora[h.id] || [];
                 return (
-                  <div key={a.id} style={{
-                    padding: '11px 14px', borderTop: '1px solid #e5e7eb',
-                    borderLeft: `4px solid ${colorBorde}`,
-                    display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap',
-                  }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14, color: '#333' }}>
-                        {etiquetaHora}
-                        {a.grupo ? ` · ${a.grupo}` : ''}
-                        {a.aula ? ` · aula ${a.aula}` : ''}
-                      </div>
-                      <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>
-                        {a.materia ? `${a.materia} · ` : ''}
-                        cubre a {a.sector_destino || '—'}
-                      </div>
-                      {a.tarea && (
-                        <div style={{ fontSize: 12.5, color: '#1e40af', marginTop: 4, lineHeight: 1.4 }}>
-                          📝 {a.tarea}
-                        </div>
-                      )}
-                      {esIncidencia && a.incidencia && (
-                        <div style={{ fontSize: 12, color: '#ea580c', marginTop: 4, lineHeight: 1.4, fontStyle: 'italic' }}>
-                          ⚠️ {a.incidencia}
-                        </div>
-                      )}
+                  <div key={h.id} style={{ borderTop: '1px solid #f1f5f9', padding: '10px 14px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 6,
+                      textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {h.label}
                     </div>
-
-                    {esConfirmada && (
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#166534',
-                        backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 20 }}>
-                        ✅ Cubierta
-                      </span>
-                    )}
-                    {esIncidencia && (
-                      <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',
-                        backgroundColor: '#fff7ed', padding: '6px 12px', borderRadius: 20 }}>
-                        ⚠️ Incidencia
-                      </span>
-                    )}
-                    {esPendiente && (
-                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        <button onClick={() => confirmarMiApoyo(a.id)} style={{
-                          padding: '8px 14px', borderRadius: 9, border: 'none',
-                          backgroundColor: '#166534', color: 'white',
-                          fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
+                    {asignados.map(a => {
+                      const esMia = String(a.profesor_id) === String(profesorId);
+                      const esConf = a.estado === 'confirmado';
+                      const esInc = a.estado === 'incidencia';
+                      const esPend = !esConf && !esInc;
+                      const colorEstado = esConf ? '#16a34a' : esInc ? '#ea580c' : '#dc2626';
+                      const iconoEstado = esConf ? '✅' : esInc ? '⚠️' : '🔴';
+                      // Nombre del ausente al que cubre
+                      const ausente = ausDia.find(au =>
+                        au.horas?.some(ah => normHora(ah.hora || ah) === h.id) &&
+                        (au.profesorId === a.profesor_ausente_id || au.abrev === a.sector_destino)
+                      );
+                      return (
+                        <div key={a.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
+                          padding: '8px 10px', borderRadius: 8,
+                          backgroundColor: esMia ? (esPend ? '#fefce8' : esConf ? '#f0fdf4' : '#fff7ed') : '#fafafa',
+                          border: '1.5px solid ' + (esMia ? colorEstado : '#e5e7eb'),
                         }}>
-                          ✅ Asumir
-                        </button>
-                        <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
-                          padding: '8px 14px', borderRadius: 9,
-                          border: '1.5px solid #ea580c', backgroundColor: 'white', color: '#ea580c',
-                          fontWeight: 800, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap',
-                        }}>
-                          ⚠️ Incidencia
-                        </button>
-                      </div>
-                    )}
+                          <span style={{ fontSize: 15 }}>{iconoEstado}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                              {a.profesor_nombre || a.sector_apoyo || '—'}
+                              {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
+                              cubre a {ausente?.profesor || a.sector_destino || a.sector_apoyo || '—'}
+                              {a.aula ? ` · aula ${a.aula}` : ''}
+                              {a.grupo ? ` · ${a.grupo}` : ''}
+                            </div>
+                            {a.tarea && (
+                              <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
+                            )}
+                          </div>
+                          {/* El propio profesor puede confirmar o marcar incidencia */}
+                          {esMia && esPend && (
+                            <div style={{ display: 'flex', gap: 5 }}>
+                              <button onClick={() => confirmarMiApoyo(a.id)} style={{
+                                padding: '7px 11px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                backgroundColor: '#16a34a', color: 'white', fontWeight: 800, fontSize: 12,
+                              }}>✅ Asumir</button>
+                              <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
+                                padding: '7px 11px', borderRadius: 8, border: '1.5px solid #ea580c',
+                                backgroundColor: 'white', color: '#ea580c', fontWeight: 800, fontSize: 12, cursor: 'pointer',
+                              }}>⚠️</button>
+                            </div>
+                          )}
+                          {esMia && esConf && (
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#16a34a',
+                              backgroundColor: '#dcfce7', padding: '4px 10px', borderRadius: 16 }}>Confirmada</span>
+                          )}
+                          {esMia && esInc && (
+                            <span style={{ fontSize: 11, fontWeight: 800, color: '#ea580c',
+                              backgroundColor: '#fff7ed', padding: '4px 10px', borderRadius: 16 }}>Incidencia</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 );
               })}
@@ -934,7 +935,7 @@ export default function Guardias() {
                                                 border:'2px solid ' + (esSugerido ? '#f97316' : esMiTurno ? '#86efac' : '#e5e7eb'),
                                               }}>
                                                 <span style={{ fontSize: esSugerido ? 20 : 14, minWidth:28, textAlign:'center' }}>
-                                                  {esSugerido ? '🏅' : esMiTurno ? '🧑‍🏫' : `${i+1}.`}
+                                                  {esSugerido ? '🏅' : i === 1 ? '🥈 2º' : i === 2 ? '🥉 3º' : esMiTurno ? '🧑‍🏫' : `${i+1}.`}
                                                 </span>
                                                 <div style={{ flex:1, minWidth:0 }}>
                                                   <div style={{ fontSize: esSugerido ? 15 : 13, fontWeight: esSugerido ? 900 : (esMiTurno ? 700 : 500), color:'#1a1a1a' }}>
