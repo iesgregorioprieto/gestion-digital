@@ -90,7 +90,7 @@ export default function SalaProfesores() {
 
   useEffect(() => {
     cargarDatos();
-    const intervalo = setInterval(cargarDatos, 120000); // cada 2 min
+    const intervalo = setInterval(cargarDatos, 30000); // cada 30 segundos
 
     // Noticias de la web del centro (se refrescan cada media hora)
     const traerNoticias = () => {
