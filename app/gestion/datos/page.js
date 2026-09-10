@@ -713,6 +713,7 @@ export default function GestionDatos() {
 
   const MAPA_HORAS_GUARDIAS = {
     '8:30': '1', '9:25': '2', '10:20': '3',
+    '11:15': 'recreo', '11:30': 'recreo', // recreo (según Delphos)
     '11:45': '4', '12:40': '5', '13:35': '6',
   };
   const DIAS_GUARDIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
