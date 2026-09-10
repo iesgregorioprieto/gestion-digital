@@ -4,7 +4,7 @@ export async function GET() {
   // La versión cambia en cada deploy de Vercel gracias al SHA del commit.
   // Esto hace que el navegador detecte el nuevo SW, lo instale y recargue
   // automáticamente todas las pestañas abiertas sin que el usuario haga nada.
-  const version = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || String(Date.now());
+  const version = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || '20260910-0647';
 
   const sw = [
     "const SW_VERSION='" + version + "';",
