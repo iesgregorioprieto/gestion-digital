@@ -401,13 +401,30 @@ export default function Guardias() {
           asignaciones.push({ ausencia: aus, clase, tipoHora: 'clase', cubre });
         }
 
-        // Procesar guardias huérfanas → el sector pierde un profesor de guardia
+        // Procesar guardias huérfanas → asignar automáticamente al mejor candidato
         for (const guardia of guardiasHora) {
+          // Mismo criterio que las clases: primero el propio sector, luego GENERAL, luego FP
+          let cubre = null;
+          for (const p of guardiasDisp) {
+            const key = normAbrev(p);
+            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
+            cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            asignadosAbrev.add(key);
+            break;
+          }
+          if (!cubre) {
+            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
+            if (libres.length > 0) {
+              const primero = libres[0];
+              asignadosAbrev.add(normAbrev(primero.abrev));
+              cubre = { ...primero, tipo: 'guardia_sector', alternativas: libres.slice(1, 5) };
+            }
+          }
           asignaciones.push({
             ausencia: aus,
             clase: { ...guardia, grupo: guardia.grupo || sectorSup },
             tipoHora: 'guardia',
-            cubre: null, // Se informa pero jefatura decide el sustituto
+            cubre,
           });
         }
       }
@@ -493,9 +510,46 @@ export default function Guardias() {
     return libres;
   }
 
-  // === Registro automático DESACTIVADO en /guardias ===
-  // El registro de apoyos solo ocurre en /gestion/guardias donde los jefes de estudio 
-  // pueden revisar y modificar antes de que se cuente en el contador
+  // === Registro automático ===
+  // Si hay un candidato asignado y no está ya registrado en apoyos_asignados,
+  // se guarda automáticamente. No espera a que nadie pulse nada.
+  useEffect(() => {
+    if (!fecha || !horaActiva || esFinde || !profesorId) return;
+    const asignaciones = asignacionAutomatica();
+    asignaciones.forEach(async (asig) => {
+      if (!asig.cubre?.profesorId) return; // sin candidato con UUID, no se puede guardar
+      // Comprobar si ya está registrado
+      const yaExiste = apoyosAsignados.some(a =>
+        a.fecha === fecha &&
+        normHora(a.hora) === horaActiva &&
+        String(a.profesor_id) === String(asig.cubre.profesorId)
+      );
+      if (yaExiste) return;
+      // Guardar automáticamente
+      try {
+        await fetch('/api/apoyos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            accion: 'autoasignar',
+            datos: {
+              fecha,
+              hora: horaActiva,
+              sector_apoyo: asig.cubre.sectorOriginal,
+              profesor_id: asig.cubre.profesorId,
+              curso_academico: await getCursoActual(),
+            },
+          }),
+        });
+        // Recargar apoyos para reflejar el cambio
+        const { data } = await consulta('apoyos_asignados')
+          .select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+        setApAsig(data || []);
+      } catch (e) {
+        console.warn('autoasignar:', e?.message);
+      }
+    });
+  }, [fecha, horaActiva, ausenciasDia, apoyosAsignados.length]);
 
   // El profesor confirma la guardia que le han preasignado.
   // El servidor comprueba que el apoyo es suyo antes de aceptarlo.
