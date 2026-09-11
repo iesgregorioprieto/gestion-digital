@@ -715,7 +715,10 @@ export default function Guardias() {
                       {h.label}
                     </div>
                     {asignados.map(a => {
-                      const esMia = String(a.profesor_id) === String(profesorId);
+                      // esMia: por UUID (lo ideal) o por nombre PDF cuando el matching de nombres falló
+                      const miNombrePdf = (sessionStorage.getItem('profesor_nombre_pdf') || '').toLowerCase().trim();
+                      const esMia = (a.profesor_id && String(a.profesor_id) === String(profesorId))
+                        || (!a.profesor_id && miNombrePdf && (a.profesor_nombre_pdf || '').toLowerCase().trim() === miNombrePdf);
                       const esConf = a.estado === 'confirmado';
                       const esInc = a.estado === 'incidencia';
                       const esPend = !esConf && !esInc;
@@ -748,26 +751,44 @@ export default function Guardias() {
                               <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
                             )}
                           </div>
-                          {/* El propio profesor puede confirmar o marcar incidencia */}
-                          {esMia && esPend && (
-                            <div style={{ display: 'flex', gap: 5 }}>
-                              <button onClick={() => confirmarMiApoyo(a.id)} style={{
-                                padding: '7px 11px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                backgroundColor: '#16a34a', color: 'white', fontWeight: 800, fontSize: 12,
-                              }}>✅ Asumir</button>
-                              <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
-                                padding: '7px 11px', borderRadius: 8, border: '1.5px solid #ea580c',
-                                backgroundColor: 'white', color: '#ea580c', fontWeight: 800, fontSize: 12, cursor: 'pointer',
-                              }}>⚠️</button>
+                          {/* Botones de acción para el profesor asignado */}
+                          {esMia && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+                              {esPend && (
+                                <>
+                                  {/* VERDE: la estoy haciendo */}
+                                  <button onClick={() => confirmarMiApoyo(a.id)} style={{
+                                    padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                                    backgroundColor: '#16a34a', color: 'white', fontWeight: 800, fontSize: 12,
+                                    whiteSpace: 'nowrap', width: '100%',
+                                  }}>🟢 La estoy haciendo</button>
+                                  {/* NARANJA: la hago pero con incidencia */}
+                                  <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
+                                    padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+                                    border: '2px solid #ea580c', backgroundColor: 'white',
+                                    color: '#ea580c', fontWeight: 800, fontSize: 12,
+                                    whiteSpace: 'nowrap', width: '100%',
+                                  }}>🟠 Incidencia</button>
+                                  {/* ROJO: informativo, no es botón */}
+                                  <div style={{
+                                    padding: '6px 10px', borderRadius: 8, fontSize: 11,
+                                    backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5',
+                                    color: '#991b1b', fontWeight: 600, textAlign: 'center', width: '100%',
+                                    boxSizing: 'border-box',
+                                  }}>🔴 Sin confirmar</div>
+                                </>
+                              )}
+                              {esConf && (
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a',
+                                  backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 16,
+                                  border: '1.5px solid #86efac' }}>🟢 Confirmada</span>
+                              )}
+                              {esInc && (
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',
+                                  backgroundColor: '#fff7ed', padding: '6px 12px', borderRadius: 16,
+                                  border: '1.5px solid #fdba74' }}>🟠 Incidencia registrada</span>
+                              )}
                             </div>
-                          )}
-                          {esMia && esConf && (
-                            <span style={{ fontSize: 11, fontWeight: 800, color: '#16a34a',
-                              backgroundColor: '#dcfce7', padding: '4px 10px', borderRadius: 16 }}>Confirmada</span>
-                          )}
-                          {esMia && esInc && (
-                            <span style={{ fontSize: 11, fontWeight: 800, color: '#ea580c',
-                              backgroundColor: '#fff7ed', padding: '4px 10px', borderRadius: 16 }}>Incidencia</span>
                           )}
                         </div>
                       );
