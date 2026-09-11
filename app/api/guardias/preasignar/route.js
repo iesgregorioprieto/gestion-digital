@@ -17,6 +17,7 @@ import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, claveAbreviada, ocupadosEnClase,
+  indiceProfesores, clavesAmbiguas,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
 
@@ -168,6 +169,15 @@ export async function POST(request) {
       console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
     }
 
+    // Dos compañeros con la misma abreviatura ("Gar. M, JL" puede ser
+    // García Moreno o García Muñoz): a esos no se les asigna nada, y hay
+    // que poder verlo en vez de que desaparezcan en silencio.
+    const ambiguas = clavesAmbiguas(indiceProfesores(profesores || []));
+    if (ambiguas.length) {
+      console.warn('preasignar: abreviaturas ambiguas →',
+        ambiguas.map(a => `${a.clave}: ${a.personas.join(' / ')}`).join(' | '));
+    }
+
     // ─── Cálculo hora por hora ───
     const nuevas = [];
     const sinCubrir = [];
@@ -229,7 +239,7 @@ export async function POST(request) {
     if (nuevas.length === 0) {
       return Response.json({
         ok: true, creadas: 0, motivo: 'todo_cubierto',
-        sin_cubrir: sinCubrir, sin_resolver: sinResolver,
+        sin_cubrir: sinCubrir, sin_resolver: sinResolver, ambiguas,
       });
     }
 
@@ -241,6 +251,7 @@ export async function POST(request) {
       creadas: nuevas.length,
       sin_cubrir: sinCubrir,
       sin_resolver: sinResolver,
+      ambiguas,
     });
   } catch (e) {
     console.error('preasignar guardias:', e?.message);
