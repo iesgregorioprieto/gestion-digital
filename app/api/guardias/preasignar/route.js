@@ -3,20 +3,24 @@
  *
  * Calcula quién cubre cada hueco de un día y lo deja registrado como
  * guardia pendiente, para que le llegue directamente al profesorado
- * en su módulo sin tener que pasar por jefatura de estudios.
+ * sin tener que pasar por jefatura de estudios.
  *
- * La llama cualquiera que abra el módulo de guardias. Es idempotente:
- * si una guardia ya está registrada para esa hora, ese grupo y esa
- * persona ausente, no se vuelve a crear. Las ya confirmadas no se
- * tocan nunca.
+ * Es idempotente: si un hueco ya tiene a alguien puesto, no se vuelve a
+ * crear. Las guardias ya fichadas y las que ha puesto dirección a mano
+ * NO se tocan nunca.
+ *
+ * Solo cuentan para la rotación las guardias fichadas.
  */
 
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
-  HORAS_GUARDIA, diaSemanaEs, construirCuadrante,
-  prepararAusencias, asignacionesDeHora, normHora, normAbrev,
+  HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
+  asignacionesDeHora, normHora, claveAbreviada, ocupadosEnClase,
 } from '@/lib/asignacionGuardias';
+import { normSector, esSectorRecreo } from '@/lib/sectores';
+
+const FICHADAS = ['confirmado', 'realizado'];
 
 let _cliente = null;
 function supa() {
@@ -37,7 +41,7 @@ function supa() {
  */
 async function cursoActivo(cliente) {
   // select('*') a propósito: la tabla no tiene siempre las mismas
-  // columnas, y pedir uno que no existe hace fallar toda la consulta.
+  // columnas, y pedir una que no existe hace fallar toda la consulta.
   const { data, error } = await cliente
     .from('config_centro')
     .select('*')
@@ -48,7 +52,6 @@ async function cursoActivo(cliente) {
   const fila = (data || [])[0];
   const curso = fila?.config?.curso || fila?.curso || fila?.curso_academico;
   if (curso) return curso;
-  // Sin configuración: se deduce de la fecha (de septiembre a agosto)
   const hoy = new Date();
   const anio = hoy.getFullYear();
   return hoy.getMonth() >= 8 ? `${anio}-${anio + 1}` : `${anio - 1}-${anio}`;
@@ -105,18 +108,18 @@ export async function POST(request) {
     // ─── Faltas del día: ausencias y DLD aprobados ───
     const [rAus, rDld] = await Promise.all([
       cliente.from('ausencias')
-        .select('profesor_id, horas, fecha_inicio, fecha_fin')
+        .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
         .lte('fecha_inicio', fecha)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('dld')
-        .select('profesor_id, horas, fecha_solicitada')
+        .select('id, profesor_id, horas, fecha_solicitada')
         .eq('fecha_solicitada', fecha)
         .eq('estado', 'aprobada'),
     ]);
 
     const faltas = [
-      ...(rAus.data || []).map(a => ({ ...a, tipo_falta: 'ausencia' })),
-      ...(rDld.data || []).map(d => ({ ...d, tipo_falta: 'dld' })),
+      ...(rAus.data || []).map(a => ({ ...a, origen: 'ausencia' })),
+      ...(rDld.data || []).map(d => ({ ...d, origen: 'dld' })),
     ];
     if (faltas.length === 0) {
       return Response.json({ ok: true, creadas: 0, motivo: 'sin_ausencias' });
@@ -125,97 +128,120 @@ export async function POST(request) {
     // ─── Guardias ya registradas ───
     const [{ data: yaHoy }, { data: delCurso }] = await Promise.all([
       cliente.from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', curso),
-      cliente.from('apoyos_asignados').select('sector_apoyo,profesor_id,estado').eq('curso_academico', curso),
+      cliente.from('apoyos_asignados')
+        .select('sector_apoyo,sector_destino,profesor_id,estado')
+        .eq('curso_academico', curso),
     ]);
 
+    // Rotación: SOLO las fichadas. Una guardia sin fichar no cuenta.
     const apoyosPorProfesor = {};
-    const apoyosPorSector = {};
+    const apoyosFueraPorSector = {};
     (delCurso || []).forEach(a => {
-      if (a.estado === 'confirmado' || a.estado === 'realizado') {
-        apoyosPorSector[a.sector_apoyo] = (apoyosPorSector[a.sector_apoyo] || 0) + 1;
-        if (a.profesor_id) apoyosPorProfesor[a.profesor_id] = (apoyosPorProfesor[a.profesor_id] || 0) + 1;
+      if (!FICHADAS.includes(a.estado)) return;
+      if (a.profesor_id) {
+        apoyosPorProfesor[a.profesor_id] = (apoyosPorProfesor[a.profesor_id] || 0) + 1;
+      }
+      // Para la rotación entre departamentos solo cuentan las salidas
+      // fuera del propio sector: lo que se reparte es bajar a cubrir a otros.
+      const suyo = normSector(a.sector_apoyo);
+      const destino = normSector(a.sector_destino);
+      if (suyo && destino && suyo !== destino) {
+        apoyosFueraPorSector[suyo] = (apoyosFueraPorSector[suyo] || 0) + 1;
       }
     });
 
-    // Huecos que ya tienen a alguien puesto: hora + grupo + quién falta
-    const yaCubiertos = new Set(
-      (yaHoy || []).map(a => `${normHora(a.hora)}|${a.grupo || ''}|${a.sector_destino || ''}`)
-    );
+    // Huecos que ya tienen a alguien puesto. La clave es hora + quién
+    // falta: si dos compañeros del mismo sector faltan a la misma hora,
+    // son dos huecos distintos y los dos hay que cubrirlos.
+    const yaCubiertos = (yaHoy || [])
+      .filter(a => !esSectorRecreo(a.sector_apoyo))
+      .map(a => ({
+        hora: normHora(a.hora),
+        profesorAusenteId: a.profesor_ausente_id,
+        profesorId: a.profesor_id,
+      }));
 
-    const ausencias = prepararAusencias(faltas, profesores || []);
-    const cuadrante = construirCuadrante(horarios);
+    const huecos = prepararHuecos(faltas, profesores || []);
+    const { porSector: cuadrante, sinResolver } = construirCuadrante(horarios, profesores || []);
 
-    // Índice del horario oficial: quién · día · hora → grupo, aula y materia.
-    // Sirve para rellenar los huecos cuando el profesor que falta no llegó
-    // a detallar su horario, que es lo habitual en las ausencias de última
-    // hora. Quien entra al aula necesita saber a qué grupo va.
-    const horarioOficial = {};
-    horarios
-      .filter(h => h.tipo === 'clase' && (h.dia || '').toLowerCase() === dia)
-      .forEach(h => {
-        const clave = `${normAbrev(h.profesor_nombre_pdf)}|${normHora(h.hora_id)}`;
-        if (!horarioOficial[clave]) {
-          horarioOficial[clave] = {
-            grupo: h.grupo || null,
-            aula: h.aula || null,
-            materia: h.materia || null,
-          };
-        }
-      });
+    if (sinResolver.length) {
+      console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
+    }
 
     // ─── Cálculo hora por hora ───
     const nuevas = [];
+    const sinCubrir = [];
+
     for (const hora of HORAS_GUARDIA) {
+      if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
+
+      const enClase = ocupadosEnClase(horarios, profesores || [], dia, hora);
+
       const asignaciones = asignacionesDeHora({
-        hora, dia, ausencias, cuadrante, horarios,
+        hora, dia, huecos, cuadrante, horarios,
         profesores: profesores || [],
-        apoyosPorProfesor, apoyosPorSector,
+        apoyosPorProfesor, apoyosFueraPorSector,
+        yaCubiertos, ocupadosIds: enClase,
       });
 
       for (const asig of asignaciones) {
-        if (!asig.cubre?.profesorId) continue;
+        if (!asig.cubre?.profesorId) {
+          sinCubrir.push({
+            hora,
+            ausente: asig.hueco.profesor,
+            grupo: asig.grupo || null,
+            aula: asig.aula || null,
+          });
+          continue;
+        }
 
-        // Lo que no dejó dicho el profesor ausente se completa con su
-        // horario oficial del centro. Se resuelve antes de la clave de
-        // duplicados: si no, el mismo hueco entraría dos veces, una con
-        // grupo y otra sin él.
-        const oficial = horarioOficial[`${normAbrev(asig.ausencia.abrev)}|${hora}`] || {};
-        const grupoFinal   = asig.clase.grupo   || oficial.grupo   || null;
-        const aulaFinal    = asig.clase.aula    || oficial.aula    || null;
-        const materiaFinal = asig.clase.materia || oficial.materia || null;
-
-        const clave = `${hora}|${grupoFinal || ''}|${asig.ausencia.sector.toUpperCase()}`;
-        if (yaCubiertos.has(clave)) continue;
-        yaCubiertos.add(clave);
+        // Se apunta en la lista viva para que el resto de horas y huecos
+        // de esta misma pasada no le asignen otra cosa a la vez.
+        yaCubiertos.push({
+          hora,
+          profesorAusenteId: asig.hueco.profesorId,
+          profesorId: asig.cubre.profesorId,
+        });
 
         nuevas.push({
           fecha,
           hora,
-          sector_apoyo: asig.cubre.sectorOriginal,
-          sector_destino: asig.ausencia.sector.toUpperCase(),
-          profesor_ausente_id: asig.ausencia.profesorId || null,
+          sector_apoyo: asig.cubre.sector,
+          sector_destino: normSector(asig.hueco.sector),
+          profesor_ausente_id: asig.hueco.profesorId || null,
           profesor_id: asig.cubre.profesorId,
-          profesor_nombre_pdf: asig.cubre.abrev || null,
-          grupo: grupoFinal,
-          aula: aulaFinal,
-          materia: materiaFinal,
-          tarea: asig.clase.instrucciones || null,
+          profesor_nombre_pdf: claveAbreviada(
+            asig.cubre.nombre.split(',')[0],
+            asig.cubre.nombre.split(',')[1] || ''
+          ) || null,
+          grupo: asig.grupo || null,
+          aula: asig.aula || null,
+          materia: asig.materia || null,
+          tarea: asig.instrucciones || null,
           asignado_por: null,          // la propuso el sistema, no una persona
           estado: 'pendiente',
-          tipo_apoyo: asig.cubre.tipo === 'guardia_sector' ? 'sector' : 'obligatorio',
+          tipo_apoyo: asig.escalon === 0 ? 'sector' : 'obligatorio',
           curso_academico: curso,
         });
       }
     }
 
     if (nuevas.length === 0) {
-      return Response.json({ ok: true, creadas: 0, motivo: 'todo_cubierto' });
+      return Response.json({
+        ok: true, creadas: 0, motivo: 'todo_cubierto',
+        sin_cubrir: sinCubrir, sin_resolver: sinResolver,
+      });
     }
 
     const { error } = await cliente.from('apoyos_asignados').insert(nuevas);
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
-    return Response.json({ ok: true, creadas: nuevas.length });
+    return Response.json({
+      ok: true,
+      creadas: nuevas.length,
+      sin_cubrir: sinCubrir,
+      sin_resolver: sinResolver,
+    });
   } catch (e) {
     console.error('preasignar guardias:', e?.message);
     return Response.json({ error: 'fallo_al_preasignar' }, { status: 500 });
