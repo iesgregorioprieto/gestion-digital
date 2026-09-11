@@ -428,12 +428,11 @@ export default function Guardias() {
     );
     const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
-    // Todos los sectores sin ausencias propias esa hora: familias de FP
-    // y también guardias generales. El apoyo es recíproco en ambos sentidos.
-    const sectoresLibres = sectores.filter(s => !porSector[s.toUpperCase()]);
-
+    // TODOS los sectores, incluidos los que tienen ausentes.
+    // Un sector puede tener 1 ausente y 3 de guardia disponibles:
+    // excluir el sector entero dejaba sin candidatos al propio GENERAL.
     const libres = [];
-    for (const sector of sectoresLibres) {
+    for (const sector of sectores) {
       const guardiasFP = guardiasDeSector(sector);
       guardiasFP.forEach(p => {
         const key = normAbrev(p);
