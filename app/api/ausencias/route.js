@@ -241,6 +241,22 @@ export async function POST(request) {
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
+      // Preasignación automática de guardias: en cuanto se registra una ausencia,
+      // el sistema asigna inmediatamente a quien corresponda según el cuadrante
+      // y la rotación. No espera a que nadie abra la app ni pulse nada.
+      const fechaAusencia = fila.fecha_inicio;
+      if (fechaAusencia) {
+        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+        fetch(`${baseUrl}/api/guardias/preasignar`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cookie': request.headers.get('cookie') || '',
+          },
+          body: JSON.stringify({ fecha: fechaAusencia }),
+        }).catch(err => console.error('preasignar tras ausencia:', err?.message));
+      }
+
       // Permiso de formación: flujo de aprobación.
       //
       // Si el profesor es de un departamento de FP, el permiso pasa
