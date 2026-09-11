@@ -195,6 +195,7 @@ export async function POST(request) {
           sector_destino: asig.ausencia.sector.toUpperCase(),
           profesor_ausente_id: asig.ausencia.profesorId || null,
           profesor_id: asig.cubre.profesorId,
+          profesor_nombre_pdf: asig.cubre.abrev || null,
           grupo: grupoFinal,
           aula: aulaFinal,
           materia: materiaFinal,
