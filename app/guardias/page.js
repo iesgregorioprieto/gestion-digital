@@ -859,6 +859,47 @@ export default function Guardias() {
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
+      {/* SELECTOR DE HORAS
+          Va arriba y se queda pegado: de un vistazo se ve el día entero,
+          con el número de ausencias de cada hora, y se salta de una a otra
+          sin desplazarse por una lista larga. */}
+      {!esFinde && (
+        <div style={{
+          padding: '12px 16px 10px', backgroundColor: 'white',
+          borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 20,
+        }}>
+          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingTop: 6 }}>
+            {HORAS.map(h => {
+              const activa = h.id === horaActiva;
+              const cnt = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id))).length;
+              const esRecreo = h.id === 'recreo';
+
+              return (
+                <button key={h.id} onClick={() => setHoraActiva(h.id)} title={h.horario} style={{
+                  flexShrink: 0, cursor: 'pointer', position: 'relative',
+                  width: esRecreo ? 62 : 46, height: 46, borderRadius: esRecreo ? 23 : '50%',
+                  backgroundColor: activa ? marron : 'white',
+                  color: activa ? 'white' : (cnt > 0 ? rojo : '#64748b'),
+                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#dfe3e8'),
+                  fontWeight: 800, fontSize: esRecreo ? 11.5 : 15, padding: 0,
+                  boxShadow: activa ? '0 2px 8px rgba(0,0,0,0.18)' : 'none',
+                }}>
+                  {esRecreo ? 'Recreo' : h.label}
+                  {cnt > 0 && (
+                    <span style={{
+                      position: 'absolute', top: -3, right: -3, backgroundColor: rojo, color: 'white',
+                      borderRadius: '50%', width: 19, height: 19, fontSize: 10.5, fontWeight: 800,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      border: '2px solid white',
+                    }}>{cnt}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* COBERTURA DE GUARDIAS HOY */}
       {!esFinde && (() => {
         // Todas las guardias del día, agrupadas por hora
@@ -869,12 +910,14 @@ export default function Guardias() {
           if (!porHora[h]) porHora[h] = [];
           porHora[h].push(a);
         });
-        const horasConGuardias = HORAS.filter(h => porHora[h.id]?.length > 0);
+        // Solo la hora seleccionada: antes se apilaban las siete y había
+        // que bajar rodando para ver la tarde.
+        const horasConGuardias = HORAS.filter(h => h.id === horaActiva && porHora[h.id]?.length > 0);
         if (horasConGuardias.length === 0) return (
           <div style={{ margin: '12px 16px', padding: '14px', borderRadius: 12,
             backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', textAlign: 'center',
             fontSize: 13, color: '#166534', fontWeight: 600 }}>
-            ✅ No hay guardias asignadas hoy
+            Sin guardias a {horaInfo?.label || 'esta hora'}
           </div>
         );
 
@@ -886,7 +929,9 @@ export default function Guardias() {
           <div style={{ padding: '12px 16px 0' }}>
             <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
               <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
-                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
+                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>
+                  🛡️ Guardias de {horaInfo?.label || ''} <span style={{ fontWeight: 600, color: '#64748b', fontSize: 12.5 }}>{horaInfo?.horario || ''}</span>
+                </strong>
                 <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
                   style={{ marginLeft: 8, width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
                     border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1d4ed8',
@@ -1026,37 +1071,6 @@ export default function Guardias() {
         );
       })()}
 
-      {/* SELECTOR DE HORAS */}
-      {!esFinde && (
-        <div style={{ padding:'10px 16px 0', backgroundColor:'white', borderBottom:'1px solid #e5e7eb' }}>
-          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
-            {HORAS.map(h => {
-              const activa = h.id === horaActiva;
-              const ausentesH = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)));
-              const cnt = ausentesH.length;
-
-              return (
-                <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
-                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer',
-                  backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
-                  color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
-                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
-                  fontWeight:700, fontSize:13, position:'relative',
-                }}>
-                  {h.label}
-                  {cnt > 0 && (
-                    <span style={{
-                      position:'absolute', top:-6, right:-6, backgroundColor:rojo, color:'white',
-                      borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:800,
-                      display:'flex', alignItems:'center', justifyContent:'center'
-                    }}>{cnt}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* HORARIO ACTIVO */}
       {!esFinde && horaInfo && (
