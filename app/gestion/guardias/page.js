@@ -713,46 +713,6 @@ export default function GestionGuardias() {
         </div>
       </details>
 
-      {/* AVISO GLOBAL: GUARDIAS PERDIDAS HOY */}
-      {(() => {
-        const perdidas = [];
-        ausenciasDia.forEach(a => {
-          (a.horas || []).forEach(h => {
-            if (h.tipo === 'guardia') {
-              perdidas.push({ profesor: a.profesor, hora: h.hora, sector: a.sector, tipo: a.tipo });
-            }
-          });
-        });
-        if (perdidas.length === 0) return null;
-        return (
-          <div style={{ padding:'12px 16px', backgroundColor:'#fef2f2', borderBottom:'2px solid #fca5a5' }}>
-            <div style={{ fontSize:13, fontWeight:800, color:rojo, marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
-              🛡️ Guardias sin cubrir hoy ({perdidas.length})
-            </div>
-            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-              {perdidas.map((p, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    const idH = HORAS.find(h => horaCoincide(p.hora, h.id))?.id;
-                    if (idH) setHoraActiva(idH);
-                  }}
-                  style={{
-                    padding:'5px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                    backgroundColor:'white', color:'#7f1d1d', border:'1.5px solid #fca5a5', cursor:'pointer',
-                  }}
-                  title="Ir a esa hora"
-                >
-                  {p.tipo === 'dld' ? '📄' : '🏥'} {p.profesor.split(',')[0]} · {p.hora} · {p.sector}
-                </button>
-              ))}
-            </div>
-            <div style={{ fontSize:11, color:'#991b1b', marginTop:6, fontStyle:'italic' }}>
-              Pulsa cualquiera para ir a esa hora y asignar un apoyo de la rotación.
-            </div>
-          </div>
-        );
-      })()}
 
       {/* NAV FECHA */}
       <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
