@@ -61,6 +61,9 @@ export default function Ausencias() {
   const [enviando, setEnviando] = useState(false);
   const [cargandoHorario, setCargandoHorario] = useState(false);
   const [modoManual, setModoManual] = useState(false);
+  // Día completo (por defecto) o solo algunas horas. Solo aplica a
+  // ausencias de un día: las de varios días siempre van completas.
+  const [diaCompleto, setDiaCompleto] = useState(true);
   const [editandoId, setEditandoId] = useState(null);
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
@@ -170,6 +173,9 @@ export default function Ausencias() {
             archivoNombre: '',
             archivoUrl: null,
             precargado: true,
+            // Con "día completo" todas cuentan. Con "algunas horas" no se
+            // marca ninguna: el profesor elige cuáles.
+            incluida: diaCompleto,
           };
         });
         setHorario(nuevoHorario);
@@ -298,7 +304,8 @@ export default function Ausencias() {
         labelsSinTarea = sinTarea.map(u => `${u.grupo}${u.materia ? ` (${u.materia})` : ''}`).join(', ');
       }
     } else {
-      const horasClase = Object.entries(horario).filter(([_, v]) => v.tipo === 'clase');
+      const horasIncluidas = Object.entries(horario).filter(([_, v]) => diaCompleto || v.incluida);
+      const horasClase = horasIncluidas.filter(([_, v]) => v.tipo === 'clase');
       const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
       if (sinTarea.length > 0) {
         labelsSinTarea = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
@@ -341,9 +348,13 @@ export default function Ausencias() {
         })
       );
     } else {
-      // Subir archivos de cada hora
+      // Subir archivos de cada hora. Con "algunas horas", solo las que el
+      // profesor ha marcado como incluidas: las demás las da él con
+      // normalidad y no deben salir en el cuadrante de guardias.
       horasConUrl = await Promise.all(
-        Object.entries(horario).map(async ([horaId, val]) => {
+        Object.entries(horario)
+          .filter(([_, val]) => diaCompleto || val.incluida)
+          .map(async ([horaId, val]) => {
           let archivoUrl = null;
           if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
           return {
@@ -402,7 +413,7 @@ export default function Ausencias() {
       'ok'
     );
     setEditandoId(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false);
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false); setDiaCompleto(true);
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -411,6 +422,9 @@ export default function Ausencias() {
   // ===== EDITAR AUSENCIA EXISTENTE =====
   function editarAusencia(a) {
     setEditandoId(a.id);
+    // Al editar se ven las horas tal como se guardaron; todas cuentan
+    // como incluidas, sea cual fuese el modo con el que se enviaron.
+    setDiaCompleto(true);
     setFechaInicio(a.fecha_inicio || '');
     setFechaFin(a.fecha_fin || a.fecha_inicio || '');
     setMotivo(observacionesDe(a.motivo, a.subtipo));
@@ -457,6 +471,7 @@ export default function Ausencias() {
           instrucciones: h.instrucciones || '',
           archivoUrl: h.archivo_url || null,
           precargado: true,
+          incluida: true,
         };
       });
       setHorario(nuevoHorario);
@@ -877,6 +892,38 @@ export default function Ausencias() {
                 </div>
               )}
 
+              {/* DÍA COMPLETO / ALGUNAS HORAS — solo para ausencias de un día */}
+              {gruposUnicos.length === 0 && (modoManual || Object.values(horario).some(h => h.precargado)) && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  {[
+                    { id: true, label: '📅 Día completo' },
+                    { id: false, label: '🕐 Algunas horas' },
+                  ].map(op => (
+                    <button key={String(op.id)} type="button"
+                      onClick={() => {
+                        setDiaCompleto(op.id);
+                        setHorario(h => Object.fromEntries(
+                          Object.entries(h).map(([k, v]) => [k, { ...v, incluida: op.id }])
+                        ));
+                      }}
+                      style={{
+                        flex: 1, padding: '10px 14px', borderRadius: 8, cursor: 'pointer',
+                        border: `2px solid ${diaCompleto === op.id ? verde : '#ddd'}`,
+                        backgroundColor: diaCompleto === op.id ? verdeClaro : 'white',
+                        color: diaCompleto === op.id ? verde : '#555',
+                        fontWeight: diaCompleto === op.id ? 700 : 500, fontSize: 13,
+                      }}>
+                      {op.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!diaCompleto && gruposUnicos.length === 0 && (
+                <div style={{ padding: '9px 12px', backgroundColor: '#fffbeb', borderRadius: 8, marginBottom: 12, border: '1px solid #fcd34d', fontSize: 12, color: '#78350f' }}>
+                  Marca solo las horas en las que vas a faltar. Las demás las darás tú con normalidad.
+                </div>
+              )}
+
               {(modoManual || Object.values(horario).some(h => h.precargado)) && (
                 <div style={{ padding: '10px 14px', backgroundColor: '#eff6ff', borderRadius: 8, marginBottom: 12, border: '1px solid #bfdbfe' }}>
                   <div style={{ fontSize: 12, color: '#1e40af', lineHeight: 1.5 }}>
@@ -908,9 +955,32 @@ export default function Ausencias() {
                   const colorBorder = val.tipo === 'clase' ? '#fbbf24' : val.tipo === 'guardia' ? '#93c5fd' : '#a78bfa';
                   const colorText = val.tipo === 'clase' ? '#92400e' : val.tipo === 'guardia' ? '#1e40af' : '#6d28d9';
                   const labelTipo = val.tipo === 'clase' ? '📚 Clase' : val.tipo === 'guardia' ? '🛡️ Guardia' : '📋 Complementaria';
+
+                  // En "algunas horas", una hora no marcada se enseña
+                  // atenuada, sin tarea, y solo con la casilla para
+                  // incluirla. Con "día completo" esto no se toca: se ve
+                  // exactamente igual que siempre.
+                  const incluida = diaCompleto || val.incluida;
+                  if (!incluida) {
+                    return (
+                      <label key={hora.id} style={{ display: 'flex', alignItems: 'center', gap: 10, borderRadius: 10, border: '1.5px solid #e0e0e0', marginBottom: 8, padding: '10px 14px', backgroundColor: '#fafafa', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={false}
+                          onChange={() => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], incluida: true } }))}
+                          style={{ width: 16, height: 16 }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#999', minWidth: 70 }}>{hora.label}</span>
+                        <span style={{ fontSize: 12, color: '#bbb' }}>{labelTipo} · la das tú con normalidad</span>
+                      </label>
+                    );
+                  }
+
                   return (
                     <div key={hora.id} style={{ borderRadius: 10, border: `1.5px solid ${colorBorder}`, marginBottom: 8, overflow: 'hidden' }}>
                       <div style={{ padding: '10px 14px', backgroundColor: colorBg, display: 'flex', alignItems: 'center', gap: 10 }}>
+                        {!diaCompleto && (
+                          <input type="checkbox" checked={true}
+                            onChange={() => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], incluida: false } }))}
+                            style={{ width: 16, height: 16 }} />
+                        )}
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#1e3a5f', minWidth: 70 }}>{hora.label}</span>
                         <span style={{ fontSize: 12, fontWeight: 700, color: colorText, backgroundColor: 'white', padding: '3px 10px', borderRadius: 20, border: `1px solid ${colorBorder}` }}>{labelTipo}</span>
                         {val.grupo && <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}{val.materia ? ` · ${val.materia}` : ''}</span>}
