@@ -50,6 +50,23 @@ function horaAhora(ahora = new Date()) {
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
+/**
+ * El grupo tal como viene del horario importado trae pegados el código
+ * del módulo y el aula: "PBPR-2686687GM-1COC(5 E004 COC)". Al compañero
+ * que va a cubrir eso no le dice nada. Lo que necesita es "GM-1COC,
+ * aula E004".
+ */
+function limpiarGrupo(txt) {
+  const s = String(txt || '').trim();
+  if (!s || s.toLowerCase() === 'libre') return { grupo: '', aula: '' };
+  const g = s.match(/((?:GM|GS|GB|BTO|ESO|FPPE)-\d[A-Z0-9.]*|CA-CFGS-[A-Z])/i);
+  const a = s.match(/\(\s*\d+\s+([A-Za-z]?\d{1,4}[A-Za-z]?)\b/);
+  return {
+    grupo: g ? g[1].toUpperCase() : s.split('(')[0].trim(),
+    aula: a ? a[1].toUpperCase() : '',
+  };
+}
+
 // Etiqueta de la franja: "10:20–11:15".
 function horaDe(horaId) {
   const h = HORAS.find(x => x.id === normHora(horaId));
@@ -884,9 +901,12 @@ export default function Guardias() {
                 const asignados = porHora[h.id] || [];
                 return (
                   <div key={h.id} style={{ borderTop: '1px solid #f1f5f9', padding: '10px 14px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 6,
-                      textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {h.label}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a' }}>{h.label}</span>
+                      <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{h.horario}</span>
+                      <span style={{ fontSize: 11.5, color: '#94a3b8', marginLeft: 'auto' }}>
+                        {asignados.length} {asignados.length === 1 ? 'guardia' : 'guardias'}
+                      </span>
                     </div>
                     {asignados.map(a => {
                       // esMia: por UUID (lo ideal) o por nombre PDF cuando el matching de nombres falló
@@ -897,37 +917,60 @@ export default function Guardias() {
                       const esInc = a.estado === 'incidencia';
                       const esPend = !esConf && !esInc;
                       const colorEstado = esConf ? '#16a34a' : esInc ? '#ea580c' : '#dc2626';
-                      const iconoEstado = esConf ? '✅' : esInc ? '⚠️' : '🔴';
                       // Nombre del ausente al que cubre
                       const ausente = ausenciasDia.find(au =>
                         au.horas?.some(ah => normHora(ah.hora || ah) === h.id) &&
                         (au.profesorId === a.profesor_ausente_id || au.abrev === a.sector_destino)
                       );
+                      const destino = limpiarGrupo(a.grupo);
+                      const aula = a.aula || destino.aula;
+                      const quien = nombrePorId(a.profesor_id)
+                        || nombreCorto(mapaProfesores, a.profesor_nombre_pdf)
+                        || a.sector_apoyo || '—';
+                      const aQuien = nombrePorId(a.profesor_ausente_id) || ausente?.profesor || '';
+
                       return (
                         <div key={a.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
-                          padding: '8px 10px', borderRadius: 8,
-                          backgroundColor: esMia ? (esPend ? '#fefce8' : esConf ? '#f0fdf4' : '#fff7ed') : '#fafafa',
-                          border: '1.5px solid ' + (esMia ? colorEstado : '#e5e7eb'),
+                          display: 'flex', alignItems: 'center', gap: 12, marginBottom: 7,
+                          padding: '10px 12px', borderRadius: 10,
+                          backgroundColor: esMia ? '#f8fafc' : 'white',
+                          border: '1px solid ' + (esMia ? colorEstado : '#e8ecf1'),
+                          borderLeft: `4px solid ${esMia ? colorEstado : (esConf ? '#86efac' : '#e2e8f0')}`,
                         }}>
-                          <span style={{ fontSize: 15 }}>{iconoEstado}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
-                              {nombrePorId(a.profesor_id)
-                                || nombreCorto(mapaProfesores, a.profesor_nombre_pdf)
-                                || a.sector_apoyo || '—'}
-                              {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
+                            {/* Lo primero, adónde hay que ir */}
+                            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: 15, fontWeight: 800, color: '#0f172a', letterSpacing: -0.2 }}>
+                                {destino.grupo || 'Sin grupo asignado'}
+                              </span>
+                              {aula && (
+                                <span style={{ fontSize: 12, fontWeight: 700, color: '#1d4ed8',
+                                  backgroundColor: '#eff6ff', padding: '2px 8px', borderRadius: 6 }}>
+                                  aula {aula}
+                                </span>
+                              )}
+                              {esMia && (
+                                <span style={{ fontSize: 11, fontWeight: 800, color: colorEstado }}>
+                                  te toca a ti
+                                </span>
+                              )}
                             </div>
-                            <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
-                              cubre a {nombrePorId(a.profesor_ausente_id)
-                                || ausente?.profesor || a.sector_destino || '—'}
-                              {a.aula ? ` · aula ${a.aula}` : ''}
-                              {a.grupo ? ` · ${a.grupo}` : ''}
+
+                            {/* Quién la hace y a quién cubre */}
+                            <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
+                              {esMia ? 'Tú' : quien}
+                              {aQuien && <span style={{ color: '#94a3b8' }}> · en lugar de {aQuien}</span>}
                             </div>
+
+                            {/* La tarea que dejó el compañero */}
                             {a.tarea && (
-                              <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
+                              <div style={{
+                                fontSize: 12.5, color: '#334155', marginTop: 7,
+                                paddingLeft: 10, borderLeft: '2px solid #dbeafe', lineHeight: 1.45,
+                              }}>{a.tarea}</div>
                             )}
                           </div>
+
                           {/* Fichaje. Un solo check, activo solo durante la
                               franja de la guardia. Sin check, consta como
                               no realizada. */}
