@@ -102,20 +102,40 @@ export default function GestionAusencias() {
   const [gruposUnicos, setGruposUnicos] = useState([]);
   const [tareasBloque, setTareasBloque] = useState({});
 
+  /**
+   * Quién puede entrar aquí YA lo decide el servidor: el middleware
+   * comprueba la cookie firmada antes de dejar pasar a nadie a
+   * /gestion/*. Esto de aquí era una segunda comprobación, con
+   * sessionStorage, que depende de la PESTAÑA — se vacía al abrir una
+   * pestaña nueva o al reabrir la app instalada, aunque la sesión de
+   * verdad (la cookie, que dura 12 horas) siga siendo válida.
+   *
+   * Si alguien entraba directamente aquí sin pasar antes por /profesor
+   * en esa misma pestaña, esta comprobación lo mandaba de vuelta al
+   * login aunque su sesión fuera perfectamente válida — es lo que
+   * pasaba al abrir la app instalada o un enlace directo.
+   *
+   * Ahora esto solo rellena el nombre para el saludo, sin bloquear
+   * nada: si de verdad no hay sesión válida, cargarTodo() lo va a saber
+   * porque el servidor le devuelve 401, y de eso ya se encarga el
+   * propio fetch.
+   */
   useEffect(() => {
-    const id = sessionStorage.getItem('profesor_id');
-    const rol = sessionStorage.getItem('profesor_rol_gestion');
-    if (!id || (rol !== 'jefe_estudios' && rol !== 'secretario' && rol !== 'director')) {
-      window.location.href = '/login'; return;
-    }
     setNombre(sessionStorage.getItem('profesor_nombre') || '');
     cargarTodo();
   }, []);
 
   async function cargarTodo() {
     setCargando(true);
+    // El único "no tienes sesión" que vale es el que dice el servidor:
+    // un 401 de verdad, no una lectura de sessionStorage.
+    const respAusencias = await fetch('/api/ausencias');
+    if (respAusencias.status === 401) {
+      window.location.href = '/login';
+      return;
+    }
     const [{ data: aus }, { data: profs }] = await Promise.all([
-      fetch('/api/ausencias').then(r => r.json()).then(d => ({ data: d.ausencias || [] })),
+      respAusencias.json().then(d => ({ data: d.ausencias || [] })),
       consulta('profesores').select('id, nombre, apellidos, departamento').eq('estado', 'activo').order('apellidos'),
     ]);
     setAusencias(aus || []);
