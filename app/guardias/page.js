@@ -23,63 +23,13 @@ const HORAS = [
   { id: '6',      label: '6ª',     horario: '13:35–14:30' },
 ];
 
-/**
- * La hora en la que estamos ahora mismo.
- *
- * Al abrir el módulo lo que interesa es la guardia de ESTE momento, no la
- * de primera hora. Entre franja y franja (y en el recreo) se devuelve la
- * que viene, que es donde hay que estar. Fuera del horario lectivo, la
- * primera, para poder preparar el día siguiente.
- */
-function horaAhora(ahora = new Date()) {
-  const min = ahora.getHours() * 60 + ahora.getMinutes();
-  const aMin = t => {
-    const [h, m] = t.split('–')[0].split(':').map(Number);
-    return h * 60 + m;
-  };
-  const fin = t => {
-    const [h, m] = t.split('–')[1].split(':').map(Number);
-    return h * 60 + m;
-  };
-  for (const h of HORAS) {
-    if (min >= aMin(h.horario) && min <= fin(h.horario)) return h.id;
-  }
-  const siguiente = HORAS.find(h => min < aMin(h.horario));
-  return siguiente ? siguiente.id : '1';
-}
-
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
-// El recreo es vigilancia de zona: no sustituye a nadie, así que no entra
-// en la lista de profesores a los que hay que cubrir.
-function esRecreoSector(sector) {
-  return (sector || '').toUpperCase().includes('RECREO');
-}
-
-/**
- * El grupo tal como viene del horario importado trae pegados el código
- * del módulo y el aula: "PBPR-2686687GM-1COC(5 E004 COC)". Al compañero
- * que va a cubrir eso no le dice nada. Lo que necesita es "GM-1COC,
- * aula E004".
- */
-function limpiarGrupo(txt) {
-  const s = String(txt || '').trim();
-  if (!s || s.toLowerCase() === 'libre') return { grupo: '', aula: '' };
-  const g = s.match(/((?:GM|GS|GB|BTO|ESO|FPPE)-\d[A-Z0-9.]*|CA-CFGS-[A-Z])/i);
-  const a = s.match(/\(\s*\d+\s+([A-Za-z]?\d{1,4}[A-Za-z]?)\b/);
-  return {
-    grupo: g ? g[1].toUpperCase() : s.split('(')[0].trim(),
-    aula: a ? a[1].toUpperCase() : '',
-  };
-}
-
-// Etiqueta de la franja: "10:20–11:15".
+// Franja de una hora, y si se puede fichar ahora mismo.
 function horaDe(horaId) {
   const h = HORAS.find(x => x.id === normHora(horaId));
   return h ? h.horario : '';
 }
-
-// ¿Se puede fichar ahora mismo esta guardia? Solo durante su franja.
 function dentroDeFranja(horaId, fechaGuardia, ahora = new Date()) {
   const h = HORAS.find(x => x.id === normHora(horaId));
   if (!h || !fechaGuardia) return false;
@@ -139,20 +89,18 @@ function inicialesNombre(nombre) {
   if (!nombre) return '';
   return nombre.trim().split(/\s+/).map(p => p[0]).join('');
 }
-function claveAbreviatura(apellidos, nombre) {
-  const ap = abreviarApellido(apellidos);
-  const nom = inicialesNombre(nombre);
-  return sinTildes(`${ap}, ${nom}`).toLowerCase().replace(/\s/g, '');
-}
-
-// Quita tildes: Delphos y las fichas del profesorado no siempre las
-// escriben igual, y por una tilde se dejaba de reconocer a la persona.
 function sinTildes(s) {
   return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
-// Clave laxa: tres letras del primer apellido e iniciales del nombre,
-// ignorando el resto de apellidos. Red de seguridad cuando la ficha y el
-// cuadrante no traen el mismo número de apellidos.
+function claveAbreviatura(apellidos, nombre) {
+  const ap = abreviarApellido(apellidos);
+  const nom = inicialesNombre(nombre);
+  // Sin tildes: Delphos y las fichas no siempre las escriben igual, y por
+  // una tilde se dejaba de reconocer a la persona y salía la sigla.
+  return sinTildes(`${ap}, ${nom}`).toLowerCase().replace(/\s/g, '');
+}
+// Red de seguridad: tres letras del primer apellido e iniciales del
+// nombre, para cuando la ficha y el cuadrante no traen los mismos apellidos.
 function claveLaxa(apellidos, nombre) {
   const raiz = (apellidos || '').trim().split(/\s+/)[0] || '';
   const nom = (nombre || '').trim().split(/\s+/).filter(Boolean).map(p => p[0]).join('');
@@ -165,25 +113,12 @@ function claveLaxaDeAbrev(abrev) {
   const raiz = ap.trim().replace(/\..*$/, '').trim();
   return sinTildes(`${raiz.slice(0, 3)}|${nom.replace(/\./g, '').trim()}`).toLowerCase();
 }
-// Nombre completo del compañero a partir de la abreviatura del cuadrante.
-// En la aplicación nunca se enseñan siglas: se muestra a la persona.
+// Nombre de la persona a partir de la sigla del cuadrante.
 function nombreLargo(mapa, abrev) {
   if (!abrev) return '';
-  const directo = mapa[sinTildes(abrev).toLowerCase().replace(/\s/g, '')];
-  if (directo) return directo;
-  const laxo = mapa['~' + claveLaxaDeAbrev(abrev)];
-  return laxo || abrev;
-}
-// Nombre corto para las etiquetas apretadas del cuadrante: nombre y
-// primer apellido. Se reconoce a la persona igual que con el nombre
-// entero, pero cabe en una línea y no rompe la rejilla de horas.
-function nombreCorto(mapa, abrev) {
-  const largo = nombreLargo(mapa, abrev);
-  if (!largo || !largo.includes(',')) return largo;
-  const [apellidos, nombre] = largo.split(',');
-  const primerApellido = apellidos.trim().split(/\s+/)[0] || '';
-  const primerNombre = (nombre || '').trim().split(/\s+/)[0] || '';
-  return `${primerNombre} ${primerApellido}`.trim();
+  return mapa[sinTildes(abrev).toLowerCase().replace(/\s/g, '')]
+    || mapa['~' + claveLaxaDeAbrev(abrev)]
+    || abrev;
 }
 function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
@@ -192,8 +127,7 @@ function normAbrev(str) {
 export default function Guardias() {
   const [cargando, setCargando]         = useState(true);
   const [fecha, setFecha]               = useState(hoyLocal());
-  // Arranca en la hora en la que estás, no en la 1ª.
-  const [horaActiva, setHoraActiva]     = useState(() => horaAhora());
+  const [horaActiva, setHoraActiva]     = useState('1');
   const [sectores, setSectores]         = useState([]);
   const [horarioGuardias, setHG]        = useState({});
   const [horariosClase, setHC]          = useState([]);
@@ -210,10 +144,10 @@ export default function Guardias() {
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
-  const [fichandoId, setFichandoId]     = useState(null);
+  const [fichandoId, setFichandoId]       = useState(null);
   const [observaciones, setObservaciones] = useState('');
-  const [fichando, setFichando]         = useState(false);
-  const [verAyuda, setVerAyuda]         = useState(false);
+  const [fichando, setFichando]           = useState(false);
+  const [verAyuda, setVerAyuda]           = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -416,39 +350,12 @@ export default function Guardias() {
 
   const diaSem = diaSemanaEs(fecha);
   const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
-  // Nombre corto de un profesor por su identificador. Las guardias
-  // guardan a quién cubre y quién la hace por id, que es lo fiable.
-  const nombrePorId = id => {
-    if (!id) return '';
-    const p = (profesoresList || []).find(x => String(x.id) === String(id));
-    return p ? `${p.nombre?.split(' ')[0] || ''} ${p.apellidos?.split(' ')[0] || ''}`.trim() : '';
-  };
-
-  /**
-   * Cuántos grupos hay que cubrir a una hora.
-   *
-   * No se puede contar sobre ausenciasDia: las ausencias de varios días y
-   * las bajas se guardan sin horas concretas (la tarea se deja por módulo,
-   * no por hora), así que al preguntarles "¿faltas a 4ª?" contestan que no
-   * y el contador se quedaba corto. Las guardias sí son fiables, porque el
-   * servidor ya sacó las horas del horario de cada día.
-   *
-   * Se cuentan los profesores distintos a los que hay que cubrir, y se
-   * suman las ausencias que aún no tengan guardia creada.
-   */
-  const gruposACubrir = horaId => {
-    const ausentes = new Set();
-
-    apoyosAsignados
-      .filter(a => normHora(a.hora) === horaId)
-      .forEach(a => ausentes.add(a.profesor_ausente_id || `apoyo:${a.id}`));
-
-    ausenciasDia
-      .filter(a => a.horas?.some(hh => horaCoincide(hh.hora, horaId)))
-      .forEach(a => { if (!ausentes.has(a.profesorId)) ausentes.add(a.profesorId || `aus:${a.abrev}`); });
-
-    return ausentes.size;
-  };
+  // Somos 154 en el claustro: hace falta el nombre entero y saber de qué
+  // departamento es quien cubre, que si no nadie se reconoce.
+  const fichaPorId = id => (profesoresList || []).find(p => String(p.id) === String(id));
+  const fichaPorAbrev = abrev => (profesoresList || []).find(p =>
+    claveAbreviatura(p.apellidos, p.nombre) === normAbrev(abrev || ''));
+  const nombreEntero = ficha => ficha ? `${ficha.nombre} ${ficha.apellidos}` : '';
 
   const horaInfo = HORAS.find(h => h.id === horaActiva);
 
@@ -529,7 +436,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreCorto(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
             break;
@@ -552,7 +459,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreCorto(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             break;
           }
@@ -604,7 +511,7 @@ export default function Guardias() {
           libres.push({
             abrev: p,
             sectorOriginal: sector.toUpperCase(),
-            nombre: nombreCorto(mapaProfesores, p),
+            nombre: nombreLargo(mapaProfesores, p),
             profesorId: profCompleto?.id || null,
             apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
             apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
@@ -657,21 +564,18 @@ export default function Guardias() {
   // === Registro automático ===
   // Si hay un candidato asignado y no está ya registrado en apoyos_asignados,
   // se guarda automáticamente. No espera a que nadie pulse nada.
-  // El registro automático de guardias desde el navegador se ha
-  // retirado: lo hacía el equipo de cada profesor que abriera la pantalla,
-  // creaba filas sin saber a quién cubrían ni en qué aula, y dos personas
-  // mirando a la vez generaban duplicados. Ahora las guardias las calcula
-  // y las guarda el servidor al registrarse la ausencia, y esta pantalla
-  // solo muestra lo que hay.
+  // El registro automático desde el navegador se ha retirado: lo hacía el
+  // equipo de cada profesor que abriera la pantalla, creaba guardias sin
+  // saber a quién cubrían ni en qué aula, y dos personas mirando a la vez
+  // generaban duplicados. Ahora las calcula y las guarda el servidor.
 
 
+  // El profesor confirma la guardia que le han preasignado.
+  // El servidor comprueba que el apoyo es suyo antes de aceptarlo.
   /**
-   * Fichar la guardia.
-   *
-   * Un solo gesto, cuando ya estás en el aula: queda la hora real y, si
-   * hace falta, las observaciones. Solo se puede durante la franja; el
-   * servidor lo vuelve a comprobar, porque el reloj del navegador lo
-   * cambia cualquiera.
+   * Fichar la guardia: un solo gesto, ya en el aula. Queda la hora real y,
+   * si hace falta, las observaciones. Solo durante la franja; el servidor
+   * lo vuelve a comprobar, porque el reloj del navegador lo cambia cualquiera.
    */
   async function ficharGuardia() {
     if (!fichandoId) return;
@@ -683,7 +587,6 @@ export default function Guardias() {
           datos: { observaciones: observaciones.trim() } }),
       });
       const d = await r.json().catch(() => ({}));
-
       if (r.ok) {
         setApAsig(prev => prev.map(a => a.id === fichandoId
           ? { ...a, estado: 'confirmado', confirmado_at: new Date().toISOString(),
@@ -696,9 +599,7 @@ export default function Guardias() {
       } else {
         alert(d.error || 'No se ha podido fichar.');
       }
-    } catch {
-      alert('Sin conexión.');
-    }
+    } catch { alert('Sin conexión.'); }
     setFichando(false);
   }
 
@@ -763,41 +664,37 @@ export default function Guardias() {
   if (cargando) return <div style={{ padding:40, textAlign:'center', fontFamily:'system-ui' }}>Cargando cuadrante…</div>;
 
   // ── Modal de incidencia ──
-  // Fichaje: el check y las observaciones, en un mismo gesto.
   const modalFichaje = fichandoId ? (() => {
     const g = apoyosAsignados.find(a => a.id === fichandoId) || {};
     return (
-      <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:1000,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
         onClick={() => setFichandoId(null)}>
-        <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440,
-          boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
-          <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a', marginBottom: 10 }}>
+        <div style={{ backgroundColor:'white', borderRadius:14, padding:24, width:'100%', maxWidth:440,
+          boxShadow:'0 8px 30px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize:18, fontWeight:800, color:'#16a34a', marginBottom:10 }}>
             ✅ Fichar la guardia
           </div>
-          <div style={{ fontSize: 13.5, color: '#334155', marginBottom: 14, lineHeight: 1.5 }}>
+          <div style={{ fontSize:13.5, color:'#334155', marginBottom:14 }}>
             {g.grupo ? <strong>{g.grupo}</strong> : 'Tu guardia'}
-            {g.aula ? ` · aula ${g.aula}` : ''}
-            {g.hora ? ` · ${horaDe(g.hora)}` : ''}
+            {g.aula ? ` · aula ${g.aula}` : ''}{g.hora ? ` · ${horaDe(g.hora)}` : ''}
           </div>
-
-          <label style={{ fontSize: 12.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 5 }}>
+          <label style={{ fontSize:12.5, fontWeight:700, color:'#475569', display:'block', marginBottom:5 }}>
             Observaciones (opcional)
           </label>
           <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
-            placeholder="Alumnos que faltan, si el grupo no estaba, si no había tarea, cualquier incidencia…"
-            rows={3} style={{ width: '100%', padding: '11px 12px', borderRadius: 8,
-              border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+            placeholder="Alumnos que faltan, si el grupo no estaba, si no había tarea…"
+            rows={3} style={{ width:'100%', padding:'11px 12px', borderRadius:8,
+              border:'1.5px solid #ddd', fontSize:14, boxSizing:'border-box', resize:'vertical' }} />
+          <div style={{ display:'flex', gap:8, marginTop:14, justifyContent:'flex-end' }}>
             <button onClick={() => setFichandoId(null)} style={{
-              padding: '10px 18px', borderRadius: 9, border: '1.5px solid #cbd5e1',
-              backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+              padding:'10px 18px', borderRadius:9, border:'1.5px solid #cbd5e1',
+              backgroundColor:'white', color:'#475569', fontWeight:700, fontSize:14, cursor:'pointer',
             }}>Cancelar</button>
             <button onClick={ficharGuardia} disabled={fichando} style={{
-              padding: '10px 18px', borderRadius: 9, border: 'none',
+              padding:'10px 18px', borderRadius:9, border:'none',
               backgroundColor: fichando ? '#94a3b8' : '#16a34a',
-              color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer',
+              color:'white', fontWeight:800, fontSize:14, cursor:'pointer',
             }}>{fichando ? 'Fichando…' : 'Fichar'}</button>
           </div>
         </div>
@@ -805,52 +702,48 @@ export default function Guardias() {
     );
   })() : null;
 
-  // La "i": qué es una guardia y qué se espera de ti.
   const modalAyuda = verAyuda ? (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:1000,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
       onClick={() => setVerAyuda(false)}>
-      <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 470,
-        maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }}
+      <div style={{ backgroundColor:'white', borderRadius:14, padding:24, width:'100%', maxWidth:470,
+        maxHeight:'80vh', overflowY:'auto', boxShadow:'0 8px 30px rgba(0,0,0,0.15)' }}
         onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8', marginBottom: 14 }}>
+        <div style={{ fontSize:18, fontWeight:800, color:'#1d4ed8', marginBottom:14 }}>
           Cómo funciona tu guardia
         </div>
-
-        <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.6 }}>
-          <p style={{ margin: '0 0 12px' }}>
+        <div style={{ fontSize:14, color:'#334155', lineHeight:1.6 }}>
+          <p style={{ margin:'0 0 12px' }}>
             Es horario lectivo obligatorio, igual que tu clase. La asigna el
-            sistema automáticamente, por rotación entre los departamentos.
+            sistema por rotación entre los departamentos.
           </p>
-          <p style={{ margin: '0 0 12px' }}>
+          <p style={{ margin:'0 0 12px' }}>
             <strong>Preséntate</strong> en el aula y con el grupo que te indica la
             ficha. Un profesor por grupo: no se juntan grupos aunque las aulas
             estén al lado.
           </p>
-          <p style={{ margin: '0 0 12px' }}>
+          <p style={{ margin:'0 0 12px' }}>
             <strong>Ficha</strong> cuando estés en el aula. El check solo está
-            activo durante la hora de la guardia; fuera de esa franja no se puede
-            fichar. Queda registrada la hora.
+            activo durante la hora de la guardia. Queda registrada la hora.
           </p>
-          <p style={{ margin: '0 0 12px' }}>
+          <p style={{ margin:'0 0 12px' }}>
             <strong>Observaciones:</strong> al fichar se abre el cuadro. Anota
             alumnos ausentes, si el grupo no estaba, si no había tarea o
             cualquier incidencia. Se puede dejar en blanco.
           </p>
-          <p style={{ margin: '0 0 12px', padding: '10px 12px', borderRadius: 8,
-            backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', fontWeight: 600 }}>
+          <p style={{ margin:'0 0 12px', padding:'10px 12px', borderRadius:8,
+            backgroundColor:'#fef2f2', border:'1px solid #fca5a5', color:'#991b1b', fontWeight:600 }}>
             Si no fichas, la guardia consta como no realizada.
           </p>
-          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
+          <p style={{ margin:0, fontSize:13, color:'#64748b' }}>
             Las guardias de recreo son vigilancia de zona: no sustituyen a nadie
             y se fichan igual.
           </p>
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+        <div style={{ display:'flex', justifyContent:'flex-end', marginTop:16 }}>
           <button onClick={() => setVerAyuda(false)} style={{
-            padding: '10px 20px', borderRadius: 9, border: 'none',
-            backgroundColor: '#1d4ed8', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            padding:'10px 20px', borderRadius:9, border:'none',
+            backgroundColor:'#1d4ed8', color:'white', fontWeight:700, fontSize:14, cursor:'pointer',
           }}>Entendido</button>
         </div>
       </div>
@@ -879,59 +772,176 @@ export default function Guardias() {
       {/* NAV FECHA */}
 
       <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
-        <button onClick={() => { setFecha(sumarDias(fecha, -1)); setHoraActiva('1'); }} style={btnNav}>←</button>
+        <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>←</button>
         <div style={{ flex:1, textAlign:'center' }}>
           <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>{fechaCorta(fecha)}</div>
           <div style={{ fontSize:12, color:'#666', marginTop:2 }}>
-            {esFinde ? '🏖️ Fin de semana' : (() => {
-              // Igual que arriba: se cuentan los profesores a los que de
-              // verdad hay que cubrir hoy, vengan de una ausencia de un día
-              // o de una baja larga.
-              const hoyAusentes = new Set();
-              apoyosAsignados.forEach(a => a.profesor_ausente_id && hoyAusentes.add(a.profesor_ausente_id));
-              ausenciasDia.forEach(a => a.profesorId && hoyAusentes.add(a.profesorId));
-              const n = hoyAusentes.size;
-              return n === 0 ? '✅ Sin ausencias' : `🚨 ${n} profesor${n !== 1 ? 'es' : ''} ausente${n !== 1 ? 's' : ''}`;
-            })()}
+            {esFinde ? '🏖️ Fin de semana' : `${ausentesEstaHora().length === 0 ? '✅ Sin ausencias' : `🚨 ${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`}`}
           </div>
         </div>
-        <button onClick={() => { setFecha(sumarDias(fecha, 1)); setHoraActiva('1'); }} style={btnNav}>→</button>
-        <button onClick={() => { setFecha(hoyLocal()); setHoraActiva(horaAhora()); }}
+        <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
+        <button onClick={() => setFecha(hoyLocal())}
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
-      {/* SELECTOR DE HORAS
-          Va arriba y se queda pegado: de un vistazo se ve el día entero,
-          con el número de ausencias de cada hora, y se salta de una a otra
-          sin desplazarse por una lista larga. */}
+      {/* COBERTURA DE GUARDIAS HOY */}
+      {!esFinde && (() => {
+        // Todas las guardias del día, agrupadas por hora
+        // Muestra quién cubre a quién — visible para todos los profesores
+        const porHora = {};
+        apoyosAsignados.forEach(a => {
+          const h = normHora(a.hora);
+          if (!porHora[h]) porHora[h] = [];
+          porHora[h].push(a);
+        });
+        const horasConGuardias = HORAS.filter(h => porHora[h.id]?.length > 0);
+        if (horasConGuardias.length === 0) return (
+          <div style={{ margin: '12px 16px', padding: '14px', borderRadius: 12,
+            backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', textAlign: 'center',
+            fontSize: 13, color: '#166534', fontWeight: 600 }}>
+            ✅ No hay guardias asignadas hoy
+          </div>
+        );
+
+        // Mis guardias (para que el propio profesor pueda confirmarlas)
+        const misGuardias = apoyosAsignados.filter(a =>
+          a.profesor_id && String(a.profesor_id) === String(profesorId));
+
+        return (
+          <div style={{ padding: '12px 16px 0' }}>
+            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
+              <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
+                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
+                <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
+                  style={{ marginLeft: 8, width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+                    border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1d4ed8',
+                    fontWeight: 800, fontSize: 13, lineHeight: 1, padding: 0 }}>i</button>
+              </div>
+
+              {horasConGuardias.map(h => {
+                const asignados = porHora[h.id] || [];
+                return (
+                  <div key={h.id} style={{ borderTop: '1px solid #f1f5f9', padding: '10px 14px' }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 6,
+                      textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      {h.label}
+                    </div>
+                    {asignados.map(a => {
+                      // esMia: por UUID (lo ideal) o por nombre PDF cuando el matching de nombres falló
+                      const miNombrePdf = (sessionStorage.getItem('profesor_nombre_pdf') || '').toLowerCase().trim();
+                      const esMia = (a.profesor_id && String(a.profesor_id) === String(profesorId))
+                        || (!a.profesor_id && miNombrePdf && (a.profesor_nombre_pdf || '').toLowerCase().trim() === miNombrePdf);
+                      const esConf = a.estado === 'confirmado';
+                      const esInc = a.estado === 'incidencia';
+                      const esPend = !esConf && !esInc;
+                      const colorEstado = esConf ? '#16a34a' : esInc ? '#ea580c' : '#dc2626';
+                      const iconoEstado = esConf ? '✅' : esInc ? '⚠️' : '🔴';
+                      // Nombre del ausente al que cubre
+                      const ausente = ausenciasDia.find(au =>
+                        au.horas?.some(ah => normHora(ah.hora || ah) === h.id) &&
+                        (au.profesorId === a.profesor_ausente_id || au.abrev === a.sector_destino)
+                      );
+                      return (
+                        <div key={a.id} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
+                          padding: '8px 10px', borderRadius: 8,
+                          backgroundColor: esMia ? (esPend ? '#fefce8' : esConf ? '#f0fdf4' : '#fff7ed') : '#fafafa',
+                          border: '1.5px solid ' + (esMia ? colorEstado : '#e5e7eb'),
+                        }}>
+                          <span style={{ fontSize: 15 }}>{iconoEstado}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
+                              {a.profesor_nombre || a.sector_apoyo || '—'}
+                              {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
+                              cubre a {ausente?.profesor || a.sector_destino || a.sector_apoyo || '—'}
+                              {a.aula ? ` · aula ${a.aula}` : ''}
+                              {a.grupo ? ` · ${a.grupo}` : ''}
+                            </div>
+                            {a.tarea && (
+                              <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
+                            )}
+                          </div>
+                          {/* Botones de acción para el profesor asignado */}
+                          {esMia && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+                              {esPend && (() => {
+                                const abierto = dentroDeFranja(a.hora, a.fecha);
+                                return (
+                                  <>
+                                    <button
+                                      onClick={() => abierto
+                                        ? (setFichandoId(a.id), setObservaciones(''))
+                                        : setVerAyuda(true)}
+                                      style={{
+                                        padding: '9px 14px', borderRadius: 8, border: 'none',
+                                        cursor: 'pointer', whiteSpace: 'nowrap', width: '100%',
+                                        backgroundColor: abierto ? '#16a34a' : '#e5e7eb',
+                                        color: abierto ? 'white' : '#9ca3af',
+                                        fontWeight: 800, fontSize: 12.5,
+                                      }}>✅ Fichar guardia</button>
+                                    <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>
+                                      {abierto ? 'Púlsalo en el aula' : `Se abre de ${horaDe(a.hora)}`}
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                              {esConf && (
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a',
+                                  backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 16,
+                                  border: '1.5px solid #86efac' }}>
+                                  ✅ Fichada{a.confirmado_at ? ` · ${new Date(a.confirmado_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}` : ''}
+                                </span>
+                              )}
+                              {esInc && (
+                                <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',
+                                  backgroundColor: '#fff7ed', padding: '6px 12px', borderRadius: 16,
+                                  border: '1.5px solid #fdba74' }}>🟠 Incidencia registrada</span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* SELECTOR DE HORAS */}
       {!esFinde && (
-        <div style={{
-          padding: '12px 16px 10px', backgroundColor: 'white',
-          borderBottom: '1px solid #e5e7eb', position: 'sticky', top: 0, zIndex: 20,
-        }}>
-          <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingTop: 6 }}>
+        <div style={{ padding:'10px 16px 0', backgroundColor:'white', borderBottom:'1px solid #e5e7eb' }}>
+          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
             {HORAS.map(h => {
               const activa = h.id === horaActiva;
-              const cnt = gruposACubrir(h.id);
-              const esRecreo = h.id === 'recreo';
+              // Se cuenta sobre las guardias ya calculadas por el servidor:
+              // las ausencias de varios días y las bajas no guardan horas
+              // concretas, así que contando sobre ellas salían de menos.
+              const aCubrir = new Set();
+              apoyosAsignados.filter(x => normHora(x.hora) === h.id)
+                .forEach(x => aCubrir.add(x.profesor_ausente_id || `g:${x.id}`));
+              ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)))
+                .forEach(a => aCubrir.add(a.profesorId || `a:${a.abrev}`));
+              const cnt = aCubrir.size;
 
               return (
-                <button key={h.id} onClick={() => setHoraActiva(h.id)} title={h.horario} style={{
-                  flexShrink: 0, cursor: 'pointer', position: 'relative',
-                  width: esRecreo ? 62 : 46, height: 46, borderRadius: esRecreo ? 23 : '50%',
-                  backgroundColor: activa ? marron : 'white',
-                  color: activa ? 'white' : (cnt > 0 ? rojo : '#64748b'),
-                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#dfe3e8'),
-                  fontWeight: 800, fontSize: esRecreo ? 11.5 : 15, padding: 0,
-                  boxShadow: activa ? '0 2px 8px rgba(0,0,0,0.18)' : 'none',
+                <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
+                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer',
+                  backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
+                  color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
+                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
+                  fontWeight:700, fontSize:13, position:'relative',
                 }}>
-                  {esRecreo ? 'Recreo' : h.label}
+                  {h.label}
                   {cnt > 0 && (
                     <span style={{
-                      position: 'absolute', top: -3, right: -3, backgroundColor: rojo, color: 'white',
-                      borderRadius: '50%', width: 19, height: 19, fontSize: 10.5, fontWeight: 800,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      border: '2px solid white',
+                      position:'absolute', top:-6, right:-6, backgroundColor:rojo, color:'white',
+                      borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:800,
+                      display:'flex', alignItems:'center', justifyContent:'center'
                     }}>{cnt}</span>
                   )}
                 </button>
@@ -940,8 +950,6 @@ export default function Guardias() {
           </div>
         </div>
       )}
-
-
 
       {/* HORARIO ACTIVO */}
       {!esFinde && horaInfo && (
@@ -960,47 +968,29 @@ export default function Guardias() {
           </div>
         ) : (
           <>
-            {/* SECCIÓN 1: PROFESORES QUE FALTAN
-                Se pinta desde las guardias que ya calculó y guardó el
-                servidor, no desde un cálculo del navegador. Antes había dos
-                bloques enseñando lo mismo con fuentes distintas: este veía
-                solo las ausencias del formulario y decía 1 cuando faltaban 3,
-                porque las ausencias largas y las bajas no guardan horas
-                concretas. */}
-            {(() => {
-              const guardiasHora = apoyosAsignados
-                .filter(a => normHora(a.hora) === horaActiva && !esRecreoSector(a.sector_apoyo));
-
-              if (guardiasHora.length === 0) return (
-                <div style={{
-                  backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
-                  padding:20, textAlign:'center', color:verde, fontSize:14,
-                }}>
-                  No falta nadie a {horaInfo?.label || 'esta hora'}
+            {/* SECCIÓN 1: PROFESORES QUE FALTAN (PROTAGONISTA) */}
+            {ausentesEstaHora().length === 0 ? (
+              <div style={{
+                backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
+                padding:20, textAlign:'center', color:verde, fontSize:14,
+              }}>
+                ✅ No hay profesores ausentes esta hora
+              </div>
+            ) : (
+              <>
+                <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                  🚨 PROFESORES QUE FALTAN ({ausentesEstaHora().length})
                 </div>
-              );
 
-              // Agrupadas por el sector del que falta, como estaban
-              const porSector = {};
-              guardiasHora.forEach(g => {
-                const s = (g.sector_destino || g.sector_apoyo || 'SIN SECTOR').toUpperCase();
-                (porSector[s] = porSector[s] || []).push(g);
-              });
+                {/* AGRUPAR POR SECTOR */}
+                {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
+                  const asignaciones = asignacionAutomatica().filter(a =>
+                    a.ausencia.sector.toUpperCase() === sectorSup
+                  );
 
-              const ausentesDistintos = new Set(guardiasHora.map(g => g.profesor_ausente_id || g.id)).size;
-
-              return (
-                <>
-                  <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
-                    🚨 PROFESORES QUE FALTAN ({ausentesDistintos})
-                    <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
-                      style={{ marginLeft:'auto', width:22, height:22, borderRadius:'50%', cursor:'pointer',
-                        border:'1.5px solid #93c5fd', backgroundColor:'white', color:'#1d4ed8',
-                        fontWeight:800, fontSize:13, lineHeight:1, padding:0 }}>i</button>
-                  </div>
-
-                  {Object.entries(porSector).map(([sectorSup, lista]) => (
+                  return (
                     <div key={sectorSup} style={{ marginBottom:16 }}>
+                      {/* Cabecera del sector */}
                       <div style={{
                         backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:'10px 10px 0 0',
                         padding:'8px 14px', display:'flex', alignItems:'center', gap:8,
@@ -1008,96 +998,211 @@ export default function Guardias() {
                         <span style={{ fontSize:16 }}>{emojiSector(sectorSup)}</span>
                         <span style={{ fontWeight:800, fontSize:13, color:rojo }}>{sectorSup}</span>
                         <span style={{ fontSize:11, color:'#7f1d1d', marginLeft:'auto' }}>
-                          {lista.length} clase{lista.length !== 1 ? 's' : ''} a cubrir
+                          {ausentes.length} ausente{ausentes.length !== 1 ? 's' : ''} · {asignaciones.length} clase{asignaciones.length !== 1 ? 's' : ''} a cubrir
                         </span>
                       </div>
 
-                      <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none',
-                                    borderRadius:'0 0 10px 10px', padding:12 }}>
-                        {lista.map(g => {
-                          const destino = limpiarGrupo(g.grupo);
-                          const aula = g.aula || destino.aula;
-                          const falta = nombrePorId(g.profesor_ausente_id) || 'Profesor no identificado';
-                          const cubre = nombrePorId(g.profesor_id)
-                            || nombreCorto(mapaProfesores, g.profesor_nombre_pdf) || '—';
-                          const esMia = g.profesor_id && String(g.profesor_id) === String(profesorId);
-                          const fichada = g.estado === 'confirmado';
-                          const abierto = dentroDeFranja(g.hora, g.fecha);
+                      {/* Cada asignación */}
+                      <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
+                        {asignaciones.length === 0 ? (
+                          <div style={{ fontSize:12, color:'#999', textAlign:'center', padding:'8px 0' }}>
+                            Sin clases esta hora (complementaria u hora libre del profesor)
+                          </div>
+                        ) : asignaciones.map((asig, idx) => {
+                          const cubre = asig.cubre;
+                          
+                          // Si es una guardia huérfana (no clase)
+                          if (asig.tipoHora === 'guardia') {
+                            return (
+                              <div key={idx} style={{
+                                padding:'10px 12px', marginBottom:8,
+                                backgroundColor:'#fef3c7', borderRadius:8,
+                                border:'1.5px solid #fbbf24',
+                              }}>
+                                <div style={{ fontSize:13, fontWeight:700, color:'#78350f', marginBottom:4 }}>
+                                  {nombreEntero(fichaPorId(asig.ausencia.profesorId)) || asig.ausencia.profesor}
+                                </div>
+                                <div style={{ fontSize:12, color:'#92400e', fontWeight:600 }}>
+                                  ⚠️ Faltaba y tenía <strong>GUARDIA en {sectorSup}</strong>
+                                </div>
+                                <div style={{ fontSize:11, color:'#78350f', marginTop:4, fontStyle:'italic' }}>
+                                  El sector pierde 1 profesor de guardia. Puede necesitar un sustituto si otros profesores del sector también faltan.
+                                </div>
+
+                                {/* Lista de candidatos — diseño a prueba de ciruelos */}
+                                {(() => {
+                                  const libre = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
+                                  if (libre.length === 0) return null;
+                                  return (
+                                    <div style={{ marginTop:12, borderTop:'2px dashed #fbbf24', paddingTop:12 }}>
+
+                                      {libre[0]?.profesorId === profesorId ? (
+                                        /* SOY EL SUGERIDO: pantalla grande y clara */
+                                        <div style={{ backgroundColor:'#fff7ed', border:'2.5px solid #f97316', borderRadius:12, padding:16, textAlign:'center' }}>
+                                          <div style={{ fontSize:22, marginBottom:6 }}>👆 TE TOCA A TI</div>
+                                          <div style={{ fontSize:14, fontWeight:800, color:'#c2410c', marginBottom:4 }}>
+                                            Eres el/la sugerido/a para cubrir esta guardia
+                                          </div>
+                                          <div style={{ fontSize:12, color:'#7c2d12', marginBottom:14 }}>
+                                            La app te ha elegido porque llevas menos guardias que el resto
+                                          </div>
+                                          <button onClick={() => activarApoyo(libre[0], sectorSup, [])} style={{
+                                            width:'100%', padding:'14px', borderRadius:10, border:'none', cursor:'pointer',
+                                            backgroundColor:'#f97316', color:'white', fontWeight:900, fontSize:18,
+                                          }}>
+                                            ✅ ASUMIR ESTA GUARDIA
+                                          </button>
+                                          <div style={{ fontSize:11, color:'#9a3412', marginTop:8 }}>
+                                            Si no puedes, deja que lo haga otro compañero de la lista
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* NO SOY EL SUGERIDO: lista compacta */
+                                        <div>
+                                          <div style={{ fontSize:12, fontWeight:700, color:'#78350f', marginBottom:10 }}>
+                                            👥 ¿Quién cubre la guardia? — <span style={{ fontWeight:400 }}>Pulsa ✅ si eres tú o alguien te lo pide</span>
+                                          </div>
+                                          {libre.map((c, i) => {
+                                            const esSugerido = i === 0;
+                                            const esMiTurno = c.profesorId === profesorId;
+                                            return (
+                                              <div key={c.abrev} style={{
+                                                display:'flex', alignItems:'center', gap:10,
+                                                padding: esSugerido ? '12px 14px' : '8px 10px',
+                                                borderRadius:10, marginBottom:6,
+                                                backgroundColor: esSugerido ? '#fff7ed' : esMiTurno ? '#f0fdf4' : '#fafafa',
+                                                border:'2px solid ' + (esSugerido ? '#f97316' : esMiTurno ? '#86efac' : '#e5e7eb'),
+                                              }}>
+                                                <span style={{ fontSize: esSugerido ? 20 : 14, minWidth:28, textAlign:'center' }}>
+                                                  {esSugerido ? '🏅' : i === 1 ? '🥈 2º' : i === 2 ? '🥉 3º' : esMiTurno ? '🧑‍🏫' : `${i+1}.`}
+                                                </span>
+                                                <div style={{ flex:1, minWidth:0 }}>
+                                                  <div style={{ fontSize: esSugerido ? 15 : 13, fontWeight: esSugerido ? 900 : (esMiTurno ? 700 : 500), color:'#1a1a1a' }}>
+                                                    {c.nombre}
+                                                    {esSugerido && <span style={{ fontSize:11, color:'#f97316', fontWeight:700, marginLeft:8 }}>← SUGERIDO</span>}
+                                                    {!esSugerido && esMiTurno && <span style={{ fontSize:11, color:'#16a34a', fontWeight:700, marginLeft:8 }}>← ERES TÚ</span>}
+                                                  </div>
+                                                  <div style={{ fontSize:11, color:'#9ca3af' }}>
+                                                    {c.sectorOriginal}{esSugerido && <span style={{ color:'#f97316' }}> · lleva menos guardias</span>}
+                                                  </div>
+                                                </div>
+                                                <button onClick={() => activarApoyo(c, sectorSup, [])} style={{
+                                                  padding: esSugerido ? '10px 18px' : '7px 12px',
+                                                  borderRadius:9, border:'none', cursor:'pointer',
+                                                  backgroundColor: esSugerido ? '#f97316' : (esMiTurno ? verde : '#94a3b8'),
+                                                  color:'white', fontWeight:800, fontSize: esSugerido ? 14 : 12, whiteSpace:'nowrap',
+                                                }}>
+                                                  ✅ {esSugerido ? 'Asumir' : 'Activar'}
+                                                </button>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            );
+                          }
+
+                          const yoCubro = cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
+                            profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
+                            profesoresList.find(p=>p.id===profesorId)?.nombre || ''
+                          ));
+
+                          // Buscar apoyo registrado para poder cambiarlo si es apoyo_cruzado
+                          const apoyoRegistrado = cubre?.tipo === 'apoyo_cruzado'
+                            ? apoyosAsignados.find(ap =>
+                                ap.hora === horaActiva &&
+                                ap.profesor_id === cubre.profesorId &&
+                                ap.grupo === asig.clase.grupo
+                              )
+                            : null;
 
                           return (
-                            <div key={g.id} style={{
-                              padding:'10px 12px', marginBottom:8, borderRadius:8,
-                              backgroundColor: esMia ? '#f0fdf4' : '#fafafa',
-                              border: esMia ? `2px solid ${verde}` : '1px solid #e5e7eb',
+                            <div key={idx} style={{
+                              padding:'10px 12px', marginBottom:8,
+                              backgroundColor: yoCubro ? '#f0fdf4' : '#fafafa',
+                              borderRadius:8, border: yoCubro ? '2px solid ' + verde : '1px solid #e5e7eb',
                             }}>
-                              {/* Quién falta */}
-                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
-                                <span style={{ fontSize:13, fontWeight:700, color:'#333' }}>{falta}</span>
-                                {destino.grupo && (
-                                  <span style={{ fontSize:12, fontWeight:700, color:'#0f172a' }}>
-                                    · {destino.grupo}
-                                  </span>
-                                )}
-                                {aula && (
-                                  <span style={{ fontSize:11.5, fontWeight:700, color:'#1d4ed8',
-                                    backgroundColor:'#eff6ff', padding:'2px 8px', borderRadius:6 }}>
-                                    aula {aula}
-                                  </span>
+                              {/* Datos del profesor ausente */}
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                                <span style={{ fontSize:13, fontWeight:700, color:'#333' }}>
+                                  {nombreEntero(fichaPorId(asig.ausencia.profesorId)) || asig.ausencia.profesor}
+                                </span>
+                                {asig.ausencia.tipo === 'dld' && (
+                                  <span style={{ fontSize:10, padding:'2px 6px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:8, fontWeight:700 }}>DLD</span>
                                 )}
                               </div>
 
-                              {/* La tarea que dejó */}
-                              {g.tarea && (
+                              {/* Datos de la clase huérfana */}
+                              <div style={{ fontSize:12, color:'#555', marginBottom:6, display:'flex', gap:12, flexWrap:'wrap' }}>
+                                {asig.clase.grupo && <span>👥 <strong>{asig.clase.grupo}</strong></span>}
+                                {asig.clase.aula && <span>📍 {asig.clase.aula}</span>}
+                                {asig.clase.materia && <span>📚 {asig.clase.materia}</span>}
+                              </div>
+
+                              {/* Tarea */}
+                              {asig.clase.instrucciones && (
                                 <div style={{
-                                  fontSize:12, color:'#78350f', backgroundColor:'#fffbeb',
-                                  border:'1px solid #fde68a', borderRadius:6,
-                                  padding:'7px 10px', marginBottom:8, lineHeight:1.45,
+                                  padding:'8px 10px', backgroundColor:'#fffbeb', borderRadius:6,
+                                  fontSize:12, color:'#78350f', marginBottom:8, border:'1px solid #fde68a',
                                 }}>
-                                  <strong>Tarea:</strong> {g.tarea}
+                                  📝 <strong>Tarea:</strong> {asig.clase.instrucciones}
                                 </div>
                               )}
 
-                              {/* Quién cubre y, si soy yo, el check */}
-                              <div style={{
-                                display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
-                                backgroundColor:'#f1f5f9', borderRadius:6, padding:'8px 10px',
-                              }}>
-                                <span style={{ fontSize:12.5, color:'#334155' }}>
-                                  <strong style={{ color: fichada ? verde : '#334155' }}>
-                                    {fichada ? 'Fichada por' : 'Cubre'}:
-                                  </strong>{' '}
-                                  <strong>{esMia ? 'tú' : cubre}</strong>
-                                  {fichada && g.confirmado_at && (
-                                    <span style={{ color:'#64748b' }}>
-                                      {' · '}{new Date(g.confirmado_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}
-                                    </span>
-                                  )}
-                                </span>
-
-                                {esMia && !fichada && (
-                                  <button
-                                    onClick={() => abierto
-                                      ? (setFichandoId(g.id), setObservaciones(''))
-                                      : setVerAyuda(true)}
-                                    style={{
-                                      marginLeft:'auto', padding:'8px 14px', borderRadius:8, border:'none',
-                                      cursor:'pointer', fontWeight:800, fontSize:13, whiteSpace:'nowrap',
-                                      backgroundColor: abierto ? verde : '#e2e8f0',
-                                      color: abierto ? 'white' : '#94a3b8',
-                                    }}>
-                                    ✅ Fichar
-                                  </button>
-                                )}
-                                {esMia && !fichada && !abierto && (
-                                  <span style={{ fontSize:10.5, color:'#94a3b8', width:'100%' }}>
-                                    El check se abre de {horaDe(g.hora)}
+                              {/* Quien cubre */}
+                              {!cubre ? (
+                                <div style={{
+                                  padding:'8px 10px', backgroundColor:'#fef2f2', borderRadius:6,
+                                  fontSize:12, color:rojo, fontWeight:700,
+                                }}>
+                                  ⚠️ NO HAY QUIEN CUBRA — sin profesores disponibles
+                                </div>
+                              ) : cubre.tipo === 'apoyo_cruzado' && !apoyoRegistrado ? (
+                                // En vista de profesor, si es un apoyo cruzado sin registrar aún, mostrar aviso neutral
+                                <div style={{
+                                  padding:'8px 10px', borderRadius:6,
+                                  backgroundColor:'#f3f4f6',
+                                  border:'1px solid #d1d5db',
+                                  fontSize:12, color:'#666', fontStyle:'italic',
+                                }}>
+                                  ⏳ Pendiente de asignar apoyo — jefatura decidirá
+                                </div>
+                              ) : (
+                                <div style={{
+                                  padding:'8px 10px', borderRadius:6,
+                                  backgroundColor: yoCubro ? '#dcfce7' : (cubre.tipo === 'apoyo_cruzado' ? '#fef3c7' : '#f3f4f6'),
+                                  border:'1px solid ' + (yoCubro ? '#86efac' : (cubre.tipo === 'apoyo_cruzado' ? '#fbbf24' : '#e5e7eb')),
+                                  display:'flex', alignItems:'center', gap:8, fontSize:12,
+                                }}>
+                                  <span style={{ fontWeight:700, color: yoCubro ? verde : (cubre.tipo === 'apoyo_cruzado' ? '#78350f' : '#333') }}>
+                                    {yoCubro ? '✅ TE CUBRE:' : cubre.tipo === 'apoyo_cruzado' ? '🚨 APOYO ASIGNADO:' : '✅ CUBRE:'}
                                   </span>
-                                )}
-                              </div>
-
-                              {g.estado === 'confirmado' && g.incidencia && (
-                                <div style={{ fontSize:11.5, color:'#475569', marginTop:6, paddingLeft:2 }}>
-                                  Observaciones: {g.incidencia}
+                                  {(() => {
+                                    const ficha = fichaPorId(cubre.profesorId) || fichaPorAbrev(cubre.abrev);
+                                    const entero = nombreEntero(ficha) || cubre.nombre;
+                                    const depto = ficha?.departamento || cubre.sectorOriginal;
+                                    return (
+                                      <>
+                                        <span style={{ fontWeight:800, color: yoCubro ? verde : '#333' }}>
+                                          {yoCubro ? 'TÚ' : entero}
+                                        </span>
+                                        {!yoCubro && depto && (
+                                          <span style={{ fontSize:11.5, fontWeight:700, color:'#1d4ed8' }}>
+                                            ({depto})
+                                          </span>
+                                        )}
+                                        <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
+                                          {cubre.tipo === 'apoyo_cruzado'
+                                            ? `${cubre.sectorOriginal} (${cubre.apoyosPrevios} apoyos)`
+                                            : `guardia ${cubre.sectorOriginal}`}
+                                        </span>
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               )}
                             </div>
@@ -1105,11 +1210,10 @@ export default function Guardias() {
                         })}
                       </div>
                     </div>
-                  ))}
-                </>
-              );
-            })()}
-
+                  );
+                })}
+              </>
+            )}
 
             {/* SECCIÓN 2: PROFESORES DE GUARDIA (COLAPSABLE, SECUNDARIO) */}
             <details style={{ marginTop:20, backgroundColor:'white', border:'1px solid #e5e7eb', borderRadius:10 }}>
@@ -1130,7 +1234,7 @@ export default function Guardias() {
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {guardias.map((p, i) => {
                           const key = normAbrev(p);
-                          const nombre = nombreCorto(mapaProfesores, p);
+                          const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           return (
                             <span key={i} style={{
