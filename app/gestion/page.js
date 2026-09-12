@@ -120,6 +120,16 @@ export default function PanelGestion() {
       color: '#7e22ce',
     },
     {
+      id: 'bajas',
+      emoji: '🏥',
+      titulo: 'Bajas y sustituciones',
+      descripcion: 'Registra bajas, asigna sustitutos y da de alta a los titulares',
+      href: '/gestion/bajas',
+      bg: '#fef2f2',
+      border: '#fca5a5',
+      color: '#b91c1c',
+    },
+    {
       id: 'mantenimiento',
       emoji: '🔧',
       titulo: 'Incidencias de mantenimiento',

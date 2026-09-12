@@ -47,8 +47,6 @@ export default function PanelSecretario() {
   const [resumenMasivo, setResumenMasivo] = useState(null);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
   const [gestionandoBaja, setGestionandoBaja] = useState(false);
-  const [busquedaSustituto, setBusquedaSustituto] = useState('');
-  const [tipoBajaSeleccionada, setTipoBajaSeleccionada] = useState('temporal');
   const [fechaBaja, setFechaBaja] = useState(hoyLocal());
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
@@ -346,164 +344,6 @@ export default function PanelSecretario() {
    * Por eso se espera entre envío y envío y se reintenta si hace falta.
    */
 
-
-
-
-  // ── GESTIÓN DE BAJAS ──────────────────────────────────────
-
-  async function registrarBaja(profesor) {
-    const mensajeConfirm = tipoBajaSeleccionada === 'temporal'
-      ? `¿Registrar baja TEMPORAL de ${profesor.nombre} ${profesor.apellidos}? Aparecerá en el cuadrante de guardias para que se cubran sus grupos.`
-      : `¿Registrar baja CON SUSTITUTO de ${profesor.nombre} ${profesor.apellidos}? A continuación podrás buscar y asignar al sustituto.`;
-    if (!confirm(mensajeConfirm)) return;
-    setGestionandoBaja(true);
-    const _rb = await fetch('/api/profesores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'baja', id: profesor.id,
-        datos: { en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja },
-      }),
-    });
-    const error = _rb.ok ? null : await _rb.json();
-    if (error) { mostrarMensaje('❌ Error registrando baja: ' + error.message, 'error'); setGestionandoBaja(false); return; }
-
-    // Si es baja TEMPORAL (sin sustituto): crear ausencia abierta para que aparezca en el cuadrante de guardias
-    if (tipoBajaSeleccionada === 'temporal') {
-      await fetch('/api/ausencias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'crear',
-          datos: {
-            profesor_id: profesor.id,
-            profesor_nombre: `${profesor.nombre} ${profesor.apellidos}`,
-            fecha_inicio: fechaBaja,
-            fecha_fin: null,
-            horas: null,
-            categoria: 'baja_sin_sustituto',
-            estado: 'aprobada',
-          },
-        }),
-      });
-    }
-
-    mostrarMensaje('✅ Baja registrada correctamente', 'ok');
-    setGestionandoBaja(false);
-    cargarProfesores();
-    setProfesorSeleccionado(prev => ({ ...prev, en_baja: true, tipo_baja: tipoBajaSeleccionada, fecha_baja: fechaBaja }));
-  }
-
-  async function pasarConSustituto(profesor) {
-    if (!confirm(`¿La baja de ${profesor.nombre} ${profesor.apellidos} se prolonga y llega un sustituto? Se cerrará su hueco en el cuadrante de guardias y podrás buscar al sustituto.`)) return;
-    setGestionandoBaja(true);
-    try {
-      // 1. Cambiar tipo de baja
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: profesor.id, datos: { tipo_baja: 'con_sustituto' } }) });
-
-      // 2. Cerrar la ausencia abierta en el cuadrante (ya no hace falta guardia, viene sustituto)
-      const ayer = new Date();
-      ayer.setDate(ayer.getDate() - 1);
-      const fechaCierre = ayer.toISOString().split('T')[0];
-      await fetch('/api/ausencias', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'cerrar_baja', datos: { profesor_id: profesor.id, fecha_fin: fechaCierre } }),
-      });
-
-      mostrarMensaje('✅ Cambiado a "con sustituto". Ya puedes buscarlo abajo.', 'ok');
-      cargarProfesores();
-      setProfesorSeleccionado(prev => ({ ...prev, tipo_baja: 'con_sustituto' }));
-    } catch(e) {
-      mostrarMensaje('❌ Error: ' + e.message, 'error');
-    }
-    setGestionandoBaja(false);
-  }
-
-  async function asignarSustituto(titular, sustituto) {
-    if (!confirm(`¿Asignar a ${sustituto.nombre} ${sustituto.apellidos} como sustituto de ${titular.nombre} ${titular.apellidos}? Se copiará el horario completo.`)) return;
-    // Cerrar cualquier ausencia abierta del titular en el cuadrante (ya no hace falta cubrir, tiene sustituto)
-    const ayerCierre = new Date(); ayerCierre.setDate(ayerCierre.getDate() - 1);
-    await fetch('/api/ausencias', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'cerrar_baja',
-        datos: { profesor_id: titular.id, fecha_fin: ayerCierre.toISOString().split('T')[0] },
-      }),
-    });
-    setGestionandoBaja(true);
-
-    try {
-      // 1. Marcar relación titular-sustituto en profesores
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { sustituto_id: sustituto.id } }) });
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: sustituto.id, datos: { titular_id: titular.id } }) });
-
-      // 2. Copiar el horario del titular al sustituto.
-      //    Lo hace el servidor: identifica al titular por su ficha (antes
-      //    se buscaba "algo que se parezca a su primer apellido", y a un
-      //    Gómez le copiaba el horario de todos los Gómez) y graba el del
-      //    sustituto con su nombre completo.
-      const rCopia = await fetch('/api/horarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'copiar_horario',
-          titular_id: titular.id,
-          sustituto_id: sustituto.id,
-        }),
-      });
-      const copia = await rCopia.json();
-      if (copia.error) throw new Error(copia.error);
-
-      mostrarMensaje(`✅ ${sustituto.nombre} ${sustituto.apellidos} asignado como sustituto. Horario copiado (${copia.copiados || 0} registros)`, 'ok');
-      setGestionandoBaja(false);
-      setBusquedaSustituto('');
-      cargarProfesores();
-      setProfesorSeleccionado(prev => ({ ...prev, sustituto_id: sustituto.id }));
-    } catch(e) {
-      mostrarMensaje('❌ Error: ' + e.message, 'error');
-      setGestionandoBaja(false);
-    }
-  }
-
-  async function altaTitular(titular) {
-    const sustitutoId = titular.sustituto_id;
-    if (!sustitutoId) {
-      // Solo quitar la baja
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null } }) });
-      mostrarMensaje('✅ Titular dado de alta', 'ok');
-      cargarProfesores();
-      return;
-    }
-
-    if (!confirm(`¿Dar de alta a ${titular.nombre} ${titular.apellidos}? El sustituto perderá el horario y quedará desactivado.`)) return;
-    setGestionandoBaja(true);
-
-    try {
-      // 1. Borrar horario del sustituto
-      await fetch('/api/horarios', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustitutoId }),
-      });
-
-      // 2. Desactivar sustituto y limpiar relación
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'cambiar_estado', id: sustitutoId, datos: { estado: 'inactivo', titular_id: null } }) });
-
-      // 3. Dar de alta al titular
-      await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null } }) });
-
-      mostrarMensaje('✅ Titular de vuelta. Sustituto desactivado y horario restaurado.', 'ok');
-      setGestionandoBaja(false);
-      cargarProfesores();
-      setProfesorSeleccionado(prev => ({ ...prev, en_baja: false, sustituto_id: null }));
-    } catch(e) {
-      mostrarMensaje('❌ Error: ' + e.message, 'error');
-      setGestionandoBaja(false);
-    }
-  }
-
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
@@ -701,199 +541,54 @@ export default function PanelSecretario() {
             </div>
           </>)}
 
-          {/* PESTAÑA BAJA */}
+          {/* PESTAÑA BAJA — solo informa. Las bajas se gestionan en su
+              propia pantalla: son un suceso con fechas, no una propiedad
+              de la ficha, y tocarlas desde dos sitios dejaba descuadrados
+              el estado del profesor y su ausencia en el cuadrante. */}
           {pestanaFicha === 'baja' && (() => {
             const p = profesorSeleccionado;
             const sustituto = p.sustituto_id ? profesores.find(x => x.id === p.sustituto_id) : null;
-            const candidatos = profesores.filter(x =>
-              x.id !== p.id &&
-              !x.en_baja &&
-              !x.titular_id && // No es ya sustituto de alguien
-              x.estado === 'activo' &&
-              (busquedaSustituto === '' ||
-                `${x.nombre} ${x.apellidos}`.toLowerCase().includes(busquedaSustituto.toLowerCase()) ||
-                x.email.toLowerCase().includes(busquedaSustituto.toLowerCase()))
-            );
-
             return (
               <div>
-                {/* ESTADO ACTUAL */}
-                {p.en_baja ? (
-                  <div style={{ backgroundColor: '#fef2f2', border: '2px solid #fca5a5', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                    <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: 15, marginBottom: 6 }}>
-                      🏥 EN BAJA — {p.tipo_baja === 'con_sustituto' ? 'Con sustituto (horario cubierto)' : 'Temporal (cubren los de guardia)'}
-                    </div>
-                    <div style={{ fontSize: 13, color: '#7f1d1d' }}>
-                      Desde: {p.fecha_baja ? new Date(p.fecha_baja + 'T12:00:00').toLocaleDateString('es-ES') : '—'}
-                    </div>
-                    {sustituto && (
-                      <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#dcfce7', borderRadius: 8, fontSize: 13, color: '#166534', fontWeight: 600 }}>
-                        ✅ Sustituto asignado: {sustituto.nombre} {sustituto.apellidos}
+                <div style={{
+                  backgroundColor: p.en_baja ? '#fef2f2' : '#f9fafb',
+                  border: `1.5px solid ${p.en_baja ? '#fca5a5' : '#e5e7eb'}`,
+                  borderRadius: 10, padding: 16, marginBottom: 16,
+                }}>
+                  {p.en_baja ? (
+                    <>
+                      <div style={{ fontWeight: 800, color: '#b91c1c', fontSize: 15, marginBottom: 6 }}>
+                        🏥 De baja desde el {p.fecha_baja
+                          ? new Date(p.fecha_baja + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })
+                          : '—'}
                       </div>
-                    )}
-                    {!sustituto && (
-                      <div style={{ marginTop: 8, padding: '8px 12px', backgroundColor: '#fef3c7', borderRadius: 8, fontSize: 13, color: '#78350f' }}>
-                        ⚠️ Sin sustituto asignado aún
+                      <div style={{ fontSize: 13, color: '#7f1d1d' }}>
+                        {sustituto
+                          ? `Sustituido por ${sustituto.nombre} ${sustituto.apellidos}`
+                          : 'Sin sustituto — sus grupos los cubren los compañeros de guardia'}
                       </div>
-                    )}
-                    {/* BOTÓN: PASAR DE TEMPORAL A CON SUSTITUTO */}
-                    {p.tipo_baja === 'temporal' && !sustituto && (
-                      <button
-                        onClick={() => pasarConSustituto(p)}
-                        disabled={gestionandoBaja}
-                        style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#0369a1', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
-                      >
-                        {gestionandoBaja ? '⏳ Procesando...' : '🔄 La baja se prolonga — Buscar sustituto'}
-                      </button>
-                    )}
-
-                    {/* BOTÓN ALTA TITULAR (cuando hay sustituto o baja temporal sin él) */}
-                    {(sustituto || p.tipo_baja === 'temporal') && (
-                      <button
-                        onClick={() => altaTitular(p)}
-                        disabled={gestionandoBaja}
-                        style={{ marginTop: 8, padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 14, width: '100%' }}
-                      >
-                        {gestionandoBaja ? '⏳ Procesando...' : '✅ TITULAR SE INCORPORA — Dar de alta' + (sustituto ? ' y desactivar sustituto' : '')}
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div style={{ backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: 10, padding: 14, marginBottom: 16 }}>
-                    <div style={{ fontWeight: 700, color: '#166534', fontSize: 14, marginBottom: 4 }}>✅ Activo — Sin baja registrada</div>
-                    <div style={{ fontSize: 13, color: '#555' }}>Usa este panel para registrar una baja y asignar un sustituto.</div>
-                  </div>
-                )}
-
-                {/* FORMULARIO REGISTRAR BAJA */}
-                {!p.en_baja && (
-                  <div style={{ backgroundColor: 'white', border: '1.5px solid #e5e7eb', borderRadius: 10, padding: 16 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 12 }}>🏥 Registrar baja</div>
-
-                    <div style={{ marginBottom: 12 }}>
-                      <label style={{ fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Tipo de baja</label>
-                      <div style={{ display: 'flex', gap: 8 }}>
-                        <button
-                          onClick={() => setTipoBajaSeleccionada('temporal')}
-                          style={{
-                            flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                            border: `2px solid ${tipoBajaSeleccionada === 'temporal' ? '#f59e0b' : '#e5e7eb'}`,
-                            backgroundColor: tipoBajaSeleccionada === 'temporal' ? '#fef3c7' : 'white',
-                            color: tipoBajaSeleccionada === 'temporal' ? '#78350f' : '#888',
-                          }}
-                        >
-                          🏥 Temporal<br/><span style={{ fontWeight: 400, fontSize: 11 }}>Corta, sin sustituto — cubren los de guardia</span>
-                        </button>
-                        <button
-                          onClick={() => setTipoBajaSeleccionada('con_sustituto')}
-                          style={{
-                            flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 700,
-                            border: `2px solid ${tipoBajaSeleccionada === 'con_sustituto' ? '#0369a1' : '#e5e7eb'}`,
-                            backgroundColor: tipoBajaSeleccionada === 'con_sustituto' ? '#eff6ff' : 'white',
-                            color: tipoBajaSeleccionada === 'con_sustituto' ? '#1e3a8a' : '#888',
-                          }}
-                        >
-                          🔄 Con sustituto<br/><span style={{ fontWeight: 400, fontSize: 11 }}>Larga — asigna a alguien su horario</span>
-                        </button>
-                      </div>
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 13, color: '#666' }}>
+                      Este profesor no está de baja.
                     </div>
+                  )}
+                </div>
 
-                    <div style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 700, color: '#555', display: 'block', marginBottom: 6 }}>Fecha de la baja</label>
-                      <input
-                        type="date"
-                        value={fechaBaja}
-                        onChange={e => setFechaBaja(e.target.value)}
-                        style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => registrarBaja(p)}
-                      disabled={gestionandoBaja}
-                      style={{
-                        width: '100%', padding: '12px', borderRadius: 8, border: 'none', cursor: gestionandoBaja ? 'not-allowed' : 'pointer',
-                        backgroundColor: '#b91c1c', color: 'white', fontWeight: 700, fontSize: 14,
-                        opacity: gestionandoBaja ? 0.7 : 1,
-                      }}
-                    >
-                      {gestionandoBaja ? '⏳ Registrando...' : '🏥 Registrar baja'}
-                    </button>
-
-                    <div style={{ marginTop: 10, fontSize: 12, color: '#888', textAlign: 'center' }}>
-                      {tipoBajaSeleccionada === 'temporal'
-                        ? 'Su nombre aparecerá en el cuadrante de guardias hasta que se resuelva.'
-                        : 'A continuación podrás buscar y asignar al sustituto, que recibirá su horario completo.'}
-                    </div>
-                  </div>
-                )}
-
-                {/* ASIGNAR SUSTITUTO */}
-                {p.en_baja && !sustituto && (
-                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14, color: '#374151', marginBottom: 10 }}>🔍 Asignar sustituto</div>
-                    <div style={{ fontSize: 12, color: '#666', marginBottom: 10 }}>
-                      El sustituto debe haberse registrado ya en la app y estar activado.
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Buscar por nombre o email..."
-                      value={busquedaSustituto}
-                      onChange={e => setBusquedaSustituto(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 10, boxSizing: 'border-box' }}
-                    />
-                    <div style={{ maxHeight: 250, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      {candidatos.length === 0 ? (
-                        <div style={{ textAlign: 'center', padding: 20, color: '#999', fontSize: 13 }}>
-                          {busquedaSustituto ? 'Sin resultados' : 'Escribe un nombre para buscar'}
-                        </div>
-                      ) : candidatos.map(c => (
-                        <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 700, fontSize: 13 }}>{c.apellidos}, {c.nombre}</div>
-                            <div style={{ fontSize: 11, color: '#666' }}>{c.email} · {c.departamento || '—'}</div>
-                          </div>
-                          <button
-                            onClick={() => asignarSustituto(p, c)}
-                            disabled={gestionandoBaja}
-                            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 12 }}
-                          >Asignar</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* CAMBIAR SUSTITUTO */}
-                {p.en_baja && sustituto && (
-                  <div style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 10, padding: 14 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, color: '#374151', marginBottom: 8 }}>🔄 Cambiar sustituto</div>
-                    <input
-                      type="text"
-                      placeholder="Buscar otro sustituto..."
-                      value={busquedaSustituto}
-                      onChange={e => setBusquedaSustituto(e.target.value)}
-                      style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginBottom: 8, boxSizing: 'border-box' }}
-                    />
-                    {busquedaSustituto && (
-                      <div style={{ maxHeight: 200, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        {candidatos.map(c => (
-                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 8, backgroundColor: '#f9fafb', border: '1px solid #e5e7eb' }}>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13 }}>{c.apellidos}, {c.nombre}</div>
-                              <div style={{ fontSize: 11, color: '#666' }}>{c.departamento || '—'}</div>
-                            </div>
-                            <button
-                              onClick={() => asignarSustituto(p, c)}
-                              disabled={gestionandoBaja}
-                              style={{ padding: '6px 12px', borderRadius: 8, border: 'none', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'white', fontWeight: 700, fontSize: 12 }}
-                            >Cambiar</button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                <a
+                  href="/gestion/bajas"
+                  style={{
+                    display: 'inline-block', textDecoration: 'none',
+                    padding: '11px 18px', borderRadius: 9,
+                    backgroundColor: '#1a56db', color: 'white',
+                    fontWeight: 700, fontSize: 14, cursor: 'pointer',
+                  }}
+                >
+                  🏥 Ir a Bajas y sustituciones
+                </a>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 8 }}>
+                  Las bajas y los sustitutos se gestionan allí, en un único sitio.
+                </div>
               </div>
             );
           })()}
@@ -1012,13 +707,9 @@ export default function PanelSecretario() {
         {/* ========== PESTAÑA CLAUSTRO ========== */}
 
 
-
-
     </div>
   );
 }
-
-
 
 function Modal({ children, onClose, titulo }) {
   return (
