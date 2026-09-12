@@ -848,54 +848,65 @@ export default function GestionGuardias() {
           )
         ) : (
           <>
+            {/* Todo esto se agrupa a partir de las filas REALES de
+                apoyos_asignados, no de asignacionAutomatica(). Antes el
+                "quién cubre" de cada fila ya venía corregido, pero QUÉ
+                AUSENCIAS EXISTEN seguía saliendo del cálculo antiguo del
+                navegador, que no ve las ausencias de varios días (se
+                guardan como "Ausencia larga", no como una hora concreta).
+                Por eso a jefatura le faltaba gente que sí aparecía en la
+                pantalla del profesor: dos fuentes para la misma pregunta,
+                otra vez. */}
             {(() => {
-              // El "cuántas" tiene que contar lo mismo que enseña la lista de
-              // abajo: se cuenta sobre las filas reales de apoyos_asignados,
-              // no sobre lo que recalcula asignacionAutomatica() por su cuenta.
-              const todasAsig = asignacionAutomatica();
               const filasHoraReales = apoyosAsignados.filter(ap =>
                 ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'));
-              const totalClases = todasAsig.length;
-              const totalSinCubrir = Math.max(0, totalClases - filasHoraReales.length);
+              const ausentesReales = new Set(filasHoraReales.map(ap => ap.profesor_ausente_id || ap.id)).size;
               const cubiertasPorApoyo = filasHoraReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
-              
-              if (totalSinCubrir > 0) {
+
+              if (ausentesReales === 0) {
                 return (
-                  <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12 }}>
-                    🚨 {totalSinCubrir} CLASE{totalSinCubrir !== 1 ? 'S' : ''} SIN CUBRIR — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                  <div style={{ fontWeight:800, fontSize:14, color:verde, marginBottom:12 }}>
+                    ✅ NO FALTA NADIE
                   </div>
                 );
               } else if (cubiertasPorApoyo > 0) {
                 return (
                   <div style={{ fontWeight:800, fontSize:14, color:'#78350f', marginBottom:12 }}>
-                    ⚠️ TODAS CUBIERTAS ({cubiertasPorApoyo} con apoyo externo) — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                    ⚠️ TODAS CUBIERTAS ({cubiertasPorApoyo} con apoyo externo) — {ausentesReales} ausente{ausentesReales !== 1 ? 's' : ''}
                   </div>
                 );
               } else {
                 return (
                   <div style={{ fontWeight:800, fontSize:14, color:verde, marginBottom:12 }}>
-                    ✅ TODAS LAS CLASES CUBIERTAS — {ausentesEstaHora().length} ausente{ausentesEstaHora().length !== 1 ? 's' : ''}
+                    ✅ TODAS LAS CLASES CUBIERTAS — {ausentesReales} ausente{ausentesReales !== 1 ? 's' : ''}
                   </div>
                 );
               }
             })()}
 
-            {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
-              const asignaciones = asignacionAutomatica().filter(a => a.ausencia.sector.toUpperCase() === sectorSup);
+            {(() => {
+              const gruposReales = {};
+              apoyosAsignados
+                .filter(ap => ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'))
+                .forEach(ap => {
+                  const s = (ap.sector_destino || 'SIN SECTOR').toUpperCase();
+                  (gruposReales[s] = gruposReales[s] || []).push(ap);
+                });
+              return Object.entries(gruposReales);
+            })().map(([sectorSup, filasSectorReales]) => {
+              const asignaciones = filasSectorReales;
 
-              // Igual que en el resumen de arriba: los recuentos salen de las
-              // filas reales, no de lo que asignacionAutomatica() recalcula.
               const totalClases = asignaciones.length;
-              const filasSectorReales = apoyosAsignados.filter(ap =>
-                ap.hora === horaActiva && (ap.sector_destino || '').toUpperCase() === sectorSup);
               const cubiertasPorGuardia = filasSectorReales.filter(ap => ap.tipo_apoyo === 'sector').length;
               const cubiertasPorApoyo = filasSectorReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
-              const sinCubrir = Math.max(0, totalClases - filasSectorReales.length);
-              
-              // Detectar si algún ausente TENÍA guardia esa hora (pérdida de capacidad del sector)
-              const perdidaGuardia = ausentes.some(a => 
-                a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')
-              );
+              const sinCubrir = 0; // si no hay fila real, no hay clase en este grupo: no puede quedar "sin cubrir" aquí
+              const ausentesSector = new Set(filasSectorReales.map(ap => ap.profesor_ausente_id || ap.id)).size;
+
+              // El aviso de "pierde profesorado de guardia" es del mundo del
+              // navegador antiguo y contradice la regla acordada (si a
+              // alguien le tocaba guardia, no hay nada que cubrir). Se deja
+              // desactivado en vez de borrar el bloque de abajo entero.
+              const perdidaGuardia = false;
               
               // Colores: verde si todo cubierto por guardia, ámbar si hay apoyo o guardia perdida, rojo si falta alguna
               let bgCabecera, borderCabecera, colorTexto, colorSub;
@@ -922,11 +933,9 @@ export default function GestionGuardias() {
               // Texto resumen
               let resumen;
               if (totalClases === 0) {
-                if (perdidaGuardia) {
-                  resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · tenía(n) guardia`;
-                } else {
-                  resumen = `${ausentes.length} ausente${ausentes.length !== 1 ? 's' : ''} · sin clases esta hora`;
-                }
+                // No debería darse: solo se crea un grupo cuando hay al
+                // menos una fila real. Se deja como red de seguridad.
+                resumen = `${ausentesSector} ausente${ausentesSector !== 1 ? 's' : ''}`;
               } else if (sinCubrir > 0) {
                 resumen = `${sinCubrir} sin cubrir · ${cubiertasPorGuardia + cubiertasPorApoyo}/${totalClases} cubiertas`;
               } else if (cubiertasPorApoyo > 0) {
@@ -949,22 +958,10 @@ export default function GestionGuardias() {
                   </div>
 
                   <div style={{ backgroundColor:'white', border:'1.5px solid ' + borderCabecera, borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
-                    {/* AVISO DE GUARDIA PERDIDA — siempre visible, tenga o no clases huérfanas */}
-                    {ausentes.some(a => a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')) && asignaciones.length > 0 && (
-                      <div style={{ backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:8, padding:'10px 12px', marginBottom:12 }}>
-                        <div style={{ fontSize:12, fontWeight:800, color:rojo, marginBottom:4 }}>
-                          ⚠️ Además, este sector pierde profesorado de guardia esta hora
-                        </div>
-                        {ausentes.filter(a => a.horas.some(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia')).map((a, i) => (
-                          <div key={i} style={{ fontSize:12, color:'#7f1d1d' }}>
-                            · <strong>{a.profesor}</strong> tenía guardia en {sectorSup}
-                          </div>
-                        ))}
-                        <div style={{ fontSize:11, color:'#991b1b', marginTop:6, fontStyle:'italic' }}>
-                          Revisa si hace falta asignar apoyo adicional para cubrir esa guardia.
-                        </div>
-                      </div>
-                    )}
+                    {/* El aviso de "guardia perdida" se ha retirado: iba
+                        contra la regla acordada (si a alguien le tocaba
+                        guardia, no hay nada que cubrir). perdidaGuardia
+                        está fijo a false más arriba. */}
 
                     {asignaciones.length === 0 ? (
                       <>
