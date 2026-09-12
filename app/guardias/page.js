@@ -418,6 +418,32 @@ export default function Guardias() {
     return p ? `${p.nombre?.split(' ')[0] || ''} ${p.apellidos?.split(' ')[0] || ''}`.trim() : '';
   };
 
+  /**
+   * Cuántos grupos hay que cubrir a una hora.
+   *
+   * No se puede contar sobre ausenciasDia: las ausencias de varios días y
+   * las bajas se guardan sin horas concretas (la tarea se deja por módulo,
+   * no por hora), así que al preguntarles "¿faltas a 4ª?" contestan que no
+   * y el contador se quedaba corto. Las guardias sí son fiables, porque el
+   * servidor ya sacó las horas del horario de cada día.
+   *
+   * Se cuentan los profesores distintos a los que hay que cubrir, y se
+   * suman las ausencias que aún no tengan guardia creada.
+   */
+  const gruposACubrir = horaId => {
+    const ausentes = new Set();
+
+    apoyosAsignados
+      .filter(a => normHora(a.hora) === horaId)
+      .forEach(a => ausentes.add(a.profesor_ausente_id || `apoyo:${a.id}`));
+
+    ausenciasDia
+      .filter(a => a.horas?.some(hh => horaCoincide(hh.hora, horaId)))
+      .forEach(a => { if (!ausentes.has(a.profesorId)) ausentes.add(a.profesorId || `aus:${a.abrev}`); });
+
+    return ausentes.size;
+  };
+
   const horaInfo = HORAS.find(h => h.id === horaActiva);
 
   // === LÓGICA CENTRAL POR HORA ===
@@ -851,7 +877,16 @@ export default function Guardias() {
         <div style={{ flex:1, textAlign:'center' }}>
           <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>{fechaCorta(fecha)}</div>
           <div style={{ fontSize:12, color:'#666', marginTop:2 }}>
-            {esFinde ? '🏖️ Fin de semana' : `${ausentesEstaHora().length === 0 ? '✅ Sin ausencias' : `🚨 ${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`}`}
+            {esFinde ? '🏖️ Fin de semana' : (() => {
+              // Igual que arriba: se cuentan los profesores a los que de
+              // verdad hay que cubrir hoy, vengan de una ausencia de un día
+              // o de una baja larga.
+              const hoyAusentes = new Set();
+              apoyosAsignados.forEach(a => a.profesor_ausente_id && hoyAusentes.add(a.profesor_ausente_id));
+              ausenciasDia.forEach(a => a.profesorId && hoyAusentes.add(a.profesorId));
+              const n = hoyAusentes.size;
+              return n === 0 ? '✅ Sin ausencias' : `🚨 ${n} profesor${n !== 1 ? 'es' : ''} ausente${n !== 1 ? 's' : ''}`;
+            })()}
           </div>
         </div>
         <button onClick={() => { setFecha(sumarDias(fecha, 1)); setHoraActiva('1'); }} style={btnNav}>→</button>
@@ -871,7 +906,7 @@ export default function Guardias() {
           <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingTop: 6 }}>
             {HORAS.map(h => {
               const activa = h.id === horaActiva;
-              const cnt = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id))).length;
+              const cnt = gruposACubrir(h.id);
               const esRecreo = h.id === 'recreo';
 
               return (
