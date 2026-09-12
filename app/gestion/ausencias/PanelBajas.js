@@ -24,6 +24,13 @@ import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1a56db';
 
+// Buscar sin que las tildes importen: "cardenas" tiene que encontrar
+// a "Cárdenas". Comparar letra a letra dejaba fuera justo los nombres
+// que es más probable que alguien escriba rápido, sin tildes.
+function sinTildes(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 function hoyISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -264,7 +271,7 @@ export default function PanelBajas() {
                 style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14 }} />
               <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 8 }}>
                 {busqueda.length >= 2 && disponibles
-                  .filter(p => `${p.nombre} ${p.apellidos}`.toLowerCase().includes(busqueda.toLowerCase()))
+                  .filter(p => sinTildes(`${p.nombre} ${p.apellidos}`).toLowerCase().includes(sinTildes(busqueda).toLowerCase()))
                   .slice(0, 12)
                   .map(p => (
                     <button key={p.id} onClick={() => setElegido(p)}
@@ -389,7 +396,7 @@ export default function PanelBajas() {
                 <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
                   {busquedaSust.length >= 2 && disponibles
                     .filter(x => x.id !== p.id &&
-                      `${x.nombre} ${x.apellidos} ${x.email || ''}`.toLowerCase().includes(busquedaSust.toLowerCase()))
+                      sinTildes(`${x.nombre} ${x.apellidos} ${x.email || ''}`).toLowerCase().includes(sinTildes(busquedaSust).toLowerCase()))
                     .slice(0, 10)
                     .map(x => (
                       <button key={x.id} onClick={() => asignarSustituto(p, x)} disabled={trabajando}
@@ -401,7 +408,7 @@ export default function PanelBajas() {
                       </button>
                     ))}
                   {busquedaSust.length >= 2 && disponibles.filter(x => x.id !== p.id &&
-                    `${x.nombre} ${x.apellidos} ${x.email || ''}`.toLowerCase().includes(busquedaSust.toLowerCase())).length === 0 && (
+                    sinTildes(`${x.nombre} ${x.apellidos} ${x.email || ''}`).toLowerCase().includes(sinTildes(busquedaSust).toLowerCase())).length === 0 && (
                     <div style={{ fontSize: 12, color: '#92400e', padding: '8px 0' }}>
                       No aparece nadie con ese nombre. El sustituto tiene que registrarse
                       antes en la aplicación para poder asignarlo.
