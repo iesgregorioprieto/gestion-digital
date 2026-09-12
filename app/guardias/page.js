@@ -1032,8 +1032,29 @@ export default function Guardias() {
                             Sin clases esta hora (complementaria u hora libre del profesor)
                           </div>
                         ) : asignaciones.map((asig, idx) => {
-                          const cubre = asig.cubre;
-                          
+                          // El "quién cubre" de una clase huérfana NO se calcula aquí.
+                          // Antes se recalculaba en el navegador (profesoresLibresParaApoyo),
+                          // con una lógica distinta a la del servidor, y por eso una misma
+                          // ausencia podía mostrar un compañero distinto al que de verdad
+                          // se le asignó y guardó en apoyos_asignados. Ahora se lee la fila
+                          // real: si no existe, es que aún no hay nadie cubriéndola.
+                          const filaReal = asig.tipoHora === 'clase'
+                            ? apoyosAsignados.find(ap =>
+                                normHora(ap.hora) === horaActiva &&
+                                ap.profesor_ausente_id === asig.ausencia.profesorId)
+                            : null;
+                          const cubre = asig.tipoHora === 'clase'
+                            ? (filaReal ? {
+                                nombre: nombreEntero(fichaPorId(filaReal.profesor_id))
+                                  || nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
+                                abrev: filaReal.profesor_nombre_pdf,
+                                profesorId: filaReal.profesor_id,
+                                sectorOriginal: filaReal.sector_apoyo,
+                                tipo: filaReal.tipo_apoyo === 'sector' ? 'guardia_sector' : 'apoyo_cruzado',
+                                apoyosPrevios: null,
+                              } : null)
+                            : asig.cubre;
+
                           // Si es una guardia huérfana (no clase)
                           if (asig.tipoHora === 'guardia') {
                             return (
@@ -1129,19 +1150,16 @@ export default function Guardias() {
                             );
                           }
 
-                          const yoCubro = cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
-                            profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
-                            profesoresList.find(p=>p.id===profesorId)?.nombre || ''
-                          ));
+                          const yoCubro = cubre?.profesorId
+                            ? String(cubre.profesorId) === String(profesorId)
+                            : (cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
+                                profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
+                                profesoresList.find(p=>p.id===profesorId)?.nombre || ''
+                              )));
 
-                          // Buscar apoyo registrado para poder cambiarlo si es apoyo_cruzado
-                          const apoyoRegistrado = cubre?.tipo === 'apoyo_cruzado'
-                            ? apoyosAsignados.find(ap =>
-                                ap.hora === horaActiva &&
-                                ap.profesor_id === cubre.profesorId &&
-                                ap.grupo === asig.clase.grupo
-                              )
-                            : null;
+                          // Con el dato real, si cubre existe es porque ya está registrado
+                          // en apoyos_asignados: no hay ya un estado "pendiente de asignar".
+                          const apoyoRegistrado = asig.tipoHora === 'clase' ? filaReal : null;
 
                           return (
                             <div key={idx} style={{
