@@ -25,6 +25,11 @@ const HORAS = [
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
+// El recreo es vigilancia de zona: no sustituye a nadie.
+function esRecreoSector(sector) {
+  return (sector || '').toUpperCase().includes('RECREO');
+}
+
 // El grupo llega del horario importado con el código del módulo y el aula
 // pegados: "PBPR-2686687GM-1COC(5 E004 COC)". Al compañero que va a cubrir
 // eso no le dice nada; lo suyo es "GM-1COC" y "aula E004".
@@ -834,150 +839,6 @@ export default function Guardias() {
         </div>
       )}
 
-      {/* COBERTURA DE GUARDIAS HOY */}
-      {!esFinde && (() => {
-        // Todas las guardias del día, agrupadas por hora
-        // Muestra quién cubre a quién — visible para todos los profesores
-        const porHora = {};
-        apoyosAsignados.forEach(a => {
-          const h = normHora(a.hora);
-          if (!porHora[h]) porHora[h] = [];
-          porHora[h].push(a);
-        });
-        // Solo la hora que está pulsada en el selector de arriba: si no,
-        // pinchar en 1ª, 2ª, 3ª... no cambiaba nada de lo que se ve aquí.
-        const horasConGuardias = HORAS.filter(h => h.id === horaActiva && porHora[h.id]?.length > 0);
-        if (horasConGuardias.length === 0) return (
-          <div style={{ margin: '12px 16px', padding: '14px', borderRadius: 12,
-            backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', textAlign: 'center',
-            fontSize: 13, color: '#166534', fontWeight: 600 }}>
-            ✅ Sin guardias a {horaInfo?.label || 'esta hora'}
-          </div>
-        );
-
-        // Mis guardias (para que el propio profesor pueda confirmarlas)
-        const misGuardias = apoyosAsignados.filter(a =>
-          a.profesor_id && String(a.profesor_id) === String(profesorId));
-
-        return (
-          <div style={{ padding: '12px 16px 0' }}>
-            <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
-              <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
-                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>
-                  🛡️ Guardias de {horaInfo?.label || ''} <span style={{ fontWeight: 600, color: '#64748b', fontSize: 12.5 }}>{horaInfo?.horario || ''}</span>
-                </strong>
-                <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
-                  style={{ marginLeft: 8, width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
-                    border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1d4ed8',
-                    fontWeight: 800, fontSize: 13, lineHeight: 1, padding: 0 }}>i</button>
-              </div>
-
-              {horasConGuardias.map(h => {
-                const asignados = porHora[h.id] || [];
-                return (
-                  <div key={h.id} style={{ borderTop: '1px solid #f1f5f9', padding: '10px 14px' }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: '#475569', marginBottom: 6,
-                      textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                      {h.label}
-                    </div>
-                    {asignados.map(a => {
-                      // esMia: por UUID (lo ideal) o por nombre PDF cuando el matching de nombres falló
-                      const miNombrePdf = (sessionStorage.getItem('profesor_nombre_pdf') || '').toLowerCase().trim();
-                      const esMia = (a.profesor_id && String(a.profesor_id) === String(profesorId))
-                        || (!a.profesor_id && miNombrePdf && (a.profesor_nombre_pdf || '').toLowerCase().trim() === miNombrePdf);
-                      const esConf = a.estado === 'confirmado';
-                      const esInc = a.estado === 'incidencia';
-                      const esPend = !esConf && !esInc;
-                      const colorEstado = esConf ? '#16a34a' : esInc ? '#ea580c' : '#dc2626';
-                      const iconoEstado = esConf ? '✅' : esInc ? '⚠️' : '🔴';
-                      // Nombre del ausente al que cubre
-                      const ausente = ausenciasDia.find(au =>
-                        au.horas?.some(ah => normHora(ah.hora || ah) === h.id) &&
-                        (au.profesorId === a.profesor_ausente_id || au.abrev === a.sector_destino)
-                      );
-                      return (
-                        <div key={a.id} style={{
-                          display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6,
-                          padding: '8px 10px', borderRadius: 8,
-                          backgroundColor: esMia ? (esPend ? '#fefce8' : esConf ? '#f0fdf4' : '#fff7ed') : '#fafafa',
-                          border: '1.5px solid ' + (esMia ? colorEstado : '#e5e7eb'),
-                        }}>
-                          <span style={{ fontSize: 15 }}>{iconoEstado}</span>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
-                              {nombreEntero(fichaPorId(a.profesor_id))
-                                || nombreLargo(mapaProfesores, a.profesor_nombre_pdf)
-                                || a.sector_apoyo || '—'}
-                              {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
-                            </div>
-                            <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
-                              {(() => {
-                                const quienFalta = nombreEntero(fichaPorId(a.profesor_ausente_id))
-                                  || ausente?.profesor || a.sector_destino || '—';
-                                const destino = limpiarGrupo(a.grupo);
-                                const aula = a.aula || destino.aula;
-                                return (
-                                  <>
-                                    cubre a {quienFalta}
-                                    {destino.grupo ? ` · ${destino.grupo}` : ''}
-                                    {aula ? ` · aula ${aula}` : ''}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                            {a.tarea && (
-                              <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
-                            )}
-                          </div>
-                          {/* Botones de acción para el profesor asignado */}
-                          {esMia && (
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
-                              {esPend && (() => {
-                                const abierto = dentroDeFranja(a.hora, a.fecha);
-                                return (
-                                  <>
-                                    <button
-                                      onClick={() => abierto
-                                        ? (setFichandoId(a.id), setObservaciones(''))
-                                        : setVerAyuda(true)}
-                                      style={{
-                                        padding: '9px 14px', borderRadius: 8, border: 'none',
-                                        cursor: 'pointer', whiteSpace: 'nowrap', width: '100%',
-                                        backgroundColor: abierto ? '#16a34a' : '#e5e7eb',
-                                        color: abierto ? 'white' : '#9ca3af',
-                                        fontWeight: 800, fontSize: 12.5,
-                                      }}>✅ Fichar guardia</button>
-                                    <div style={{ fontSize: 10, color: '#9ca3af', textAlign: 'right' }}>
-                                      {abierto ? 'Púlsalo en el aula' : `Se abre de ${horaDe(a.hora)}`}
-                                    </div>
-                                  </>
-                                );
-                              })()}
-                              {esConf && (
-                                <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a',
-                                  backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 16,
-                                  border: '1.5px solid #86efac' }}>
-                                  ✅ Fichada{a.confirmado_at ? ` · ${new Date(a.confirmado_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}` : ''}
-                                </span>
-                              )}
-                              {esInc && (
-                                <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',
-                                  backgroundColor: '#fff7ed', padding: '6px 12px', borderRadius: 16,
-                                  border: '1.5px solid #fdba74' }}>🟠 Incidencia registrada</span>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })()}
-
       {/* HORARIO ACTIVO */}
       {!esFinde && horaInfo && (
         <div style={{ textAlign:'center', padding:'8px 16px', backgroundColor:'#f3f4f6', fontSize:12, color:'#666' }}>
@@ -995,29 +856,42 @@ export default function Guardias() {
           </div>
         ) : (
           <>
-            {/* SECCIÓN 1: PROFESORES QUE FALTAN (PROTAGONISTA) */}
-            {ausentesEstaHora().length === 0 ? (
-              <div style={{
-                backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
-                padding:20, textAlign:'center', color:verde, fontSize:14,
-              }}>
-                ✅ No hay profesores ausentes esta hora
-              </div>
-            ) : (
-              <>
-                <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
-                  🚨 PROFESORES QUE FALTAN ({ausentesEstaHora().length})
+            {/* QUIÉN FALTA A ESTA HORA Y QUIÉN LE CUBRE
+                Único bloque: antes había dos (uno alimentado por el
+                servidor y otro que el navegador calculaba por su cuenta,
+                y por eso a veces no coincidían). Se lee todo de
+                apoyos_asignados, la fila real que guardó el servidor. */}
+            {(() => {
+              const guardiasHora = apoyosAsignados.filter(a =>
+                normHora(a.hora) === horaActiva && !esRecreoSector(a.sector_apoyo));
+
+              if (guardiasHora.length === 0) return (
+                <div style={{
+                  backgroundColor:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:12,
+                  padding:20, textAlign:'center', color:verde, fontSize:14,
+                }}>
+                  ✅ No falta nadie a {horaInfo?.label || 'esta hora'}
                 </div>
+              );
 
-                {/* AGRUPAR POR SECTOR */}
-                {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
-                  const asignaciones = asignacionAutomatica().filter(a =>
-                    a.ausencia.sector.toUpperCase() === sectorSup
-                  );
+              const porSector = {};
+              guardiasHora.forEach(g => {
+                const s = (g.sector_destino || g.sector_apoyo || 'SIN SECTOR').toUpperCase();
+                (porSector[s] = porSector[s] || []).push(g);
+              });
 
-                  return (
+              return (
+                <>
+                  <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12, display:'flex', alignItems:'center', gap:6 }}>
+                    🚨 PROFESORES QUE FALTAN ({guardiasHora.length})
+                    <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
+                      style={{ marginLeft:'auto', width:22, height:22, borderRadius:'50%', cursor:'pointer',
+                        border:'1.5px solid #93c5fd', backgroundColor:'white', color:'#1d4ed8',
+                        fontWeight:800, fontSize:13, lineHeight:1, padding:0 }}>i</button>
+                  </div>
+
+                  {Object.entries(porSector).map(([sectorSup, lista]) => (
                     <div key={sectorSup} style={{ marginBottom:16 }}>
-                      {/* Cabecera del sector */}
                       <div style={{
                         backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:'10px 10px 0 0',
                         padding:'8px 14px', display:'flex', alignItems:'center', gap:8,
@@ -1025,229 +899,99 @@ export default function Guardias() {
                         <span style={{ fontSize:16 }}>{emojiSector(sectorSup)}</span>
                         <span style={{ fontWeight:800, fontSize:13, color:rojo }}>{sectorSup}</span>
                         <span style={{ fontSize:11, color:'#7f1d1d', marginLeft:'auto' }}>
-                          {ausentes.length} ausente{ausentes.length !== 1 ? 's' : ''} · {asignaciones.length} clase{asignaciones.length !== 1 ? 's' : ''} a cubrir
+                          {lista.length} clase{lista.length !== 1 ? 's' : ''} a cubrir
                         </span>
                       </div>
 
-                      {/* Cada asignación */}
-                      <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none', borderRadius:'0 0 10px 10px', padding:12 }}>
-                        {asignaciones.length === 0 ? (
-                          <div style={{ fontSize:12, color:'#999', textAlign:'center', padding:'8px 0' }}>
-                            Sin clases esta hora (complementaria u hora libre del profesor)
-                          </div>
-                        ) : asignaciones.map((asig, idx) => {
-                          // El "quién cubre" de una clase huérfana NO se calcula aquí.
-                          // Antes se recalculaba en el navegador (profesoresLibresParaApoyo),
-                          // con una lógica distinta a la del servidor, y por eso una misma
-                          // ausencia podía mostrar un compañero distinto al que de verdad
-                          // se le asignó y guardó en apoyos_asignados. Ahora se lee la fila
-                          // real: si no existe, es que aún no hay nadie cubriéndola.
-                          const filaReal = asig.tipoHora === 'clase'
-                            ? apoyosAsignados.find(ap =>
-                                normHora(ap.hora) === horaActiva &&
-                                ap.profesor_ausente_id === asig.ausencia.profesorId)
-                            : null;
-                          const cubre = asig.tipoHora === 'clase'
-                            ? (filaReal ? {
-                                nombre: nombreEntero(fichaPorId(filaReal.profesor_id))
-                                  || nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
-                                abrev: filaReal.profesor_nombre_pdf,
-                                profesorId: filaReal.profesor_id,
-                                sectorOriginal: filaReal.sector_apoyo,
-                                tipo: filaReal.tipo_apoyo === 'sector' ? 'guardia_sector' : 'apoyo_cruzado',
-                                apoyosPrevios: null,
-                              } : null)
-                            : asig.cubre;
-
-                          // Si es una guardia huérfana (no clase)
-                          if (asig.tipoHora === 'guardia') {
-                            return (
-                              <div key={idx} style={{
-                                padding:'10px 12px', marginBottom:8,
-                                backgroundColor:'#fef3c7', borderRadius:8,
-                                border:'1.5px solid #fbbf24',
-                              }}>
-                                <div style={{ fontSize:13, fontWeight:700, color:'#78350f', marginBottom:4 }}>
-                                  {nombreEntero(fichaPorId(asig.ausencia.profesorId)) || asig.ausencia.profesor}
-                                </div>
-                                <div style={{ fontSize:12, color:'#92400e', fontWeight:600 }}>
-                                  ⚠️ Faltaba y tenía <strong>GUARDIA en {sectorSup}</strong>
-                                </div>
-                                <div style={{ fontSize:11, color:'#78350f', marginTop:4, fontStyle:'italic' }}>
-                                  El sector pierde 1 profesor de guardia. Puede necesitar un sustituto si otros profesores del sector también faltan.
-                                </div>
-
-                                {/* Lista de candidatos — diseño a prueba de ciruelos */}
-                                {(() => {
-                                  const libre = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
-                                  if (libre.length === 0) return null;
-                                  return (
-                                    <div style={{ marginTop:12, borderTop:'2px dashed #fbbf24', paddingTop:12 }}>
-
-                                      {libre[0]?.profesorId === profesorId ? (
-                                        /* SOY EL SUGERIDO: pantalla grande y clara */
-                                        <div style={{ backgroundColor:'#fff7ed', border:'2.5px solid #f97316', borderRadius:12, padding:16, textAlign:'center' }}>
-                                          <div style={{ fontSize:22, marginBottom:6 }}>👆 TE TOCA A TI</div>
-                                          <div style={{ fontSize:14, fontWeight:800, color:'#c2410c', marginBottom:4 }}>
-                                            Eres el/la sugerido/a para cubrir esta guardia
-                                          </div>
-                                          <div style={{ fontSize:12, color:'#7c2d12', marginBottom:14 }}>
-                                            La app te ha elegido porque llevas menos guardias que el resto
-                                          </div>
-                                          <button onClick={() => activarApoyo(libre[0], sectorSup, [])} style={{
-                                            width:'100%', padding:'14px', borderRadius:10, border:'none', cursor:'pointer',
-                                            backgroundColor:'#f97316', color:'white', fontWeight:900, fontSize:18,
-                                          }}>
-                                            ✅ ASUMIR ESTA GUARDIA
-                                          </button>
-                                          <div style={{ fontSize:11, color:'#9a3412', marginTop:8 }}>
-                                            Si no puedes, deja que lo haga otro compañero de la lista
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        /* NO SOY EL SUGERIDO: lista compacta */
-                                        <div>
-                                          <div style={{ fontSize:12, fontWeight:700, color:'#78350f', marginBottom:10 }}>
-                                            👥 ¿Quién cubre la guardia? — <span style={{ fontWeight:400 }}>Pulsa ✅ si eres tú o alguien te lo pide</span>
-                                          </div>
-                                          {libre.map((c, i) => {
-                                            const esSugerido = i === 0;
-                                            const esMiTurno = c.profesorId === profesorId;
-                                            return (
-                                              <div key={c.abrev} style={{
-                                                display:'flex', alignItems:'center', gap:10,
-                                                padding: esSugerido ? '12px 14px' : '8px 10px',
-                                                borderRadius:10, marginBottom:6,
-                                                backgroundColor: esSugerido ? '#fff7ed' : esMiTurno ? '#f0fdf4' : '#fafafa',
-                                                border:'2px solid ' + (esSugerido ? '#f97316' : esMiTurno ? '#86efac' : '#e5e7eb'),
-                                              }}>
-                                                <span style={{ fontSize: esSugerido ? 20 : 14, minWidth:28, textAlign:'center' }}>
-                                                  {esSugerido ? '🏅' : i === 1 ? '🥈 2º' : i === 2 ? '🥉 3º' : esMiTurno ? '🧑‍🏫' : `${i+1}.`}
-                                                </span>
-                                                <div style={{ flex:1, minWidth:0 }}>
-                                                  <div style={{ fontSize: esSugerido ? 15 : 13, fontWeight: esSugerido ? 900 : (esMiTurno ? 700 : 500), color:'#1a1a1a' }}>
-                                                    {c.nombre}
-                                                    {esSugerido && <span style={{ fontSize:11, color:'#f97316', fontWeight:700, marginLeft:8 }}>← SUGERIDO</span>}
-                                                    {!esSugerido && esMiTurno && <span style={{ fontSize:11, color:'#16a34a', fontWeight:700, marginLeft:8 }}>← ERES TÚ</span>}
-                                                  </div>
-                                                  <div style={{ fontSize:11, color:'#9ca3af' }}>
-                                                    {c.sectorOriginal}{esSugerido && <span style={{ color:'#f97316' }}> · lleva menos guardias</span>}
-                                                  </div>
-                                                </div>
-                                                <button onClick={() => activarApoyo(c, sectorSup, [])} style={{
-                                                  padding: esSugerido ? '10px 18px' : '7px 12px',
-                                                  borderRadius:9, border:'none', cursor:'pointer',
-                                                  backgroundColor: esSugerido ? '#f97316' : (esMiTurno ? verde : '#94a3b8'),
-                                                  color:'white', fontWeight:800, fontSize: esSugerido ? 14 : 12, whiteSpace:'nowrap',
-                                                }}>
-                                                  ✅ {esSugerido ? 'Asumir' : 'Activar'}
-                                                </button>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            );
-                          }
-
-                          const yoCubro = cubre?.profesorId
-                            ? String(cubre.profesorId) === String(profesorId)
-                            : (cubre && normAbrev(cubre.abrev) === normAbrev(claveAbreviatura(
-                                profesoresList.find(p=>p.id===profesorId)?.apellidos || '',
-                                profesoresList.find(p=>p.id===profesorId)?.nombre || ''
-                              )));
-
-                          // Con el dato real, si cubre existe es porque ya está registrado
-                          // en apoyos_asignados: no hay ya un estado "pendiente de asignar".
-                          const apoyoRegistrado = asig.tipoHora === 'clase' ? filaReal : null;
+                      <div style={{ backgroundColor:'white', border:'1.5px solid #fca5a5', borderTop:'none',
+                                    borderRadius:'0 0 10px 10px', padding:12 }}>
+                        {lista.map(g => {
+                          const destino = limpiarGrupo(g.grupo);
+                          const aula = g.aula || destino.aula;
+                          const ausenteNombre = nombreEntero(fichaPorId(g.profesor_ausente_id)) || 'Profesor no identificado';
+                          const fichaCubre = fichaPorId(g.profesor_id);
+                          const cubreNombre = nombreEntero(fichaCubre)
+                            || nombreLargo(mapaProfesores, g.profesor_nombre_pdf) || '—';
+                          const cubreDepto = fichaCubre?.departamento || g.sector_apoyo;
+                          const esMia = g.profesor_id && String(g.profesor_id) === String(profesorId);
+                          const fichada = g.estado === 'confirmado';
+                          const abierto = dentroDeFranja(g.hora, g.fecha);
 
                           return (
-                            <div key={idx} style={{
-                              padding:'10px 12px', marginBottom:8,
-                              backgroundColor: yoCubro ? '#f0fdf4' : '#fafafa',
-                              borderRadius:8, border: yoCubro ? '2px solid ' + verde : '1px solid #e5e7eb',
+                            <div key={g.id} style={{
+                              padding:'10px 12px', marginBottom:8, borderRadius:8,
+                              backgroundColor: esMia ? '#f0fdf4' : '#fafafa',
+                              border: esMia ? '2px solid ' + verde : '1px solid #e5e7eb',
                             }}>
-                              {/* Datos del profesor ausente */}
-                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
-                                <span style={{ fontSize:13, fontWeight:700, color:'#333' }}>
-                                  {nombreEntero(fichaPorId(asig.ausencia.profesorId)) || asig.ausencia.profesor}
-                                </span>
-                                {asig.ausencia.tipo === 'dld' && (
-                                  <span style={{ fontSize:10, padding:'2px 6px', backgroundColor:'#dbeafe', color:'#1e40af', borderRadius:8, fontWeight:700 }}>DLD</span>
+                              {/* Quién falta */}
+                              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
+                                <span style={{ fontSize:13, fontWeight:700, color:'#333' }}>{ausenteNombre}</span>
+                                {destino.grupo && (
+                                  <span style={{ fontSize:12, fontWeight:700, color:'#0f172a' }}>· {destino.grupo}</span>
+                                )}
+                                {aula && (
+                                  <span style={{ fontSize:11.5, fontWeight:700, color:'#1d4ed8',
+                                    backgroundColor:'#eff6ff', padding:'2px 8px', borderRadius:6 }}>
+                                    aula {aula}
+                                  </span>
                                 )}
                               </div>
 
-                              {/* Datos de la clase huérfana */}
-                              <div style={{ fontSize:12, color:'#555', marginBottom:6, display:'flex', gap:12, flexWrap:'wrap' }}>
-                                {asig.clase.grupo && <span>👥 <strong>{asig.clase.grupo}</strong></span>}
-                                {asig.clase.aula && <span>📍 {asig.clase.aula}</span>}
-                                {asig.clase.materia && <span>📚 {asig.clase.materia}</span>}
-                              </div>
-
-                              {/* Tarea */}
-                              {asig.clase.instrucciones && (
+                              {/* La tarea, si la dejó */}
+                              {g.tarea && (
                                 <div style={{
-                                  padding:'8px 10px', backgroundColor:'#fffbeb', borderRadius:6,
-                                  fontSize:12, color:'#78350f', marginBottom:8, border:'1px solid #fde68a',
+                                  fontSize:12, color:'#78350f', backgroundColor:'#fffbeb',
+                                  border:'1px solid #fde68a', borderRadius:6,
+                                  padding:'7px 10px', marginBottom:8, lineHeight:1.45,
                                 }}>
-                                  📝 <strong>Tarea:</strong> {asig.clase.instrucciones}
+                                  📝 <strong>Tarea:</strong> {g.tarea}
                                 </div>
                               )}
 
-                              {/* Quien cubre */}
-                              {!cubre ? (
-                                <div style={{
-                                  padding:'8px 10px', backgroundColor:'#fef2f2', borderRadius:6,
-                                  fontSize:12, color:rojo, fontWeight:700,
-                                }}>
-                                  ⚠️ NO HAY QUIEN CUBRA — sin profesores disponibles
-                                </div>
-                              ) : cubre.tipo === 'apoyo_cruzado' && !apoyoRegistrado ? (
-                                // En vista de profesor, si es un apoyo cruzado sin registrar aún, mostrar aviso neutral
-                                <div style={{
-                                  padding:'8px 10px', borderRadius:6,
-                                  backgroundColor:'#f3f4f6',
-                                  border:'1px solid #d1d5db',
-                                  fontSize:12, color:'#666', fontStyle:'italic',
-                                }}>
-                                  ⏳ Pendiente de asignar apoyo — jefatura decidirá
-                                </div>
-                              ) : (
-                                <div style={{
-                                  padding:'8px 10px', borderRadius:6,
-                                  backgroundColor: yoCubro ? '#dcfce7' : (cubre.tipo === 'apoyo_cruzado' ? '#fef3c7' : '#f3f4f6'),
-                                  border:'1px solid ' + (yoCubro ? '#86efac' : (cubre.tipo === 'apoyo_cruzado' ? '#fbbf24' : '#e5e7eb')),
-                                  display:'flex', alignItems:'center', gap:8, fontSize:12,
-                                }}>
-                                  <span style={{ fontWeight:700, color: yoCubro ? verde : (cubre.tipo === 'apoyo_cruzado' ? '#78350f' : '#333') }}>
-                                    {yoCubro ? '✅ TE CUBRE:' : cubre.tipo === 'apoyo_cruzado' ? '🚨 APOYO ASIGNADO:' : '✅ CUBRE:'}
+                              {/* Quién cubre */}
+                              <div style={{
+                                display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+                                backgroundColor:'#f1f5f9', borderRadius:6, padding:'8px 10px',
+                              }}>
+                                <span style={{ fontSize:12.5, color:'#334155' }}>
+                                  <strong style={{ color: fichada ? verde : '#334155' }}>
+                                    {fichada ? 'Fichada por' : 'Cubre'}:
+                                  </strong>{' '}
+                                  <strong>{esMia ? 'tú' : cubreNombre}</strong>
+                                  {!esMia && cubreDepto && (
+                                    <span style={{ fontSize:11.5, fontWeight:700, color:'#1d4ed8' }}> ({cubreDepto})</span>
+                                  )}
+                                  {fichada && g.confirmado_at && (
+                                    <span style={{ color:'#64748b' }}>
+                                      {' · '}{new Date(g.confirmado_at).toLocaleTimeString('es-ES', { hour:'2-digit', minute:'2-digit' })}
+                                    </span>
+                                  )}
+                                </span>
+
+                                {esMia && !fichada && (
+                                  <button
+                                    onClick={() => abierto
+                                      ? (setFichandoId(g.id), setObservaciones(''))
+                                      : setVerAyuda(true)}
+                                    style={{
+                                      marginLeft:'auto', padding:'8px 14px', borderRadius:8, border:'none',
+                                      cursor:'pointer', fontWeight:800, fontSize:13, whiteSpace:'nowrap',
+                                      backgroundColor: abierto ? verde : '#e2e8f0',
+                                      color: abierto ? 'white' : '#94a3b8',
+                                    }}>
+                                    ✅ Fichar
+                                  </button>
+                                )}
+                                {esMia && !fichada && !abierto && (
+                                  <span style={{ fontSize:10.5, color:'#94a3b8', width:'100%' }}>
+                                    El check se abre de {horaDe(g.hora)}
                                   </span>
-                                  {(() => {
-                                    const ficha = fichaPorId(cubre.profesorId) || fichaPorAbrev(cubre.abrev);
-                                    const entero = nombreEntero(ficha) || cubre.nombre;
-                                    const depto = ficha?.departamento || cubre.sectorOriginal;
-                                    return (
-                                      <>
-                                        <span style={{ fontWeight:800, color: yoCubro ? verde : '#333' }}>
-                                          {yoCubro ? 'TÚ' : entero}
-                                        </span>
-                                        {!yoCubro && depto && (
-                                          <span style={{ fontSize:11.5, fontWeight:700, color:'#1d4ed8' }}>
-                                            ({depto})
-                                          </span>
-                                        )}
-                                        <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
-                                          {cubre.tipo === 'apoyo_cruzado'
-                                            ? `${cubre.sectorOriginal} (${cubre.apoyosPrevios} apoyos)`
-                                            : `guardia ${cubre.sectorOriginal}`}
-                                        </span>
-                                      </>
-                                    );
-                                  })()}
+                                )}
+                              </div>
+
+                              {fichada && g.incidencia && (
+                                <div style={{ fontSize:11.5, color:'#475569', marginTop:6, paddingLeft:2 }}>
+                                  Observaciones: {g.incidencia}
                                 </div>
                               )}
                             </div>
@@ -1255,10 +999,10 @@ export default function Guardias() {
                         })}
                       </div>
                     </div>
-                  );
-                })}
-              </>
-            )}
+                  ))}
+                </>
+              );
+            })()}
 
             {/* SECCIÓN 2: PROFESORES DE GUARDIA (COLAPSABLE, SECUNDARIO) */}
             <details style={{ marginTop:20, backgroundColor:'white', border:'1px solid #e5e7eb', borderRadius:10 }}>
