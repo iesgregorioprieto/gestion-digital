@@ -43,13 +43,25 @@ const ESTADOS = {
 
 export default function GestionAusencias() {
   const [nombre, setNombre] = useState('');
-  // Se puede entrar directamente a una pestaña desde otra pantalla:
-  // /gestion/ausencias?vista=bajas
-  const [vista, setVista] = useState(() => {
-    if (typeof window === 'undefined') return 'lista';
+  /**
+   * Se puede entrar directamente a una pestaña desde otra pantalla, con
+   * /gestion/ausencias?vista=bajas.
+   *
+   * Esto SIEMPRE tiene que arrancar en 'lista' y cambiar después, en un
+   * useEffect. Leer la URL directamente en el useState (como estaba)
+   * hace que el servidor, que no ve la URL real de la pestaña del
+   * navegador, renderice siempre 'lista', mientras que el navegador
+   * calcula 'bajas' o 'manual' desde el primer instante: React compara
+   * las dos versiones al hidratar, no coinciden, y la página entera se
+   * rompe. Cambiarlo en un efecto ocurre DESPUÉS de que la primera
+   * versión ya coincidió con la del servidor, así que no hay nada que
+   * comparar mal.
+   */
+  const [vista, setVista] = useState('lista');
+  useEffect(() => {
     const v = new URLSearchParams(window.location.search).get('vista');
-    return ['lista', 'manual', 'escenario', 'bajas'].includes(v) ? v : 'lista';
-  });
+    if (['lista', 'manual', 'escenario', 'bajas'].includes(v)) setVista(v);
+  }, []);
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [ausencias, setAusencias] = useState([]);
   const [profesores, setProfesores] = useState([]);
