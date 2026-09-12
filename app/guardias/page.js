@@ -23,6 +23,31 @@ const HORAS = [
   { id: '6',      label: '6ª',     horario: '13:35–14:30' },
 ];
 
+/**
+ * La hora en la que estamos ahora mismo.
+ *
+ * Al abrir el módulo lo que interesa es la guardia de ESTE momento, no la
+ * de primera hora. Entre franja y franja (y en el recreo) se devuelve la
+ * que viene, que es donde hay que estar. Fuera del horario lectivo, la
+ * primera, para poder preparar el día siguiente.
+ */
+function horaAhora(ahora = new Date()) {
+  const min = ahora.getHours() * 60 + ahora.getMinutes();
+  const aMin = t => {
+    const [h, m] = t.split('–')[0].split(':').map(Number);
+    return h * 60 + m;
+  };
+  const fin = t => {
+    const [h, m] = t.split('–')[1].split(':').map(Number);
+    return h * 60 + m;
+  };
+  for (const h of HORAS) {
+    if (min >= aMin(h.horario) && min <= fin(h.horario)) return h.id;
+  }
+  const siguiente = HORAS.find(h => min < aMin(h.horario));
+  return siguiente ? siguiente.id : '1';
+}
+
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
@@ -126,7 +151,8 @@ function normAbrev(str) {
 export default function Guardias() {
   const [cargando, setCargando]         = useState(true);
   const [fecha, setFecha]               = useState(hoyLocal());
-  const [horaActiva, setHoraActiva]     = useState('1');
+  // Arranca en la hora en la que estás, no en la 1ª.
+  const [horaActiva, setHoraActiva]     = useState(() => horaAhora());
   const [sectores, setSectores]         = useState([]);
   const [horarioGuardias, setHG]        = useState({});
   const [horariosClase, setHC]          = useState([]);
@@ -759,15 +785,15 @@ export default function Guardias() {
       {/* NAV FECHA */}
 
       <div style={{ padding:'14px 16px', backgroundColor:'white', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:8 }}>
-        <button onClick={() => setFecha(sumarDias(fecha, -1))} style={btnNav}>←</button>
+        <button onClick={() => { setFecha(sumarDias(fecha, -1)); setHoraActiva('1'); }} style={btnNav}>←</button>
         <div style={{ flex:1, textAlign:'center' }}>
           <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>{fechaCorta(fecha)}</div>
           <div style={{ fontSize:12, color:'#666', marginTop:2 }}>
             {esFinde ? '🏖️ Fin de semana' : `${ausentesEstaHora().length === 0 ? '✅ Sin ausencias' : `🚨 ${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`}`}
           </div>
         </div>
-        <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
-        <button onClick={() => setFecha(hoyLocal())}
+        <button onClick={() => { setFecha(sumarDias(fecha, 1)); setHoraActiva('1'); }} style={btnNav}>→</button>
+        <button onClick={() => { setFecha(hoyLocal()); setHoraActiva(horaAhora()); }}
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
