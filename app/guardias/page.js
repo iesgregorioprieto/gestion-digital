@@ -49,6 +49,24 @@ function horaAhora(ahora = new Date()) {
 }
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
+
+// Etiqueta de la franja: "10:20–11:15".
+function horaDe(horaId) {
+  const h = HORAS.find(x => x.id === normHora(horaId));
+  return h ? h.horario : '';
+}
+
+// ¿Se puede fichar ahora mismo esta guardia? Solo durante su franja.
+function dentroDeFranja(horaId, fechaGuardia, ahora = new Date()) {
+  const h = HORAS.find(x => x.id === normHora(horaId));
+  if (!h || !fechaGuardia) return false;
+  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`;
+  if (hoy !== fechaGuardia) return false;
+  const min = ahora.getHours() * 60 + ahora.getMinutes();
+  const aMin = t => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
+  const [ini, fin] = h.horario.split('–');
+  return min >= aMin(ini) && min <= aMin(fin);
+}
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
   const s = horaGuardada.toString().toLowerCase().trim();
@@ -169,9 +187,10 @@ export default function Guardias() {
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
-  const [incidenciaId, setIncidenciaId] = useState(null);
-  const [incidenciaTexto, setIncidenciaTexto] = useState('');
-  const [enviandoInc, setEnviandoInc] = useState(false);
+  const [fichandoId, setFichandoId]     = useState(null);
+  const [observaciones, setObservaciones] = useState('');
+  const [fichando, setFichando]         = useState(false);
+  const [verAyuda, setVerAyuda]         = useState(false);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -589,92 +608,51 @@ export default function Guardias() {
   // === Registro automático ===
   // Si hay un candidato asignado y no está ya registrado en apoyos_asignados,
   // se guarda automáticamente. No espera a que nadie pulse nada.
-  useEffect(() => {
-    if (!fecha || !horaActiva || esFinde || !profesorId) return;
-    const asignaciones = asignacionAutomatica();
-    asignaciones.forEach(async (asig) => {
-      if (!asig.cubre?.profesorId) return; // sin candidato con UUID, no se puede guardar
-      // Comprobar si ya está registrado
-      const yaExiste = apoyosAsignados.some(a =>
-        a.fecha === fecha &&
-        normHora(a.hora) === horaActiva &&
-        String(a.profesor_id) === String(asig.cubre.profesorId)
-      );
-      if (yaExiste) return;
-      // Guardar automáticamente
-      try {
-        await fetch('/api/apoyos', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            accion: 'autoasignar',
-            datos: {
-              fecha,
-              hora: horaActiva,
-              sector_apoyo: asig.cubre.sectorOriginal,
-              profesor_id: asig.cubre.profesorId,
-              curso_academico: await getCursoActual(),
-            },
-          }),
-        });
-        // Recargar apoyos para reflejar el cambio
-        const { data } = await consulta('apoyos_asignados')
-          .select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
-        setApAsig(data || []);
-      } catch (e) {
-        console.warn('autoasignar:', e?.message);
-      }
-    });
-  }, [fecha, horaActiva, ausenciasDia, apoyosAsignados.length]);
+  // El registro automático de guardias desde el navegador se ha
+  // retirado: lo hacía el equipo de cada profesor que abriera la pantalla,
+  // creaba filas sin saber a quién cubrían ni en qué aula, y dos personas
+  // mirando a la vez generaban duplicados. Ahora las guardias las calcula
+  // y las guarda el servidor al registrarse la ausencia, y esta pantalla
+  // solo muestra lo que hay.
 
-  // El profesor confirma la guardia que le han preasignado.
-  // El servidor comprueba que el apoyo es suyo antes de aceptarlo.
-  async function confirmarConIncidencia() {
-    if (!incidenciaId || !incidenciaTexto.trim()) return;
-    setEnviandoInc(true);
+
+  /**
+   * Fichar la guardia.
+   *
+   * Un solo gesto, cuando ya estás en el aula: queda la hora real y, si
+   * hace falta, las observaciones. Solo se puede durante la franja; el
+   * servidor lo vuelve a comprobar, porque el reloj del navegador lo
+   * cambia cualquiera.
+   */
+  async function ficharGuardia() {
+    if (!fichandoId) return;
+    setFichando(true);
     try {
       const r = await fetch('/api/apoyos', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'confirmar_con_incidencia', id: incidenciaId,
-          datos: { incidencia: incidenciaTexto.trim() } }),
+        body: JSON.stringify({ accion: 'fichar', id: fichandoId,
+          datos: { observaciones: observaciones.trim() } }),
       });
+      const d = await r.json().catch(() => ({}));
+
       if (r.ok) {
-        setMisApoyos(prev => prev.map(a =>
-          a.id === incidenciaId
-            ? { ...a, estado: 'incidencia', confirmado_at: new Date().toISOString(), incidencia: incidenciaTexto.trim() }
-            : a
-        ));
-        setIncidenciaId(null);
-        setIncidenciaTexto('');
+        setApAsig(prev => prev.map(a => a.id === fichandoId
+          ? { ...a, estado: 'confirmado', confirmado_at: new Date().toISOString(),
+              incidencia: observaciones.trim() || null }
+          : a));
+        setFichandoId(null);
+        setObservaciones('');
+      } else if (d.error === 'fuera_de_franja') {
+        alert('El check solo está activo durante la hora de la guardia.');
       } else {
-        const d = await r.json().catch(() => ({}));
-        alert(d.error || 'No se ha podido registrar la incidencia.');
+        alert(d.error || 'No se ha podido fichar.');
       }
-    } catch { alert('Sin conexión.'); }
-    setEnviandoInc(false);
+    } catch {
+      alert('Sin conexión.');
+    }
+    setFichando(false);
   }
 
-  async function confirmarMiApoyo(apoyoId) {
-    try {
-      const r = await fetch('/api/apoyos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'confirmar', id: apoyoId }),
-      });
-      if (!r.ok) {
-        const e = await r.json().catch(() => ({}));
-        alert(e.error === 'apoyo_ajeno'
-          ? 'Esa guardia no está asignada a tu nombre.'
-          : 'No se ha podido confirmar. Inténtalo de nuevo.');
-        return;
-      }
-      setApAsig(prev => prev.map(a =>
-        a.id === apoyoId ? { ...a, estado: 'confirmado', confirmado_at: new Date().toISOString() } : a
-      ));
-    } catch (e) {
-      alert('No se ha podido confirmar. Comprueba la conexión.');
-    }
-  }
 
   // El propio profesor se apunta para cubrir una guardia huérfana
   async function activarApoyo(candidato, sector, apoyosFijados) {
@@ -736,37 +714,95 @@ export default function Guardias() {
   if (cargando) return <div style={{ padding:40, textAlign:'center', fontFamily:'system-ui' }}>Cargando cuadrante…</div>;
 
   // ── Modal de incidencia ──
-  const modalIncidencia = incidenciaId ? (
+  // Fichaje: el check y las observaciones, en un mismo gesto.
+  const modalFichaje = fichandoId ? (() => {
+    const g = apoyosAsignados.find(a => a.id === fichandoId) || {};
+    return (
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+        onClick={() => setFichandoId(null)}>
+        <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440,
+          boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: '#16a34a', marginBottom: 10 }}>
+            ✅ Fichar la guardia
+          </div>
+          <div style={{ fontSize: 13.5, color: '#334155', marginBottom: 14, lineHeight: 1.5 }}>
+            {g.grupo ? <strong>{g.grupo}</strong> : 'Tu guardia'}
+            {g.aula ? ` · aula ${g.aula}` : ''}
+            {g.hora ? ` · ${horaDe(g.hora)}` : ''}
+          </div>
+
+          <label style={{ fontSize: 12.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 5 }}>
+            Observaciones (opcional)
+          </label>
+          <textarea value={observaciones} onChange={e => setObservaciones(e.target.value)}
+            placeholder="Alumnos que faltan, si el grupo no estaba, si no había tarea, cualquier incidencia…"
+            rows={3} style={{ width: '100%', padding: '11px 12px', borderRadius: 8,
+              border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
+            <button onClick={() => setFichandoId(null)} style={{
+              padding: '10px 18px', borderRadius: 9, border: '1.5px solid #cbd5e1',
+              backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+            }}>Cancelar</button>
+            <button onClick={ficharGuardia} disabled={fichando} style={{
+              padding: '10px 18px', borderRadius: 9, border: 'none',
+              backgroundColor: fichando ? '#94a3b8' : '#16a34a',
+              color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer',
+            }}>{fichando ? 'Fichando…' : 'Fichar'}</button>
+          </div>
+        </div>
+      </div>
+    );
+  })() : null;
+
+  // La "i": qué es una guardia y qué se espera de ti.
+  const modalAyuda = verAyuda ? (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000,
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
-      onClick={() => setIncidenciaId(null)}>
-      <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 440,
-        boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: '#ea580c', marginBottom: 12 }}>
-          {'⚠️'} Registrar incidencia
+      onClick={() => setVerAyuda(false)}>
+      <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, width: '100%', maxWidth: 470,
+        maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }}
+        onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize: 18, fontWeight: 800, color: '#1d4ed8', marginBottom: 14 }}>
+          Cómo funciona tu guardia
         </div>
-        <p style={{ fontSize: 14, color: '#555', marginBottom: 14, lineHeight: 1.5 }}>
-          Has ido a cubrir la guardia pero no se ha podido realizar con normalidad.
-          Explica brevemente qué ha pasado.
-        </p>
-        <p style={{ fontSize: 12.5, color: '#ea580c', marginBottom: 14 }}>
-          La guardia quedará registrada pero <strong>no contará para el reparto proporcional</strong>.
-        </p>
-        <textarea value={incidenciaTexto} onChange={e => setIncidenciaTexto(e.target.value)}
-          placeholder="Describe la incidencia..."
-          rows={3} style={{ width: '100%', padding: '11px 12px', borderRadius: 8,
-            border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', resize: 'vertical' }} />
-        <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end' }}>
-          <button onClick={() => setIncidenciaId(null)} style={{
-            padding: '10px 18px', borderRadius: 9, border: '1.5px solid #cbd5e1',
-            backgroundColor: 'white', color: '#475569', fontWeight: 700, fontSize: 14, cursor: 'pointer',
-          }}>Cancelar</button>
-          <button onClick={confirmarConIncidencia}
-            disabled={enviandoInc || !incidenciaTexto.trim()} style={{
-            padding: '10px 18px', borderRadius: 9, border: 'none',
-            backgroundColor: (enviandoInc || !incidenciaTexto.trim()) ? '#94a3b8' : '#ea580c',
-            color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer',
-          }}>{enviandoInc ? 'Enviando...' : 'Registrar incidencia'}</button>
+
+        <div style={{ fontSize: 14, color: '#334155', lineHeight: 1.6 }}>
+          <p style={{ margin: '0 0 12px' }}>
+            Es horario lectivo obligatorio, igual que tu clase. La asigna el
+            sistema automáticamente, por rotación entre los departamentos.
+          </p>
+          <p style={{ margin: '0 0 12px' }}>
+            <strong>Preséntate</strong> en el aula y con el grupo que te indica la
+            ficha. Un profesor por grupo: no se juntan grupos aunque las aulas
+            estén al lado.
+          </p>
+          <p style={{ margin: '0 0 12px' }}>
+            <strong>Ficha</strong> cuando estés en el aula. El check solo está
+            activo durante la hora de la guardia; fuera de esa franja no se puede
+            fichar. Queda registrada la hora.
+          </p>
+          <p style={{ margin: '0 0 12px' }}>
+            <strong>Observaciones:</strong> al fichar se abre el cuadro. Anota
+            alumnos ausentes, si el grupo no estaba, si no había tarea o
+            cualquier incidencia. Se puede dejar en blanco.
+          </p>
+          <p style={{ margin: '0 0 12px', padding: '10px 12px', borderRadius: 8,
+            backgroundColor: '#fef2f2', border: '1px solid #fca5a5', color: '#991b1b', fontWeight: 600 }}>
+            Si no fichas, la guardia consta como no realizada.
+          </p>
+          <p style={{ margin: 0, fontSize: 13, color: '#64748b' }}>
+            Las guardias de recreo son vigilancia de zona: no sustituyen a nadie
+            y se fichan igual.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+          <button onClick={() => setVerAyuda(false)} style={{
+            padding: '10px 20px', borderRadius: 9, border: 'none',
+            backgroundColor: '#1d4ed8', color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer',
+          }}>Entendido</button>
         </div>
       </div>
     </div>
@@ -774,7 +810,8 @@ export default function Guardias() {
 
     return (
     <div style={{ minHeight:'100vh', backgroundColor:'#f9fafb', fontFamily:'system-ui,sans-serif', paddingBottom:60 }}>
-      {modalIncidencia}
+      {modalFichaje}
+      {modalAyuda}
 
       {/* HEADER */}
       <div style={{ backgroundColor:marron, color:'white', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -833,6 +870,10 @@ export default function Guardias() {
             <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
               <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
                 <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
+                <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
+                  style={{ marginLeft: 8, width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
+                    border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1d4ed8',
+                    fontWeight: 800, fontSize: 13, lineHeight: 1, padding: 0 }}>i</button>
               </div>
 
               {/* Nombre de una persona por su identificador. Este bloque
@@ -887,37 +928,42 @@ export default function Guardias() {
                               <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
                             )}
                           </div>
-                          {/* Botones de acción para el profesor asignado */}
+                          {/* Fichaje. Un solo check, activo solo durante la
+                              franja de la guardia. Sin check, consta como
+                              no realizada. */}
                           {esMia && (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
-                              {esPend && (
-                                <>
-                                  {/* VERDE: la estoy haciendo */}
-                                  <button onClick={() => confirmarMiApoyo(a.id)} style={{
-                                    padding: '8px 12px', borderRadius: 8, border: 'none', cursor: 'pointer',
-                                    backgroundColor: '#16a34a', color: 'white', fontWeight: 800, fontSize: 12,
-                                    whiteSpace: 'nowrap', width: '100%',
-                                  }}>🟢 La estoy haciendo</button>
-                                  {/* NARANJA: la hago pero con incidencia */}
-                                  <button onClick={() => { setIncidenciaId(a.id); setIncidenciaTexto(''); }} style={{
-                                    padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
-                                    border: '2px solid #ea580c', backgroundColor: 'white',
-                                    color: '#ea580c', fontWeight: 800, fontSize: 12,
-                                    whiteSpace: 'nowrap', width: '100%',
-                                  }}>🟠 Incidencia</button>
-                                  {/* ROJO: informativo, no es botón */}
-                                  <div style={{
-                                    padding: '6px 10px', borderRadius: 8, fontSize: 11,
-                                    backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5',
-                                    color: '#991b1b', fontWeight: 600, textAlign: 'center', width: '100%',
-                                    boxSizing: 'border-box',
-                                  }}>🔴 Sin confirmar</div>
-                                </>
-                              )}
+                              {esPend && (() => {
+                                const abierto = dentroDeFranja(a.hora, a.fecha);
+                                return (
+                                  <>
+                                    <button
+                                      onClick={() => abierto
+                                        ? (setFichandoId(a.id), setObservaciones(''))
+                                        : setVerAyuda(true)}
+                                      style={{
+                                        padding: '9px 14px', borderRadius: 8, border: 'none',
+                                        cursor: 'pointer', whiteSpace: 'nowrap', width: '100%',
+                                        backgroundColor: abierto ? '#16a34a' : '#e5e7eb',
+                                        color: abierto ? 'white' : '#9ca3af',
+                                        fontWeight: 800, fontSize: 13,
+                                      }}>
+                                      ✅ Fichar guardia
+                                    </button>
+                                    <div style={{ fontSize: 10.5, color: '#9ca3af', textAlign: 'right' }}>
+                                      {abierto
+                                        ? 'Púlsalo cuando estés en el aula'
+                                        : `Se activa de ${horaDe(a.hora)}`}
+                                    </div>
+                                  </>
+                                );
+                              })()}
                               {esConf && (
                                 <span style={{ fontSize: 12, fontWeight: 800, color: '#16a34a',
                                   backgroundColor: '#dcfce7', padding: '6px 12px', borderRadius: 16,
-                                  border: '1.5px solid #86efac' }}>🟢 Confirmada</span>
+                                  border: '1.5px solid #86efac' }}>
+                                  ✅ Fichada{a.confirmado_at ? ` · ${new Date(a.confirmado_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}` : ''}
+                                </span>
                               )}
                               {esInc && (
                                 <span style={{ fontSize: 12, fontWeight: 800, color: '#ea580c',

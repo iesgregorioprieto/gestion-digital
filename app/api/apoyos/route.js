@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { dentroDeFranja } from '@/lib/asignacionGuardias';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 
@@ -40,6 +41,44 @@ export async function POST(request) {
 
     const { accion, id, datos, lista } = await request.json();
     if (!accion) return Response.json({ error: 'Falta la acción' }, { status: 400 });
+
+    // ─── FICHAR la guardia ───
+    //
+    // Un solo gesto: el profesor pulsa el check cuando YA ESTÁ en el aula,
+    // y queda la hora real. Sustituye a los tres botones de antes (verde,
+    // naranja, rojo), que obligaban a elegir entre "la estoy haciendo" y
+    // "incidencia" sin que nadie supiera bien cuál tocar.
+    //
+    // Solo se puede fichar DURANTE la franja: ni antes de que empiece ni
+    // después de que acabe. Se comprueba aquí y no solo en la pantalla,
+    // porque el reloj del navegador lo cambia cualquiera.
+    //
+    // Las observaciones son opcionales y van en el mismo gesto.
+    if (accion === 'fichar') {
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const { data: fila } = await supa().from('apoyos_asignados')
+        .select('id, fecha, hora, profesor_id').eq('id', id).eq('profesor_id', sesion.id);
+      const guardia = (fila || [])[0];
+      if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
+
+      if (!dentroDeFranja(guardia.hora, guardia.fecha)) {
+        return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
+      }
+
+      const observaciones = (datos?.observaciones || '').trim();
+      const { error } = await supa().from('apoyos_asignados')
+        .update({
+          estado: 'confirmado',
+          confirmado_at: new Date().toISOString(),   // la hora real del check
+          incidencia: observaciones || null,
+          cuenta_reparto: true,                      // fichada: cuenta para el reparto
+        })
+        .eq('id', id).eq('profesor_id', sesion.id);
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
 
     // ─── El profesor confirma SU apoyo ───
     if (accion === 'confirmar') {
