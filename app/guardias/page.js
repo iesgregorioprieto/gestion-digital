@@ -311,19 +311,14 @@ export default function Guardias() {
       ...dlds.map(d => ({...d, tipo_falta:'dld'})),
     ];
 
-    // Antes de leer los apoyos se pide al servidor que preasigne los
-    // que falten. Así la propuesta le llega al profesorado aunque nadie
-    // de jefatura haya abierto el cuadrante. Si falla, se sigue igual:
-    // se verán los apoyos que ya hubiera.
-    try {
-      await fetch('/api/guardias/preasignar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fecha: f }),
-      });
-    } catch (e) {
-      console.error('No se pudieron preasignar las guardias:', e);
-    }
+    // La preasignación NO se pide desde aquí. Si cada profesor que abre
+    // esta pantalla lanza su propia llamada al servidor, dos personas
+    // abriéndola casi a la vez leen la base de datos antes de que la otra
+    // termine de guardar, y las dos crean una fila para el mismo hueco:
+    // el mismo compañero aparece cubierto dos veces por dos personas
+    // distintas. La preasignación se dispara UNA sola vez, al registrarse
+    // la ausencia (ver app/api/ausencias/route.js), y cubre el rango
+    // entero de la baja. Aquí solo se lee lo que ya hay guardado.
 
     // Cargar apoyos para esta fecha
     try {
