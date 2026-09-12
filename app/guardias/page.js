@@ -50,6 +50,12 @@ function horaAhora(ahora = new Date()) {
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
+// El recreo es vigilancia de zona: no sustituye a nadie, así que no entra
+// en la lista de profesores a los que hay que cubrir.
+function esRecreoSector(sector) {
+  return (sector || '').toUpperCase().includes('RECREO');
+}
+
 /**
  * El grupo tal como viene del horario importado trae pegados el código
  * del módulo y el aula: "PBPR-2686687GM-1COC(5 E004 COC)". Al compañero
