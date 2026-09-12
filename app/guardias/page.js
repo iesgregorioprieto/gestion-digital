@@ -795,6 +795,45 @@ export default function Guardias() {
           style={{ ...btnNav, backgroundColor:marron, color:'white', border:'none', fontSize:11 }}>Hoy</button>
       </div>
 
+      {/* SELECTOR DE HORAS */}
+      {!esFinde && (
+        <div style={{ padding:'10px 16px 0', backgroundColor:'white', borderBottom:'1px solid #e5e7eb' }}>
+          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
+            {HORAS.map(h => {
+              const activa = h.id === horaActiva;
+              // Se cuenta sobre las guardias ya calculadas por el servidor:
+              // las ausencias de varios días y las bajas no guardan horas
+              // concretas, así que contando sobre ellas salían de menos.
+              const aCubrir = new Set();
+              apoyosAsignados.filter(x => normHora(x.hora) === h.id)
+                .forEach(x => aCubrir.add(x.profesor_ausente_id || `g:${x.id}`));
+              ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)))
+                .forEach(a => aCubrir.add(a.profesorId || `a:${a.abrev}`));
+              const cnt = aCubrir.size;
+
+              return (
+                <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
+                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer',
+                  backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
+                  color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
+                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
+                  fontWeight:700, fontSize:13, position:'relative',
+                }}>
+                  {h.label}
+                  {cnt > 0 && (
+                    <span style={{
+                      position:'absolute', top:-6, right:-6, backgroundColor:rojo, color:'white',
+                      borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:800,
+                      display:'flex', alignItems:'center', justifyContent:'center'
+                    }}>{cnt}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* COBERTURA DE GUARDIAS HOY */}
       {!esFinde && (() => {
         // Todas las guardias del día, agrupadas por hora
@@ -934,45 +973,6 @@ export default function Guardias() {
           </div>
         );
       })()}
-
-      {/* SELECTOR DE HORAS */}
-      {!esFinde && (
-        <div style={{ padding:'10px 16px 0', backgroundColor:'white', borderBottom:'1px solid #e5e7eb' }}>
-          <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
-            {HORAS.map(h => {
-              const activa = h.id === horaActiva;
-              // Se cuenta sobre las guardias ya calculadas por el servidor:
-              // las ausencias de varios días y las bajas no guardan horas
-              // concretas, así que contando sobre ellas salían de menos.
-              const aCubrir = new Set();
-              apoyosAsignados.filter(x => normHora(x.hora) === h.id)
-                .forEach(x => aCubrir.add(x.profesor_ausente_id || `g:${x.id}`));
-              ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)))
-                .forEach(a => aCubrir.add(a.profesorId || `a:${a.abrev}`));
-              const cnt = aCubrir.size;
-
-              return (
-                <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
-                  flexShrink:0, padding:'8px 14px', borderRadius:10, cursor:'pointer',
-                  backgroundColor: activa ? marron : (cnt > 0 ? '#fef2f2' : 'white'),
-                  color: activa ? 'white' : (cnt > 0 ? rojo : '#555'),
-                  border: activa ? 'none' : '1.5px solid ' + (cnt > 0 ? '#fca5a5' : '#d1d5db'),
-                  fontWeight:700, fontSize:13, position:'relative',
-                }}>
-                  {h.label}
-                  {cnt > 0 && (
-                    <span style={{
-                      position:'absolute', top:-6, right:-6, backgroundColor:rojo, color:'white',
-                      borderRadius:'50%', width:18, height:18, fontSize:10, fontWeight:800,
-                      display:'flex', alignItems:'center', justifyContent:'center'
-                    }}>{cnt}</span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* HORARIO ACTIVO */}
       {!esFinde && horaInfo && (
