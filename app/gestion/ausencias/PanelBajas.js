@@ -70,8 +70,15 @@ export default function PanelBajas() {
 
   async function cargar() {
     setCargando(true);
-    const { data } = await consulta('profesores')
+    // 'profesores_gestion' y no 'profesores': la lista de columnas
+    // permitidas para 'profesores' no incluye fecha_baja, así que pedirla
+    // ahí rechazaba la consulta entera en silencio y dejaba esta pantalla
+    // sin nadie que buscar. 'profesores_gestion' es la misma tabla, con
+    // más columnas, solo para equipo directivo — que es justo quien usa
+    // esta pantalla.
+    const { data, error } = await consulta('profesores_gestion')
       .select('id,nombre,apellidos,email,departamento,estado,en_baja,tipo_baja,fecha_baja,sustituto_id,titular_id');
+    if (error) console.error('cargar profesores (bajas):', error.message);
     setProfesores(data || []);
     setCargando(false);
   }
