@@ -241,20 +241,32 @@ export async function POST(request) {
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
-      // Preasignación automática de guardias: en cuanto se registra una ausencia,
-      // el sistema asigna inmediatamente a quien corresponda según el cuadrante
+      // Preasignación automática de guardias: en cuanto se registra una
+      // ausencia, el sistema asigna a quien corresponda según el cuadrante
       // y la rotación. No espera a que nadie abra la app ni pulse nada.
+      //
+      // Se espera a que termine (antes iba sin await y en el servidor la
+      // función se cerraba a veces antes de que saliera la petición), y se
+      // manda el rango entero: una ausencia de tres días se preasigna
+      // completa, no solo el primer día. Una baja sin fecha de fin la cubre
+      // el tope de días de la propia preasignación.
       const fechaAusencia = fila.fecha_inicio;
       if (fechaAusencia) {
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
-        fetch(`${baseUrl}/api/guardias/preasignar`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Cookie': request.headers.get('cookie') || '',
-          },
-          body: JSON.stringify({ fecha: fechaAusencia }),
-        }).catch(err => console.error('preasignar tras ausencia:', err?.message));
+        try {
+          await fetch(`${baseUrl}/api/guardias/preasignar`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Cookie': request.headers.get('cookie') || '',
+            },
+            body: JSON.stringify({ fecha: fechaAusencia, hasta: fila.fecha_fin || null }),
+          });
+        } catch (err) {
+          // Que falle la preasignación no puede tumbar el registro de la
+          // ausencia: lo importante es que quede guardada.
+          console.error('preasignar tras ausencia:', err?.message);
+        }
       }
 
       // Permiso de formación: flujo de aprobación.

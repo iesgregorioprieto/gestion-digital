@@ -5,6 +5,11 @@
  * guardia pendiente, para que le llegue directamente al profesorado
  * sin tener que pasar por jefatura de estudios.
  *
+ * Cubre un día o un rango: una baja de tres días se preasigna entera de
+ * una sola vez, sin esperar a que alguien abra la aplicación cada
+ * mañana. Los datos pesados (horarios y profesorado) se leen una vez y
+ * valen para todos los días.
+ *
  * Es idempotente: si un hueco ya tiene a alguien puesto, no se vuelve a
  * crear. Las guardias ya fichadas y las que ha puesto dirección a mano
  * NO se tocan nunca.
@@ -22,6 +27,39 @@ import {
 import { normSector, esSectorRecreo } from '@/lib/sectores';
 
 const FICHADAS = ['confirmado', 'realizado'];
+
+// Tope de días por llamada. Una baja sin fecha de fin es infinita: se
+// preasignan los próximos días y el resto lo va añadiendo el día a día.
+const MAX_DIAS = 15;
+
+function sumarDias(fecha, n) {
+  const d = new Date(fecha + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Días lectivos del rango (sin fines de semana; los festivos se caen
+// solos porque en el horario no hay nada ese día).
+function diasDelRango(desde, hasta) {
+  const dias = [];
+  let f = desde;
+  for (let i = 0; i < MAX_DIAS; i++) {
+    const ds = diaSemanaEs(f);
+    if (ds !== 'sabado' && ds !== 'domingo') dias.push({ fecha: f, diaSemana: ds });
+    if (f >= hasta) break;
+    f = sumarDias(f, 1);
+  }
+  return dias;
+}
+
+// ¿Esta falta afecta a este día?
+function afectaA(falta, fecha) {
+  const ini = falta.fecha_inicio || falta.fecha_solicitada;
+  const fin = falta.fecha_fin || falta.fecha_solicitada || falta.fecha_inicio;
+  if (!ini) return false;
+  if (ini > fecha) return false;
+  return !fin || fin >= fecha;
+}
 
 let _cliente = null;
 function supa() {
@@ -72,13 +110,16 @@ export async function POST(request) {
     const sesion = await sesionDe(request);
     if (!sesion?.id) return Response.json({ error: 'sin_sesion' }, { status: 401 });
 
-    const { fecha } = await request.json();
+    const { fecha, hasta } = await request.json();
     if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       return Response.json({ error: 'fecha_no_valida' }, { status: 400 });
     }
+    const fechaFin = (hasta && /^\d{4}-\d{2}-\d{2}$/.test(hasta) && hasta > fecha)
+      ? (hasta > sumarDias(fecha, MAX_DIAS) ? sumarDias(fecha, MAX_DIAS) : hasta)
+      : fecha;
 
-    const dia = diaSemanaEs(fecha);
-    if (dia === 'sabado' || dia === 'domingo') {
+    const dias = diasDelRango(fecha, fechaFin);
+    if (dias.length === 0) {
       return Response.json({ ok: true, creadas: 0, motivo: 'fin_de_semana' });
     }
 
@@ -106,15 +147,17 @@ export async function POST(request) {
       .from('profesores')
       .select('id,nombre,apellidos,departamento,especialidad');
 
-    // ─── Faltas del día: ausencias y DLD aprobados ───
+    // ─── Faltas que tocan el rango: ausencias y DLD aprobados ───
+    const ultimo = dias[dias.length - 1].fecha;
     const [rAus, rDld] = await Promise.all([
       cliente.from('ausencias')
         .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
-        .lte('fecha_inicio', fecha)
+        .lte('fecha_inicio', ultimo)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('dld')
         .select('id, profesor_id, horas, fecha_solicitada')
-        .eq('fecha_solicitada', fecha)
+        .gte('fecha_solicitada', fecha)
+        .lte('fecha_solicitada', ultimo)
         .eq('estado', 'aprobada'),
     ]);
 
@@ -127,8 +170,9 @@ export async function POST(request) {
     }
 
     // ─── Guardias ya registradas ───
-    const [{ data: yaHoy }, { data: delCurso }] = await Promise.all([
-      cliente.from('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', curso),
+    const [{ data: yaEnRango }, { data: delCurso }] = await Promise.all([
+      cliente.from('apoyos_asignados').select('*')
+        .gte('fecha', fecha).lte('fecha', ultimo).eq('curso_academico', curso),
       cliente.from('apoyos_asignados')
         .select('sector_apoyo,sector_destino,profesor_id,estado')
         .eq('curso_academico', curso),
@@ -151,20 +195,7 @@ export async function POST(request) {
       }
     });
 
-    // Huecos que ya tienen a alguien puesto. La clave es hora + quién
-    // falta: si dos compañeros del mismo sector faltan a la misma hora,
-    // son dos huecos distintos y los dos hay que cubrirlos.
-    const yaCubiertos = (yaHoy || [])
-      .filter(a => !esSectorRecreo(a.sector_apoyo))
-      .map(a => ({
-        hora: normHora(a.hora),
-        profesorAusenteId: a.profesor_ausente_id,
-        profesorId: a.profesor_id,
-      }));
-
-    const huecos = prepararHuecos(faltas, profesores || []);
     const { porSector: cuadrante, sinResolver } = construirCuadrante(horarios, profesores || []);
-
     if (sinResolver.length) {
       console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
     }
@@ -178,68 +209,88 @@ export async function POST(request) {
         ambiguas.map(a => `${a.clave}: ${a.personas.join(' / ')}`).join(' | '));
     }
 
-    // ─── Cálculo hora por hora ───
+    // ─── Cálculo, día por día ───
     const nuevas = [];
     const sinCubrir = [];
 
-    for (const hora of HORAS_GUARDIA) {
-      if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
+    for (const { fecha: diaFecha, diaSemana } of dias) {
+      const delDia = faltas.filter(f => afectaA(f, diaFecha));
+      if (delDia.length === 0) continue;
 
-      const enClase = ocupadosEnClase(horarios, profesores || [], dia, hora);
-
-      const asignaciones = asignacionesDeHora({
-        hora, dia, huecos, cuadrante, horarios,
-        profesores: profesores || [],
-        apoyosPorProfesor, apoyosFueraPorSector,
-        yaCubiertos, ocupadosIds: enClase,
+      // Las horas salen de lo que marcó el profesor; si dejó las tareas
+      // por módulo (ausencia larga) o no dejó nada (baja), del horario.
+      const huecos = prepararHuecos(delDia, profesores || [], {
+        horarios, dia: diaSemana,
       });
 
-      for (const asig of asignaciones) {
-        if (!asig.cubre?.profesorId) {
-          sinCubrir.push({
+      const yaCubiertos = (yaEnRango || [])
+        .filter(a => a.fecha === diaFecha && !esSectorRecreo(a.sector_apoyo))
+        .map(a => ({
+          hora: normHora(a.hora),
+          profesorAusenteId: a.profesor_ausente_id,
+          profesorId: a.profesor_id,
+        }));
+
+      for (const hora of HORAS_GUARDIA) {
+        if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
+
+        const enClase = ocupadosEnClase(horarios, profesores || [], diaSemana, hora);
+
+        const asignaciones = asignacionesDeHora({
+          hora, dia: diaSemana, huecos, cuadrante, horarios,
+          profesores: profesores || [],
+          apoyosPorProfesor, apoyosFueraPorSector,
+          yaCubiertos, ocupadosIds: enClase,
+        });
+
+        for (const asig of asignaciones) {
+          if (!asig.cubre?.profesorId) {
+            sinCubrir.push({
+              fecha: diaFecha, hora,
+              ausente: asig.hueco.profesor,
+              grupo: asig.grupo || null,
+              aula: asig.aula || null,
+            });
+            continue;
+          }
+
+          // Se apunta en la lista viva para que el resto de horas y
+          // huecos de este mismo día no le asignen otra cosa a la vez.
+          yaCubiertos.push({
             hora,
-            ausente: asig.hueco.profesor,
+            profesorAusenteId: asig.hueco.profesorId,
+            profesorId: asig.cubre.profesorId,
+          });
+
+          nuevas.push({
+            fecha: diaFecha,
+            hora,
+            sector_apoyo: asig.cubre.sector,
+            sector_destino: normSector(asig.hueco.sector),
+            profesor_ausente_id: asig.hueco.profesorId || null,
+            profesor_id: asig.cubre.profesorId,
+            profesor_nombre_pdf: claveAbreviada(
+              asig.cubre.nombre.split(',')[0],
+              asig.cubre.nombre.split(',')[1] || ''
+            ) || null,
             grupo: asig.grupo || null,
             aula: asig.aula || null,
+            materia: asig.materia || null,
+            tarea: asig.instrucciones || null,
+            asignado_por: null,          // la propuso el sistema, no una persona
+            estado: 'pendiente',
+            tipo_apoyo: asig.escalon === 0 ? 'sector' : 'obligatorio',
+            curso_academico: curso,
           });
-          continue;
         }
-
-        // Se apunta en la lista viva para que el resto de horas y huecos
-        // de esta misma pasada no le asignen otra cosa a la vez.
-        yaCubiertos.push({
-          hora,
-          profesorAusenteId: asig.hueco.profesorId,
-          profesorId: asig.cubre.profesorId,
-        });
-
-        nuevas.push({
-          fecha,
-          hora,
-          sector_apoyo: asig.cubre.sector,
-          sector_destino: normSector(asig.hueco.sector),
-          profesor_ausente_id: asig.hueco.profesorId || null,
-          profesor_id: asig.cubre.profesorId,
-          profesor_nombre_pdf: claveAbreviada(
-            asig.cubre.nombre.split(',')[0],
-            asig.cubre.nombre.split(',')[1] || ''
-          ) || null,
-          grupo: asig.grupo || null,
-          aula: asig.aula || null,
-          materia: asig.materia || null,
-          tarea: asig.instrucciones || null,
-          asignado_por: null,          // la propuso el sistema, no una persona
-          estado: 'pendiente',
-          tipo_apoyo: asig.escalon === 0 ? 'sector' : 'obligatorio',
-          curso_academico: curso,
-        });
       }
     }
 
     if (nuevas.length === 0) {
       return Response.json({
         ok: true, creadas: 0, motivo: 'todo_cubierto',
-        sin_cubrir: sinCubrir, sin_resolver: sinResolver, ambiguas,
+        dias: dias.length, sin_cubrir: sinCubrir,
+        sin_resolver: sinResolver, ambiguas,
       });
     }
 
@@ -249,6 +300,7 @@ export async function POST(request) {
     return Response.json({
       ok: true,
       creadas: nuevas.length,
+      dias: dias.length,
       sin_cubrir: sinCubrir,
       sin_resolver: sinResolver,
       ambiguas,
