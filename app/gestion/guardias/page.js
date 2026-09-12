@@ -889,10 +889,15 @@ export default function GestionGuardias() {
         ) : (
           <>
             {(() => {
+              // El "cuántas" tiene que contar lo mismo que enseña la lista de
+              // abajo: se cuenta sobre las filas reales de apoyos_asignados,
+              // no sobre lo que recalcula asignacionAutomatica() por su cuenta.
               const todasAsig = asignacionAutomatica();
-              const totalSinCubrir = todasAsig.filter(a => !a.cubre).length;
+              const filasHoraReales = apoyosAsignados.filter(ap =>
+                ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'));
               const totalClases = todasAsig.length;
-              const cubiertasPorApoyo = todasAsig.filter(a => a.cubre?.tipo === 'apoyo_obligatorio').length;
+              const totalSinCubrir = Math.max(0, totalClases - filasHoraReales.length);
+              const cubiertasPorApoyo = filasHoraReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
               
               if (totalSinCubrir > 0) {
                 return (
@@ -917,12 +922,15 @@ export default function GestionGuardias() {
 
             {Object.entries(ausenciasPorSector()).map(([sectorSup, ausentes]) => {
               const asignaciones = asignacionAutomatica().filter(a => a.ausencia.sector.toUpperCase() === sectorSup);
-              
-              // Estado global del sector
+
+              // Igual que en el resumen de arriba: los recuentos salen de las
+              // filas reales, no de lo que asignacionAutomatica() recalcula.
               const totalClases = asignaciones.length;
-              const cubiertasPorGuardia = asignaciones.filter(a => a.cubre?.tipo === 'guardia_sector').length;
-              const cubiertasPorApoyo = asignaciones.filter(a => a.cubre?.tipo === 'apoyo_obligatorio').length;
-              const sinCubrir = asignaciones.filter(a => !a.cubre).length;
+              const filasSectorReales = apoyosAsignados.filter(ap =>
+                ap.hora === horaActiva && (ap.sector_destino || '').toUpperCase() === sectorSup);
+              const cubiertasPorGuardia = filasSectorReales.filter(ap => ap.tipo_apoyo === 'sector').length;
+              const cubiertasPorApoyo = filasSectorReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
+              const sinCubrir = Math.max(0, totalClases - filasSectorReales.length);
               
               // Detectar si algún ausente TENÍA guardia esa hora (pérdida de capacidad del sector)
               const perdidaGuardia = ausentes.some(a => 
@@ -1119,7 +1127,29 @@ export default function GestionGuardias() {
                         })}
                       </>
                     ) : asignaciones.map((asig, idx) => {
-                      const cubre = asig.cubre;
+                      // "Quién cubre" no se calcula aquí. Antes se recalculaba
+                      // en el navegador (asignacionAutomatica), con una lógica
+                      // distinta a la del servidor, y por eso jefatura podía ver
+                      // un compañero distinto al que de verdad se le asignó y
+                      // guardó en apoyos_asignados — que es lo que ve el
+                      // profesorado desde su propia pantalla. Se lee la fila real.
+                      const filaReal = apoyosAsignados.find(ap =>
+                        ap.hora === horaActiva && ap.profesor_ausente_id === asig.ausencia.profesorId);
+                      const cubre = filaReal ? {
+                        nombre: nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
+                        abrev: filaReal.profesor_nombre_pdf,
+                        profesorId: filaReal.profesor_id,
+                        sectorOriginal: filaReal.sector_apoyo,
+                        tipo: filaReal.tipo_apoyo === 'sector' ? 'guardia_sector' : 'apoyo_obligatorio',
+                        apoyosPrevios: filaReal.profesor_id ? (apoyosPorProfesor[filaReal.profesor_id] || 0) : 0,
+                        // Para poder seguir ofreciendo el botón "Cambiar ▾" en el
+                        // apoyo obligatorio: mismos candidatos que ya se calculan
+                        // para las sugerencias de refuerzo, un poco más abajo.
+                        alternativas: filaReal.tipo_apoyo !== 'sector'
+                          ? profesoresLibresParaApoyo(new Set([normAbrev(filaReal.profesor_nombre_pdf)]),
+                              ausenciasPorSector(), asig.ausencia.sector?.toUpperCase())
+                          : [],
+                      } : null;
 
                       // Buscar apoyo registrado si es obligatorio
                       const apoyoReg = cubre?.tipo === 'apoyo_obligatorio'
