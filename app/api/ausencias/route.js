@@ -205,6 +205,42 @@ export async function GET(request) {
  *   - Cualquiera con sesión → notificar y editar LA SUYA
  *   - Equipo directivo      → notificar por otro, resolver y borrar
  */
+
+/**
+ * Quita las guardias que ya no hacen falta.
+ *
+ * Cuando una ausencia se borra o se acorta —porque llega el sustituto o
+ * porque el compañero avisa de que al final sí viene—, las guardias que
+ * se habían preasignado para los días siguientes se quedaban puestas: el
+ * profesor de guardia seguía viendo que tenía que cubrir a alguien que ya
+ * está en el centro.
+ *
+ * Solo se borran las PENDIENTES. Si un compañero llegó a fichar una, se
+ * queda: la hizo, y tiene que constar y contar.
+ */
+// Ayer, en formato AAAA-MM-DD. Se usa como corte: lo de hoy en adelante
+// se limpia; lo de días pasados se queda como registro de lo ocurrido.
+function ayer() {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
+async function limpiarGuardias(profesorId, desde = null) {
+  if (!profesorId) return;
+  try {
+    let q = supa().from('apoyos_asignados')
+      .delete()
+      .eq('profesor_ausente_id', profesorId)
+      .eq('estado', 'pendiente');
+    if (desde) q = q.gt('fecha', desde);
+    const { error } = await q;
+    if (error) console.error('limpiar guardias:', error.message);
+  } catch (e) {
+    console.error('limpiar guardias:', e?.message);
+  }
+}
+
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
@@ -350,8 +386,21 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
+      // Se mira antes de borrarla, que después ya no se puede saber a
+      // quién pertenecía ni desde cuándo.
+      const { data: previa } = await supa().from('ausencias')
+        .select('profesor_id, fecha_inicio').eq('id', id);
+      const dueño = (previa || [])[0];
+
       const { error } = await supa().from('ausencias').delete().eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // Si ya no falta, nadie tiene que cubrirle. Las guardias que algún
+      // compañero haya fichado se quedan: esas se hicieron.
+      if (dueño?.profesor_id) {
+        await limpiarGuardias(dueño.profesor_id, ayer());
+      }
+
       return Response.json({ ok: true });
     }
 
@@ -370,6 +419,10 @@ export async function POST(request) {
         .is('fecha_fin', null);
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // A partir del cierre ya no hay que cubrirle: viene el sustituto.
+      await limpiarGuardias(datos.profesor_id, datos.fecha_fin);
+
       return Response.json({ ok: true });
     }
 

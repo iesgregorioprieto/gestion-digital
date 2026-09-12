@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { indiceProfesores, buscaProfesor, nombreDe } from '@/lib/asignacionGuardias';
+import { getCursoActual } from '@/lib/curso';
 
 /**
  * HORARIOS DEL PROFESORADO
@@ -37,7 +39,9 @@ export async function POST(request) {
       return Response.json({ error: 'sin_permisos' }, { status: 403 });
     }
 
-    const { accion, curso, tipo, profesor_id, lote } = await request.json();
+    const cuerpo = await request.json();
+    const { accion, curso, tipo, profesor_id, lote } = cuerpo;
+    const datosExtra = cuerpo;
 
     // ─── Borrar los horarios de un curso (antes de reimportarlos) ───
     if (accion === 'borrar_curso') {
@@ -74,6 +78,74 @@ export async function POST(request) {
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
+    }
+
+    // ─── Copiar el horario de un titular a su sustituto ───
+    //
+    // Antes lo hacía el navegador: buscaba el horario del titular con un
+    // "se parece a su primer apellido", así que a un titular apellidado
+    // Gómez le copiaba el horario de todos los Gómez del centro. Y grababa
+    // el del sustituto con una abreviatura inventada, cuando las clases se
+    // guardan con el nombre completo.
+    //
+    // Ahora se identifica a cada persona igual que lo hace el motor de
+    // guardias, y el horario copiado lleva el nombre completo.
+    if (accion === 'copiar_horario') {
+      const { titular_id, sustituto_id } = datosExtra;
+      if (!titular_id || !sustituto_id) {
+        return Response.json({ error: 'Faltan el titular o el sustituto' }, { status: 400 });
+      }
+
+      const cliente = supa();
+      const cursoActivo = curso || await getCursoActual();
+
+      const { data: profesores } = await cliente
+        .from('profesores').select('id,nombre,apellidos');
+      const titular = (profesores || []).find(p => p.id === titular_id);
+      const sustituto = (profesores || []).find(p => p.id === sustituto_id);
+      if (!titular || !sustituto) {
+        return Response.json({ error: 'Profesor no encontrado' }, { status: 404 });
+      }
+
+      const indice = indiceProfesores(profesores || []);
+
+      let horarios = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data } = await cliente.from('horarios_profesores')
+          .select('*').eq('curso_academico', cursoActivo).range(offset, offset + 999);
+        if (!data || data.length === 0) break;
+        horarios = horarios.concat(data);
+        if (data.length < 1000) break;
+      }
+
+      // Suyas y solo suyas: se identifica a la persona, no se busca un
+      // parecido en el apellido.
+      const suyas = horarios.filter(h =>
+        buscaProfesor(indice, h.profesor_nombre_pdf)?.id === titular.id);
+
+      if (suyas.length === 0) {
+        return Response.json({ ok: true, copiados: 0, motivo: 'el titular no tiene horario' });
+      }
+
+      // El sustituto arranca limpio, por si ya tenía algo cargado.
+      await cliente.from('horarios_profesores').delete().eq('profesor_id', sustituto_id);
+
+      const copias = suyas.map(h => {
+        const { id, created_at, ...resto } = h;
+        return {
+          ...resto,
+          profesor_id: sustituto_id,
+          profesor_nombre_pdf: nombreDe(sustituto),
+        };
+      });
+
+      for (let i = 0; i < copias.length; i += 200) {
+        const { error } = await cliente.from('horarios_profesores')
+          .insert(copias.slice(i, i + 200));
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+      }
+
+      return Response.json({ ok: true, copiados: copias.length, nombre: nombreDe(sustituto) });
     }
 
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });

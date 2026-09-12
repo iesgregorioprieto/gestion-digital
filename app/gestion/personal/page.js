@@ -439,45 +439,24 @@ export default function PanelSecretario() {
       await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: titular.id, datos: { sustituto_id: sustituto.id } }) });
       await fetch('/api/profesores', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ accion: 'baja', id: sustituto.id, datos: { titular_id: titular.id } }) });
 
-      // 2. Borrar horario previo del sustituto (por si tenía algo)
-      await fetch('/api/horarios', {
+      // 2. Copiar el horario del titular al sustituto.
+      //    Lo hace el servidor: identifica al titular por su ficha (antes
+      //    se buscaba "algo que se parezca a su primer apellido", y a un
+      //    Gómez le copiaba el horario de todos los Gómez) y graba el del
+      //    sustituto con su nombre completo.
+      const rCopia = await fetch('/api/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustituto.id }),
+        body: JSON.stringify({
+          accion: 'copiar_horario',
+          titular_id: titular.id,
+          sustituto_id: sustituto.id,
+        }),
       });
+      const copia = await rCopia.json();
+      if (copia.error) throw new Error(copia.error);
 
-      // 3. Copiar horario del titular al sustituto
-      // Primero obtenemos el nombre PDF del titular para buscar su horario
-      const { data: horariosTitular } = await consulta('horarios_profesores')
-        .select('*')
-        .eq('curso_academico', await getCursoActual())
-        .ilike('profesor_nombre_pdf', `%${titular.apellidos.split(' ')[0]}%`);
-
-      if (horariosTitular && horariosTitular.length > 0) {
-        // Construir nombre PDF del sustituto (formato Delphos: "Ape. N, IN")
-        const ape = sustituto.apellidos.split(' ')[0].substring(0, 3) + '.';
-        const ape2 = sustituto.apellidos.split(' ')[1] ? sustituto.apellidos.split(' ')[1][0] : '';
-        const nom = sustituto.nombre.split(' ').map(n => n[0]).join('');
-        const nombrePdfSust = `${ape} ${ape2 ? ape2 + ', ' : ', '}${nom}`;
-
-        const copias = horariosTitular.map(h => ({
-          ...h,
-          id: undefined, // Nuevo ID
-          profesor_id: sustituto.id,
-          profesor_nombre_pdf: nombrePdfSust,
-        }));
-
-        // Insertar en batches de 50
-        for (let i = 0; i < copias.length; i += 50) {
-          await fetch('/api/horarios', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ accion: 'insertar', lote: copias.slice(i, i + 50) }),
-          });
-        }
-      }
-
-      mostrarMensaje(`✅ ${sustituto.nombre} ${sustituto.apellidos} asignado como sustituto. Horario copiado (${horariosTitular?.length || 0} registros)`, 'ok');
+      mostrarMensaje(`✅ ${sustituto.nombre} ${sustituto.apellidos} asignado como sustituto. Horario copiado (${copia.copiados || 0} registros)`, 'ok');
       setGestionandoBaja(false);
       setBusquedaSustituto('');
       cargarProfesores();
