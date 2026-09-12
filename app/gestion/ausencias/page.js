@@ -599,7 +599,9 @@ function descargarInforme() {
     setCargandoHorario(false);
   }
 
-  function diasParaJustificar(createdAt) {
+  // El plazo cuenta desde el día de la falta (fecha_inicio), no desde que
+  // se registró la ausencia. Mismo criterio que en app/ausencias/page.js.
+  function diasParaJustificar(fechaInicio) {
     const limite = new Date(createdAt);
     limite.setDate(limite.getDate() + 3);
     return Math.ceil((limite - new Date()) / (1000 * 60 * 60 * 24));
@@ -844,7 +846,7 @@ ${a.observaciones_directivo ? `
             ) : ausenciasFiltradas.map(a => {
               const est = ESTADOS[a.estado] || ESTADOS.pendiente;
               const horas = Array.isArray(a.horas) ? a.horas : [];
-              const dias = diasParaJustificar(a.created_at);
+              const dias = diasParaJustificar(a.fecha_inicio);
               const vencida = !a.justificado && a.estado !== 'justificada' && dias < 0;
               return (
                 <div key={a.id} style={{ backgroundColor: vencida ? '#fffbfb' : 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${vencida ? '#b91c1c' : est.color}` }}>

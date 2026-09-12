@@ -484,7 +484,7 @@ export default function Ausencias() {
 
     // Dejar constancia si se entrega fuera de plazo
     const fueraDePlazo = ausenciaJustificando.estado === 'sin_justificar'
-      || diasParaJustificar(ausenciaJustificando.created_at) <= 0;
+      || diasParaJustificar(ausenciaJustificando.fecha_inicio) <= 0;
 
     await fetch('/api/ausencias', {
       method: 'POST',
@@ -515,8 +515,12 @@ export default function Ausencias() {
   }
 
   // Días restantes para justificar
-  function diasParaJustificar(createdAt) {
-    const limite = new Date(createdAt);
+  // El plazo cuenta desde el DÍA DE LA FALTA, no desde que se registra la
+  // ausencia. Antes contaba desde el registro: si alguien anotaba hoy una
+  // ausencia de la semana que viene, el plazo ya estaba corriendo antes
+  // incluso de faltar.
+  function diasParaJustificar(fechaInicio) {
+    const limite = new Date(fechaInicio + 'T00:00:00');
     limite.setDate(limite.getDate() + 3);
     const hoy = new Date();
     const diff = Math.ceil((limite - hoy) / (1000 * 60 * 60 * 24));
@@ -1068,7 +1072,7 @@ export default function Ausencias() {
               </div>
             ) : historial.map(a => {
               const est = ESTADOS[a.estado] || ESTADOS.pendiente;
-              const dias = diasParaJustificar(a.created_at);
+              const dias = diasParaJustificar(a.fecha_inicio);
               const horas = Array.isArray(a.horas) ? a.horas : [];
               const horasClase = horas.filter(h => h.tipo === 'clase');
               return (
