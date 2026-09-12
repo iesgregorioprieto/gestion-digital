@@ -100,8 +100,14 @@ export async function GET(request) {
 
     const curso = await getCursoActual();
 
+    // Jefatura puede pedir el horario de OTRO profesor (para registrar
+    // una ausencia telefónica). Solo directivos pueden pedir el de otra
+    // persona; cualquiera puede pedir el suyo propio.
+    const profesorIdParam = url.searchParams.get('profesor_id');
+    const idBuscado = (profesorIdParam && esDirectivo(sesion)) ? profesorIdParam : sesion.id;
+
     // Buscar el nombre PDF del profesor
-    const { data: prof } = await supa().from('profesores').select('nombre, apellidos').eq('id', sesion.id);
+    const { data: prof } = await supa().from('profesores').select('nombre, apellidos').eq('id', idBuscado);
     let nombrePdf = null;
     if (prof?.[0]) {
       const { nombre, apellidos } = prof[0];

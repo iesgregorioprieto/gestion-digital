@@ -83,6 +83,12 @@ export default function GestionAusencias() {
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [bajaProlongada, setBajaProlongada] = useState(false);
+  // Mismo mecanismo que en el formulario del profesorado para las
+  // ausencias de varios días: la tarea se deja por módulo/grupo. Para
+  // un solo día, esta pantalla ya dejaba marcar y desmarcar cada hora
+  // con los botones de abajo (pulsar de nuevo un tipo ya activo lo quita).
+  const [gruposUnicos, setGruposUnicos] = useState([]);
+  const [tareasBloque, setTareasBloque] = useState({});
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -520,12 +526,22 @@ function descargarInforme() {
     const prof = profesores.find(p => p.id === profesorSeleccionado);
     setEnviando(true);
 
-    const horasConDatos = Object.entries(horario).map(([horaId, val]) => ({
-      hora: HORAS.find(h => h.id === horaId)?.label || horaId,
-      tipo: val.tipo,
-      grupo: val.grupo || null,
-      instrucciones: val.instrucciones?.trim() || null,
-    }));
+    // Varios días: una tarea por módulo/grupo, igual que en el formulario
+    // del propio profesorado. Un solo día: hora por hora, como hasta ahora.
+    const horasConDatos = gruposUnicos.length > 0
+      ? gruposUnicos.map(u => ({
+          hora: 'Ausencia larga',
+          tipo: 'clase',
+          grupo: u.grupo,
+          materia: u.materia || null,
+          instrucciones: (tareasBloque[`${u.grupo}|${u.materia}`]?.instrucciones || '').trim() || null,
+        }))
+      : Object.entries(horario).map(([horaId, val]) => ({
+          hora: HORAS.find(h => h.id === horaId)?.label || horaId,
+          tipo: val.tipo,
+          grupo: val.grupo || null,
+          instrucciones: val.instrucciones?.trim() || null,
+        }));
 
     const _resp = await fetch('/api/ausencias', {
       method: 'POST',
@@ -553,50 +569,75 @@ function descargarInforme() {
     mostrarMensaje(`✅ Ausencia de ${prof.nombre} ${prof.apellidos} registrada correctamente`, 'ok');
     setBajaProlongada(false); setProfesorSeleccionado(''); setFechaInicio(''); setFechaFin('');
     setMotivo(''); setTipo('imprevista'); setSubtipo(''); setHorario({});
+    setGruposUnicos([]); setTareasBloque({});
     setVista('lista');
     cargarTodo();
   }
 
-  async function cargarHorarioProfesor(profId, fecha) {
+  /**
+   * Carga el horario del profesor elegido, para la fecha de inicio Y para
+   * saber si el rango completo (hasta fecha_fin) es de varios días.
+   *
+   * Usa la MISMA API que el formulario del propio profesorado
+   * (GET /api/ausencias?horario_dia=1), con profesor_id para pedir el
+   * horario de otra persona — antes tenía su propia consulta aparte por
+   * RPC, que solo sabía leer un día suelto y no sabía nada de ausencias
+   * de varios días: si jefatura registraba por teléfono una baja de
+   * lunes a miércoles, se mandaban las horas del lunes también para el
+   * martes y el miércoles, aunque el horario fuera distinto esos días.
+   */
+  async function cargarHorarioProfesor(profId, fecha, fechaHasta) {
     if (!profId || !fecha) return;
     setCargandoHorario(true);
     setHorario({});
-    const prof = profesores.find(p => p.id === profId);
-    if (!prof) { setCargandoHorario(false); return; }
-    
-    const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
-    const diaSem = dias[new Date(fecha+'T12:00:00').getDay()];
-    if (diaSem === 'sabado' || diaSem === 'domingo') { setCargandoHorario(false); return; }
-    
-    // Buscar nombre en horarios_profesores usando unaccent
-    const { data: fnResult } = await consultaRpc('buscar_profesor_horario', { 
-        p_nombre: prof.nombre.split(' ')[0], 
-        p_apellido: prof.apellidos.split(' ')[0] 
-      });
-    
-    if (!fnResult) { setCargandoHorario(false); return; }
-    
-    const { data: horas } = await consulta('horarios_profesores')
-      .select('hora_id, tipo, grupo, materia')
-      .eq('profesor_nombre_pdf', fnResult)
-      .eq('dia', diaSem)
-      .eq('curso_academico', await getCursoActual());
-    
-    if (horas?.length > 0) {
-      const nuevoHorario = {};
-      horas.forEach(h => {
-        const horaIdNorm = h.hora_id.replace(/[aª]$/, '');
-        nuevoHorario[horaIdNorm] = {
-          tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo,
-          grupo: h.grupo || '',
-          materia: h.materia || '',
-          instrucciones: '',
-          precargado: true,
-        };
-      });
-      setHorario(nuevoHorario);
+    setGruposUnicos([]);
+    setTareasBloque({});
+
+    const hasta = fechaHasta || fechaFin || fecha;
+    const varios = calcularDiasAusencia(fecha, hasta) >= 2;
+
+    try {
+      const r = await fetch(
+        `/api/ausencias?horario_dia=1&fecha=${fecha}&profesor_id=${profId}`);
+      const d = await r.json();
+
+      if (varios && d.gruposUnicos?.length > 0) {
+        setGruposUnicos(d.gruposUnicos);
+        const bloque = {};
+        d.gruposUnicos.forEach(u => {
+          bloque[`${u.grupo}|${u.materia}`] = { instrucciones: '' };
+        });
+        setTareasBloque(bloque);
+        setCargandoHorario(false);
+        return;
+      }
+
+      if (d.horas?.length > 0) {
+        const nuevoHorario = {};
+        d.horas.forEach(h => {
+          const horaIdNorm = h.hora_id.replace(/[aª]$/, '');
+          nuevoHorario[horaIdNorm] = {
+            tipo: h.tipo === 'complementaria' ? 'guardia' : h.tipo,
+            grupo: h.grupo || '',
+            materia: h.materia || '',
+            instrucciones: '',
+            precargado: true,
+          };
+        });
+        setHorario(nuevoHorario);
+      }
+    } catch (e) {
+      console.warn('cargarHorarioProfesor:', e?.message);
     }
     setCargandoHorario(false);
+  }
+
+  // Igual que en el formulario del profesorado: cuántos días son.
+  function calcularDiasAusencia(inicio, fin) {
+    if (!inicio || !fin) return 1;
+    const d1 = new Date(inicio + 'T12:00:00');
+    const d2 = new Date(fin + 'T12:00:00');
+    return Math.round((d2 - d1) / 86400000) + 1;
   }
 
   // El plazo cuenta desde el día de la falta (fecha_inicio), no desde que
@@ -1008,7 +1049,7 @@ ${a.observaciones_directivo ? `
             {/* PROFESOR */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>👨‍🏫 Profesor *</label>
-              <select value={profesorSeleccionado} onChange={e => { setProfesorSeleccionado(e.target.value); cargarHorarioProfesor(e.target.value, fechaInicio); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
+              <select value={profesorSeleccionado} onChange={e => { setProfesorSeleccionado(e.target.value); cargarHorarioProfesor(e.target.value, fechaInicio, fechaFin); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }}>
                 <option value="">-- Selecciona el profesor --</option>
                 {profesores.map(p => <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre} {p.departamento ? `· ${p.departamento}` : ''}</option>)}
               </select>
@@ -1018,12 +1059,12 @@ ${a.observaciones_directivo ? `
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha inicio *</label>
-                <input type="date" value={fechaInicio} onChange={e => { setFechaInicio(e.target.value); if (!fechaFin) setFechaFin(e.target.value); cargarHorarioProfesor(profesorSeleccionado, e.target.value); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                <input type="date" value={fechaInicio} onChange={e => { const nueva = e.target.value; setFechaInicio(nueva); const hasta = fechaFin || nueva; if (!fechaFin) setFechaFin(nueva); cargarHorarioProfesor(profesorSeleccionado, nueva, hasta); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin</label>
                 {!bajaProlongada ? (
-                  <input type="date" value={fechaFin} min={fechaInicio} onChange={e => setFechaFin(e.target.value)} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
+                  <input type="date" value={fechaFin} min={fechaInicio} onChange={e => { const nueva = e.target.value; setFechaFin(nueva); cargarHorarioProfesor(profesorSeleccionado, fechaInicio, nueva); }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
                 ) : (
                   <div style={{ padding: '10px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', fontSize: 13, color: '#b91c1c', fontWeight: 600 }}>
                     🏥 Sin fecha fin — Baja prolongada
@@ -1096,10 +1137,41 @@ ${a.observaciones_directivo ? `
                 rows={2} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: `1.5px solid ${subtipo === 'otros' && !motivo.trim() ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
 
-            {/* HORARIO */}
+            {/* VARIOS DÍAS: tarea por módulo/grupo, igual que en el
+                formulario del propio profesorado. Antes esta pantalla no
+                distinguía: si se registraba una baja de varios días por
+                teléfono, se mandaban las horas de un solo día (el de
+                inicio) como si valieran para todos los días del rango,
+                aunque el horario cambie de un día a otro. */}
+            {gruposUnicos.length > 0 && (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ backgroundColor: '#fef3c7', border: '1.5px solid #fbbf24', borderRadius: 10, padding: '10px 14px', marginBottom: 10, fontSize: 13, color: '#92400e' }}>
+                  📅 Ausencia de varios días — la tarea se deja por módulo/grupo, no hora por hora.
+                </div>
+                {gruposUnicos.map(u => {
+                  const key = `${u.grupo}|${u.materia}`;
+                  const t = tareasBloque[key] || {};
+                  return (
+                    <div key={key} style={{ borderRadius: 10, border: '1.5px solid #ddd', marginBottom: 8, padding: '10px 14px' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: azul, marginBottom: 6 }}>
+                        {u.grupo}{u.materia ? ` · ${u.materia}` : ''}
+                      </div>
+                      <textarea value={t.instrucciones || ''}
+                        onChange={e => setTareasBloque(tb => ({ ...tb, [key]: { ...tb[key], instrucciones: e.target.value } }))}
+                        placeholder="Tarea para este grupo (opcional — ponla solo si el profesor la dictó por teléfono)"
+                        rows={2}
+                        style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 12, boxSizing: 'border-box', resize: 'vertical' }} />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* UN SOLO DÍA: horario hora por hora */}
+            {gruposUnicos.length === 0 && (
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 4 }}>🕐 Horario afectado</label>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Marca las horas. Las tareas son opcionales — ponlas solo si el profesor las dictó por teléfono.</div>
+              <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>Marca las horas. Las tareas son opcionales — ponlas solo si el profesor las dictó por teléfono. Pulsa de nuevo un tipo ya marcado para quitarlo si esa hora no es de ausencia.</div>
 
               {HORAS.map(hora => {
                 const val = horario[hora.id];
@@ -1185,6 +1257,7 @@ ${a.observaciones_directivo ? `
                 );
               })}
             </div>
+            )}
 
             <button onClick={enviarManual} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: naranja, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
               {enviando ? '⏳ Registrando...' : '✍️ Registrar ausencia'}
