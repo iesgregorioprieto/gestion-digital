@@ -25,6 +25,17 @@ const HORAS = [
 
 function normHora(h) { return (h||'').toString().replace(/[aª]$/,'').toLowerCase(); }
 
+// El grupo llega del horario importado con el código del módulo y el aula
+// pegados: "PBPR-2686687GM-1COC(5 E004 COC)". Al compañero que va a cubrir
+// eso no le dice nada; lo suyo es "GM-1COC" y "aula E004".
+function limpiarGrupo(txt) {
+  const t = String(txt || '').trim();
+  if (!t || t.toLowerCase() === 'libre') return { grupo: '', aula: '' };
+  const g = t.match(/((?:GM|GS|GB|BTO|ESO|FPPE)-\d[A-Z0-9.]*|CA-CFGS-[A-Z])/i);
+  const a = t.match(/\(\s*\d+\s+([A-Za-z]?\d{1,4}[A-Za-z]?)\b/);
+  return { grupo: g ? g[1].toUpperCase() : t.split('(')[0].trim(), aula: a ? a[1].toUpperCase() : '' };
+}
+
 // Franja de una hora, y si se puede fichar ahora mismo.
 function horaDe(horaId) {
   const h = HORAS.find(x => x.id === normHora(horaId));
@@ -851,13 +862,25 @@ export default function Guardias() {
                           <span style={{ fontSize: 15 }}>{iconoEstado}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
-                              {a.profesor_nombre || a.sector_apoyo || '—'}
+                              {nombreEntero(fichaPorId(a.profesor_id))
+                                || nombreLargo(mapaProfesores, a.profesor_nombre_pdf)
+                                || a.sector_apoyo || '—'}
                               {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
                             </div>
                             <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
-                              cubre a {ausente?.profesor || a.sector_destino || a.sector_apoyo || '—'}
-                              {a.aula ? ` · aula ${a.aula}` : ''}
-                              {a.grupo ? ` · ${a.grupo}` : ''}
+                              {(() => {
+                                const quienFalta = nombreEntero(fichaPorId(a.profesor_ausente_id))
+                                  || ausente?.profesor || a.sector_destino || '—';
+                                const destino = limpiarGrupo(a.grupo);
+                                const aula = a.aula || destino.aula;
+                                return (
+                                  <>
+                                    cubre a {quienFalta}
+                                    {destino.grupo ? ` · ${destino.grupo}` : ''}
+                                    {aula ? ` · aula ${aula}` : ''}
+                                  </>
+                                );
+                              })()}
                             </div>
                             {a.tarea && (
                               <div style={{ fontSize: 11.5, color: '#1e40af', marginTop: 3 }}>📝 {a.tarea}</div>
