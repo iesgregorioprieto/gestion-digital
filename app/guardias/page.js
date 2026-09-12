@@ -844,12 +844,14 @@ export default function Guardias() {
           if (!porHora[h]) porHora[h] = [];
           porHora[h].push(a);
         });
-        const horasConGuardias = HORAS.filter(h => porHora[h.id]?.length > 0);
+        // Solo la hora que está pulsada en el selector de arriba: si no,
+        // pinchar en 1ª, 2ª, 3ª... no cambiaba nada de lo que se ve aquí.
+        const horasConGuardias = HORAS.filter(h => h.id === horaActiva && porHora[h.id]?.length > 0);
         if (horasConGuardias.length === 0) return (
           <div style={{ margin: '12px 16px', padding: '14px', borderRadius: 12,
             backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', textAlign: 'center',
             fontSize: 13, color: '#166534', fontWeight: 600 }}>
-            ✅ No hay guardias asignadas hoy
+            ✅ Sin guardias a {horaInfo?.label || 'esta hora'}
           </div>
         );
 
@@ -861,7 +863,9 @@ export default function Guardias() {
           <div style={{ padding: '12px 16px 0' }}>
             <div style={{ borderRadius: 12, overflow: 'hidden', border: '1.5px solid #d1d5db', backgroundColor: 'white' }}>
               <div style={{ padding: '10px 14px', backgroundColor: '#f8fafc', borderBottom: '1px solid #e5e7eb' }}>
-                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
+                <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>
+                  🛡️ Guardias de {horaInfo?.label || ''} <span style={{ fontWeight: 600, color: '#64748b', fontSize: 12.5 }}>{horaInfo?.horario || ''}</span>
+                </strong>
                 <button onClick={() => setVerAyuda(true)} title="Cómo funciona tu guardia"
                   style={{ marginLeft: 8, width: 22, height: 22, borderRadius: '50%', cursor: 'pointer',
                     border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1d4ed8',
