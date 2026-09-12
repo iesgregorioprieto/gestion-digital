@@ -374,6 +374,14 @@ export default function Guardias() {
 
   const diaSem = diaSemanaEs(fecha);
   const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
+  // Nombre corto de un profesor por su identificador. Las guardias
+  // guardan a quién cubre y quién la hace por id, que es lo fiable.
+  const nombrePorId = id => {
+    if (!id) return '';
+    const p = (profesoresList || []).find(x => String(x.id) === String(id));
+    return p ? `${p.nombre?.split(' ')[0] || ''} ${p.apellidos?.split(' ')[0] || ''}`.trim() : '';
+  };
+
   const horaInfo = HORAS.find(h => h.id === horaActiva);
 
   // === LÓGICA CENTRAL POR HORA ===
@@ -827,6 +835,10 @@ export default function Guardias() {
                 <strong style={{ fontSize: 14.5, color: '#1e3a5f' }}>🛡️ Cobertura de guardias hoy</strong>
               </div>
 
+              {/* Nombre de una persona por su identificador. Este bloque
+                  pintaba a.profesor_nombre, que no es una columna de
+                  apoyos_asignados, así que siempre salía vacío y caía al
+                  sector: se leía "ELECTRICIDAD cubre a ELECTRICIDAD". */}
               {horasConGuardias.map(h => {
                 const asignados = porHora[h.id] || [];
                 return (
@@ -860,11 +872,14 @@ export default function Guardias() {
                           <span style={{ fontSize: 15 }}>{iconoEstado}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a' }}>
-                              {a.profesor_nombre || a.sector_apoyo || '—'}
+                              {nombrePorId(a.profesor_id)
+                                || nombreCorto(mapaProfesores, a.profesor_nombre_pdf)
+                                || a.sector_apoyo || '—'}
                               {esMia && <span style={{ fontSize: 11, color: colorEstado, fontWeight: 800, marginLeft: 6 }}>← ERES TÚ</span>}
                             </div>
                             <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 1 }}>
-                              cubre a {ausente?.profesor || a.sector_destino || a.sector_apoyo || '—'}
+                              cubre a {nombrePorId(a.profesor_ausente_id)
+                                || ausente?.profesor || a.sector_destino || '—'}
                               {a.aula ? ` · aula ${a.aula}` : ''}
                               {a.grupo ? ` · ${a.grupo}` : ''}
                             </div>
