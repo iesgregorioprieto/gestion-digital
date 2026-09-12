@@ -675,7 +675,7 @@ function descargarInforme() {
   // El plazo cuenta desde el día de la falta (fecha_inicio), no desde que
   // se registró la ausencia. Mismo criterio que en app/ausencias/page.js.
   function diasParaJustificar(fechaInicio) {
-    const limite = new Date(createdAt);
+    const limite = new Date(fechaInicio + 'T00:00:00');
     limite.setDate(limite.getDate() + 3);
     return Math.ceil((limite - new Date()) / (1000 * 60 * 60 * 24));
   }
