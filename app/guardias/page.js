@@ -108,6 +108,17 @@ function nombreLargo(mapa, abrev) {
   const laxo = mapa['~' + claveLaxaDeAbrev(abrev)];
   return laxo || abrev;
 }
+// Nombre corto para las etiquetas apretadas del cuadrante: nombre y
+// primer apellido. Se reconoce a la persona igual que con el nombre
+// entero, pero cabe en una línea y no rompe la rejilla de horas.
+function nombreCorto(mapa, abrev) {
+  const largo = nombreLargo(mapa, abrev);
+  if (!largo || !largo.includes(',')) return largo;
+  const [apellidos, nombre] = largo.split(',');
+  const primerApellido = apellidos.trim().split(/\s+/)[0] || '';
+  const primerNombre = (nombre || '').trim().split(/\s+/)[0] || '';
+  return `${primerNombre} ${primerApellido}`.trim();
+}
 function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
 }
@@ -416,7 +427,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreCorto(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
             break;
@@ -439,7 +450,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreCorto(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             break;
           }
@@ -491,7 +502,7 @@ export default function Guardias() {
           libres.push({
             abrev: p,
             sectorOriginal: sector.toUpperCase(),
-            nombre: nombreLargo(mapaProfesores, p),
+            nombre: nombreCorto(mapaProfesores, p),
             profesorId: profCompleto?.id || null,
             apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
             apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
@@ -1186,7 +1197,7 @@ export default function Guardias() {
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {guardias.map((p, i) => {
                           const key = normAbrev(p);
-                          const nombre = nombreLargo(mapaProfesores, p);
+                          const nombre = nombreCorto(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           return (
                             <span key={i} style={{
