@@ -354,6 +354,23 @@ export async function POST(request) {
         delete cambios.profesor_id;      // no se puede cambiar de dueño
       }
 
+      // Al justificar, el plazo de 3 días desde el día de la falta se
+      // vuelve a comprobar aquí. El navegador ya lo calcula para avisar
+      // al profesor, pero es solo una ayuda visual: si se llamara a esta
+      // API directamente, "justificada_fuera_plazo" llegaría en lo que
+      // mande quien la llame, y no es de fiar. Se recalcula con la fecha
+      // real guardada en la propia ausencia.
+      if (cambios.estado === 'justificada') {
+        const { data: propia } = await supa()
+          .from('ausencias').select('fecha_inicio').eq('id', id);
+        const fechaInicio = (propia || [])[0]?.fecha_inicio;
+        if (fechaInicio) {
+          const limite = new Date(fechaInicio + 'T00:00:00');
+          limite.setDate(limite.getDate() + 3);
+          cambios.justificada_fuera_plazo = new Date() > limite;
+        }
+      }
+
       let consulta = supa().from('ausencias').update(cambios).eq('id', id);
       // Quien no es directivo solo puede tocar las suyas
       if (!esDirectivo(sesion)) consulta = consulta.eq('profesor_id', sesion.id);
