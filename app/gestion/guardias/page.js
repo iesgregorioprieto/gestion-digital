@@ -141,6 +141,7 @@ export default function GestionGuardias() {
   const [cargando, setCargando] = useState(true);
   const [cargandoDia, setCargandoDia] = useState(false);
   const [errorCarga, setErrorCarga] = useState('');
+  const [recalculando, setRecalculando] = useState(false);
   // Evita que un doble clic cree dos apoyos para el mismo profesor y hora.
   // En una mañana de guardias, con prisa, el doble clic pasa.
   const [procesandoApoyo, setProcesandoApoyo] = useState(false);
@@ -826,6 +827,42 @@ export default function GestionGuardias() {
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
         <button onClick={() => setFecha(hoyLocal())} style={{ ...btnNav, backgroundColor:azul, color:'white', border:'none' }}>Hoy</button>
+      </div>
+
+      {/* RECALCULAR
+          Único punto desde el que se pide al servidor que preasigne.
+          Antes lo disparaba automáticamente cada profesor al abrir
+          /guardias, y si dos lo abrían casi a la vez, las dos peticiones
+          leían la base de datos antes de que la otra terminara de guardar
+          y duplicaban la asignación. Aquí es un clic explícito de
+          jefatura, uno cada vez. */}
+      <div style={{ padding:'8px 16px', backgroundColor:'#fafafa', borderBottom:'1px solid #e5e7eb',
+        display:'flex', alignItems:'center', gap:10 }}>
+        <button
+          onClick={async () => {
+            setRecalculando(true);
+            try {
+              await fetch('/api/guardias/preasignar', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fecha }),
+              });
+              await cargarDia(fecha);
+            } catch (e) {
+              alert('No se ha podido recalcular: ' + e.message);
+            }
+            setRecalculando(false);
+          }}
+          disabled={recalculando}
+          style={{
+            padding:'8px 14px', borderRadius:8, border:'1.5px solid ' + azul,
+            backgroundColor: recalculando ? '#e5e7eb' : 'white', color: azul,
+            fontWeight:700, fontSize:12.5, cursor: recalculando ? 'default' : 'pointer',
+          }}>
+          {recalculando ? '⏳ Recalculando…' : '🔄 Recalcular guardias de este día'}
+        </button>
+        <span style={{ fontSize:11.5, color:'#94a3b8' }}>
+          Úsalo si has borrado guardias a mano o si algo no cuadra. Respeta lo que ya esté fichado.
+        </span>
       </div>
 
       {/* ACCESO RÁPIDO: registrar ausencia que falta */}
