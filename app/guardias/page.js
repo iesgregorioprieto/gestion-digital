@@ -76,7 +76,37 @@ function inicialesNombre(nombre) {
 function claveAbreviatura(apellidos, nombre) {
   const ap = abreviarApellido(apellidos);
   const nom = inicialesNombre(nombre);
-  return `${ap}, ${nom}`.toLowerCase().replace(/\s/g, '');
+  return sinTildes(`${ap}, ${nom}`).toLowerCase().replace(/\s/g, '');
+}
+
+// Quita tildes: Delphos y las fichas del profesorado no siempre las
+// escriben igual, y por una tilde se dejaba de reconocer a la persona.
+function sinTildes(s) {
+  return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+// Clave laxa: tres letras del primer apellido e iniciales del nombre,
+// ignorando el resto de apellidos. Red de seguridad cuando la ficha y el
+// cuadrante no traen el mismo número de apellidos.
+function claveLaxa(apellidos, nombre) {
+  const raiz = (apellidos || '').trim().split(/\s+/)[0] || '';
+  const nom = (nombre || '').trim().split(/\s+/).filter(Boolean).map(p => p[0]).join('');
+  if (!raiz || !nom) return '';
+  return sinTildes(`${raiz.slice(0, 3)}|${nom}`).toLowerCase();
+}
+function claveLaxaDeAbrev(abrev) {
+  const [ap, nom] = (abrev || '').split(',');
+  if (!ap || !nom) return '';
+  const raiz = ap.trim().replace(/\..*$/, '').trim();
+  return sinTildes(`${raiz.slice(0, 3)}|${nom.replace(/\./g, '').trim()}`).toLowerCase();
+}
+// Nombre completo del compañero a partir de la abreviatura del cuadrante.
+// En la aplicación nunca se enseñan siglas: se muestra a la persona.
+function nombreLargo(mapa, abrev) {
+  if (!abrev) return '';
+  const directo = mapa[sinTildes(abrev).toLowerCase().replace(/\s/g, '')];
+  if (directo) return directo;
+  const laxo = mapa['~' + claveLaxaDeAbrev(abrev)];
+  return laxo || abrev;
 }
 function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
@@ -150,6 +180,7 @@ export default function Guardias() {
     (profes || []).forEach(p => {
       const clave = claveAbreviatura(p.apellidos, p.nombre);
       mapa[clave] = `${p.apellidos}, ${p.nombre}`;
+      mapa['~' + claveLaxa(p.apellidos, p.nombre)] = `${p.apellidos}, ${p.nombre}`;
     });
     setMapaProf(mapa);
     setProfsList(profes || []);
@@ -385,7 +416,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
             break;
@@ -408,7 +439,7 @@ export default function Guardias() {
           for (const p of guardiasDisp) {
             const key = normAbrev(p);
             if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: mapaProfesores[key] || p, abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
+            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
             asignadosAbrev.add(key);
             break;
           }
@@ -460,7 +491,7 @@ export default function Guardias() {
           libres.push({
             abrev: p,
             sectorOriginal: sector.toUpperCase(),
-            nombre: mapaProfesores[key] || p,
+            nombre: nombreLargo(mapaProfesores, p),
             profesorId: profCompleto?.id || null,
             apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
             apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
@@ -1155,7 +1186,7 @@ export default function Guardias() {
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {guardias.map((p, i) => {
                           const key = normAbrev(p);
-                          const nombre = mapaProfesores[key] || p;
+                          const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           return (
                             <span key={i} style={{

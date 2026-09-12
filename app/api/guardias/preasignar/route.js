@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
-  asignacionesDeHora, normHora, claveAbreviada, ocupadosEnClase,
+  asignacionesDeHora, normHora, ocupadosEnClase,
   indiceProfesores, clavesAmbiguas,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
@@ -269,10 +269,9 @@ export async function POST(request) {
             sector_destino: normSector(asig.hueco.sector),
             profesor_ausente_id: asig.hueco.profesorId || null,
             profesor_id: asig.cubre.profesorId,
-            profesor_nombre_pdf: claveAbreviada(
-              asig.cubre.nombre.split(',')[0],
-              asig.cubre.nombre.split(',')[1] || ''
-            ) || null,
+            // Nombre completo, no la abreviatura del cuadrante: lo que se
+            // guarda aquí es lo que acaba viendo el profesorado.
+            profesor_nombre_pdf: asig.cubre.nombre || null,
             grupo: asig.grupo || null,
             aula: asig.aula || null,
             materia: asig.materia || null,
