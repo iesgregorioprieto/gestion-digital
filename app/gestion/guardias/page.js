@@ -477,77 +477,13 @@ export default function GestionGuardias() {
     return asignaciones;
   }
 
-  // Auto-registro de apoyos OBLIGATORIOS (no los sugeridos)
-  useEffect(() => {
-    if (cargandoDia || cargando) return;
-    autoRegistrarApoyosObligatorios();
-  }, [ausenciasDia, horaActiva, cargandoDia, cargando]);
-
-  async function autoRegistrarApoyosObligatorios() {
-    const asignaciones = asignacionAutomatica();
-    const apoyosNuevos = [];
-
-    for (const asig of asignaciones) {
-      // Solo registrar los OBLIGATORIOS (cuando no hay guardias del sector)
-      if (asig.cubre?.tipo !== 'apoyo_obligatorio') continue;
-      if (!asig.cubre.profesorId) continue;
-
-      const yaExiste = apoyosAsignados.some(ap =>
-        ap.fecha === fecha &&
-        ap.hora === horaActiva &&
-        ap.profesor_id === asig.cubre.profesorId &&
-        ap.grupo === (asig.clase.grupo || null)
-      );
-      if (yaExiste) continue;
-
-      apoyosNuevos.push({
-        fecha,
-        hora: horaActiva,
-        sector_apoyo: asig.cubre.sectorOriginal,
-        sector_destino: asig.ausencia.sector.toUpperCase(),
-        profesor_id: asig.cubre.profesorId,
-        grupo: asig.clase.grupo || null,
-        aula: asig.clase.aula || null,
-        materia: asig.clase.materia || null,
-        tarea: asig.clase.instrucciones || null,
-        asignado_por: usuario?.id,
-        estado: 'pendiente',
-        tipo_apoyo: 'obligatorio',
-        curso_academico: await getCursoActual(),
-      });
-    }
-
-    if (apoyosNuevos.length > 0) {
-      const _rm = await fetch('/api/apoyos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'asignar', lista: apoyosNuevos }),
-      });
-      const data = _rm.ok ? (await _rm.json()).apoyos : null;
-      if (data) {
-        setApAsig(prev => [...prev, ...data]);
-        // Push a cada profesor asignado
-        const HORAS_LABEL = { '1': '1ª (8:30–9:25)', '2': '2ª (9:25–10:20)', '3': '3ª (10:20–11:15)', 'recreo': 'Recreo (11:15–11:45)', '4': '4ª (11:45–12:40)', '5': '5ª (12:40–13:35)', '6': '6ª (13:35–14:30)' };
-        for (const ap of data) {
-          if (!ap.profesor_id) continue;
-          try {
-            await fetch('/api/push', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                accion: 'enviar',
-                profesor_id: ap.profesor_id,
-                titulo: '🛡️ Apoyo de guardia asignado',
-                cuerpo: `Tienes un apoyo el ${fecha} a las ${HORAS_LABEL[horaActiva] || horaActiva}${ap.grupo ? ' — ' + ap.grupo : ''}`,
-                url: '/guardias',
-              }),
-            });
-          } catch(e) { console.error('Push apoyo automático:', e); }
-        }
-      }
-    }
-  }
-
+  // El auto-registro que había aquí (useEffect + autoRegistrarApoyosObligatorios)
+  // se ha retirado: escribía en apoyos_asignados con la lógica antigua del
+  // navegador cada vez que jefatura abría esta pantalla, y marcaba las filas
+  // como puestas a mano (asignado_por: usuario.id) aunque no lo estaban — por
+  // lo que quedaban fuera de cualquier limpieza o recálculo posterior. El
+  // servidor ya cubre estos huecos al registrarse la ausencia; si hace falta
+  // forzarlo, está el botón "Recalcular guardias de este día" más abajo.
   // Activar apoyo (jefe pulsa botón cuando no era obligatorio)
   async function activarApoyoUrgente(asig, profesorSeleccionado) {
     if (procesandoApoyo) return;   // ya hay uno en marcha
