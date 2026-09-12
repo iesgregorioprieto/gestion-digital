@@ -576,7 +576,7 @@ export default function PanelSecretario() {
                 </div>
 
                 <a
-                  href="/gestion/bajas"
+                  href="/gestion/ausencias?vista=bajas"
                   style={{
                     display: 'inline-block', textDecoration: 'none',
                     padding: '11px 18px', borderRadius: 9,

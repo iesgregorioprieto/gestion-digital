@@ -8,6 +8,7 @@ import EscenarioDia from '@/components/EscenarioDia';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
+import PanelBajas from './PanelBajas';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
 const rojo = '#991b1b';
@@ -42,7 +43,13 @@ const ESTADOS = {
 
 export default function GestionAusencias() {
   const [nombre, setNombre] = useState('');
-  const [vista, setVista] = useState('lista');
+  // Se puede entrar directamente a una pestaña desde otra pantalla:
+  // /gestion/ausencias?vista=bajas
+  const [vista, setVista] = useState(() => {
+    if (typeof window === 'undefined') return 'lista';
+    const v = new URLSearchParams(window.location.search).get('vista');
+    return ['lista', 'manual', 'escenario', 'bajas'].includes(v) ? v : 'lista';
+  });
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [ausencias, setAusencias] = useState([]);
   const [profesores, setProfesores] = useState([]);
@@ -716,6 +723,7 @@ ${a.observaciones_directivo ? `
           { id: 'lista', label: `📋 Todas las ausencias (${ausencias.length})` },
           { id: 'manual', label: '✍️ Registrar ausencia' },
           { id: 'escenario', label: '📅 Escenario del día' },
+          { id: 'bajas', label: '🏥 Bajas y sustituciones' },
         ].map(t => (
           <button key={t.id} onClick={() => setVista(t.id)} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === t.id ? naranja : '#ddd'}`, backgroundColor: vista === t.id ? naranja : 'white', color: vista === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {t.label}
@@ -986,6 +994,8 @@ ${a.observaciones_directivo ? `
             <EscenarioDia fecha={fechaEscenario} />
           </div>
         )}
+
+        {vista === 'bajas' && <PanelBajas />}
 
         {vista === 'manual' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>

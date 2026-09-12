@@ -19,7 +19,6 @@
  */
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { consulta } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
 
@@ -42,8 +41,7 @@ function fechaLarga(f) {
   });
 }
 
-export default function BajasPage() {
-  const router = useRouter();
+export default function PanelBajas() {
 
   const [cargando, setCargando] = useState(true);
   const [profesores, setProfesores] = useState([]);
@@ -232,16 +230,8 @@ export default function BajasPage() {
   };
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: 16, fontFamily: 'system-ui, sans-serif' }}>
-      <button onClick={() => router.push('/gestion')}
-        style={{ background: 'none', border: 'none', color: azul, fontSize: 14, cursor: 'pointer', marginBottom: 8 }}>
-        ← Gestión
-      </button>
-
-      <h1 style={{ fontSize: 22, fontWeight: 800, color: azul, margin: '0 0 4px' }}>
-        🏥 Bajas y sustituciones
-      </h1>
-      <p style={{ fontSize: 13, color: '#666', margin: '0 0 20px' }}>
+    <div style={{ maxWidth: 900 }}>
+      <p style={{ fontSize: 13, color: '#666', margin: '0 0 18px' }}>
         Mientras no hay sustituto, los grupos del profesor de baja salen en el
         cuadrante de guardias y los cubren los compañeros por rotación.
       </p>
