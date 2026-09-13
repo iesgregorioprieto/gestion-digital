@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
+import PanelEquipos from './PanelEquipos';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -30,6 +31,7 @@ const AMBITOS = [
   { valor: 'director',        label: '👔 Dirección' },
   { valor: 'secretario',      label: '📁 Secretaría' },
   { valor: 'departamento',    label: '🏫 Un departamento concreto' },
+  { valor: 'equipo',          label: '👥 Un equipo de trabajo' },
   { valor: 'manual',          label: '✋ Elegir personas a dedo' },
 ];
 
@@ -62,6 +64,8 @@ export default function GestionComunicaciones() {
   const [titulo, setTitulo] = useState('');
   const [texto, setTexto] = useState('');
   const [ambitos, setAmbitos] = useState(['claustro']);
+  const [equipos, setEquipos] = useState([]);
+  const [equiposElegidos, setEquiposElegidos] = useState([]);
   const [dptos, setDptos] = useState([]);
   const [elegidos, setElegidos] = useState([]);
   const [fecha, setFecha] = useState('');
@@ -77,12 +81,20 @@ export default function GestionComunicaciones() {
   const [vMinutos, setVMinutos] = useState('3');
 
   useEffect(() => {
+    fetch('/api/equipos')
+      .then(r => r.ok ? r.json() : { equipos: [] })
+      .then(d => setEquipos(d.equipos || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('seccion');
-    if (q === 'convocatorias' || q === 'avisos') setSeccion(q);
+    if (['avisos', 'convocatorias', 'equipos'].includes(q)) setSeccion(q);
   }, []);
 
   // El tipo de lo que se publica lo decide la pestaña.
   useEffect(() => {
+    if (seccion === 'equipos') return;
     setTipo(seccion === 'convocatorias' ? 'convocatoria' : 'aviso');
   }, [seccion]);
 
@@ -359,6 +371,7 @@ export default function GestionComunicaciones() {
     if (ambitos.length === 0) return aviso('Elige a quién va dirigida.', 'error');
     if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
     if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
+    if (ambitos.includes('equipo') && equiposElegidos.length === 0) return aviso('Elige al menos un equipo.', 'error');
     if (tipo === 'convocatoria' && !fecha) return aviso('Indica el día de la reunión.', 'error');
 
     setGuardando(true);
@@ -371,6 +384,7 @@ export default function GestionComunicaciones() {
           tipo, titulo, mensaje: texto, ambito: ambitos,
           departamento: ambitos.includes('departamento') ? dptos : null,
           destinatarios: ambitos.includes('manual') ? elegidos : null,
+          equipos: ambitos.includes('equipo') ? equiposElegidos : null,
           fecha_reunion: fecha || null, hora_reunion: hora || null, lugar: lugar || null,
         },
       }),
@@ -383,7 +397,7 @@ export default function GestionComunicaciones() {
         ? '📅 Convocatoria publicada. Ya le ha saltado a los convocados.'
         : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
       setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar('');
-      setElegidos([]); setAmbitos(['claustro']); setDptos([]);
+      setElegidos([]); setAmbitos(['claustro']); setDptos([]); setEquiposElegidos([]);
       setVista('lista');
       cargar();
     }
@@ -431,6 +445,10 @@ export default function GestionComunicaciones() {
           📅 Convocatorias
         </button>
         <a href="/gestion/votaciones" style={pestana(false)}>🗳️ Votaciones sueltas</a>
+        <button onClick={() => { setSeccion('equipos'); setVista('lista'); }}
+          style={{ ...pestana(seccion === 'equipos'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
+          👥 Equipos
+        </button>
       </div>
 
       <div style={{ maxWidth: 880, margin: '0 auto', padding: 16 }}>
@@ -444,6 +462,9 @@ export default function GestionComunicaciones() {
           }}>{mensaje.texto}</div>
         )}
 
+        {seccion === 'equipos' && <PanelEquipos />}
+
+        {seccion !== 'equipos' && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
           <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>
             {seccion === 'convocatorias' ? '📋 Convocadas' : '📋 Publicados'}
@@ -468,9 +489,10 @@ export default function GestionComunicaciones() {
             );
           })()}
         </div>
+        )}
 
         {/* ─── NUEVA ─── */}
-        {vista === 'nueva' && (
+        {seccion !== 'equipos' && vista === 'nueva' && (
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb' }}>
 
             {/* El tipo ya no se elige aquí: lo marca la pestaña en la que
@@ -553,6 +575,33 @@ export default function GestionComunicaciones() {
               </div>
             )}
 
+            {ambitos.includes('equipo') && (
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ fontSize: 12.5, fontWeight: 700, color: '#475569', display: 'block', marginBottom: 6 }}>
+                  Equipos ({equiposElegidos.length} elegido{equiposElegidos.length !== 1 ? 's' : ''}) *
+                </label>
+                {equipos.length === 0 ? (
+                  <div style={{ fontSize: 12.5, color: '#92400e', padding: '10px 13px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1px solid #fcd34d' }}>
+                    Todavía no hay equipos creados. Créalos en la pestaña 👥 Equipos.
+                  </div>
+                ) : (
+                  <div style={{ maxHeight: 200, overflowY: 'auto', border: '1.5px solid #ddd', borderRadius: 8, padding: 8 }}>
+                    {equipos.map(eq => (
+                      <label key={eq.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 4px', cursor: 'pointer', fontSize: 13 }}>
+                        <input type="checkbox" checked={equiposElegidos.includes(eq.id)}
+                          onChange={() => setEquiposElegidos(prev => prev.includes(eq.id)
+                            ? prev.filter(x => x !== eq.id) : [...prev, eq.id])} />
+                        <strong>{eq.nombre}</strong>
+                        <span style={{ color: '#94a3b8', fontSize: 11.5 }}>
+                          {(eq.miembros || []).length} miembro{(eq.miembros || []).length !== 1 ? 's' : ''}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {ambitos.includes('manual') && (
               <div style={{ marginBottom: 14 }}>
                 <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>
@@ -605,7 +654,7 @@ export default function GestionComunicaciones() {
         )}
 
         {/* ─── LISTA ─── */}
-        {vista === 'lista' && (() => {
+        {seccion !== 'equipos' && vista === 'lista' && (() => {
           // Cada pestaña enseña lo suyo y nada más.
           const visibles = lista.filter(c =>
             seccion === 'convocatorias' ? c.tipo === 'convocatoria' : c.tipo !== 'convocatoria');

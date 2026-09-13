@@ -84,6 +84,12 @@ export function esDestinatario(c, ficha) {
         if (dptos.some(d => d.trim().toLowerCase() === fichaDpto)) return true;
         break;
       case 'manual':
+      case 'equipo':
+        // Un equipo de trabajo se resuelve al publicar: la convocatoria
+        // guarda la lista de personas tal como estaba en ese momento, no
+        // una referencia al equipo. Así, si mañana se quita a alguien del
+        // equipo, la convocatoria de la semana pasada -- y su acta -- no
+        // cambian solas.
         if (Array.isArray(c.destinatarios) && c.destinatarios.includes(ficha.id)) return true;
         break;
     }
@@ -218,13 +224,26 @@ export async function POST(request) {
       if (!datos?.titulo?.trim())  return Response.json({ error: 'Falta el título' }, { status: 400 });
       if (!datos?.mensaje?.trim()) return Response.json({ error: 'Falta el mensaje' }, { status: 400 });
 
+      // Si va dirigida a equipos de trabajo, se resuelven sus miembros
+      // ahora y se guardan en 'destinatarios'. La convocatoria queda con
+      // la foto del equipo en el momento de publicarla: editar el equipo
+      // mañana no reescribe lo ya convocado ni su acta.
+      let destinatarios = datos.destinatarios || null;
+      const ambitosPedidos = Array.isArray(datos.ambito) ? datos.ambito : [datos.ambito];
+      if (ambitosPedidos.includes('equipo') && Array.isArray(datos.equipos) && datos.equipos.length > 0) {
+        const { data: eqs } = await cliente
+          .from('equipos').select('miembros').in('id', datos.equipos);
+        const deEquipos = (eqs || []).flatMap(e => e.miembros || []);
+        destinatarios = [...new Set([...(destinatarios || []), ...deEquipos])];
+      }
+
       const fila = {
         tipo: datos.tipo === 'convocatoria' ? 'convocatoria' : 'aviso',
         titulo: datos.titulo.trim(),
         mensaje: datos.mensaje.trim(),
         ambito: datos.ambito || 'claustro',
         departamento: datos.departamento || null,
-        destinatarios: datos.destinatarios || null,
+        destinatarios,
         fecha_reunion: datos.fecha_reunion || null,
         hora_reunion: datos.hora_reunion || null,
         lugar: datos.lugar || null,
