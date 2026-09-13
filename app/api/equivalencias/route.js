@@ -74,28 +74,48 @@ function parecido(nombrePdf, profesor) {
 
   const apellidos = String(profesor.apellidos || '').split(/\s+/).filter(Boolean).map(limpio);
   const nombres   = String(profesor.nombre   || '').split(/\s+/).filter(Boolean).map(limpio);
-  const inicNombre = nombres.map(n => n[0]).join('');      // "María Soledad" → "ms"
-  const inicApe    = apellidos.map(a => a[0]).join('');
+  if (apellidos.length === 0) return 0;
 
-  // Condición de entrada: el PRIMER apellido tiene que encajar. Sin esto,
-  // compartir un segundo apellido común ("Gómez") más unas iniciales
-  // parecidas bastaba para proponer a quien no era.
-  const primerApellido = apellidos[0] || '';
-  const encajaPrimerApellido = trozos.some(t =>
-    t.length >= 3 && (primerApellido.startsWith(t) || t.startsWith(primerApellido)));
-  if (!encajaPrimerApellido) return 0;
+  const inicNombre = nombres.map(n => n[0]).join('');
 
-  let puntos = 0;
-  for (const t of trozos) {
-    // ¿Es el principio de alguno de sus apellidos? ("Lop." → "López")
-    if (apellidos.some(a => a.startsWith(t) && t.length >= 3)) { puntos += 3; continue; }
-    // ¿Es el principio de alguno de sus nombres?
-    if (nombres.some(n => n.startsWith(t) && t.length >= 3))   { puntos += 2; continue; }
-    // ¿Son sus iniciales? ("ME" → María Elena, "MdlÁ" → María de los Ángeles)
-    if (t === inicNombre || t === inicApe)                      { puntos += 2; continue; }
-    // Iniciales parciales
-    if (t.length <= 4 && inicNombre.startsWith(t[0]))           { puntos += 1; continue; }
+  // ── Los APELLIDOS mandan ──
+  // Un trozo "encaja" con un apellido si uno empieza por el otro: así
+  // "Lop." casa con "López" y "González" casa con "Gonzalez". Se exige
+  // que encajen TODOS los apellidos del profesor, no solo el primero:
+  // sin eso, "Pozas Gómez" proponía a "Alfaro Gómez" por compartir el
+  // segundo apellido, que no ayuda a nadie.
+  const encaja = (t, a) => t.length >= 3 && (a.startsWith(t) || t.startsWith(a));
+  const apellidosQueEncajan = apellidos.filter(a => trozos.some(t => encaja(t, a)));
+
+  // Hay dos clases de nombre en el horario y no se les puede pedir lo mismo:
+  //
+  //   NOMBRE LARGO ("Cruz Ortiz, María Paula"): trae los apellidos
+  //   enteros, así que se exigen TODOS. Sin esto, "Pozas Gómez" proponía
+  //   a "Alfaro Gómez" por compartir el segundo apellido.
+  //
+  //   ABREVIATURA ("ME Lop.", "MS Dia."): solo trae un apellido cortado,
+  //   así que exigirlos todos dejaría a estas sin ninguna sugerencia. Se
+  //   pide uno, pero a cambio el nombre o sus iniciales TIENEN que
+  //   encajar también -- si no, no se propone nada.
+  const esAbreviatura = trozos.length <= 2 || !nombrePdf.includes(',');
+
+  const encajaNombre = trozos.some(t =>
+    nombres.some(n => t.length >= 3 && (n.startsWith(t) || t.startsWith(n))));
+  const encajaIniciales = trozos.some(t => t === inicNombre);
+
+  if (esAbreviatura) {
+    if (apellidosQueEncajan.length === 0) return 0;
+    if (!encajaNombre && !encajaIniciales) return 0;
+  } else {
+    if (apellidosQueEncajan.length < apellidos.length) return 0;
   }
+
+  let puntos = apellidosQueEncajan.length * 4;
+
+  // El nombre, para desempatar entre los que ya han pasado el filtro.
+  if (encajaNombre) puntos += 3;
+  else if (encajaIniciales) puntos += 2;   // "ME" = María Elena
+
   return puntos;
 }
 
