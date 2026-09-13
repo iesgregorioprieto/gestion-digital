@@ -226,6 +226,13 @@ export default function PanelConflictos() {
                   ))}
                 </div>
               )}
+              {(x.candidatos || []).length === 0 && (
+                <div style={{ fontSize: 12, color: AMBAR, backgroundColor: '#fffbeb',
+                  border: '1px solid #fcd34d', borderRadius: 7, padding: '8px 11px', marginBottom: 10 }}>
+                  No hay nadie parecido en el claustro: lo más probable es que esta
+                  persona no tenga cuenta en la aplicación. Si es así, déjalo como está.
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, color: '#94a3b8' }}>
                   {(x.candidatos || []).length > 0 ? 'O elige otra:' : 'Elige a quién corresponde:'}

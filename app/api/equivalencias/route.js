@@ -77,6 +77,14 @@ function parecido(nombrePdf, profesor) {
   const inicNombre = nombres.map(n => n[0]).join('');      // "María Soledad" → "ms"
   const inicApe    = apellidos.map(a => a[0]).join('');
 
+  // Condición de entrada: el PRIMER apellido tiene que encajar. Sin esto,
+  // compartir un segundo apellido común ("Gómez") más unas iniciales
+  // parecidas bastaba para proponer a quien no era.
+  const primerApellido = apellidos[0] || '';
+  const encajaPrimerApellido = trozos.some(t =>
+    t.length >= 3 && (primerApellido.startsWith(t) || t.startsWith(primerApellido)));
+  if (!encajaPrimerApellido) return 0;
+
   let puntos = 0;
   for (const t of trozos) {
     // ¿Es el principio de alguno de sus apellidos? ("Lop." → "López")
@@ -173,11 +181,20 @@ export async function GET(request) {
 
     // 4. No se reconoce: se ofrecen los más parecidos arriba del todo,
     //    para no tener que buscar entre 155 personas por cada abreviatura.
+    // Solo se propone cuando el parecido es FUERTE. Antes bastaba con
+    // compartir un apellido, y eso llenaba la pantalla de sugerencias
+    // que no eran la persona ("Pozas Gómez, María de las Mercedes" →
+    // "Alfaro Gómez, María Cortes"). Una sugerencia mala es peor que
+    // ninguna: invita a confirmar algo incorrecto, y confirmar mal manda
+    // a un profesor a cubrir clases que no son suyas.
+    //
+    // El umbral de 5 puntos exige, en la práctica, que encajen el
+    // apellido Y el nombre (o sus iniciales), no solo uno de los dos.
     const sugeridos = (profesores || [])
       .map(p => ({ p, punt: parecido(nombre, p) }))
-      .filter(x => x.punt > 0)
+      .filter(x => x.punt >= 5)
       .sort((a, b) => b.punt - a.punt)
-      .slice(0, 4)
+      .slice(0, 3)
       .map(x => x.p);
     sinCasar.push({ nombre, ...cuenta, candidatos: sugeridos });
   }
