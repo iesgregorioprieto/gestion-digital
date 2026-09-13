@@ -40,6 +40,14 @@ function fechaLarga(f) {
 }
 
 export default function GestionComunicaciones() {
+  // Pestaña del módulo: avisos o convocatorias. Son dos cosas distintas
+  // (un aviso se lee y punto; una convocatoria tiene día, hora, lugar,
+  // asistencia y fichaje), así que se gestionan por separado en vez de
+  // mezcladas en una sola lista.
+  const [seccion, setSeccion] = useState(() => {
+    if (typeof window === 'undefined') return 'avisos';
+    return 'avisos';
+  });
   const [vista, setVista] = useState('lista');
   const [lista, setLista] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -67,6 +75,16 @@ export default function GestionComunicaciones() {
   const [vPregunta, setVPregunta] = useState('');
   const [vOpciones, setVOpciones] = useState(['A favor', 'En contra', 'Abstención']);
   const [vMinutos, setVMinutos] = useState('3');
+
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('seccion');
+    if (q === 'convocatorias' || q === 'avisos') setSeccion(q);
+  }, []);
+
+  // El tipo de lo que se publica lo decide la pestaña.
+  useEffect(() => {
+    setTipo(seccion === 'convocatorias' ? 'convocatoria' : 'aviso');
+  }, [seccion]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -365,7 +383,7 @@ export default function GestionComunicaciones() {
         ? '📅 Convocatoria publicada. Ya le ha saltado a los convocados.'
         : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
       setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar('');
-      setElegidos([]); setAmbitos(['claustro']); setDptos([]); setTipo('aviso');
+      setElegidos([]); setAmbitos(['claustro']); setDptos([]);
       setVista('lista');
       cargar();
     }
@@ -404,7 +422,14 @@ export default function GestionComunicaciones() {
 
       {/* Barra del módulo: las dos caras del claustro */}
       <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '9px 16px 0', display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-        <a href="/gestion/comunicaciones" style={pestana(true)}>📢 Avisos y convocatorias</a>
+        <button onClick={() => { setSeccion('avisos'); setVista('lista'); }}
+          style={{ ...pestana(seccion === 'avisos'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
+          📢 Avisos
+        </button>
+        <button onClick={() => { setSeccion('convocatorias'); setVista('lista'); }}
+          style={{ ...pestana(seccion === 'convocatorias'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
+          📅 Convocatorias
+        </button>
         <a href="/gestion/votaciones" style={pestana(false)}>🗳️ Votaciones sueltas</a>
       </div>
 
@@ -420,8 +445,12 @@ export default function GestionComunicaciones() {
         )}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>📋 Publicadas</button>
-          <button onClick={() => setVista('nueva')} style={btn(vista === 'nueva')}>➕ Nueva</button>
+          <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>
+            {seccion === 'convocatorias' ? '📋 Convocadas' : '📋 Publicados'}
+          </button>
+          <button onClick={() => setVista('nueva')} style={btn(vista === 'nueva')}>
+            {seccion === 'convocatorias' ? '➕ Convocar reunión' : '➕ Nuevo aviso'}
+          </button>
           {(() => {
             // Las de reuniones ya pasadas o cerradas se acumulan; se
             // pueden borrar de golpe, pero descargando el acta antes.
@@ -444,21 +473,20 @@ export default function GestionComunicaciones() {
         {vista === 'nueva' && (
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb' }}>
 
-            <div style={{ display: 'flex', gap: 9, marginBottom: 18, flexWrap: 'wrap' }}>
-              <button type="button" onClick={() => setTipo('aviso')}
-                style={{ flex: 1, minWidth: 150, padding: '13px', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 14,
-                  border: `2px solid ${tipo === 'aviso' ? AMBAR : '#ddd'}`,
-                  backgroundColor: tipo === 'aviso' ? '#fffbeb' : 'white',
-                  color: tipo === 'aviso' ? AMBAR : '#666' }}>
-                📢 Aviso
-              </button>
-              <button type="button" onClick={() => setTipo('convocatoria')}
-                style={{ flex: 1, minWidth: 150, padding: '13px', borderRadius: 10, cursor: 'pointer', fontWeight: 800, fontSize: 14,
-                  border: `2px solid ${tipo === 'convocatoria' ? AZUL : '#ddd'}`,
-                  backgroundColor: tipo === 'convocatoria' ? '#eff6ff' : 'white',
-                  color: tipo === 'convocatoria' ? AZUL : '#666' }}>
-                📅 Convocatoria
-              </button>
+            {/* El tipo ya no se elige aquí: lo marca la pestaña en la que
+                estás. Antes había que acordarse de pulsarlo, y publicar un
+                aviso cuando se quería convocar una reunión (o al revés) era
+                fácil y difícil de ver luego. */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18,
+              padding: '12px 15px', borderRadius: 10,
+              backgroundColor: tipo === 'convocatoria' ? '#eff6ff' : '#fffbeb',
+              border: `2px solid ${tipo === 'convocatoria' ? AZUL : AMBAR}`,
+            }}>
+              <span style={{ fontSize: 20 }}>{tipo === 'convocatoria' ? '📅' : '📢'}</span>
+              <span style={{ fontWeight: 800, fontSize: 14.5, color: tipo === 'convocatoria' ? AZUL : AMBAR }}>
+                {tipo === 'convocatoria' ? 'Nueva convocatoria de reunión' : 'Nuevo aviso al profesorado'}
+              </span>
             </div>
 
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 18, lineHeight: 1.6, padding: '10px 13px', borderRadius: 8, backgroundColor: '#f8fafc' }}>
@@ -577,16 +605,22 @@ export default function GestionComunicaciones() {
         )}
 
         {/* ─── LISTA ─── */}
-        {vista === 'lista' && (
-          cargando ? (
+        {vista === 'lista' && (() => {
+          // Cada pestaña enseña lo suyo y nada más.
+          const visibles = lista.filter(c =>
+            seccion === 'convocatorias' ? c.tipo === 'convocatoria' : c.tipo !== 'convocatoria');
+
+          return cargando ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
-          ) : lista.length === 0 ? (
+          ) : visibles.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 50, color: '#aaa', backgroundColor: 'white', borderRadius: 12, border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 40, marginBottom: 10 }}>📢</div>
-              Todavía no has publicado nada
+              <div style={{ fontSize: 40, marginBottom: 10 }}>{seccion === 'convocatorias' ? '📅' : '📢'}</div>
+              {seccion === 'convocatorias'
+                ? 'Todavía no has convocado ninguna reunión'
+                : 'Todavía no has publicado ningún aviso'}
             </div>
           ) : (
-            lista.map(c => {
+            visibles.map(c => {
               const esConv = c.tipo === 'convocatoria';
               const resp = c.respuestas || [];
               const leidas = resp.filter(r => r.leida_at).length;
@@ -846,8 +880,8 @@ export default function GestionComunicaciones() {
                 </div>
               );
             })
-          )
-        )}
+          );
+        })()}
       </div>
     </div>
   );
