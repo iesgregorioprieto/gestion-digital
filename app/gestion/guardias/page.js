@@ -330,6 +330,10 @@ export default function GestionGuardias() {
     setCargandoDia(false);
   }
 
+  // Ficha completa de un profesor por su identificador, para poder mostrar
+  // su nombre y apellidos a partir de una fila de apoyos_asignados.
+  const fichaPorId = id => (profesoresList || []).find(p => String(p.id) === String(id));
+
   const diaSem = diaSemanaEs(fecha);
   const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
   const horaInfo = HORAS.find(h => h.id === horaActiva);
@@ -1083,15 +1087,31 @@ export default function GestionGuardias() {
                           );
                         })}
                       </>
-                    ) : asignaciones.map((asig, idx) => {
-                      // "Quién cubre" no se calcula aquí. Antes se recalculaba
-                      // en el navegador (asignacionAutomatica), con una lógica
-                      // distinta a la del servidor, y por eso jefatura podía ver
-                      // un compañero distinto al que de verdad se le asignó y
-                      // guardó en apoyos_asignados — que es lo que ve el
-                      // profesorado desde su propia pantalla. Se lee la fila real.
-                      const filaReal = apoyosAsignados.find(ap =>
-                        ap.hora === horaActiva && ap.profesor_ausente_id === asig.ausencia.profesorId);
+                    ) : asignaciones.map((filaReal, idx) => {
+                      // Cada elemento es ya la FILA REAL de apoyos_asignados.
+                      // El resto del bloque, escrito para el formato antiguo
+                      // del navegador, espera un objeto con .ausencia y .clase
+                      // dentro; se construye aquí a partir de la fila para no
+                      // reescribir toda la vista.
+                      const fichaAusente = fichaPorId(filaReal.profesor_ausente_id);
+                      const asig = {
+                        tipoHora: 'clase',
+                        ausencia: {
+                          profesorId: filaReal.profesor_ausente_id,
+                          profesor: fichaAusente
+                            ? `${fichaAusente.apellidos}, ${fichaAusente.nombre}`
+                            : (filaReal.profesor_nombre_pdf || '—'),
+                          sector: filaReal.sector_destino || sectorSup,
+                          tipo: 'ausencia',
+                        },
+                        clase: {
+                          grupo: filaReal.grupo || '',
+                          aula: filaReal.aula || null,
+                          materia: filaReal.materia || null,
+                          instrucciones: filaReal.tarea || null,
+                        },
+                      };
+
                       const cubre = filaReal ? {
                         nombre: nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
                         abrev: filaReal.profesor_nombre_pdf,
