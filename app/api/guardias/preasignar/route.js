@@ -142,10 +142,15 @@ export async function POST(request) {
       return Response.json({ ok: true, creadas: 0, motivo: 'sin_horarios' });
     }
 
-    // ─── Profesorado ───
-    const { data: profesores } = await cliente
-      .from('profesores')
-      .select('id,nombre,apellidos,departamento,especialidad');
+    // ─── Profesorado y equivalencias de nombre ───
+    // El horario de Delphos y la ficha del profesor no siempre escriben
+    // el nombre igual. Las equivalencias confirmadas a mano en Personal
+    // son las que permiten reconocer a esas personas; sin ellas, el motor
+    // sencillamente no las ve y no les genera guardias.
+    const [{ data: profesores }, { data: equivalencias }] = await Promise.all([
+      cliente.from('profesores').select('id,nombre,apellidos,departamento,especialidad'),
+      cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
+    ]);
 
     // ─── Faltas que tocan el rango: ausencias y DLD aprobados ───
     const ultimo = dias[dias.length - 1].fecha;
@@ -195,7 +200,7 @@ export async function POST(request) {
       }
     });
 
-    const { porSector: cuadrante, sinResolver } = construirCuadrante(horarios, profesores || []);
+    const { porSector: cuadrante, sinResolver } = construirCuadrante(horarios, profesores || [], equivalencias || []);
     if (sinResolver.length) {
       console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
     }
@@ -203,7 +208,7 @@ export async function POST(request) {
     // Dos compañeros con la misma abreviatura ("Gar. M, JL" puede ser
     // García Moreno o García Muñoz): a esos no se les asigna nada, y hay
     // que poder verlo en vez de que desaparezcan en silencio.
-    const ambiguas = clavesAmbiguas(indiceProfesores(profesores || []));
+    const ambiguas = clavesAmbiguas(indiceProfesores(profesores || [], equivalencias || []));
     if (ambiguas.length) {
       console.warn('preasignar: abreviaturas ambiguas →',
         ambiguas.map(a => `${a.clave}: ${a.personas.join(' / ')}`).join(' | '));
@@ -220,7 +225,7 @@ export async function POST(request) {
       // Las horas salen de lo que marcó el profesor; si dejó las tareas
       // por módulo (ausencia larga) o no dejó nada (baja), del horario.
       const huecos = prepararHuecos(delDia, profesores || [], {
-        horarios, dia: diaSemana,
+        horarios, dia: diaSemana, equivalencias: equivalencias || [],
       });
 
       const yaCubiertos = (yaEnRango || [])
@@ -234,13 +239,14 @@ export async function POST(request) {
       for (const hora of HORAS_GUARDIA) {
         if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
 
-        const enClase = ocupadosEnClase(horarios, profesores || [], diaSemana, hora);
+        const enClase = ocupadosEnClase(horarios, profesores || [], diaSemana, hora, equivalencias || []);
 
         const asignaciones = asignacionesDeHora({
           hora, dia: diaSemana, huecos, cuadrante, horarios,
           profesores: profesores || [],
           apoyosPorProfesor, apoyosFueraPorSector,
           yaCubiertos, ocupadosIds: enClase,
+          equivalencias: equivalencias || [],
         });
 
         for (const asig of asignaciones) {

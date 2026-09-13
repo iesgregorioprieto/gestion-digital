@@ -7,6 +7,7 @@ import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
 import { DEPARTAMENTOS } from '@/lib/sectores';
+import PanelConflictos from './PanelConflictos';
 
 const TIPOS_CONTRATO = [
   'Funcionario de carrera',
@@ -380,6 +381,7 @@ export default function PanelSecretario() {
         <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
           {[
             { id: 'profesores', emoji: '👥', label: 'Profesorado' },
+            { id: 'conflictos', emoji: '🔗', label: 'Nombres del horario' },
           ].map(t => (
             <button key={t.id} onClick={() => setPestana(t.id)} style={{
               padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -392,6 +394,8 @@ export default function PanelSecretario() {
             </button>
           ))}
         </div>
+
+        {pestana === 'conflictos' && <PanelConflictos />}
 
         {pestana === 'profesores' && (
           <>
