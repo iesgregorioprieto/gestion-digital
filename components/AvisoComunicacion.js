@@ -26,7 +26,25 @@ export default function AvisoComunicacion() {
   const [error, setError] = useState('');
   const [ahora, setAhora] = useState(Date.now());
 
-  const fuera = !ruta || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta === '/';
+  /**
+   * Dónde NO debe saltar.
+   *
+   * Las pantallas de /gestion son donde trabaja el equipo directivo, y
+   * quien convoca suele ser destinatario de su propia convocatoria (un
+   * jefe de estudios que convoca al equipo directivo está dentro del
+   * ámbito). Sin esta excepción, al pulsar "Publicar" el aviso le salta
+   * a él mismo por encima, a pantalla completa y sin botón de cerrar:
+   * la única salida es responder si asiste. Parece que la aplicación se
+   * ha bloqueado justo al convocar.
+   *
+   * Al equipo directivo le seguirá saltando igual que a todo el mundo en
+   * cuanto salga de las pantallas de gestión.
+   */
+  const fuera = !ruta
+    || ruta.startsWith('/gestion')
+    || ruta.startsWith('/login')
+    || ruta.startsWith('/sala')
+    || ruta === '/';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

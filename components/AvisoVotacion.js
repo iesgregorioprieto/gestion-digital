@@ -30,7 +30,7 @@ export default function AvisoVotacion() {
   // Y en el login o el panel de la sala tampoco pinta nada.
   const fuera = !ruta
     || ruta.startsWith('/votaciones')
-    || ruta.startsWith('/gestion/votaciones')
+    || ruta.startsWith('/gestion')   // ninguna pantalla de gestión, no solo la de votaciones
     || ruta.startsWith('/login')
     || ruta.startsWith('/sala')
     || ruta === '/';
