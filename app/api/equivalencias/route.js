@@ -54,6 +54,43 @@ async function sesionDe(request) {
  * "María del Pilar"). Con eso se cubre el caso habitual sin inventar:
  * la confirmación la da una persona, no el código.
  */
+/**
+ * Puntúa cuánto se parece una abreviatura del cuadrante a un profesor.
+ *
+ * El cuadrante de guardias no usa un formato único: se han visto
+ * "ME Lop.", "M Núñ.", "MdlÁ Mat.", "MV Agu.", "Cár. C, LJ" y
+ * "Aba. GP, MJ". Intentar reconocer cada patrón a mano es una carrera
+ * perdida: siempre aparece uno nuevo.
+ *
+ * Así que no se intenta interpretar el formato. Se trocea la abreviatura
+ * en pedazos y se mira cuántos encajan con las iniciales y los apellidos
+ * del profesor. Sirve para ORDENAR los candidatos y ponerle fácil a
+ * quien confirma; la decisión sigue siendo de una persona.
+ */
+function parecido(nombrePdf, profesor) {
+  const limpio = t => normClave(t).replace(/\./g, '');
+  const trozos = String(nombrePdf || '').split(/[\s,.]+/).filter(Boolean).map(limpio).filter(Boolean);
+  if (trozos.length === 0) return 0;
+
+  const apellidos = String(profesor.apellidos || '').split(/\s+/).filter(Boolean).map(limpio);
+  const nombres   = String(profesor.nombre   || '').split(/\s+/).filter(Boolean).map(limpio);
+  const inicNombre = nombres.map(n => n[0]).join('');      // "María Soledad" → "ms"
+  const inicApe    = apellidos.map(a => a[0]).join('');
+
+  let puntos = 0;
+  for (const t of trozos) {
+    // ¿Es el principio de alguno de sus apellidos? ("Lop." → "López")
+    if (apellidos.some(a => a.startsWith(t) && t.length >= 3)) { puntos += 3; continue; }
+    // ¿Es el principio de alguno de sus nombres?
+    if (nombres.some(n => n.startsWith(t) && t.length >= 3))   { puntos += 2; continue; }
+    // ¿Son sus iniciales? ("ME" → María Elena, "MdlÁ" → María de los Ángeles)
+    if (t === inicNombre || t === inicApe)                      { puntos += 2; continue; }
+    // Iniciales parciales
+    if (t.length <= 4 && inicNombre.startsWith(t[0]))           { puntos += 1; continue; }
+  }
+  return puntos;
+}
+
 function pareceLaMisma(nombrePdf, profesor) {
   const partes = String(nombrePdf || '').split(',');
   if (partes.length < 2) return false;
@@ -134,8 +171,15 @@ export async function GET(request) {
       continue;
     }
 
-    // 4. Ni idea: hay que elegir a mano
-    sinCasar.push({ nombre, ...cuenta, candidatos: candidatos.slice(0, 5) });
+    // 4. No se reconoce: se ofrecen los más parecidos arriba del todo,
+    //    para no tener que buscar entre 155 personas por cada abreviatura.
+    const sugeridos = (profesores || [])
+      .map(p => ({ p, punt: parecido(nombre, p) }))
+      .filter(x => x.punt > 0)
+      .sort((a, b) => b.punt - a.punt)
+      .slice(0, 4)
+      .map(x => x.p);
+    sinCasar.push({ nombre, ...cuenta, candidatos: sugeridos });
   }
 
   const orden = (a, b) => (b.clases + b.guardias) - (a.clases + a.guardias);

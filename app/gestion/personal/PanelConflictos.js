@@ -207,7 +207,29 @@ export default function PanelConflictos() {
             <div key={x.nombre} style={{ ...caja, borderLeft: `4px solid #fca5a5` }}>
               <div style={{ fontWeight: 700, fontSize: 14.5, color: AZUL }}>{x.nombre}</div>
               <div style={{ fontSize: 11.5, color: '#94a3b8', marginBottom: 10 }}>en el horario · {cuenta(x)}</div>
+              {/* Los más parecidos, a un clic. El cuadrante abrevia de
+                  muchas formas distintas ("ME Lop.", "MdlÁ Mat.",
+                  "Cár. C, LJ"), así que en vez de buscar entre 155
+                  personas por cada uno, se ofrecen los candidatos
+                  probables ordenados. Confirma una persona, no el código. */}
+              {(x.candidatos || []).length > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>¿Es…?</span>
+                  {x.candidatos.map(c => (
+                    <button key={c.id} onClick={() => confirmar(x.nombre, c.id)}
+                      disabled={trabajando === x.nombre}
+                      style={{ padding: '6px 13px', borderRadius: 20, border: `1.5px solid ${VERDE}`,
+                        backgroundColor: '#f0fdf4', color: VERDE, fontWeight: 700,
+                        fontSize: 12.5, cursor: 'pointer' }}>
+                      {c.apellidos}, {c.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: '#94a3b8' }}>
+                  {(x.candidatos || []).length > 0 ? 'O elige otra:' : 'Elige a quién corresponde:'}
+                </span>
                 {selector(x.nombre)}
                 <button onClick={() => confirmar(x.nombre, eleccion[x.nombre])}
                   disabled={!eleccion[x.nombre] || trabajando === x.nombre}
