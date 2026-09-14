@@ -64,8 +64,11 @@ export async function POST(request) {
 
     const prof = (filas || [])[0];
 
-    // Ya tiene contraseña: que entre por el login, no por aquí
-    if (prof?.password_hash?.length > 0) {
+    // Ya tiene contraseña: que entre por el login, no por aquí.
+    // Excepción: si es una cuenta provisional creada por dirección, se
+    // permite completar el registro (poner la contraseña real y los datos
+    // completos). El estado provisional se quita al actualizar.
+    if (prof?.password_hash?.length > 0 && !prof?.provisional) {
       return Response.json({ estado: 'ya_registrado' });
     }
     // Ya pidió el acceso y está esperando aprobación
@@ -82,6 +85,7 @@ export async function POST(request) {
       password_hash: await cifrarPassword(password),
       solicitud_acceso: true,
       estado: 'pendiente',
+      provisional: false,   // ya no es provisional: se registró él mismo
     };
 
     // El estado y el cargo los decide siempre el servidor: aunque el

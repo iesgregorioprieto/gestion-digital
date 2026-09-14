@@ -8,6 +8,7 @@ import { consulta, consultaRpc } from '@/lib/consulta';
 import { getCursoActual } from '@/lib/curso';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 import PanelConflictos from './PanelConflictos';
+import FormProvisional from './FormProvisional';
 
 const TIPOS_CONTRATO = [
   'Funcionario de carrera',
@@ -382,6 +383,7 @@ export default function PanelSecretario() {
           {[
             { id: 'profesores', emoji: '👥', label: 'Profesorado' },
             { id: 'conflictos', emoji: '🔗', label: 'Nombres del horario' },
+            { id: 'provisional', emoji: '➕', label: 'Alta rápida' },
           ].map(t => (
             <button key={t.id} onClick={() => setPestana(t.id)} style={{
               padding: '9px 16px', borderRadius: 10, border: 'none', cursor: 'pointer',
@@ -396,6 +398,8 @@ export default function PanelSecretario() {
         </div>
 
         {pestana === 'conflictos' && <PanelConflictos />}
+
+        {pestana === 'provisional' && <FormProvisional />}
 
         {pestana === 'profesores' && (
           <>
