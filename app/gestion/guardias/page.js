@@ -672,7 +672,7 @@ export default function GestionGuardias() {
         </summary>
         <div style={{ padding:'0 16px 14px' }}>
           <div style={{ fontSize:11, color:'#6b7280', marginBottom:10 }}>
-            Ordenados de menos a más apoyos prestados. El primero de la lista es el siguiente al que le toca.
+            Ordenados de menos a más guardias prestadas fuera de su sector. El primero de la lista es el siguiente al que le toca.
           </div>
           <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
             {SECTORES_FP
@@ -713,7 +713,7 @@ export default function GestionGuardias() {
             return (
               <div style={{ marginTop:10, paddingTop:8, borderTop:'1px solid #e5e7eb' }}>
                 <div style={{ fontSize:11, color:'#6b7280', marginBottom: porProfesor.length ? 8 : 0 }}>
-                  Total de apoyos prestados al cuadrante general este curso: <strong style={{ color:azul }}>{total}</strong>
+                  Total de guardias prestadas al cuadrante general este curso: <strong style={{ color:azul }}>{total}</strong>
                 </div>
                 {porProfesor.length > 0 && (
                   <details>
@@ -897,7 +897,7 @@ export default function GestionGuardias() {
               } else if (cubiertasPorApoyo > 0) {
                 return (
                   <div style={{ fontWeight:800, fontSize:14, color:'#78350f', marginBottom:12 }}>
-                    ⚠️ TODAS CUBIERTAS ({cubiertasPorApoyo} con apoyo externo) — {ausentesReales} ausente{ausentesReales !== 1 ? 's' : ''}
+                    ⚠️ TODAS CUBIERTAS ({cubiertasPorApoyo} con guardia de otro sector) — {ausentesReales} ausente{ausentesReales !== 1 ? 's' : ''}
                   </div>
                 );
               } else {
@@ -964,7 +964,7 @@ export default function GestionGuardias() {
               } else if (sinCubrir > 0) {
                 resumen = `${sinCubrir} sin cubrir · ${cubiertasPorGuardia + cubiertasPorApoyo}/${totalClases} cubiertas`;
               } else if (cubiertasPorApoyo > 0) {
-                resumen = `✓ Cubiertas ${totalClases}/${totalClases} (${cubiertasPorApoyo} con apoyo externo)`;
+                resumen = `✓ Cubiertas ${totalClases}/${totalClases} (${cubiertasPorApoyo} con guardia de otro sector)`;
               } else {
                 resumen = `✓ Cubiertas ${totalClases}/${totalClases}`;
               }
@@ -1258,13 +1258,13 @@ export default function GestionGuardias() {
                             );
                           })()}
 
-                          {/* APOYO OBLIGATORIO (NARANJA) */}
+                          {/* GUARDIA ASIGNADA FUERA DE SU SECTOR (NARANJA) */}
                           {cubre?.tipo === 'apoyo_obligatorio' && (
                             <div style={{
                               padding:'8px 10px', borderRadius:6, backgroundColor:'#fef3c7',
                               border:'2px solid #f59e0b', display:'flex', alignItems:'center', gap:8, fontSize:12, flexWrap:'wrap',
                             }}>
-                              <span style={{ fontWeight:800, color:'#78350f' }}>🚨 APOYO OBLIGATORIO:</span>
+                              <span style={{ fontWeight:800, color:'#78350f' }}>🚨 GUARDIA ASIGNADA:</span>
                               <span style={{ fontWeight:800, color:'#78350f' }}>{cubre.nombre}</span>
                               <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
                                 {cubre.sectorOriginal} ({cubre.apoyosPrevios} apoyos)
@@ -1320,7 +1320,7 @@ export default function GestionGuardias() {
                                 color:'#78350f', display:'flex', alignItems:'center', gap:6,
                                 userSelect:'none',
                               }}>
-                                💡 Ver sugerencias de apoyo extra ({sugerenciasBackup.length})
+                                💡 Ver otros profesores libres a esta hora ({sugerenciasBackup.length})
                                 <span style={{ fontSize:10, fontWeight:400, opacity:0.75, marginLeft:'auto' }}>
                                   rotación · pulsa para ver
                                 </span>
