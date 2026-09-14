@@ -1117,11 +1117,22 @@ export default function GestionGuardias() {
                         },
                       };
 
+                      // El nombre se saca del IDENTIFICADOR de la fila, no del
+                      // texto. Antes se resolvía por parecido
+                      // (nombreLargo sobre profesor_nombre_pdf), y eso
+                      // confundía a personas con apellidos parecidos: donde el
+                      // motor había asignado a "Romero Pacheco, Ana Isabel", la
+                      // pantalla pintaba a "Romero de Ávila, Carlos", y el mismo
+                      // profesor aparecía cubriendo dos guardias a la vez.
+                      // La fila ya trae el id: no hay nada que adivinar.
+                      const fichaCubre = fichaPorId(filaReal?.profesor_id);
                       const cubre = filaReal ? {
-                        nombre: nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
+                        nombre: fichaCubre
+                          ? `${fichaCubre.apellidos}, ${fichaCubre.nombre}`
+                          : nombreLargo(mapaProfesores, filaReal.profesor_nombre_pdf),
                         abrev: filaReal.profesor_nombre_pdf,
                         profesorId: filaReal.profesor_id,
-                        sectorOriginal: filaReal.sector_apoyo,
+                        sectorOriginal: fichaCubre?.departamento || filaReal.sector_apoyo,
                         tipo: filaReal.tipo_apoyo === 'sector' ? 'guardia_sector' : 'apoyo_obligatorio',
                         apoyosPrevios: filaReal.profesor_id ? (apoyosPorProfesor[filaReal.profesor_id] || 0) : 0,
                         // Para poder seguir ofreciendo el botón "Cambiar ▾" en el
