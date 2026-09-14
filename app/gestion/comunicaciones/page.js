@@ -783,6 +783,22 @@ export default function GestionComunicaciones() {
                                   </div>
                                   {v.abierta ? (
                                     <>
+                                      {/* Las opciones, SIN recuento. Mientras la
+                                          votación está abierta no se enseñan
+                                          resultados parciales, pero quien convoca
+                                          sí tiene que poder comprobar que la
+                                          pregunta y las opciones se guardaron
+                                          bien: antes no se veían por ningún lado
+                                          hasta cerrarla. */}
+                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                                        {(v.opciones || []).map(o => (
+                                          <span key={o} style={{
+                                            padding: '3px 11px', borderRadius: 20, fontSize: 12,
+                                            backgroundColor: '#faf5ff', color: '#7e22ce',
+                                            border: '1px solid #e9d5ff', fontWeight: 600,
+                                          }}>{o}</span>
+                                        ))}
+                                      </div>
                                       <div style={{ fontSize: 12.5, color: '#475569' }}>
                                         {v.participantes} {v.participantes === 1 ? 'voto emitido' : 'votos emitidos'}
                                       </div>
