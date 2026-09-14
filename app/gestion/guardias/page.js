@@ -580,6 +580,22 @@ export default function GestionGuardias() {
 
   // Cambiar profesor de un apoyo ya registrado
   async function cambiarProfesor(apoyoId, nuevoProfesor) {
+    // Sin identificador no se puede asignar a nadie: la guardia quedaría
+    // sin dueño real, no se le podría avisar, ni fichar, ni contaría para
+    // la rotación. Pasa con los nombres del cuadrante que todavía no se
+    // han casado con ninguna ficha ("MS Dia."). Antes el servidor lo
+    // rechazaba con un escueto "No se pudo cambiar el apoyo", sin decir
+    // por qué ni qué hacer.
+    if (!nuevoProfesor?.profesorId) {
+      alert(
+        `"${nuevoProfesor?.nombre || nuevoProfesor?.abrev || 'Ese profesor'}" es un nombre del ` +
+        `cuadrante que todavía no está asociado a ninguna ficha del profesorado, ` +
+        `así que no se le puede asignar la guardia.\n\n` +
+        `Resuélvelo en Personal → Nombres del horario y vuelve a intentarlo.`
+      );
+      return;
+    }
+
     const _rc = await fetch('/api/apoyos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1407,20 +1423,36 @@ export default function GestionGuardias() {
             </div>
             <div style={{ fontSize:12, fontWeight:700, marginBottom:8 }}>Selecciona nuevo profesor:</div>
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {modalActivar.sugeridos.map((p, i) => (
+              {[...modalActivar.sugeridos]
+                .sort((a, b) => (b.profesorId ? 1 : 0) - (a.profesorId ? 1 : 0))
+                .map((p, i) => {
+                // Los nombres del cuadrante que aún no están casados con una
+                // ficha no se pueden asignar: se marcan y se dejan al final,
+                // en vez de dejar que se pulsen y salte un error seco.
+                const identificado = !!p.profesorId;
+                return (
                 <button key={i} onClick={() => cambiarProfesor(modalActivar.apoyoId, p)} style={{
                   padding:'10px 12px', borderRadius:10, cursor:'pointer', textAlign:'left',
-                  backgroundColor: i === 0 ? '#fef3c7' : 'white',
-                  border: i === 0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb',
+                  backgroundColor: !identificado ? '#fafafa' : (i === 0 ? '#fef3c7' : 'white'),
+                  border: !identificado ? '1.5px dashed #d4d4d4'
+                    : (i === 0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb'),
                   display:'flex', alignItems:'center', gap:10,
+                  opacity: identificado ? 1 : 0.65,
                 }}>
-                  <span style={{ fontSize:14 }}>{i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`}</span>
+                  <span style={{ fontSize:14 }}>
+                    {!identificado ? '⚠️' : (i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`)}
+                  </span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:700, fontSize:13 }}>{p.nombre}</div>
-                    <div style={{ fontSize:11, color:'#666' }}>{p.sectorOriginal} · {p.apoyosPrevios} apoyo{p.apoyosPrevios!==1?'s':''}</div>
+                    <div style={{ fontSize:11, color: identificado ? '#666' : '#b45309' }}>
+                      {identificado
+                        ? `${p.sectorOriginal} · ${p.apoyosPrevios} apoyo${p.apoyosPrevios!==1?'s':''}`
+                        : 'sin asociar a ninguna ficha — resuélvelo en Personal → Nombres del horario'}
+                    </div>
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
             <button onClick={() => setModalActivar(null)} style={{ marginTop:14, padding:'8px 16px', width:'100%', borderRadius:8, border:'1px solid #ddd', backgroundColor:'white', color:'#666', cursor:'pointer', fontSize:13 }}>Cancelar</button>
           </div>
