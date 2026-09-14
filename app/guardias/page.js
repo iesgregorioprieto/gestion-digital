@@ -54,7 +54,8 @@ function dentroDeFranja(horaId, fechaGuardia, ahora = new Date()) {
   const min = ahora.getHours() * 60 + ahora.getMinutes();
   const aMin = t => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
   const [ini, fin] = h.horario.split('–');
-  return min >= aMin(ini) && min <= aMin(fin);
+  // Fin exclusivo: a las 9:25 no pueden estar activas 1ª y 2ª a la vez.
+  return min >= aMin(ini) && min < aMin(fin);
 }
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
