@@ -59,6 +59,7 @@ export default function GestionAutorizaciones() {
   const [grupoTutor, setGrupoTutor] = useState('');
   const [grupoSeleccionado, setGrupoSeleccionado] = useState('');
   const [grupos, setGrupos] = useState([]);
+  const [generandoInforme, setGenerandoInforme] = useState(false);
   const [alumnos, setAlumnos] = useState([]);
   const [cambios, setCambios] = useState({}); // {id: {auth_imagenes: true/false, dni: ''}}
   const [cargando, setCargando] = useState(false);
@@ -174,6 +175,59 @@ export default function GestionAutorizaciones() {
   }
 
   // Contar restricciones de un alumno
+  /**
+   * Informe de seguros escolares de todos los grupos.
+   *
+   * Se pide grupo por grupo porque la API entrega el alumnado filtrado
+   * por grupo; son pocas peticiones y así no hace falta un endpoint nuevo.
+   */
+  async function descargarInformeSeguros() {
+    setGenerandoInforme(true);
+    try {
+      const filas = [];
+      for (const g of grupos) {
+        const { alumnos: delGrupo } = await fetch(
+          `/api/alumnos?grupo=${encodeURIComponent(g)}`).then(r => r.json());
+        (delGrupo || []).forEach(a => filas.push({ grupo: g, ...a }));
+      }
+
+      const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      const formaTexto = f =>
+        f === 'transferencia' ? 'Transferencia' : f === 'metalico' ? 'Metálico' : '';
+
+      const lineas = [
+        ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Pagado', 'Forma de pago', 'Fecha']
+          .map(esc).join(';'),
+        ...filas
+          .sort((a, b) =>
+            (a.grupo || '').localeCompare(b.grupo || '', 'es')
+            || (a.apellidos || '').localeCompare(b.apellidos || '', 'es'))
+          .map(a => [
+            a.grupo, a.apellidos, a.nombre, a.dni || '',
+            a.seguro_pagado ? 'SÍ' : 'NO',
+            formaTexto(a.seguro_forma_pago),
+            a.seguro_fecha || '',
+          ].map(esc).join(';')),
+      ];
+
+      // BOM para que Excel abra bien las tildes
+      const blob = new Blob(['\ufeff' + lineas.join('\n')],
+        { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `seguros-escolares-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      const pagados = filas.filter(x => x.seguro_pagado).length;
+      mostrarMensaje(`✅ Informe descargado · ${pagados} de ${filas.length} con el seguro pagado`, 'ok');
+    } catch (e) {
+      mostrarMensaje('No se ha podido generar el informe', 'error');
+    }
+    setGenerandoInforme(false);
+  }
+
   function contarRestricciones(alumno) {
     return AUTORIZACIONES.filter(a => !getValor(alumno, a.key)).length;
   }
@@ -200,6 +254,26 @@ export default function GestionAutorizaciones() {
       )}
 
       <div style={{ padding: 16 }}>
+
+        {/* INFORME DE SEGUROS — solo directivos */}
+        {esDirectivo && (
+          <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: azul }}>🛡️ Seguros escolares</div>
+                <div style={{ fontSize: 11.5, color: '#666', marginTop: 2 }}>
+                  Todos los grupos, con quién ha pagado y cómo. Se abre con Excel.
+                </div>
+              </div>
+              <button onClick={descargarInformeSeguros} disabled={generandoInforme || grupos.length === 0}
+                style={{ padding: '10px 18px', borderRadius: 9, border: 'none',
+                  backgroundColor: generandoInforme ? '#94a3b8' : '#166534', color: 'white',
+                  fontWeight: 700, fontSize: 13.5, cursor: generandoInforme ? 'default' : 'pointer' }}>
+                {generandoInforme ? 'Generando…' : '📥 Descargar informe'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* SELECTOR DE GRUPO — solo para directivos */}
         {esDirectivo && (

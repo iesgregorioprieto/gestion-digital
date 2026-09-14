@@ -136,6 +136,35 @@ export default function GestionAutorizaciones() {
     setCambios(c => ({ ...c, [alumnoId]: { ...c[alumnoId], dni } }));
   }
 
+  // ── Seguro escolar ──
+  // Al marcarlo como pagado se guarda también la fecha, para el informe.
+  // Al desmarcarlo se limpian forma de pago y fecha: si no está pagado,
+  // no tiene sentido conservar "pagó por transferencia el día X".
+  function toggleSeguro(alumnoId, alumno) {
+    const pagadoAhora = getValor(alumno, 'seguro_pagado');
+    setCambios(c => ({
+      ...c,
+      [alumnoId]: {
+        ...c[alumnoId],
+        seguro_pagado: !pagadoAhora,
+        seguro_forma_pago: !pagadoAhora ? (getValor(alumno, 'seguro_forma_pago') || null) : null,
+        seguro_fecha: !pagadoAhora ? new Date().toISOString().slice(0, 10) : null,
+      },
+    }));
+  }
+
+  function setFormaPago(alumnoId, forma) {
+    setCambios(c => ({
+      ...c,
+      [alumnoId]: {
+        ...c[alumnoId],
+        seguro_pagado: true,
+        seguro_forma_pago: forma,
+        seguro_fecha: c[alumnoId]?.seguro_fecha || new Date().toISOString().slice(0, 10),
+      },
+    }));
+  }
+
   function getValor(alumno, campo) {
     if (cambios[alumno.id]?.[campo] !== undefined) return cambios[alumno.id][campo];
     return alumno[campo];
@@ -312,6 +341,80 @@ export default function GestionAutorizaciones() {
                           style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box', textTransform: 'uppercase' }}
                         />
                       </div>
+
+                      {/* SEGURO ESCOLAR */}
+                      {(() => {
+                        const pagado = getValor(alumno, 'seguro_pagado');
+                        const forma  = getValor(alumno, 'seguro_forma_pago');
+                        return (
+                          <div style={{ marginBottom: 16, padding: 12, borderRadius: 9,
+                            backgroundColor: pagado ? '#f0fdf4' : '#fafafa',
+                            border: `1.5px solid ${pagado ? '#6ee7b7' : '#e5e7eb'}` }}>
+
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
+                              <span style={{ fontSize: 12, fontWeight: 800, color: azul }}>
+                                🛡️ SEGURO ESCOLAR
+                              </span>
+                              <span
+                                title={'Están exentos de pagar el seguro escolar:\n\n' +
+                                       '· El alumnado de 1º y 2º de ESO\n' +
+                                       '· El alumnado mayor de 28 años\n\n' +
+                                       'Marca el pago solo a quien le corresponda abonarlo.'}
+                                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                  width: 17, height: 17, borderRadius: '50%', backgroundColor: '#dbeafe',
+                                  color: '#1e40af', fontSize: 11, fontWeight: 800, cursor: 'help' }}>
+                                i
+                              </span>
+                            </div>
+
+                            <div onClick={() => toggleSeguro(alumno.id, alumno)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                                borderRadius: 8, cursor: 'pointer', marginBottom: pagado ? 9 : 0,
+                                backgroundColor: pagado ? '#dcfce7' : 'white',
+                                border: `1.5px solid ${pagado ? '#6ee7b7' : '#ddd'}` }}>
+                              <span style={{ fontSize: 20, minWidth: 26, textAlign: 'center' }}>
+                                {pagado ? '✅' : '⬜'}
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 700, fontSize: 13,
+                                  color: pagado ? '#065f46' : '#475569' }}>
+                                  Pagado seguro escolar
+                                </div>
+                                {pagado && getValor(alumno, 'seguro_fecha') && (
+                                  <div style={{ fontSize: 11, color: '#059669', marginTop: 1 }}>
+                                    registrado el {getValor(alumno, 'seguro_fecha')}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {pagado && (
+                              <div style={{ display: 'flex', gap: 7 }}>
+                                {[
+                                  { valor: 'transferencia', label: '🏦 Transferencia' },
+                                  { valor: 'metalico',      label: '💶 En metálico' },
+                                ].map(op => (
+                                  <button key={op.valor} type="button"
+                                    onClick={() => setFormaPago(alumno.id, op.valor)}
+                                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8,
+                                      fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                                      backgroundColor: forma === op.valor ? '#1e3a5f' : 'white',
+                                      color: forma === op.valor ? 'white' : '#475569',
+                                      border: `1.5px solid ${forma === op.valor ? '#1e3a5f' : '#ddd'}` }}>
+                                    {op.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+
+                            {pagado && !forma && (
+                              <div style={{ fontSize: 11.5, color: '#92400e', marginTop: 7 }}>
+                                Indica cómo se ha pagado.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* SECCIÓN MENORES */}
                       <div style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 }}>

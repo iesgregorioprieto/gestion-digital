@@ -107,6 +107,7 @@ export async function POST(request) {
       const permitidos = [
         'auth_imagenes', 'auth_salidas', 'auth_actividades',
         'auth_informar_progeni', 'auth_imagenes_mayor', 'dni',
+        'seguro_pagado', 'seguro_forma_pago', 'seguro_fecha',
       ];
       const limpio = {};
       for (const k of permitidos) {
@@ -121,6 +122,32 @@ export async function POST(request) {
       // de verdad tiene que estar aquí, porque una petición se puede
       // enviar a mano sin pasar por la pantalla. Son autorizaciones de
       // imágenes y salidas de menores.
+      // El seguro escolar lo marca ÚNICAMENTE el tutor de ese grupo.
+      // Es un cobro que gestiona la tutoría, y dejarlo abierto a más
+      // gente acabaría en dos personas marcando lo mismo con criterios
+      // distintos. Dirección puede verlo en el informe, pero no tocarlo.
+      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha']
+        .some(k => k in limpio);
+
+      if (tocaSeguro) {
+        const [{ data: alumnos }, { data: profes }] = await Promise.all([
+          supa().from('alumnos').select('grupo').eq('id', id),
+          supa().from('profesores').select('grupo_tutoria, rol').eq('id', sesion.id),
+        ]);
+        const grupoAlumno = (alumnos || [])[0]?.grupo;
+        const profe = (profes || [])[0];
+        const esTutor = Array.isArray(profe?.rol) && profe.rol.includes('tutor');
+        const suGrupo = profe?.grupo_tutoria;
+
+        if (!esTutor || !suGrupo
+            || !grupoAlumno
+            || grupoAlumno.trim().toUpperCase() !== suGrupo.trim().toUpperCase()) {
+          return Response.json(
+            { error: 'El seguro escolar solo lo puede marcar el tutor del grupo' },
+            { status: 403 });
+        }
+      }
+
       if (!esDirectivo(sesion)) {
         const [{ data: alumnos }, { data: profes }] = await Promise.all([
           supa().from('alumnos').select('grupo').eq('id', id),
