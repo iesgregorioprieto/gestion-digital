@@ -371,14 +371,19 @@ export default function GestionGuardias() {
     );
     const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
 
-    // Sectores que pueden prestar apoyo: los que no tienen ausencias
-    // propias esa hora. Se incluyen TODOS, familias y generales.
+    // TODOS los sectores, sin excluir ninguno.
     //
-    // Antes solo entraban las familias profesionales, así que una guardia
-    // de Automoción sin nadie libre en su familia se quedaba sin ninguna
-    // sugerencia, aunque hubiera profesorado de guardia general
-    // disponible. El apoyo es recíproco en los dos sentidos.
-    const sectoresLibres = sectores.filter(s => !porSector[s.toUpperCase()]);
+    // Antes solo entraban los sectores SIN ausencias propias esa hora
+    // (`sectores.filter(s => !porSector[s.toUpperCase()])`). Eso descartaba
+    // en bloque a un sector entero en cuanto faltaba UNA persona de él:
+    // si a esa hora faltaba un profesor de GENERAL, ningún general
+    // aparecía en el desplegable, aunque hubiera tres de guardia libres.
+    //
+    // Quién está realmente libre ya se comprueba abajo, uno a uno: no
+    // está en clase, no está ausente y no tiene ya otra guardia asignada.
+    // Excluir sectores enteros por adelantado sobraba y ocultaba a gente
+    // disponible justo cuando más falta hacía.
+    const sectoresLibres = sectores;
 
     const libres = [];
     for (const sector of sectoresLibres) {
