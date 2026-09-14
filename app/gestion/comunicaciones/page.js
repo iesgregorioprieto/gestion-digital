@@ -369,6 +369,13 @@ export default function GestionComunicaciones() {
     if (!titulo.trim()) return aviso('Ponle un título.', 'error');
     if (!texto.trim())  return aviso('Escribe el mensaje.', 'error');
     if (ambitos.length === 0) return aviso('Elige a quién va dirigida.', 'error');
+
+    // Mandar algo a 155 personas sin querer es muy caro de deshacer: se
+    // pide confirmación expresa.
+    if (ambitos.includes('claustro')) {
+      const que = tipo === 'convocatoria' ? 'esta convocatoria' : 'este aviso';
+      if (!confirm(`Vas a enviar ${que} a TODO EL CLAUSTRO.\n\n¿Seguro?`)) return;
+    }
     if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
     if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
     if (ambitos.includes('equipo') && equiposElegidos.length === 0) return aviso('Elige al menos un equipo.', 'error');
@@ -546,7 +553,15 @@ export default function GestionComunicaciones() {
                           } else {
                             setAmbitos(prev => {
                               const sin = prev.filter(x => x !== 'claustro' && x !== a.valor);
-                              if (marcado) return sin.length === 0 ? ['claustro'] : sin;
+                              // Al desmarcar el último ámbito NO se pone
+                              // "todo el claustro". Antes sí, y era muy
+                              // peligroso: si marcabas "personas a dedo" y
+                              // luego lo desmarcabas para cambiar de idea,
+                              // quedaba seleccionado el claustro entero sin
+                              // avisar, y el aviso salía a los 155.
+                              // Mejor quedarse sin nadie: el botón de
+                              // publicar se bloquea y se ve el motivo.
+                              if (marcado) return sin;
                               return [...sin, a.valor];
                             });
                           }
@@ -556,6 +571,22 @@ export default function GestionComunicaciones() {
                   );
                 })}
               </div>
+            </div>
+
+            {/* A cuánta gente va, siempre a la vista. Publicar algo al
+                claustro entero sin querer es muy fácil y muy caro: esto
+                lo pone delante antes de pulsar. */}
+            <div style={{
+              margin: '10px 0 16px', padding: '10px 14px', borderRadius: 9, fontSize: 13,
+              backgroundColor: ambitos.includes('claustro') ? '#fffbeb' : '#f8fafc',
+              border: `1.5px solid ${ambitos.includes('claustro') ? '#fcd34d' : '#e2e8f0'}`,
+              color: ambitos.includes('claustro') ? '#92400e' : '#475569', fontWeight: 600,
+            }}>
+              {ambitos.length === 0
+                ? '⚠️ No has elegido a nadie todavía'
+                : ambitos.includes('claustro')
+                  ? '📣 Va a TODO EL CLAUSTRO'
+                  : `Va a: ${ambitos.map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(' · ')}`}
             </div>
 
             {ambitos.includes('departamento') && (
