@@ -1034,11 +1034,16 @@ export default function Guardias() {
                 cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
                 display:'flex', alignItems:'center', gap:8,
               }}>
-                📊 Profesores de guardia esta hora (todos los sectores)
+                📊 Profesores de guardia esta hora — 🛡️ ya cubriendo
               </summary>
               <div style={{ padding:'0 16px 16px' }}>
                 {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
                   const guardias = guardiasDeSector(s);
+                  // Quien ya cubre una guardia a esta hora no está libre.
+                  const yaCubriendo = new Set(
+                    (apoyosAsignados || [])
+                      .filter(a => horaCoincide(a.hora, horaActiva) && a.profesor_nombre_pdf)
+                      .map(a => normAbrev(a.profesor_nombre_pdf)));
                   return (
                     <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
                       <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
@@ -1049,14 +1054,16 @@ export default function Guardias() {
                           const key = normAbrev(p);
                           const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
+                          const ocupado = yaCubriendo.has(normAbrev(nombre));
                           return (
-                            <span key={i} style={{
+                            <span key={i} title={ocupado ? 'Ya está cubriendo una guardia a esta hora' : ''}
+                              style={{
                               padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                              backgroundColor: esYo ? '#fef3c7' : '#f0fdf4',
-                              color: esYo ? '#78350f' : verde,
-                              border:'1.5px solid ' + (esYo ? '#fbbf24' : '#bbf7d0'),
+                              backgroundColor: ocupado ? '#fef3c7' : '#f0fdf4',
+                              color: ocupado ? '#92400e' : verde,
+                              border:'1.5px solid ' + (ocupado ? '#fbbf24' : '#bbf7d0'),
                             }}>
-                              {esYo && '⭐ '}{nombre}
+                              {ocupado ? '🛡️ ' : (esYo ? '⭐ ' : '')}{nombre}
                             </span>
                           );
                         })}

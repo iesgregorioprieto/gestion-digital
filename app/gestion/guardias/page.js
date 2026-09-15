@@ -1373,12 +1373,20 @@ export default function GestionGuardias() {
                 cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
                 display:'flex', alignItems:'center', gap:8, userSelect:'none',
               }}>
-                📊 Profesores de guardia esta hora (todos los sectores)
+                📊 Profesores de guardia esta hora — 🛡️ ya cubriendo · 🚫 ausente
               </summary>
               <div style={{ padding:'0 16px 16px' }}>
                 {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
                   const guardias = guardiasDeSector(s);
                   const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
+                  // Quien YA está cubriendo una guardia a esta hora no está
+                  // libre. Esta lista los pintaba a todos en verde y daba a
+                  // entender que había gente sin usar en el sector cuando no
+                  // la había.
+                  const yaCubriendo = new Set(
+                    (apoyosAsignados || [])
+                      .filter(a => horaCoincide(a.hora, horaActiva) && a.profesor_nombre_pdf)
+                      .map(a => normAbrev(a.profesor_nombre_pdf)));
                   return (
                     <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
                       <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
@@ -1389,15 +1397,20 @@ export default function GestionGuardias() {
                           const key = normAbrev(p);
                           const nombre = nombreCorto(mapaProfesores, p);
                           const estaAusente = ausentesAbrev.has(key);
+                          const ocupado = !estaAusente
+                            && yaCubriendo.has(normAbrev(nombreLargo(mapaProfesores, p)));
+                          const fondo  = estaAusente ? '#fee2e2' : (ocupado ? '#fef3c7' : '#f0fdf4');
+                          const tinta  = estaAusente ? rojo : (ocupado ? '#92400e' : verde);
+                          const borde  = estaAusente ? '#fca5a5' : (ocupado ? '#fbbf24' : '#bbf7d0');
                           return (
-                            <span key={i} style={{
+                            <span key={i} title={ocupado ? 'Ya está cubriendo una guardia a esta hora' : ''}
+                              style={{
                               padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                              backgroundColor: estaAusente ? '#fee2e2' : '#f0fdf4',
-                              color: estaAusente ? rojo : verde,
-                              border:'1.5px solid ' + (estaAusente ? '#fca5a5' : '#bbf7d0'),
+                              backgroundColor: fondo, color: tinta,
+                              border:'1.5px solid ' + borde,
                               textDecoration: estaAusente ? 'line-through' : 'none',
                             }}>
-                              {estaAusente && '🚫 '}{nombre}
+                              {estaAusente ? '🚫 ' : (ocupado ? '🛡️ ' : '')}{nombre}
                             </span>
                           );
                         })}
