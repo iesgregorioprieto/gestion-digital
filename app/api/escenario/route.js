@@ -52,7 +52,8 @@ export async function GET(request) {
 
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, claveServidor());
 
-  const [rAus, rAct, rDld] = await Promise.all([
+  const [rProf, rAus, rAct, rDld] = await Promise.all([
+    sb.from('profesores').select('id, nombre, apellidos'),
     // Sin fecha de fin la ausencia sigue abierta: es lo que es una baja,
     // que no tiene alta prevista. Pedir que fecha_fin sea mayor o igual
     // que hoy las dejaba fuera, y quien lleva dos semanas de baja no
@@ -99,9 +100,22 @@ export async function GET(request) {
   });
 
   // 2. Extraescolares: responsable y acompañantes
+  //
+  // Los acompañantes se guardan por identificador, no por nombre. Antes se
+  // pintaban en crudo y en el escenario del día aparecía un profesor
+  // llamado "76689848-1d3f-43b7-be61-...".
+  const nombrePorId = new Map(
+    (rProf.data || []).map(p => [p.id, `${p.nombre} ${p.apellidos}`.trim()])
+  );
+  const comoNombre = x => {
+    if (!x) return null;
+    if (typeof x === 'string') return nombrePorId.get(x) || x;
+    return nombrePorId.get(x.id) || x.nombre || null;
+  };
+
   (rAct.data || []).filter(a => a.estado !== 'rechazada').forEach(a => {
     const acomp = Array.isArray(a.acompanantes) ? a.acompanantes : [];
-    const nombres = [a.profesor_nombre, ...acomp].filter(Boolean);
+    const nombres = [a.profesor_nombre, ...acomp.map(comoNombre)].filter(Boolean);
     const grupos = Array.isArray(a.grupos) && a.grupos.length ? ` · ${a.grupos.join(', ')}` : '';
     nombres.forEach(n => {
       items.push({
