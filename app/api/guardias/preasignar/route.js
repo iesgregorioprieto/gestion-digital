@@ -25,6 +25,7 @@ import {
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
+import { normGrupo } from '@/lib/grupos';
 
 const FICHADAS = ['confirmado', 'realizado'];
 
@@ -196,9 +197,13 @@ export async function POST(request) {
 
     // ─── Faltas que tocan el rango: ausencias y DLD aprobados ───
     const ultimo = dias[dias.length - 1].fecha;   // hoy y, como mucho, mañana
-    const [rAus, rDld] = await Promise.all([
+    const [rAus, rAct, rDld] = await Promise.all([
       cliente.from('ausencias')
         .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
+        .lte('fecha_inicio', ultimo)
+        .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
+      cliente.from('actividades')
+        .select('grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado')
         .lte('fecha_inicio', ultimo)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('dld')
@@ -393,9 +398,44 @@ export async function POST(request) {
 
       // Las horas salen de lo que marcó el profesor; si dejó las tareas
       // por módulo (ausencia larga) o no dejó nada (baja), del horario.
-      const huecos = prepararHuecos(delDia, profesores || [], {
+      const huecosBrutos = prepararHuecos(delDia, listaProfes, {
         horarios, dia: diaSemana, equivalencias: equivalencias || [],
       });
+
+      /**
+       * GRUPOS QUE HOY NO ESTÁN EN EL CENTRO
+       *
+       * Si 2º CAR se va entero de excursión, la clase de 2º CAR no hay que
+       * cubrirla: no queda nadie a quien atender. Pero al profesor que se
+       * va con ellos sí hay que cubrirle el resto de sus clases, las de
+       * los grupos que se quedan.
+       *
+       * El dato ya lo recoge el módulo de actividades: por cada grupo se
+       * guarda la lista de alumnos que van, o la palabra 'todos' si va el
+       * grupo completo. Si va solo una parte, el resto se queda en el
+       * centro y esa clase se cubre como cualquier otra.
+       */
+      const gruposFuera = [];
+      (rAct.data || [])
+        .filter(a => a.estado !== 'rechazada' && afectaA(a, diaFecha))
+        .forEach(a => {
+          const asistentes = a.alumnos_asistentes || {};
+          (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
+            if (asistentes[g] === 'todos') gruposFuera.push(normGrupo(g));
+          });
+        });
+
+      // El grupo de una clase viene dentro de un código largo de Delphos
+      // ("IPCG-3095215GS-1GVEC(6 F109 COM)"), así que se busca dentro.
+      const grupoSeHaIdo = texto => {
+        if (!texto || gruposFuera.length === 0) return false;
+        const t = normGrupo(texto);
+        return gruposFuera.some(g => g && t.includes(g));
+      };
+
+      const huecos = huecosBrutos
+        .map(h => ({ ...h, horas: (h.horas || []).filter(x => !grupoSeHaIdo(x.grupo)) }))
+        .filter(h => (h.horas || []).length > 0 || h.diaCompleto);
 
       // Solo lo intocable condiciona el reparto. Lo demás se rehace.
       const yaCubiertos = (yaEnRango || [])
