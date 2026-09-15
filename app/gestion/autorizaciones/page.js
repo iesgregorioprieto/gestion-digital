@@ -41,8 +41,8 @@ const AUTORIZACIONES = [
     // sobre la misma lista de alumnos.
     key: 'modulos_convalidados',
     emoji: '📘',
-    label: 'Tiene módulos convalidados',
-    detalle: 'No asiste a las clases de los módulos que tiene convalidados',
+    label: 'Permitir la salida del centro en materias convalidadas',
+    detalle: 'Puede salir del centro en las horas de los módulos que tiene convalidados',
     quien: 'Lo marca el tutor del grupo',
     seccion: 'academico',
   },
@@ -438,10 +438,10 @@ export default function GestionAutorizaciones() {
                         const valor = getValor(alumno, auth.key);
                         return (
                           <div key={auth.key} onClick={() => toggleAuth(alumno.id, auth.key)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', backgroundColor: valor ? '#fef3c7' : '#fafafa', border: `1.5px solid ${valor ? '#fbbf24' : '#e5e7eb'}`, transition: 'all 0.15s' }}>
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', backgroundColor: valor ? '#f0fdf4' : '#fafafa', border: `1.5px solid ${valor ? '#6ee7b7' : '#e5e7eb'}`, transition: 'all 0.15s' }}>
                             <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '⬜'}</span>
                             <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#92400e' : '#555' }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#065f46' : '#555' }}>
                                 {auth.emoji} {auth.label}
                               </div>
                               <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>
