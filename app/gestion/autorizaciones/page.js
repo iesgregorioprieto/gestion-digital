@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { resolverGrupo } from '@/lib/grupos';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 const azul = '#1e3a5f';
@@ -93,12 +94,20 @@ export default function GestionAutorizaciones() {
 
     // Si es tutor, cargar su grupo automáticamente
     if (tutor && !esDirectivoLocal) {
-      consulta('profesores').select('grupo_tutoria').eq('id', id).then(({ data }) => {
-        if (data?.[0]?.grupo_tutoria) {
-          setGrupoTutor(data[0].grupo_tutoria);
-          setGrupoSeleccionado(data[0].grupo_tutoria);
-          cargarAlumnos(data[0].grupo_tutoria);
-        }
+      // El grupo de la ficha del tutor puede estar escrito de otra forma
+      // que en el listado de alumnado ("2º DDC" frente a "2DDC"). Se
+      // traduce al nombre real antes de pedir nada, o el tutor se queda
+      // mirando una pantalla vacía sin saber por qué.
+      Promise.all([
+        consulta('profesores').select('grupo_tutoria').eq('id', id),
+        fetch('/api/alumnos?grupos=1').then(r => r.json()),
+      ]).then(([{ data }, { grupos: existentes }]) => {
+        const suyo = data?.[0]?.grupo_tutoria;
+        if (!suyo) return;
+        const real = resolverGrupo(suyo, existentes || []) || suyo;
+        setGrupoTutor(real);
+        setGrupoSeleccionado(real);
+        cargarAlumnos(real);
       });
     }
   }, []);

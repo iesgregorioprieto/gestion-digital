@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { mismoGrupo, resolverGrupo } from '@/lib/grupos';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 
@@ -76,8 +77,18 @@ export async function GET(request) {
     return Response.json({ error: 'Indica un grupo o unos apellidos', alumnos: [] }, { status: 400 });
   }
 
+  // El grupo puede llegar escrito de otra forma ("2º DDC" frente a
+  // "2DDC"). Se traduce al nombre que está realmente guardado antes de
+  // consultar; si no, el tutor no ve a su propia tutoría.
+  let grupoReal = grupo;
+  if (grupo) {
+    const { data: todos } = await supa().from('alumnos').select('grupo');
+    const existentes = [...new Set((todos || []).map(a => a.grupo).filter(Boolean))];
+    grupoReal = resolverGrupo(grupo, existentes) || grupo;
+  }
+
   let consulta = supa().from('alumnos').select('*');
-  if (grupo)          consulta = consulta.eq('grupo', grupo);
+  if (grupo)          consulta = consulta.eq('grupo', grupoReal);
   else if (apellidos) consulta = consulta.ilike('apellidos', `%${apellidos}%`);
 
   const { data, error } = await consulta.order('apellidos');
@@ -139,9 +150,8 @@ export async function POST(request) {
         const esTutor = Array.isArray(profe?.rol) && profe.rol.includes('tutor');
         const suGrupo = profe?.grupo_tutoria;
 
-        if (!esTutor || !suGrupo
-            || !grupoAlumno
-            || grupoAlumno.trim().toUpperCase() !== suGrupo.trim().toUpperCase()) {
+        if (!esTutor || !suGrupo || !grupoAlumno
+            || !mismoGrupo(grupoAlumno, suGrupo)) {
           return Response.json(
             { error: 'El seguro escolar solo lo puede marcar el tutor del grupo' },
             { status: 403 });
@@ -162,7 +172,7 @@ export async function POST(request) {
         if (!esTutor || !suGrupo) {
           return Response.json({ error: 'Sin permisos' }, { status: 403 });
         }
-        if (!grupoAlumno || grupoAlumno.trim().toUpperCase() !== suGrupo.trim().toUpperCase()) {
+        if (!mismoGrupo(grupoAlumno, suGrupo)) {
           return Response.json({ error: 'Ese alumno no es de tu tutoría' }, { status: 403 });
         }
       }
