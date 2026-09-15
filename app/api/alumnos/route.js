@@ -29,6 +29,28 @@ async function sesionDe(request) {
   return verificarSesion(m[1], secreto);
 }
 
+
+/**
+ * TODOS los alumnos, sin el tope de mil filas.
+ *
+ * Supabase devuelve como mucho 1000 registros por consulta. El centro
+ * pasa de mil alumnos, así que un select sin paginar se quedaba con los
+ * mil primeros por orden de grupo y los grupos del final del alfabeto
+ * desaparecían del desplegable: sus tutores no podían marcar ninguna
+ * autorización porque su grupo no aparecía por ninguna parte.
+ */
+async function todasLasFilas(columnas) {
+  let filas = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supa()
+      .from('alumnos').select(columnas).range(desde, desde + 999);
+    if (error || !data || data.length === 0) break;
+    filas = filas.concat(data);
+    if (data.length < 1000) break;
+  }
+  return filas;
+}
+
 export async function GET(request) {
   const sesion = await sesionDe(request);
   if (!sesion) {
@@ -42,11 +64,9 @@ export async function GET(request) {
 
   // Resumen: solo cifras, sin datos personales
   if (resumen) {
-    const { data } = await supa()
-      .from('alumnos')
-      .select('grupo, auth_imagenes, auth_salidas, auth_actividades, auth_informar_progeni, auth_imagenes_mayor');
+    const filas = await todasLasFilas(
+      'grupo, auth_imagenes, auth_salidas, auth_actividades, auth_informar_progeni, auth_imagenes_mayor');
 
-    const filas = data || [];
     const conRestricciones = filas.filter(a =>
       a.auth_imagenes === false || a.auth_salidas === false || a.auth_actividades === false ||
       a.auth_informar_progeni === false || a.auth_imagenes_mayor === false
@@ -61,15 +81,15 @@ export async function GET(request) {
 
   // Lista de grupos: no contiene datos personales
   if (url.searchParams.get('grupos') === '1') {
-    const { data } = await supa().from('alumnos').select('grupo').order('grupo');
-    const grupos = [...new Set((data || []).map(a => a.grupo).filter(Boolean))];
+    const data = await todasLasFilas('grupo');
+    const grupos = [...new Set(data.map(a => a.grupo).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
     return Response.json({ grupos });
   }
 
   // Recuento por grupo, para el panel de datos del centro
   if (url.searchParams.get('recuento') === '1') {
-    const { data } = await supa().from('alumnos').select('id, grupo');
-    return Response.json({ alumnos: data || [] });
+    return Response.json({ alumnos: await todasLasFilas('id, grupo') });
   }
 
   // Búsqueda: siempre acotada, nunca el listado completo del centro
@@ -82,8 +102,8 @@ export async function GET(request) {
   // consultar; si no, el tutor no ve a su propia tutoría.
   let grupoReal = grupo;
   if (grupo) {
-    const { data: todos } = await supa().from('alumnos').select('grupo');
-    const existentes = [...new Set((todos || []).map(a => a.grupo).filter(Boolean))];
+    const todos = await todasLasFilas('grupo');
+    const existentes = [...new Set(todos.map(a => a.grupo).filter(Boolean))];
     grupoReal = resolverGrupo(grupo, existentes) || grupo;
   }
 
