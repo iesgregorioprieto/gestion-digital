@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState } from 'react';
+import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
 import { getSupabase } from '@/lib/supabase';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 
@@ -240,8 +241,11 @@ export default function Registro() {
 
           {form.esTutor && (
             <Campo label="¿De qué grupo? *">
-              <input value={form.grupoTutoria} onChange={e => set('grupoTutoria', e.target.value)}
-                placeholder="Ej: 2ESO-A, GM-2CAR, 1BACH-B" style={inputEstilo} />
+              <SelectorGrupoTutoria
+                valor={form.grupoTutoria}
+                onChange={g => set('grupoTutoria', g)}
+                estilo={inputEstilo}
+              />
             </Campo>
           )}
 

@@ -52,6 +52,17 @@ async function todasLasFilas(columnas) {
 }
 
 export async function GET(request) {
+  // La lista de códigos de grupo no contiene ningún dato personal, y hace
+  // falta en el formulario de alta, donde todavía no hay sesión: es donde
+  // el profesor elige de qué grupo es tutor. Si no, tendría que
+  // escribirlo a mano, que es de donde venían los "1º ESO A".
+  if (new URL(request.url).searchParams.get('grupos') === '1') {
+    const data = await todasLasFilas('grupo');
+    const grupos = [...new Set(data.map(a => a.grupo).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b, 'es'));
+    return Response.json({ grupos });
+  }
+
   const sesion = await sesionDe(request);
   if (!sesion) {
     return Response.json({ error: 'sin_sesion', alumnos: [] }, { status: 401 });
@@ -80,13 +91,6 @@ export async function GET(request) {
   }
 
   // Lista de grupos: no contiene datos personales
-  if (url.searchParams.get('grupos') === '1') {
-    const data = await todasLasFilas('grupo');
-    const grupos = [...new Set(data.map(a => a.grupo).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'es'));
-    return Response.json({ grupos });
-  }
-
   // Recuento por grupo, para el panel de datos del centro
   if (url.searchParams.get('recuento') === '1') {
     return Response.json({ alumnos: await todasLasFilas('id, grupo') });

@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
 import { getSupabase } from '@/lib/supabase';
 import GestionNotificaciones from '@/components/GestionNotificaciones';
 import TamanoLetra from '@/components/TamanoLetra';
@@ -137,7 +138,7 @@ export default function MisDatos() {
             antiguedad_cuerpo: form.anio_cuerpo ? Math.max(0, new Date().getFullYear() - parseInt(form.anio_cuerpo)) : null,
             telefono:          form.telefono.trim() || null,
             rol:               rolNuevo,
-            grupo_tutoria:     form.esTutor ? form.grupoTutoria.trim().toUpperCase() : null,
+            grupo_tutoria:     form.esTutor ? form.grupoTutoria.trim() : null,
           },
         }),
       });
@@ -450,8 +451,11 @@ export default function MisDatos() {
 
             {form.esTutor && (
               <Campo label="¿De qué grupo? *">
-                <input value={form.grupoTutoria} onChange={e => set('grupoTutoria', e.target.value)}
-                  placeholder="Ej: 2ESO-A, GM-2CAR" style={inputEstilo} />
+                <SelectorGrupoTutoria
+                  valor={form.grupoTutoria}
+                  onChange={g => set('grupoTutoria', g)}
+                  estilo={inputEstilo}
+                />
               </Campo>
             )}
 
