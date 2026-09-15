@@ -21,7 +21,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
-  asignacionesDeHora, normHora, ocupadosEnClase,
+  asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
@@ -177,7 +177,8 @@ export async function POST(request) {
     // son las que permiten reconocer a esas personas; sin ellas, el motor
     // sencillamente no las ve y no les genera guardias.
     const [{ data: profesores }, { data: equivalencias }] = await Promise.all([
-      cliente.from('profesores').select('id,nombre,apellidos,departamento,especialidad'),
+      cliente.from('profesores')
+        .select('id,nombre,apellidos,departamento,especialidad,en_baja,fecha_baja,sustituto_id,titular_id'),
       cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
     ]);
 
@@ -195,10 +196,49 @@ export async function POST(request) {
         .eq('estado', 'aprobada'),
     ]);
 
+    /**
+     * EL ESCENARIO DEL DÍA
+     *
+     * El punto de partida no son las ausencias sueltas, es quién está hoy
+     * en el centro. Y ahí entran tres cosas:
+     *
+     *   · las ausencias y los DLD aprobados de ese día
+     *   · quién está de baja, aunque nadie haya registrado una ausencia
+     *     suya: la baja se marca en su ficha y eso ya basta
+     *   · quién ha venido a sustituir a quién
+     *
+     * Lo de la baja hacía falta porque el motor solo miraba la tabla de
+     * ausencias. Una baja antigua, o una cuya ausencia se borró, dejaba al
+     * profesor como disponible y se le asignaban guardias estando de baja.
+     */
+    const listaProfes = profesores || [];
+
+    // El sustituto asume el horario del titular, y con él sus guardias.
+    const relevo = new Map();          // id del titular → id del sustituto
+    listaProfes.forEach(p => {
+      if (p.titular_id) relevo.set(p.titular_id, p.id);
+    });
+    listaProfes.forEach(p => {
+      if (p.en_baja && p.sustituto_id && !relevo.has(p.id)) relevo.set(p.id, p.sustituto_id);
+    });
+
     const faltas = [
       ...(rAus.data || []).map(a => ({ ...a, origen: 'ausencia' })),
       ...(rDld.data || []).map(d => ({ ...d, origen: 'dld' })),
     ];
+
+    // Quien está de baja y NO tiene sustituto falta el día entero: sus
+    // grupos hay que cubrirlos. Si ya tiene sustituto, no falta nadie: el
+    // sustituto da sus clases y hace sus guardias.
+    const yaTieneFalta = new Set(faltas.map(f => f.profesor_id));
+    listaProfes
+      .filter(p => p.en_baja && !relevo.has(p.id) && !yaTieneFalta.has(p.id))
+      .filter(p => !p.fecha_baja || p.fecha_baja <= ultimo)
+      .forEach(p => faltas.push({
+        id: `baja-${p.id}`, profesor_id: p.id, origen: 'baja',
+        horas: null, fecha_inicio: p.fecha_baja || fecha, fecha_fin: null,
+      }));
+
     if (faltas.length === 0) {
       return Response.json({ ok: true, creadas: 0, motivo: 'sin_ausencias' });
     }
@@ -229,7 +269,32 @@ export async function POST(request) {
       }
     });
 
-    const { porSector: cuadrante, sinResolver } = construirCuadrante(horarios, profesores || [], equivalencias || []);
+    const { porSector: cuadranteBruto, sinResolver } =
+      construirCuadrante(horarios, listaProfes, equivalencias || []);
+
+    /**
+     * El cuadrante de guardias lleva el nombre del TITULAR, porque se
+     * hizo en septiembre. Si esa persona está de baja y ha venido alguien
+     * a sustituirla, quien hace esa guardia es el sustituto: ha asumido
+     * su horario entero, y las guardias forman parte del horario.
+     */
+    const porFicha = new Map(listaProfes.map(p => [p.id, p]));
+    const cuadrante = {};
+    for (const [sector, dias] of Object.entries(cuadranteBruto || {})) {
+      cuadrante[sector] = {};
+      for (const [d, horas] of Object.entries(dias || {})) {
+        cuadrante[sector][d] = {};
+        for (const [h, gente] of Object.entries(horas || {})) {
+          cuadrante[sector][d][h] = (gente || []).map(g => {
+            const sustituto = relevo.get(g.profesorId);
+            if (!sustituto) return g;
+            const f = porFicha.get(sustituto);
+            if (!f) return g;
+            return { ...g, profesorId: f.id, nombre: nombreDe(f) };
+          });
+        }
+      }
+    }
     if (sinResolver.length) {
       console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
     }
@@ -322,11 +387,17 @@ export async function POST(request) {
       for (const hora of HORAS_GUARDIA) {
         if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
 
-        const enClase = ocupadosEnClase(horarios, profesores || [], diaSemana, hora, equivalencias || []);
+        // Quien da clase a esta hora no puede cubrir. Y si el horario es
+        // de un titular de baja, quien está dando esa clase es su
+        // sustituto: es él quien queda ocupado, no el que no ha venido.
+        const enClaseBruto = ocupadosEnClase(horarios, listaProfes, diaSemana, hora, equivalencias || []);
+        const enClase = new Set(
+          [...enClaseBruto].map(id => relevo.get(id) || id)
+        );
 
         const asignaciones = asignacionesDeHora({
           hora, dia: diaSemana, huecos, cuadrante, horarios,
-          profesores: profesores || [],
+          profesores: listaProfes,
           apoyosPorProfesor, apoyosFueraPorSector,
           yaCubiertos, ocupadosIds: enClase,
           equivalencias: equivalencias || [],
