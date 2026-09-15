@@ -748,6 +748,7 @@ export default function GestionGuardias() {
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
         <button onClick={() => setFecha(hoyLocal())} style={{ ...btnNav, backgroundColor:azul, color:'white', border:'none' }}>Hoy</button>
+        <button onClick={() => setFecha(sumarDias(hoyLocal(), 7))} style={btnNav} title="Mismo día de la semana que viene">+1 sem</button>
       </div>
 
       {/* RECALCULAR
@@ -779,12 +780,36 @@ export default function GestionGuardias() {
             backgroundColor: recalculando ? '#e5e7eb' : 'white', color: azul,
             fontWeight:700, fontSize:12.5, cursor: recalculando ? 'default' : 'pointer',
           }}>
-          {recalculando ? '⏳ Recalculando…' : '🔄 Recalcular guardias de este día'}
+          {recalculando
+            ? '⏳ Calculando…'
+            : (fecha > hoyLocal() ? '🔮 Preparar la previsión de este día' : '🔄 Recalcular guardias de este día')}
         </button>
         <span style={{ fontSize:11.5, color:'#94a3b8' }}>
-          Úsalo si has borrado guardias a mano o si algo no cuadra. Respeta lo que ya esté fichado.
+          {fecha > hoyLocal()
+            ? 'Con las ausencias y los DLD que hay registrados a día de hoy. Respeta lo que ya esté fichado.'
+            : 'Úsalo si has borrado guardias a mano o si algo no cuadra. Respeta lo que ya esté fichado.'}
         </span>
       </div>
+
+      {/* PREVISIÓN: jefatura sí puede adelantarse; el profesorado no.
+          A ellos se les enseña hoy y mañana para que no organicen su
+          semana sobre un reparto que va a cambiar en cuanto falte
+          alguien. Aquí, en cambio, hace falta ver venir los días. */}
+      {fecha > sumarDias(hoyLocal(), 1) && (
+        <div style={{ margin:'10px 16px', padding:'12px 14px', borderRadius:10,
+          backgroundColor:'#eff6ff', border:'1.5px solid #93c5fd' }}>
+          <div style={{ fontSize:13, fontWeight:800, color:'#1e40af', marginBottom:4 }}>
+            🔮 Estás viendo una previsión
+          </div>
+          <div style={{ fontSize:12.5, color:'#1e3a8a', lineHeight:1.5 }}>
+            Este reparto se hace con lo que hay registrado ahora mismo y se
+            volverá a calcular entero esa misma mañana, y otra vez cada hora
+            del día. Sirve para ver venir los huecos y buscar solución con
+            tiempo, no para avisar a nadie todavía: el profesorado solo ve hoy
+            y mañana.
+          </div>
+        </div>
+      )}
 
       {/* ACCESO RÁPIDO: registrar ausencia que falta */}
       <div style={{ padding:'10px 16px', backgroundColor:'#f8fafc', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
