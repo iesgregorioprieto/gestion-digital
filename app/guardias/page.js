@@ -58,6 +58,18 @@ function dentroDeFranja(horaId, fechaGuardia, ahora = new Date()) {
   // Fin exclusivo: a las 9:25 no pueden estar activas 1ª y 2ª a la vez.
   return min >= aMin(ini) && min < aMin(fin);
 }
+// ¿Ya ha terminado esa hora? Si terminó y nadie fichó, la guardia consta
+// como no realizada y se ve en rojo. No se oculta.
+function franjaTerminada(horaId, fechaGuardia, ahora = new Date()) {
+  const h = HORAS.find(x => x.id === normHora(horaId));
+  if (!h || !fechaGuardia) return false;
+  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`;
+  if (fechaGuardia < hoy) return true;
+  if (fechaGuardia > hoy) return false;
+  const aMin = t => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
+  const fin = h.horario.split('–')[1];
+  return (ahora.getHours() * 60 + ahora.getMinutes()) >= aMin(fin);
+}
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
   const s = horaGuardada.toString().toLowerCase().trim();
@@ -916,12 +928,15 @@ export default function Guardias() {
                           const esMia = g.profesor_id && String(g.profesor_id) === String(profesorId);
                           const fichada = g.estado === 'confirmado';
                           const abierto = dentroDeFranja(g.hora, g.fecha);
+                          const perdida = !fichada && franjaTerminada(g.hora, g.fecha);
 
                           return (
                             <div key={g.id} style={{
                               padding:'10px 12px', marginBottom:8, borderRadius:8,
-                              backgroundColor: esMia ? '#f0fdf4' : '#fafafa',
-                              border: esMia ? '2px solid ' + verde : '1px solid #e5e7eb',
+                              backgroundColor: perdida ? '#fef2f2' : (esMia ? '#f0fdf4' : '#fafafa'),
+                              border: perdida
+                                ? '2px solid ' + rojo
+                                : (esMia ? '2px solid ' + verde : '1px solid #e5e7eb'),
                             }}>
                               {/* Quién falta */}
                               <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6, flexWrap:'wrap' }}>
@@ -968,7 +983,7 @@ export default function Guardias() {
                                   )}
                                 </span>
 
-                                {esMia && !fichada && (
+                                {esMia && !fichada && !perdida && (
                                   <button
                                     onClick={() => abierto
                                       ? (setFichandoId(g.id), setObservaciones(''))
@@ -982,7 +997,16 @@ export default function Guardias() {
                                     ✅ Fichar
                                   </button>
                                 )}
-                                {esMia && !fichada && !abierto && (
+                                {perdida && (
+                                  <span style={{
+                                    marginLeft:'auto', fontSize:12, fontWeight:800, color:rojo,
+                                    backgroundColor:'#fee2e2', border:'1.5px solid #fca5a5',
+                                    borderRadius:8, padding:'6px 12px', whiteSpace:'nowrap',
+                                  }}>
+                                    ❌ No realizada
+                                  </span>
+                                )}
+                                {esMia && !fichada && !abierto && !perdida && (
                                   <span style={{ fontSize:10.5, color:'#94a3b8', width:'100%' }}>
                                     El check se abre de {horaDe(g.hora)}
                                   </span>
