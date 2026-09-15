@@ -6,6 +6,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
+import AvisoCuadrante from '@/components/AvisoCuadrante';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -766,6 +767,9 @@ export default function Guardias() {
     <div style={{ minHeight:'100vh', backgroundColor:'#f9fafb', fontFamily:'system-ui,sans-serif', paddingBottom:60 }}>
       {modalFichaje}
       {modalAyuda}
+
+      {/* ¿Eres tú? También aquí, por si se le pasó en la portada. */}
+      <AvisoCuadrante />
 
       {/* HEADER */}
       <div style={{ backgroundColor:marron, color:'white', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>

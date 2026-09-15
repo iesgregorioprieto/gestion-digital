@@ -6,6 +6,7 @@ import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
+import AvisoCuadrante from '@/components/AvisoCuadrante';
 import ValoracionModulo from '@/components/ValoracionModulo';
 
 export default function PanelProfesor() {
@@ -353,6 +354,11 @@ export default function PanelProfesor() {
       </div>
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '28px 16px' }}>
+
+        {/* ¿ERES TÚ? Identificación en el cuadrante de guardias.
+            Solo lo ve quien aparece en el cuadrante con un nombre que no
+            casa con su ficha; al resto no le sale nada. */}
+        <AvisoCuadrante />
 
         {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
         {profId && <AvisoNotificaciones profesorId={profId} />}
