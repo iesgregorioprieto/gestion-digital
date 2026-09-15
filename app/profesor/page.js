@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { hoyLocal } from '@/lib/fechas';
+import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
@@ -56,18 +56,20 @@ export default function PanelProfesor() {
   }, []);
   
   async function cargarApoyosPendientes(id) {
-    // SOLO HOY. El reparto se rehace cada mañana y cada vez que cambia
-    // algo durante el día, así que enseñar las guardias de la semana que
-    // viene sería enseñar algo que va a cambiar. El profesor mira por la
-    // mañana y sabe lo que le toca hoy.
+    // Hoy y, como mucho, mañana. Nada más: el reparto se rehace cada vez
+    // que falta alguien, así que enseñar la semana sería enseñar algo que
+    // va a cambiar. Y lo de mañana va marcado como provisional, porque
+    // lo es: mañana por la mañana se vuelve a calcular.
     const hoy = hoyLocal();
     const { data } = await consulta('apoyos_asignados')
       .select('*')
       .eq('profesor_id', id)
       .eq('estado', 'pendiente')
-      .eq('fecha', hoy)
+      .gte('fecha', hoy)
+      .lte('fecha', sumarDias(hoy, 3))
+      .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
-    setApoyosPendientes(data || []);
+    setApoyosPendientes((data || []).slice(0, 8));
   }
   
 
@@ -369,10 +371,10 @@ export default function PanelProfesor() {
               <span style={{ fontSize:26 }}>🛡️</span>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
-                  {apoyosPendientes.length === 1 ? 'HOY TIENES UNA GUARDIA' : `HOY TIENES ${apoyosPendientes.length} GUARDIAS`}
+                  {apoyosPendientes.length === 1 ? 'TIENES UNA GUARDIA ASIGNADA' : `TIENES ${apoyosPendientes.length} GUARDIAS ASIGNADAS`}
                 </div>
                 <div style={{ fontSize:12, color:'#92400e' }}>
-                  El reparto puede cambiar si falta alguien más. Se ficha en
+                  Puede cambiar durante el día si falta alguien más. Se ficha en
                   «Mis guardias», durante la hora de la guardia
                 </div>
               </div>
@@ -390,8 +392,18 @@ export default function PanelProfesor() {
                     backgroundColor:'#f59e0b', color:'white', 
                     padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:800
                   }}>
-                    📅 {new Date(ap.fecha+'T12:00:00').toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}
+                    📅 {ap.fecha === hoyLocal()
+                      ? 'HOY'
+                      : new Date(ap.fecha+'T12:00:00').toLocaleDateString('es-ES', {weekday:'long', day:'numeric', month:'long'})}
                   </span>
+                  {ap.fecha !== hoyLocal() && (
+                    <span style={{
+                      backgroundColor:'white', color:'#92400e', border:'1.5px solid #fbbf24',
+                      padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:700
+                    }}>
+                      provisional
+                    </span>
+                  )}
                   <span style={{ 
                     backgroundColor:'#78350f', color:'white', 
                     padding:'2px 10px', borderRadius:20, fontSize:11, fontWeight:800

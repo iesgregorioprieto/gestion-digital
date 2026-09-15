@@ -115,13 +115,18 @@ export async function POST(request) {
     if (!sesion?.id) return Response.json({ error: 'sin_sesion' }, { status: 401 });
 
     /**
-     * UN SOLO DÍA. NUNCA UN RANGO.
+     * HOY Y, COMO MUCHO, MAÑANA. NUNCA LA SEMANA.
      *
-     * Antes se repartía la semana entera por adelantado a partir de las
+     * Antes se repartía hasta quince días por adelantado a partir de las
      * ausencias conocidas. Eso no se sostiene: el día tiene imprevistos.
      * Si a 3ª se pone malo un compañero, el reparto de esa hora cambia
      * entero, y lo que se hubiera dejado escrito el lunes para el jueves
      * no vale nada.
+     *
+     * Todo lo que sale de aquí es PROVISIONAL mientras no se fiche. Un
+     * profesor que hoy no tiene guardia puede tenerla a 3ª porque ha
+     * faltado alguien a media mañana. El sistema tiene que ser así de
+     * vivo; encorchetarlo es lo que lo rompía.
      *
      * El reparto se rehace cuando cambia algo: al registrar una ausencia,
      * al aprobar un DLD, cuando jefatura lo pide, y cada mañana desde el
@@ -132,7 +137,17 @@ export async function POST(request) {
       return Response.json({ error: 'fecha_no_valida' }, { status: 400 });
     }
 
-    const dias = diasDelRango(fecha, fecha);
+    // El día de hoy y, como mucho, el siguiente lectivo. Ni un día más.
+    // Lo de mañana es orientativo y se volverá a calcular mañana por la
+    // mañana: sirve para que alguien sepa que en principio le toca, no
+    // para darlo por cerrado.
+    const dias = [];
+    let f = fecha;
+    for (let i = 0; i < 5 && dias.length < 2; i++) {
+      const ds = diaSemanaEs(f);
+      if (ds !== 'sabado' && ds !== 'domingo') dias.push({ fecha: f, diaSemana: ds });
+      f = sumarDias(f, 1);
+    }
     if (dias.length === 0) {
       return Response.json({ ok: true, creadas: 0, motivo: 'fin_de_semana' });
     }
@@ -167,7 +182,7 @@ export async function POST(request) {
     ]);
 
     // ─── Faltas que tocan el rango: ausencias y DLD aprobados ───
-    const ultimo = fecha;   // un solo día
+    const ultimo = dias[dias.length - 1].fecha;   // hoy y, como mucho, mañana
     const [rAus, rDld] = await Promise.all([
       cliente.from('ausencias')
         .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
