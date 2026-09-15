@@ -457,10 +457,15 @@ export async function POST(request) {
             sector_apoyo: asig.cubre.sector,
             sector_destino: normSector(asig.hueco.sector),
             profesor_ausente_id: asig.hueco.profesorId || null,
-            profesor_id: asig.cubre.profesorId,
+            // Puede ir sin dueño: si el cuadrante dice que a esa hora hay
+            // un guardia de ese departamento pero su nombre abreviado no
+            // casa con ninguna ficha, la guardia se le asigna igualmente a
+            // ese puesto. Queda a nombre del cuadrante hasta que alguien la
+            // reclame desde la aplicación y se identifique de paso.
+            profesor_id: asig.cubre.profesorId || null,
             // Nombre completo, no la abreviatura del cuadrante: lo que se
             // guarda aquí es lo que acaba viendo el profesorado.
-            profesor_nombre_pdf: asig.cubre.nombre || null,
+            profesor_nombre_pdf: asig.cubre.nombrePdf || asig.cubre.nombre || null,
             grupo: asig.grupo || null,
             aula: asig.aula || null,
             materia: asig.materia || null,
