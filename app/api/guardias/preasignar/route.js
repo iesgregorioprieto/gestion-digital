@@ -305,10 +305,18 @@ export async function POST(request) {
             if (!f) return g;
             return { ...g, profesorId: f.id, nombre: nombreDe(f) };
           }).filter(g => {
+            if (!g.profesorId) return true;
+
+            // CERROJO: quien está de baja no cubre nada. Da igual que su
+            // ausencia esté registrada, que se borrara o que nadie la
+            // creara nunca: si la ficha dice que está de baja, no está en
+            // el centro y no puede estar en un aula. Esto no depende de
+            // ningún otro flujo a propósito.
+            if (porFicha.get(g.profesorId)?.en_baja) return false;
+
             // El sustituto puede estar ya en el cuadrante con su propio
             // nombre, si alguien actualizó el horario. Sin esto quedaría
             // dos veces a la misma hora y podría cubrir dos aulas a la vez.
-            if (!g.profesorId) return true;
             if (vistos.has(g.profesorId)) return false;
             vistos.add(g.profesorId);
             return true;
