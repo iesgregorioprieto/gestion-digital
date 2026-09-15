@@ -92,8 +92,21 @@ export default function PanelBajas() {
     .filter(p => p.en_baja)
     .sort((a, b) => (a.fecha_baja || '').localeCompare(b.fecha_baja || ''));
 
+  /**
+   * QUIÉN PUEDE SER SUSTITUTO.
+   *
+   * Antes se exigía estado 'activo', y ese era justo el problema: el
+   * sustituto acaba de llegar al centro, se registra en la aplicación y
+   * queda en 'pendiente' hasta que secretaría le da el visto bueno. O
+   * sea, la única persona a la que hacía falta asignar era la única que
+   * no salía en la búsqueda.
+   *
+   * Ahora sale también el pendiente, avisado con su etiqueta, y al
+   * asignarlo se le activa de paso: si jefatura lo pone a dar clase, es
+   * que esa persona está en el centro.
+   */
   const disponibles = profesores.filter(p =>
-    !p.en_baja && p.estado === 'activo' && !p.titular_id);
+    !p.en_baja && p.estado !== 'inactivo' && !p.titular_id);
 
   // ─── Acciones ───
 
@@ -148,6 +161,16 @@ export default function PanelBajas() {
 
     setTrabajando(true);
     try {
+      // 0. Si venía recién registrado, queda activado: jefatura lo está
+      //    poniendo a dar clase, no hace falta un visto bueno aparte.
+      if (sustituto.estado !== 'activo') {
+        await fetch('/api/profesores', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'cambiar_estado', id: sustituto.id,
+            datos: { estado: 'activo' } }),
+        });
+      }
+
       // 1. Enlazar titular y sustituto
       await fetch('/api/profesores', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -397,7 +420,7 @@ export default function PanelBajas() {
                 </div>
 
                 <input value={busquedaSust} onChange={e => setBusquedaSust(e.target.value)}
-                  placeholder="Busca al sustituto (debe estar registrado en la aplicación)"
+                  placeholder="Busca al sustituto por nombre o correo"
                   style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14 }} />
 
                 <div style={{ maxHeight: 200, overflowY: 'auto', marginTop: 8 }}>
@@ -412,6 +435,14 @@ export default function PanelBajas() {
                                  cursor: 'pointer', marginBottom: 5, fontSize: 13 }}>
                         <strong>{x.apellidos}, {x.nombre}</strong>
                         <span style={{ color: '#888' }}> · {x.email}</span>
+                        {x.estado !== 'activo' && (
+                          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700,
+                                         color: '#92400e', backgroundColor: '#fef3c7',
+                                         border: '1px solid #fde68a', borderRadius: 12,
+                                         padding: '1px 8px' }}>
+                            recién registrado · se activará al asignarlo
+                          </span>
+                        )}
                       </button>
                     ))}
                   {busquedaSust.length >= 2 && disponibles.filter(x => x.id !== p.id &&
