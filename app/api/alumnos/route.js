@@ -182,11 +182,11 @@ export async function POST(request) {
       // Es un cobro que gestiona la tutoría, y dejarlo abierto a más
       // gente acabaría en dos personas marcando lo mismo con criterios
       // distintos. Dirección puede verlo en el informe, pero no tocarlo.
-      // Las convalidaciones van por el mismo camino que el seguro: las
-      // marca el tutor del grupo y nadie más. Es información académica de
-      // su tutoría y con dos personas marcándola acabaría descuadrada.
-      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha',
-                          'modulos_convalidados']
+      // El seguro escolar sigue siendo cosa solo del tutor: es un cobro.
+      // Las convalidaciones NO: las puede marcar el tutor del grupo y
+      // también el equipo directivo, que a menudo las tramita sin ser
+      // tutor de ese grupo.
+      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha']
         .some(k => k in limpio);
 
       if (tocaSeguro) {

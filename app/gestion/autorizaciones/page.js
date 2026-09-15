@@ -43,7 +43,7 @@ const AUTORIZACIONES = [
     emoji: '📘',
     label: 'Permitir la salida del centro en materias convalidadas',
     detalle: 'Puede salir del centro en las horas de los módulos que tiene convalidados',
-    quien: 'Lo marca el tutor del grupo',
+    quien: 'Tutor del grupo o equipo directivo',
     seccion: 'academico',
   },
   {
@@ -409,27 +409,6 @@ export default function GestionAutorizaciones() {
                         />
                       </div>
 
-                      {/* SECCIÓN MENORES */}
-                      <div style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 }}>
-                        A cumplimentar si es menor de edad
-                      </div>
-                      {AUTORIZACIONES.filter(a => a.seccion === 'menor').map(auth => {
-                        const valor = getValor(alumno, auth.key);
-                        return (
-                          <div key={auth.key} onClick={() => toggleAuth(alumno.id, auth.key)}
-                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', backgroundColor: valor ? '#f0fdf4' : '#fee2e2', border: `1.5px solid ${valor ? '#6ee7b7' : '#fca5a5'}`, transition: 'all 0.15s' }}>
-                            <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '❌'}</span>
-                            <div style={{ flex: 1 }}>
-                              <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#065f46' : rojo }}>
-                                {auth.emoji} {auth.label}
-                              </div>
-                              <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>
-                              <div style={{ fontSize: 10, color: '#999', marginTop: 1 }}>👤 {auth.quien}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-
                       {/* SITUACIÓN ACADÉMICA */}
                       <div style={{ fontSize: 11, fontWeight: 800, color: '#92400e', textTransform: 'uppercase', margin: '12px 0 8px', letterSpacing: 0.5 }}>
                         Situación académica
@@ -442,6 +421,27 @@ export default function GestionAutorizaciones() {
                             <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '⬜'}</span>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#065f46' : '#555' }}>
+                                {auth.emoji} {auth.label}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>
+                              <div style={{ fontSize: 10, color: '#999', marginTop: 1 }}>👤 {auth.quien}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* SECCIÓN MENORES */}
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#6d28d9', textTransform: 'uppercase', marginBottom: 8, letterSpacing: 0.5 }}>
+                        A cumplimentar si es menor de edad
+                      </div>
+                      {AUTORIZACIONES.filter(a => a.seccion === 'menor').map(auth => {
+                        const valor = getValor(alumno, auth.key);
+                        return (
+                          <div key={auth.key} onClick={() => toggleAuth(alumno.id, auth.key)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', backgroundColor: valor ? '#f0fdf4' : '#fee2e2', border: `1.5px solid ${valor ? '#6ee7b7' : '#fca5a5'}`, transition: 'all 0.15s' }}>
+                            <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '❌'}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#065f46' : rojo }}>
                                 {auth.emoji} {auth.label}
                               </div>
                               <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>
