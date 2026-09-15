@@ -67,7 +67,7 @@ export async function GET(request) {
       cliente.from('actividades')
         .select('titulo, profesor_nombre, acompanantes, grupos, fecha_inicio, fecha_fin, lugar, estado')
         .lte('fecha_inicio', domingoStr)
-        .gte('fecha_fin', lunesStr)
+        .or(`fecha_fin.gte.${lunesStr},fecha_fin.is.null`)
         .order('fecha_inicio', { ascending: true }),
     ]);
 

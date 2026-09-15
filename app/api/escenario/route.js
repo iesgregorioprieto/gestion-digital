@@ -53,12 +53,18 @@ export async function GET(request) {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, claveServidor());
 
   const [rAus, rAct, rDld] = await Promise.all([
+    // Sin fecha de fin la ausencia sigue abierta: es lo que es una baja,
+    // que no tiene alta prevista. Pedir que fecha_fin sea mayor o igual
+    // que hoy las dejaba fuera, y quien lleva dos semanas de baja no
+    // aparecía en el escenario del día.
     sb.from('ausencias')
-      .select('id, profesor_nombre, fecha_inicio, fecha_fin, subtipo, motivo, horas, estado, datos_extra')
-      .lte('fecha_inicio', fecha).gte('fecha_fin', fecha),
+      .select('id, profesor_id, profesor_nombre, fecha_inicio, fecha_fin, subtipo, motivo, horas, estado, datos_extra')
+      .lte('fecha_inicio', fecha)
+      .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
     sb.from('actividades')
       .select('id, titulo, profesor_nombre, acompanantes, grupos, fecha_inicio, fecha_fin, estado')
-      .lte('fecha_inicio', fecha).gte('fecha_fin', fecha),
+      .lte('fecha_inicio', fecha)
+      .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
     sb.from('dld')
       .select('id, profesor_nombre, tipo_dld, fecha_solicitada, horas, estado')
       .eq('fecha_solicitada', fecha),
@@ -74,6 +80,9 @@ export async function GET(request) {
   // 1 y 3. Ausencias → las de formación van a su propio bloque
   (rAus.data || []).forEach(a => {
     const esFormacion = a.subtipo === 'permiso_formacion';
+    // Una ausencia abierta es una baja. Se marca como tal para que en el
+    // vistazo del día se distinga de quien falta una mañana.
+    const esBaja = !a.fecha_fin && a.fecha_inicio < fecha;
     const ex = a.datos_extra || {};
     const detalleFormacion = [ex.curso, ex.entidad, ex.horario].filter(Boolean).join(' · ');
     items.push({
@@ -81,7 +90,9 @@ export async function GET(request) {
       profesor: a.profesor_nombre || '—',
       detalle: (esFormacion && detalleFormacion)
         ? detalleFormacion
-        : (a.subtipo ? etiquetaMotivo(a.subtipo) : (a.motivo || 'Sin especificar')),
+        : esBaja
+          ? `Baja desde el ${a.fecha_inicio.slice(8, 10)}/${a.fecha_inicio.slice(5, 7)} — sin sustituto`
+          : (a.subtipo ? etiquetaMotivo(a.subtipo) : (a.motivo || 'Sin especificar')),
       nHoras: Array.isArray(a.horas) ? a.horas.length : 0,
       estado: a.estado,
     });
