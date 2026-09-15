@@ -59,6 +59,16 @@ export default function SalaProfesores() {
   const [horaVista, setHoraVista] = useState(null); // null = usar la real
   const horaEfectiva = (esHoy && !horaVista) ? horaAct : (horaVista || horaAct);
 
+  // En una tele se lee de lejos: "Juan Ruiz" antes que "Ruiz Fernandez, Juan".
+  function nombreCortoSala(largo) {
+    if (!largo) return '';
+    if (!largo.includes(',')) return largo;
+    const [apellidos, nombre] = largo.split(',');
+    const ap = (apellidos || '').trim().split(/\s+/)[0] || '';
+    const no = (nombre || '').trim().split(/\s+/)[0] || '';
+    return `${no} ${ap}`.trim();
+  }
+
   function moverDia(saltos) {
     const d = new Date(dia + 'T12:00:00');
     d.setDate(d.getDate() + saltos);
@@ -330,7 +340,7 @@ export default function SalaProfesores() {
           </div>
           {/* GUARDIAS ASIGNADAS */}
           <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Guardias asignadas hoy</h2>
+            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Quién cubre cada hora</h2>
             {apoyos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                 🛡️ Sin guardias asignadas
@@ -338,9 +348,12 @@ export default function SalaProfesores() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {HORAS.map(h => {
+                  // La columna es 'hora', no 'hora_id', y el nombre de quien
+                  // cubre viene en 'profesor_nombre_pdf'. Con los nombres
+                  // antiguos este recuadro salía siempre vacío.
                   const apoyosHora = apoyos.filter(a => {
-                    const horaId = (a.hora_id || '').toString().replace(/[aª]/g, '');
-                    return horaId === h.id;
+                    const hid = (a.hora || '').toString().toLowerCase().replace(/[aª\s]/g, '');
+                    return hid === h.id || (hid.includes('recreo') && h.id === 'recreo');
                   });
                   if (apoyosHora.length === 0) return null;
                   return (
@@ -357,12 +370,12 @@ export default function SalaProfesores() {
                           paddingLeft: 8, marginLeft: -4,
                         }}>
                           <span style={{ fontWeight: 600,
-                            color: a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#fca5a5' }}>
-                            {a.estado === 'confirmado' ? '✅' : a.estado === 'incidencia' ? '⚠️' : '🔴'}{' '}
-                            {a.profesor_nombre || 'Sin asignar'}
+                            color: a.estado === 'confirmado' ? '#22c55e' : '#fca5a5' }}>
+                            {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
+                            {nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
                           </span>
-                          <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                            {a.grupo ? `→ ${a.grupo}` : ''} {a.aula ? `(${a.aula})` : ''}
+                          <span style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
+                            {a.grupo ? a.grupo : ''}{a.aula ? ` · ${a.aula}` : ''}
                           </span>
                         </div>
                       ))}
