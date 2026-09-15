@@ -98,6 +98,17 @@ export default function SalaProfesores() {
     setUltimaCarga(new Date());
   }, [dia]);
 
+  // El cuadrante se pone al día diez minutos antes de que acabe cada
+  // hora. Esta pantalla está encendida todo el día en la sala de
+  // profesores, así que es la que mejor puede dispararlo. Si no hay nadie
+  // mirando, lo hará el primer profesor que abra sus guardias.
+  useEffect(() => {
+    const alDia = () => fetch('/api/guardias/al-dia', { method: 'POST' }).catch(() => {});
+    alDia();
+    const t = setInterval(alDia, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     cargarDatos();
     const intervalo = setInterval(cargarDatos, 30000); // cada 30 segundos
