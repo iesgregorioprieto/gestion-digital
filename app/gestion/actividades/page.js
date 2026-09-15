@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { hoyLocal } from '@/lib/fechas';
+import { FRANJAS } from '@/lib/asignacionGuardias';
 import EscenarioDia from '@/components/EscenarioDia';
 
 const VERDE = '#1e6b2e';
@@ -118,6 +119,93 @@ export default function GestionActividades() {
    * se podía hacer era rechazarla, y seguía apareciendo en los listados y
    * en los avisos de ausencias sin registrar.
    */
+  /**
+   * REGISTRAR LA AUSENCIA DE QUIEN VA A UNA ACTIVIDAD
+   *
+   * La actividad ya sabe a qué hora sale y a qué hora vuelve, así que no
+   * hace falta que nadie piense qué franjas se pierde: se calculan solas.
+   * La visita al museo de 11:00 a 12:41 se lleva 3ª, el recreo y 4ª, y
+   * las demás horas las da esa persona con normalidad.
+   *
+   * La ausencia se registra como actividad complementaria, que no cuenta
+   * como falta ni sale en el informe de la Delegación: se registra solo
+   * para que el cuadrante sepa que faltan y se cubran sus grupos.
+   *
+   * Lo que no se puede rellenar por nadie son las TAREAS del alumnado.
+   * Eso lo añade cada uno después, desde su propia ausencia.
+   */
+  function franjasDe(horaSalida, horaRegreso) {
+    const aMin = t => {
+      const [h, m] = String(t).slice(0, 5).split(':').map(Number);
+      return (h * 60) + (m || 0);
+    };
+    if (!horaSalida) return null;                  // sin horas: día completo
+    const ini = aMin(horaSalida);
+    const fin = horaRegreso ? aMin(horaRegreso) : 24 * 60;
+
+    // Solo se pierde la hora si se la comen de verdad. Volver a las 12:41
+    // cuando la 5ª empieza a las 12:40 no es perder la 5ª: es llegar un
+    // minuto tarde. Sin este margen se cubrirían clases que esa persona
+    // va a dar, y encima se la quitaría de la lista de guardias.
+    const MARGEN = 10;   // minutos
+    return FRANJAS
+      .filter(f => {
+        const solape = Math.min(aMin(f.fin), fin) - Math.max(aMin(f.inicio), ini);
+        return solape >= MARGEN;
+      })
+      .map(f => f.id);
+  }
+
+  async function registrarAusencias(a) {
+    const horas = franjasDe(a.hora_salida, a.hora_regreso);
+    const etiqueta = horas && horas.length
+      ? horas.map(h => (h === 'recreo' ? 'recreo' : `${h}ª`)).join(', ')
+      : 'el día completo';
+
+    const gente = [a.profesor_id, ...(Array.isArray(a.acompanantes) ? a.acompanantes : [])]
+      .filter(Boolean)
+      .filter(id => !ausenciasPorFecha?.some(au =>
+        au.profesor_id === id
+        && au.fecha_inicio <= a.fecha_inicio
+        && (au.fecha_fin || au.fecha_inicio) >= a.fecha_inicio));
+
+    if (gente.length === 0) { aviso('Ya estaban registradas todas', 'ok'); return; }
+
+    if (!confirm(
+      `Se va a registrar la ausencia de ${gente.length === 1 ? '1 persona' : `${gente.length} personas`} ` +
+      `por «${a.titulo || 'la actividad'}».\n\n` +
+      `Horas: ${etiqueta}.\n\n` +
+      `No cuenta como falta. Cada uno tendrá que añadir después las tareas ` +
+      `para su alumnado desde su propia ausencia.`
+    )) return;
+
+    setProcesando(a.id);
+    let hechas = 0;
+    for (const id of gente) {
+      const r = await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'crear',
+          datos: {
+            profesor_id: id,
+            fecha_inicio: a.fecha_inicio,
+            fecha_fin: a.fecha_fin || a.fecha_inicio,
+            subtipo: 'act_complementarias',
+            motivo: a.titulo || 'Actividad complementaria',
+            horas: horas ? horas.map(h => ({ hora: h })) : null,
+          },
+        }),
+      });
+      if (r.ok) hechas++;
+    }
+    setProcesando(null);
+    aviso(hechas
+      ? `✅ ${hechas === 1 ? 'Ausencia registrada' : `${hechas} ausencias registradas`} — ${etiqueta}`
+      : 'No se ha podido registrar ninguna', hechas ? 'ok' : 'error');
+    cargar();
+  }
+
   async function borrar(a) {
     const quien = a.profesor_nombre || 'alguien';
     if (!confirm(
@@ -228,14 +316,28 @@ export default function GestionActividades() {
                 🚨 {flojas.length === 1 ? 'Una actividad aprobada sin ausencia registrada' : `${flojas.length} actividades aprobadas sin ausencia registrada`}
               </div>
               El cuadrante de guardias no sabe que ese profesorado falta, así que sus
-              grupos se quedarán sin cubrir. Recuérdales que registren la ausencia con
-              las tareas para el alumnado.
+              grupos se quedarán sin cubrir. Puedes registrarla tú desde aquí: las horas
+              salen de la propia actividad. Las tareas para el alumnado las añade
+              después cada uno desde su ausencia.
               <div style={{ marginTop: 8 }}>
-                {flojas.map(a => (
-                  <div key={a.id} style={{ fontSize: 12.5, marginTop: 3 }}>
-                    · <strong>{a.titulo}</strong> — {fechaTexto(a.fecha_inicio)} — {a.profesor_nombre}
-                  </div>
-                ))}
+                {flojas.map(a => {
+                  const hs = franjasDe(a.hora_salida, a.hora_regreso);
+                  const etiqueta = hs && hs.length
+                    ? hs.map(h => (h === 'recreo' ? 'recreo' : `${h}ª`)).join(', ')
+                    : 'día completo';
+                  return (
+                    <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5, marginTop: 6 }}>
+                      <span>
+                        · <strong>{a.titulo}</strong> — {fechaTexto(a.fecha_inicio)} — {a.profesor_nombre}
+                        {' '}<span style={{ color: '#7f1d1d' }}>({etiqueta})</span>
+                      </span>
+                      <button onClick={() => registrarAusencias(a)} disabled={procesando === a.id}
+                        style={{ padding: '5px 12px', borderRadius: 7, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                        {procesando === a.id ? '...' : `📝 Registrar la ausencia (${etiqueta})`}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           );
