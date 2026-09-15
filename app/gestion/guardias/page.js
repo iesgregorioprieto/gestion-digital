@@ -1289,8 +1289,10 @@ export default function GestionGuardias() {
                               padding:'8px 10px', borderRadius:6, backgroundColor:'#fef3c7',
                               border:'2px solid #f59e0b', display:'flex', alignItems:'center', gap:8, fontSize:12, flexWrap:'wrap',
                             }}>
-                              <span style={{ fontWeight:800, color:'#78350f' }}>🚨 GUARDIA ASIGNADA:</span>
-                              <span style={{ fontWeight:800, color:'#78350f' }}>{cubre.nombre}</span>
+                              <span style={{ fontWeight:800, color:'#78350f' }}>
+                                {cubre.profesorId ? "🚨 GUARDIA ASIGNADA:" : "❓ SIN IDENTIFICAR:"}
+                              </span>
+                              <span style={{ fontWeight:800, color: cubre.profesorId ? "#78350f" : rojo }}>{cubre.nombre}</span>
                               <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
                                 {cubre.sectorOriginal} ({cubre.apoyosPrevios} apoyos)
                               </span>

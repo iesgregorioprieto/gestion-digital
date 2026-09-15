@@ -192,7 +192,32 @@ export async function POST(request) {
       }, { onConflict: 'nombre_horario' });
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true });
+
+      /**
+       * Y se queda con las guardias que ya tenía ese puesto.
+       *
+       * Mientras no se sabía quién era, sus guardias se le asignaban
+       * igualmente —el cuadrante dice que esa persona está de guardia— y
+       * quedaban a nombre del cuadrante, sin dueño. Al identificarse pasan
+       * a ser suyas, con su grupo y su aula, sin esperar al siguiente
+       * reparto.
+       *
+       * Solo las de hoy en adelante: las de días pasados ya no se pueden
+       * fichar y ponerle el nombre ahora solo serviría para que le constara
+       * como no realizada una guardia de la que nadie le avisó.
+       */
+      const hoy = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+
+      const { data: adoptadas } = await cliente.from('apoyos_asignados')
+        .update({ profesor_id: sesion.id })
+        .is('profesor_id', null)
+        .eq('profesor_nombre_pdf', nombre_horario)
+        .gte('fecha', hoy)
+        .select('id');
+
+      return Response.json({ ok: true, guardias_adoptadas: (adoptadas || []).length });
     }
 
     return Response.json({ error: 'Acción no reconocida' }, { status: 400 });

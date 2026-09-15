@@ -38,6 +38,7 @@ export default function AvisoCuadrante() {
   const [propuestas, setPropuestas] = useState([]);
   const [enviando, setEnviando] = useState('');
   const [hecho, setHecho] = useState('');
+  const [adoptadas, setAdoptadas] = useState(0);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -69,7 +70,7 @@ export default function AvisoCuadrante() {
         return;
       }
       setPropuestas(ps => ps.filter(p => p.nombre !== nombre));
-      if (accion === 'soy_yo') setHecho(nombre);
+      if (accion === 'soy_yo') { setHecho(nombre); setAdoptadas(d.guardias_adoptadas || 0); }
     } catch {
       setError('No se ha podido guardar. Inténtalo de nuevo.');
     }
@@ -85,6 +86,13 @@ export default function AvisoCuadrante() {
       }}>
         ✅ Listo. Ya tienes tus guardias del cuadrante. Aparecerán en «Mis guardias»
         a partir de ahora, y no habrá que volver a preguntártelo.
+        {adoptadas > 0 && (
+          <div style={{ marginTop: 6, fontWeight: 500 }}>
+            {adoptadas === 1
+              ? 'Tienes 1 guardia ya asignada esperándote, con su grupo y su aula.'
+              : `Tienes ${adoptadas} guardias ya asignadas esperándote, con su grupo y su aula.`}
+          </div>
+        )}
       </div>
     );
   }
