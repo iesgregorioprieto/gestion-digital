@@ -297,12 +297,21 @@ export async function POST(request) {
       for (const [d, horas] of Object.entries(dias || {})) {
         cuadrante[sector][d] = {};
         for (const [h, gente] of Object.entries(horas || {})) {
+          const vistos = new Set();
           cuadrante[sector][d][h] = (gente || []).map(g => {
             const sustituto = relevo.get(g.profesorId);
             if (!sustituto) return g;
             const f = porFicha.get(sustituto);
             if (!f) return g;
             return { ...g, profesorId: f.id, nombre: nombreDe(f) };
+          }).filter(g => {
+            // El sustituto puede estar ya en el cuadrante con su propio
+            // nombre, si alguien actualizó el horario. Sin esto quedaría
+            // dos veces a la misma hora y podría cubrir dos aulas a la vez.
+            if (!g.profesorId) return true;
+            if (vistos.has(g.profesorId)) return false;
+            vistos.add(g.profesorId);
+            return true;
           });
         }
       }
