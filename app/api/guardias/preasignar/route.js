@@ -22,7 +22,7 @@ import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase,
-  indiceProfesores, clavesAmbiguas,
+  indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
 
@@ -214,6 +214,52 @@ export async function POST(request) {
         ambiguas.map(a => `${a.clave}: ${a.personas.join(' / ')}`).join(' | '));
     }
 
+    /**
+     * QUÉ SE PUEDE REHACER Y QUÉ NO
+     *
+     * El reparto no se calcula una vez al día: se recalcula cada vez que
+     * alguien registra una ausencia. Hasta ahora TODO lo ya guardado era
+     * intocable, aunque estuviera sin fichar, y eso rompía la regla del
+     * centro por la puerta de atrás: cada ausencia nueva se encajaba en
+     * las sobras de la anterior.
+     *
+     * Pasó el 15/09. A las 16:44 se registró una ausencia de Informática
+     * y salió a cubrirla un guardia de TMV, con todo el derecho: a esa
+     * hora no había ninguna ausencia en TMV. A las 20:01 se registró la
+     * de Sánchez Anegas, de TMV, y ya no quedaba nadie en casa: sus tres
+     * horas las cubrieron Industrias Alimentarias, General y FOL.
+     *
+     * La regla es que cada hora se resuelve entera y de cero. Para que
+     * eso sea verdad, las propuestas que aún no ha fichado nadie tienen
+     * que poder deshacerse.
+     *
+     * Intocable es solo lo que no se puede deshacer sin perjudicar a
+     * alguien:
+     *   · lo ya fichado, que es trabajo hecho
+     *   · lo que puso una persona a mano desde jefatura
+     *   · el recreo, que no sustituye a nadie
+     *   · las horas que ya han pasado: rehacerlas no cambia nada de lo
+     *     ocurrido y solo confunde a quien ya estuvo allí
+     */
+    const ahora = ahoraEnCentro();
+    const aMin = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+
+    const yaPasada = (f, h) => {
+      if (f < ahora.fecha) return true;
+      if (f > ahora.fecha) return false;
+      const fin = franja(h)?.fin;
+      return fin ? ahora.minutos >= aMin(fin) : false;
+    };
+
+    const esIntocable = a =>
+      FICHADAS.includes(a.estado)
+      || a.estado === 'incidencia'
+      || !!a.asignado_por
+      || esSectorRecreo(a.sector_apoyo)
+      || yaPasada(a.fecha, normHora(a.hora));
+
+    const aBorrar = [];
+
     // ─── Cálculo, día por día ───
     const nuevas = [];
     const sinCubrir = [];
@@ -228,13 +274,21 @@ export async function POST(request) {
         horarios, dia: diaSemana, equivalencias: equivalencias || [],
       });
 
+      // Solo lo intocable condiciona el reparto. Lo demás se rehace.
       const yaCubiertos = (yaEnRango || [])
-        .filter(a => a.fecha === diaFecha && !esSectorRecreo(a.sector_apoyo))
+        .filter(a => a.fecha === diaFecha && esIntocable(a))
+        .filter(a => !esSectorRecreo(a.sector_apoyo))
         .map(a => ({
           hora: normHora(a.hora),
           profesorAusenteId: a.profesor_ausente_id,
           profesorId: a.profesor_id,
         }));
+
+      // Las propuestas antiguas de este día se borran y la hora se
+      // resuelve entera otra vez.
+      (yaEnRango || [])
+        .filter(a => a.fecha === diaFecha && !esIntocable(a) && a.id)
+        .forEach(a => aBorrar.push(a.id));
 
       for (const hora of HORAS_GUARDIA) {
         if (hora === 'recreo') continue;   // el recreo no sustituye a nadie
@@ -291,9 +345,20 @@ export async function POST(request) {
       }
     }
 
+    // Fuera las propuestas viejas que se acaban de rehacer. Se borran
+    // ahora, justo antes de escribir las nuevas, para que la ventana en
+    // la que el día está a medias sea lo más corta posible.
+    for (let i = 0; i < aBorrar.length; i += 200) {
+      const { error: errBorrado } = await cliente
+        .from('apoyos_asignados').delete().in('id', aBorrar.slice(i, i + 200));
+      if (errBorrado) {
+        return Response.json({ error: errBorrado.message }, { status: 500 });
+      }
+    }
+
     if (nuevas.length === 0) {
       return Response.json({
-        ok: true, creadas: 0, motivo: 'todo_cubierto',
+        ok: true, creadas: 0, rehechas: aBorrar.length, motivo: 'todo_cubierto',
         dias: dias.length, sin_cubrir: sinCubrir,
         sin_resolver: sinResolver, ambiguas,
       });
@@ -305,6 +370,7 @@ export async function POST(request) {
     return Response.json({
       ok: true,
       creadas: nuevas.length,
+      rehechas: aBorrar.length,
       dias: dias.length,
       sin_cubrir: sinCubrir,
       sin_resolver: sinResolver,
