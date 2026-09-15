@@ -294,6 +294,9 @@ export async function POST(request) {
       // el tope de días de la propia preasignación.
       const fechaAusencia = fila.fecha_inicio;
       if (fechaAusencia) {
+        const hoyEnMadrid = () => new Intl.DateTimeFormat('sv-SE', {
+          timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+        }).format(new Date());
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
         try {
           await fetch(`${baseUrl}/api/guardias/preasignar`, {
@@ -302,7 +305,10 @@ export async function POST(request) {
               'Content-Type': 'application/json',
               'Cookie': request.headers.get('cookie') || '',
             },
-            body: JSON.stringify({ fecha: fechaAusencia, hasta: fila.fecha_fin || null }),
+            // Solo el día que se está viviendo. Los siguientes se
+            // recalculan esa misma mañana: repartir el jueves con los
+            // datos del lunes no sirve de nada.
+            body: JSON.stringify({ fecha: hoyEnMadrid() }),
           });
         } catch (err) {
           // Que falle la preasignación no puede tumbar el registro de la

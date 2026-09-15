@@ -1,5 +1,18 @@
+/**
+ * CIERRE DEL DÍA
+ *
+ * A las 18:00 se da por cerrada la jornada: las guardias que nadie ha
+ * fichado quedan marcadas como no realizadas, y así salen en el informe
+ * de jefatura.
+ *
+ * Aquí no se amonesta a nadie ni se crea ninguna incidencia. Esto solo
+ * deja constancia. Si jefatura ve que alguien no ficha sus guardias, será
+ * jefatura quien hable con esa persona.
+ */
+
 import { createClient } from '@supabase/supabase-js';
 import { claveServidor } from '@/lib/claveServidor';
+import { FRANJAS } from '@/lib/asignacionGuardias';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,50 +44,20 @@ export async function GET(request) {
 
   const { data: abandonados, error } = await sb
     .from('apoyos_asignados')
-    .select('id, hora, sector_apoyo, profesor_id')
+    .select('id')
     .eq('fecha', hoy)
     .eq('estado', 'pendiente');
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  if (!abandonados?.length) return Response.json({ ok: true, incidencias: 0 });
+  if (!abandonados?.length) return Response.json({ ok: true, cerradas: 0 });
 
-  const HORAS_LABEL = { '1':'1ª hora (8:30-9:25)','2':'2ª hora (9:25-10:20)','3':'3ª hora (10:35-11:30)',
-    '4':'4ª hora (11:30-12:25)','5':'5ª hora (12:25-13:20)','6':'6ª hora (14:15-15:10)' };
+  // El recreo también se cierra: si no se fichó, no se hizo.
+  const { error: errCierre } = await sb
+    .from('apoyos_asignados')
+    .update({ estado: 'sin_cubrir' })
+    .in('id', abandonados.map(a => a.id));
 
-  let creadas = 0;
-  for (const ap of abandonados) {
-    let nombreSugerido = 'Sin identificar';
-    if (ap.profesor_id) {
-      const { data: prof } = await sb.from('profesores')
-        .select('nombre, apellidos').eq('id', ap.profesor_id);
-      if (prof?.[0]) nombreSugerido = `${prof[0].apellidos}, ${prof[0].nombre}`;
-    }
+  if (errCierre) return Response.json({ error: errCierre.message }, { status: 500 });
 
-    const franja = HORAS_LABEL[String(ap.hora)] || `hora ${ap.hora}`;
-    const descripcion =
-      `GUARDIA NO CUBIERTA\n` +
-      `Franja: ${franja}\n` +
-      `Sector: ${ap.sector_apoyo || '—'}\n\n` +
-      `Profesor/a sugerido/a (principal responsable):\n` +
-      `  \u2022 ${nombreSugerido}\n\n` +
-      `El resto de candidatos disponibles esa franja tampoco actuaron.\n` +
-      `Acci\u00f3n recomendada: amonestaci\u00f3n verbal a todos los candidatos, ` +
-      `especialmente al sugerido.`;
-
-    const { error: eIns } = await sb.from('incidencias_app').insert([{
-      profesor_id: ap.profesor_id || null,
-      profesor_nombre: nombreSugerido,
-      modulo: 'Guardias',
-      tipo: 'fallo',
-      descripcion,
-      estado: 'nueva',
-    }]);
-
-    if (!eIns) {
-      await sb.from('apoyos_asignados').update({ estado: 'sin_cubrir' }).eq('id', ap.id);
-      creadas++;
-    }
-  }
-
-  return Response.json({ ok: true, incidencias: creadas });
+  return Response.json({ ok: true, fecha: hoy, cerradas: abandonados.length });
 }

@@ -53,6 +53,10 @@
       "schedule": "0 7 * * 1-5"
     },
     {
+      "path": "/api/cron/guardias-hoy",
+      "schedule": "0 5 * * 1-5"
+    },
+    {
       "path": "/api/cron/guardias-sin-cubrir",
       "schedule": "0 16 * * 1-5"
     },

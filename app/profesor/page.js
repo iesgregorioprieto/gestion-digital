@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { hoyLocal, sumarDias } from '@/lib/fechas';
+import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
@@ -56,18 +56,17 @@ export default function PanelProfesor() {
   }, []);
   
   async function cargarApoyosPendientes(id) {
-    // Buscar apoyos pendientes de HOY y siguientes días (hasta 7)
+    // SOLO HOY. El reparto se rehace cada mañana y cada vez que cambia
+    // algo durante el día, así que enseñar las guardias de la semana que
+    // viene sería enseñar algo que va a cambiar. El profesor mira por la
+    // mañana y sabe lo que le toca hoy.
     const hoy = hoyLocal();
-    // sumarDias trabaja en hora local. Con toISOString, de madrugada
-    // en España el cálculo se iba un día y dejaba fuera avisos.
-    const dentroDe7 = sumarDias(hoy, 7);
     const { data } = await consulta('apoyos_asignados')
       .select('*')
       .eq('profesor_id', id)
       .eq('estado', 'pendiente')
-      .gte('fecha', hoy)
-      .lte('fecha', dentroDe7)
-      .order('fecha', { ascending: true });
+      .eq('fecha', hoy)
+      .order('hora', { ascending: true });
     setApoyosPendientes(data || []);
   }
   
@@ -370,10 +369,11 @@ export default function PanelProfesor() {
               <span style={{ fontSize:26 }}>🛡️</span>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
-                  {apoyosPendientes.length === 1 ? 'TIENES UNA GUARDIA ASIGNADA' : `TIENES ${apoyosPendientes.length} GUARDIAS ASIGNADAS`}
+                  {apoyosPendientes.length === 1 ? 'HOY TIENES UNA GUARDIA' : `HOY TIENES ${apoyosPendientes.length} GUARDIAS`}
                 </div>
                 <div style={{ fontSize:12, color:'#92400e' }}>
-                  Se fichan en «Mis guardias», durante la hora de cada una
+                  El reparto puede cambiar si falta alguien más. Se ficha en
+                  «Mis guardias», durante la hora de la guardia
                 </div>
               </div>
             </div>

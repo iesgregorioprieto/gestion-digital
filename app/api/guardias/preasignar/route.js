@@ -107,18 +107,32 @@ async function sesionDe(request) {
 
 export async function POST(request) {
   try {
-    const sesion = await sesionDe(request);
+    // El cron de cada mañana no tiene sesión: se identifica con la clave
+    // de cron, igual que los demás.
+    const cronSecret = process.env.CRON_SECRET;
+    const esCron = cronSecret && request.headers.get('authorization') === `Bearer ${cronSecret}`;
+    const sesion = esCron ? { id: 'cron' } : await sesionDe(request);
     if (!sesion?.id) return Response.json({ error: 'sin_sesion' }, { status: 401 });
 
-    const { fecha, hasta } = await request.json();
+    /**
+     * UN SOLO DÍA. NUNCA UN RANGO.
+     *
+     * Antes se repartía la semana entera por adelantado a partir de las
+     * ausencias conocidas. Eso no se sostiene: el día tiene imprevistos.
+     * Si a 3ª se pone malo un compañero, el reparto de esa hora cambia
+     * entero, y lo que se hubiera dejado escrito el lunes para el jueves
+     * no vale nada.
+     *
+     * El reparto se rehace cuando cambia algo: al registrar una ausencia,
+     * al aprobar un DLD, cuando jefatura lo pide, y cada mañana desde el
+     * cron. Siempre sobre el día que se está viviendo.
+     */
+    const { fecha } = await request.json();
     if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
       return Response.json({ error: 'fecha_no_valida' }, { status: 400 });
     }
-    const fechaFin = (hasta && /^\d{4}-\d{2}-\d{2}$/.test(hasta) && hasta > fecha)
-      ? (hasta > sumarDias(fecha, MAX_DIAS) ? sumarDias(fecha, MAX_DIAS) : hasta)
-      : fecha;
 
-    const dias = diasDelRango(fecha, fechaFin);
+    const dias = diasDelRango(fecha, fecha);
     if (dias.length === 0) {
       return Response.json({ ok: true, creadas: 0, motivo: 'fin_de_semana' });
     }
@@ -153,7 +167,7 @@ export async function POST(request) {
     ]);
 
     // ─── Faltas que tocan el rango: ausencias y DLD aprobados ───
-    const ultimo = dias[dias.length - 1].fecha;
+    const ultimo = fecha;   // un solo día
     const [rAus, rDld] = await Promise.all([
       cliente.from('ausencias')
         .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
