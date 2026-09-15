@@ -57,9 +57,29 @@ export async function GET(request) {
   // el profesor elige de qué grupo es tutor. Si no, tendría que
   // escribirlo a mano, que es de donde venían los "1º ESO A".
   if (new URL(request.url).searchParams.get('grupos') === '1') {
-    const data = await todasLasFilas('grupo');
-    const grupos = [...new Set(data.map(a => a.grupo).filter(Boolean))]
-      .sort((a, b) => a.localeCompare(b, 'es'));
+    /**
+     * Los grupos del centro salen de DOS sitios y se juntan los dos:
+     *
+     *   - la tabla 'grupos', que es la lista oficial de unidades que se
+     *     sube al importar. Ahí están todas, tengan o no alumnado
+     *     cargado todavía.
+     *   - los grupos que aparecen en el alumnado, por si alguno llegó
+     *     sin estar en esa lista.
+     *
+     * Antes solo se miraba el alumnado, y un grupo que existe pero cuya
+     * matrícula aún no se ha subido no aparecía por ninguna parte: su
+     * tutor no podía ni seleccionarlo.
+     */
+    const [{ data: oficiales }, alumnado] = await Promise.all([
+      supa().from('grupos').select('codigo'),
+      todasLasFilas('grupo'),
+    ]);
+
+    const grupos = [...new Set([
+      ...(oficiales || []).map(g => g.codigo),
+      ...alumnado.map(a => a.grupo),
+    ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+
     return Response.json({ grupos });
   }
 
