@@ -36,6 +36,17 @@ const AUTORIZACIONES = [
     seccion: 'menor',
   },
   {
+    // Esto no es una autorización, es situación académica, pero vive en
+    // la misma pantalla porque lo marca la misma persona —el tutor— y
+    // sobre la misma lista de alumnos.
+    key: 'modulos_convalidados',
+    emoji: '📘',
+    label: 'Tiene módulos convalidados',
+    detalle: 'No asiste a las clases de los módulos que tiene convalidados',
+    quien: 'Lo marca el tutor del grupo',
+    seccion: 'academico',
+  },
+  {
     key: 'auth_informar_progeni',
     emoji: '📊',
     label: 'Informar a progenitores',
@@ -238,7 +249,9 @@ export default function GestionAutorizaciones() {
   }
 
   function contarRestricciones(alumno) {
-    return AUTORIZACIONES.filter(a => !getValor(alumno, a.key)).length;
+    // Las convalidaciones no son una autorización: no faltan, se tienen
+    // o no se tienen. No cuentan como pendiente.
+    return AUTORIZACIONES.filter(a => a.seccion !== 'academico' && !getValor(alumno, a.key)).length;
   }
 
   return (
@@ -408,6 +421,27 @@ export default function GestionAutorizaciones() {
                             <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '❌'}</span>
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#065f46' : rojo }}>
+                                {auth.emoji} {auth.label}
+                              </div>
+                              <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>
+                              <div style={{ fontSize: 10, color: '#999', marginTop: 1 }}>👤 {auth.quien}</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* SITUACIÓN ACADÉMICA */}
+                      <div style={{ fontSize: 11, fontWeight: 800, color: '#92400e', textTransform: 'uppercase', margin: '12px 0 8px', letterSpacing: 0.5 }}>
+                        Situación académica
+                      </div>
+                      {AUTORIZACIONES.filter(a => a.seccion === 'academico').map(auth => {
+                        const valor = getValor(alumno, auth.key);
+                        return (
+                          <div key={auth.key} onClick={() => toggleAuth(alumno.id, auth.key)}
+                            style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, marginBottom: 6, cursor: 'pointer', backgroundColor: valor ? '#fef3c7' : '#fafafa', border: `1.5px solid ${valor ? '#fbbf24' : '#e5e7eb'}`, transition: 'all 0.15s' }}>
+                            <span style={{ fontSize: 22, minWidth: 30, textAlign: 'center' }}>{valor ? '✅' : '⬜'}</span>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontWeight: 700, fontSize: 13, color: valor ? '#92400e' : '#555' }}>
                                 {auth.emoji} {auth.label}
                               </div>
                               <div style={{ fontSize: 11, color: '#666', marginTop: 1 }}>{auth.detalle}</div>

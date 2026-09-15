@@ -163,6 +163,7 @@ export async function POST(request) {
         'auth_imagenes', 'auth_salidas', 'auth_actividades',
         'auth_informar_progeni', 'auth_imagenes_mayor', 'dni',
         'seguro_pagado', 'seguro_forma_pago', 'seguro_fecha',
+        'modulos_convalidados',
       ];
       const limpio = {};
       for (const k of permitidos) {
@@ -181,7 +182,11 @@ export async function POST(request) {
       // Es un cobro que gestiona la tutoría, y dejarlo abierto a más
       // gente acabaría en dos personas marcando lo mismo con criterios
       // distintos. Dirección puede verlo en el informe, pero no tocarlo.
-      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha']
+      // Las convalidaciones van por el mismo camino que el seguro: las
+      // marca el tutor del grupo y nadie más. Es información académica de
+      // su tutoría y con dos personas marcándola acabaría descuadrada.
+      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha',
+                          'modulos_convalidados']
         .some(k => k in limpio);
 
       if (tocaSeguro) {
@@ -197,7 +202,7 @@ export async function POST(request) {
         if (!esTutor || !suGrupo || !grupoAlumno
             || !mismoGrupo(grupoAlumno, suGrupo)) {
           return Response.json(
-            { error: 'El seguro escolar solo lo puede marcar el tutor del grupo' },
+            { error: 'Esto solo lo puede marcar el tutor del grupo' },
             { status: 403 });
         }
       }
