@@ -1373,7 +1373,7 @@ export default function GestionGuardias() {
                 cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
                 display:'flex', alignItems:'center', gap:8, userSelect:'none',
               }}>
-                📊 Profesores de guardia esta hora — 🛡️ ya cubriendo · 🚫 ausente
+                📊 Profesores de guardia esta hora — 🟢 libre · 🔴 ocupado · 🚫 no está
               </summary>
               <div style={{ padding:'0 16px 16px' }}>
                 {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
@@ -1399,18 +1399,23 @@ export default function GestionGuardias() {
                           const estaAusente = ausentesAbrev.has(key);
                           const ocupado = !estaAusente
                             && yaCubriendo.has(normAbrev(nombreLargo(mapaProfesores, p)));
-                          const fondo  = estaAusente ? '#fee2e2' : (ocupado ? '#fef3c7' : '#f0fdf4');
-                          const tinta  = estaAusente ? rojo : (ocupado ? '#92400e' : verde);
-                          const borde  = estaAusente ? '#fca5a5' : (ocupado ? '#fbbf24' : '#bbf7d0');
+                          // Semáforo: verde libre, rojo ocupado. El que hoy
+                          // no está va en gris y tachado, para no confundir
+                          // "no viene" con "está pero ya tiene guardia".
+                          const fondo  = estaAusente ? '#f4f4f5' : (ocupado ? '#fee2e2' : '#f0fdf4');
+                          const tinta  = estaAusente ? '#9ca3af' : (ocupado ? rojo : verde);
+                          const borde  = estaAusente ? '#d4d4d8' : (ocupado ? '#fca5a5' : '#bbf7d0');
+                          const pista  = estaAusente ? 'Hoy no está: tiene ausencia registrada'
+                            : (ocupado ? 'Ocupado: ya está cubriendo una guardia a esta hora'
+                                       : 'Libre a esta hora');
                           return (
-                            <span key={i} title={ocupado ? 'Ya está cubriendo una guardia a esta hora' : ''}
-                              style={{
+                            <span key={i} title={pista} style={{
                               padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
                               backgroundColor: fondo, color: tinta,
                               border:'1.5px solid ' + borde,
                               textDecoration: estaAusente ? 'line-through' : 'none',
                             }}>
-                              {estaAusente ? '🚫 ' : (ocupado ? '🛡️ ' : '')}{nombre}
+                              {estaAusente ? '🚫 ' : (ocupado ? '🔴 ' : '🟢 ')}{nombre}
                             </span>
                           );
                         })}

@@ -1034,7 +1034,7 @@ export default function Guardias() {
                 cursor:'pointer', padding:'12px 16px', fontSize:13, fontWeight:700, color:'#555',
                 display:'flex', alignItems:'center', gap:8,
               }}>
-                📊 Profesores de guardia esta hora — 🛡️ ya cubriendo
+                📊 Profesores de guardia esta hora — 🟢 libre · 🔴 ocupado
               </summary>
               <div style={{ padding:'0 16px 16px' }}>
                 {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
@@ -1055,15 +1055,17 @@ export default function Guardias() {
                           const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           const ocupado = yaCubriendo.has(normAbrev(nombre));
+                          // Semáforo: verde libre, rojo ya cubriendo.
                           return (
-                            <span key={i} title={ocupado ? 'Ya está cubriendo una guardia a esta hora' : ''}
+                            <span key={i}
+                              title={ocupado ? 'Ocupado: ya está cubriendo una guardia a esta hora' : 'Libre a esta hora'}
                               style={{
                               padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                              backgroundColor: ocupado ? '#fef3c7' : '#f0fdf4',
-                              color: ocupado ? '#92400e' : verde,
-                              border:'1.5px solid ' + (ocupado ? '#fbbf24' : '#bbf7d0'),
+                              backgroundColor: ocupado ? '#fee2e2' : '#f0fdf4',
+                              color: ocupado ? rojo : verde,
+                              border:'1.5px solid ' + (ocupado ? '#fca5a5' : '#bbf7d0'),
                             }}>
-                              {ocupado ? '🛡️ ' : (esYo ? '⭐ ' : '')}{nombre}
+                              {ocupado ? '🔴 ' : '🟢 '}{esYo ? '⭐ ' : ''}{nombre}
                             </span>
                           );
                         })}
