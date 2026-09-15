@@ -112,6 +112,37 @@ export default function GestionActividades() {
     setAlumnosDe(prev => ({ ...prev, [a.id]: porGrupo }));
   }
 
+  /**
+   * Borrar una actividad. Hace falta de verdad: se hacen pruebas, se
+   * duplica una solicitud, se cancela una salida. Sin esto, lo único que
+   * se podía hacer era rechazarla, y seguía apareciendo en los listados y
+   * en los avisos de ausencias sin registrar.
+   */
+  async function borrar(a) {
+    const quien = a.profesor_nombre || 'alguien';
+    if (!confirm(
+      `¿Borrar «${a.titulo || 'esta actividad'}»?\n\n` +
+      `La solicitó ${quien}. Se borra del todo y no se puede deshacer.\n\n` +
+      `Si solo quieres denegarla, usa Rechazar en vez de esto.`
+    )) return;
+
+    setProcesando(a.id);
+    const r = await fetch('/api/centro', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tabla: 'actividades', accion: 'borrar', id: a.id }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      aviso('No se ha podido borrar: ' + (e.error || 'error'), 'error');
+    } else {
+      setActividades(prev => prev.filter(x => x.id !== a.id));
+      setAbierta(null);
+      aviso('🗑️ Actividad borrada', 'ok');
+    }
+    setProcesando(null);
+  }
+
   async function resolver(id, nuevoEstado) {
     setProcesando(id);
     const r = await fetch('/api/centro', {
@@ -407,12 +438,19 @@ export default function GestionActividades() {
                         </div>
                       )}
 
-                      {(a.estado || 'pendiente') !== 'pendiente' && (
-                        <button onClick={() => resolver(a.id, 'pendiente')} disabled={procesando === a.id}
-                          style={{ marginTop: 12, padding: '7px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
-                          ↩️ Volver a dejarla pendiente
+                      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {(a.estado || 'pendiente') !== 'pendiente' && (
+                          <button onClick={() => resolver(a.id, 'pendiente')} disabled={procesando === a.id}
+                            style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
+                            ↩️ Volver a dejarla pendiente
+                          </button>
+                        )}
+                        <button onClick={() => borrar(a)} disabled={procesando === a.id}
+                          title="Borra la actividad del todo. Para denegarla, usa Rechazar."
+                          style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: 'white', color: ROJO, fontWeight: 600, fontSize: 12.5, cursor: 'pointer', marginLeft: 'auto' }}>
+                          🗑️ Borrar
                         </button>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
