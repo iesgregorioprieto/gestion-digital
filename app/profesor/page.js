@@ -71,17 +71,6 @@ export default function PanelProfesor() {
     setApoyosPendientes(data || []);
   }
   
-  async function confirmarApoyo(apoyoId) {
-    // El servidor comprueba que el apoyo es tuyo: antes cualquiera podía
-    // dar por confirmado el de otro cambiando el id en la consola.
-    const r = await fetch('/api/apoyos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'confirmar', id: apoyoId }),
-    });
-    if (!r.ok) { alert('No se pudo confirmar el apoyo'); return; }
-    cargarApoyosPendientes(profId);
-  }
 
   function cerrarSesion() {
     sessionStorage.clear();
@@ -375,20 +364,17 @@ export default function PanelProfesor() {
             borderRadius: 14, 
             padding: 20, 
             marginBottom: 20, 
-            boxShadow: '0 4px 20px rgba(245, 158, 11, 0.3)',
-            animation: 'pulse 2s ease-in-out infinite'
+            boxShadow: '0 2px 10px rgba(245, 158, 11, 0.18)'
           }}>
-            <style>{`
-              @keyframes pulse {
-                0%, 100% { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.3); }
-                50% { box-shadow: 0 4px 30px rgba(245, 158, 11, 0.6); }
-              }
-            `}</style>
             <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-              <span style={{ fontSize:28 }}>🚨</span>
+              <span style={{ fontSize:26 }}>🛡️</span>
               <div style={{ flex:1 }}>
-                <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>APOYO ASIGNADO</div>
-                <div style={{ fontSize:12, color:'#92400e' }}>Debes cubrir {apoyosPendientes.length === 1 ? 'este grupo' : `estos ${apoyosPendientes.length} grupos`}</div>
+                <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
+                  {apoyosPendientes.length === 1 ? 'TIENES UNA GUARDIA ASIGNADA' : `TIENES ${apoyosPendientes.length} GUARDIAS ASIGNADAS`}
+                </div>
+                <div style={{ fontSize:12, color:'#92400e' }}>
+                  Se fichan en «Mis guardias», durante la hora de cada una
+                </div>
               </div>
             </div>
             {apoyosPendientes.map(ap => (
@@ -435,17 +421,17 @@ export default function PanelProfesor() {
                     <strong>📝 Tarea para los alumnos:</strong><br/>{ap.tarea}
                   </div>
                 )}
-                <button 
-                  onClick={()=>confirmarApoyo(ap.id)}
-                  style={{
-                    marginTop:12, padding:'10px 20px', width:'100%',
-                    backgroundColor:'#059669', color:'white', 
-                    border:'none', borderRadius:10, cursor:'pointer',
-                    fontSize:14, fontWeight:800, boxShadow:'0 2px 8px rgba(5, 150, 105, 0.3)'
-                  }}
-                >
-                  ✅ CONFIRMAR QUE LO CUBRO
-                </button>
+                {/* Aquí NO se ficha. El check vive en «Mis guardias» y
+                    solo se abre durante la franja de esa guardia: dar una
+                    guardia por hecha tres días antes no significa nada. */}
+                <a href="/guardias" style={{
+                  display:'block', marginTop:12, padding:'9px 20px', width:'100%',
+                  backgroundColor:'white', color:'#78350f', textAlign:'center',
+                  border:'1.5px solid #fbbf24', borderRadius:10,
+                  textDecoration:'none', fontSize:13, fontWeight:700, boxSizing:'border-box',
+                }}>
+                  Ver en Mis guardias
+                </a>
               </div>
             ))}
           </div>

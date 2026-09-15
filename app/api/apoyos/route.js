@@ -80,44 +80,11 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
-    // ─── El profesor confirma SU apoyo ───
-    if (accion === 'confirmar') {
-      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
-
-      // El filtro por profesor_id impide confirmar el apoyo de otro
-      const { data, error } = await supa().from('apoyos_asignados')
-        .update({ estado: 'confirmado', confirmado_at: new Date().toISOString() })
-        .eq('id', id).eq('profesor_id', sesion.id).select('id');
-
-      if (error) return Response.json({ error: error.message }, { status: 500 });
-      if (!data || data.length === 0) {
-        return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
-      }
-      return Response.json({ ok: true });
-    }
-
-    // ─── El profesor confirma SU apoyo CON INCIDENCIA ───
-    // La guardia queda registrada (la asumió) pero no cuenta para el
-    // reparto proporcional, porque no se llegó a cubrir de verdad.
-    if (accion === 'confirmar_con_incidencia') {
-      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
-      if (!datos?.incidencia?.trim()) return Response.json({ error: 'Describe la incidencia' }, { status: 400 });
-
-      const { data, error } = await supa().from('apoyos_asignados')
-        .update({
-          estado: 'incidencia',
-          confirmado_at: new Date().toISOString(),
-          incidencia: datos.incidencia.trim(),
-          cuenta_reparto: false,
-        })
-        .eq('id', id).eq('profesor_id', sesion.id).select('id');
-
-      if (error) return Response.json({ error: error.message }, { status: 500 });
-      if (!data || data.length === 0) {
-        return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
-      }
-      return Response.json({ ok: true });
-    }
+    // Las acciones 'confirmar' y 'confirmar_con_incidencia' del modelo
+    // antiguo se han eliminado: daban por hecha una guardia desde
+    // cualquier pantalla y a cualquier hora, incluso días antes. La
+    // única forma de dar una guardia por hecha es 'fichar', que
+    // comprueba en el servidor que estamos dentro de la franja.
 
     // ─── Autoasignarse una guardia huérfana ───
     // Cualquier profesor de guardia puede apuntarse a cubrir una guardia
