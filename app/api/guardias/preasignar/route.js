@@ -53,12 +53,24 @@ function diasDelRango(desde, hasta) {
 }
 
 // ¿Esta falta afecta a este día?
+/**
+ * ¿Esta falta afecta a este día?
+ *
+ * Cuidado con la ausencia SIN fecha de fin, que es justo lo que es una
+ * baja: abierta, sin alta prevista. Antes, al no haber fin se usaba la
+ * fecha de inicio como fin, y la baja pasaba a durar un solo día: las
+ * clases de quien llevaba dos semanas de baja se cubrieron el primer día
+ * y ninguno más.
+ */
 function afectaA(falta, fecha) {
-  const ini = falta.fecha_inicio || falta.fecha_solicitada;
-  const fin = falta.fecha_fin || falta.fecha_solicitada || falta.fecha_inicio;
-  if (!ini) return false;
-  if (ini > fecha) return false;
-  return !fin || fin >= fecha;
+  // Un DLD es siempre de un día concreto.
+  if (falta.fecha_solicitada) return falta.fecha_solicitada === fecha;
+
+  const ini = falta.fecha_inicio;
+  if (!ini || ini > fecha) return false;
+
+  // Sin fecha de fin, la ausencia sigue abierta.
+  return !falta.fecha_fin || falta.fecha_fin >= fecha;
 }
 
 let _cliente = null;
