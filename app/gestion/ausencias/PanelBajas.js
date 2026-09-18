@@ -183,11 +183,14 @@ export default function PanelBajas() {
           datos: { titular_id: titular.id } }),
       });
 
-      // 2. Copiar el horario. Lo hace el servidor, que identifica al
-      //    titular por su ficha en vez de por un parecido en el apellido.
+      // 2. Traspasar el horario, no copiarlo. Las clases y las guardias
+      //    del titular pasan a ser del sustituto, y el titular desaparece
+      //    del cuadrante porque deja de estar en él. Antes se copiaba y
+      //    quedaban los dos, con lo que el centro contaba el doble de
+      //    gente y al de baja se le seguían asignando guardias.
       const r = await fetch('/api/horarios', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'copiar_horario',
+        body: JSON.stringify({ accion: 'traspasar_horario',
           titular_id: titular.id, sustituto_id: sustituto.id }),
       });
       const copia = await r.json();
@@ -212,7 +215,7 @@ export default function PanelBajas() {
         body: JSON.stringify({ accion: 'recalcular_dias', datos: { profesor_id: titular.id } }),
       }).catch(() => {});
 
-      aviso(`Sustituto asignado. Horario copiado (${copia.copiados || 0} registros).`);
+      aviso(`Sustituto asignado. Horario traspasado (${copia.traspasados || 0} registros): sus clases y sus guardias pasan a ${nombreDe(sustituto)}.`);
       setAsignandoA(null); setBusquedaSust(''); setFechaIncorporacion(hoyISO());
       cargar();
     } catch (e) {
@@ -259,6 +262,13 @@ export default function PanelBajas() {
         body: JSON.stringify({ accion: 'cerrar_baja',
           datos: { profesor_id: titular.id, fecha_fin: hoyISO() } }),
       });
+
+      // Recupera su horario: las filas que se le traspasaron al sustituto
+      // vuelven a su nombre, con la abreviatura del cuadrante incluida.
+      await fetch('/api/horarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+      }).catch(() => {});
 
       // Vuelve a su horario: sus ausencias abiertas vuelven a generar
       // horas que cubrir con normalidad.

@@ -90,7 +90,28 @@ export async function POST(request) {
     //
     // Ahora se identifica a cada persona igual que lo hace el motor de
     // guardias, y el horario copiado lleva el nombre completo.
-    if (accion === 'copiar_horario') {
+    /**
+     * TRASPASAR EL HORARIO AL SUSTITUTO
+     *
+     * Antes esto COPIABA el horario y dejaba el del titular intacto. El
+     * resultado era que dos personas ocupaban el mismo horario: Consuegra
+     * seguía con sus 18 clases y sus 3 guardias, y Laura Martín, su
+     * sustituta, con otras 18 y otras 3. El centro contaba el doble de
+     * gente de la que tenía.
+     *
+     * Y lo peor eran las guardias. La copia se hacía con el nombre
+     * completo, pero el cuadrante de guardias lleva la abreviatura
+     * ("Con. M, VA"), que es otra fila. Así que las guardias del titular
+     * se quedaban a su nombre pasara lo que pasara con sus ausencias:
+     * jefatura registraba una baja tras otra y él seguía saliendo en el
+     * cuadrante, porque el motor lee el cuadrante y allí seguía estando.
+     *
+     * Ahora se TRASPASA. Las filas cambian de dueño —las de clase y las
+     * de guardia, con abreviatura incluida— y se guarda de quién eran,
+     * para poder devolverlas el día del alta. El titular desaparece del
+     * cuadrante porque deja de estar en él, sin tocar el motor.
+     */
+    if (accion === 'traspasar_horario') {
       const { titular_id, sustituto_id } = datosExtra;
       if (!titular_id || !sustituto_id) {
         return Response.json({ error: 'Faltan el titular o el sustituto' }, { status: 400 });
@@ -119,34 +140,71 @@ export async function POST(request) {
       }
 
       // Suyas y solo suyas: se identifica a la persona, no se busca un
-      // parecido en el apellido.
+      // parecido en el apellido. Aquí entran también las filas del
+      // cuadrante de guardias, que van con su abreviatura.
       const suyas = horarios.filter(h =>
         buscaProfesor(indice, h.profesor_nombre_pdf)?.id === titular.id);
 
       if (suyas.length === 0) {
-        return Response.json({ ok: true, copiados: 0, motivo: 'el titular no tiene horario' });
+        return Response.json({ ok: true, traspasados: 0, motivo: 'el titular no tiene horario' });
       }
 
-      // El sustituto arranca limpio, por si ya tenía algo cargado.
-      await cliente.from('horarios_profesores').delete().eq('profesor_id', sustituto_id);
+      // Restos de traspasos anteriores del sustituto, si los hubiera.
+      await cliente.from('horarios_profesores')
+        .delete().eq('profesor_id', sustituto_id).eq('curso_academico', cursoActivo);
 
-      const copias = suyas.map(h => {
-        const { id, created_at, ...resto } = h;
-        return {
-          ...resto,
-          profesor_id: sustituto_id,
-          profesor_nombre_pdf: nombreDe(sustituto),
-        };
-      });
-
-      for (let i = 0; i < copias.length; i += 200) {
+      let traspasados = 0;
+      for (const h of suyas) {
         const { error } = await cliente.from('horarios_profesores')
-          .insert(copias.slice(i, i + 200));
+          .update({
+            profesor_id: sustituto_id,
+            profesor_nombre_pdf: nombreDe(sustituto),
+            // De quién era y cómo se llamaba aquí: es lo que permite
+            // devolvérselo intacto el día que se incorpore.
+            titular_original_id: titular.id,
+            nombre_original_pdf: h.profesor_nombre_pdf,
+          })
+          .eq('id', h.id);
         if (error) return Response.json({ error: error.message }, { status: 500 });
+        traspasados++;
       }
 
-      return Response.json({ ok: true, copiados: copias.length, nombre: nombreDe(sustituto) });
+      return Response.json({ ok: true, traspasados, nombre: nombreDe(sustituto) });
     }
+
+    /**
+     * DEVOLVER EL HORARIO AL TITULAR
+     *
+     * El día del alta, cada fila vuelve a su dueño con el nombre que
+     * tenía, abreviatura del cuadrante incluida. Si no se hace, el
+     * sustituto seguiría dando sus clases y haciendo sus guardias
+     * aunque ya se hubiera ido del centro.
+     */
+    if (accion === 'devolver_horario') {
+      const { titular_id } = datosExtra;
+      if (!titular_id) return Response.json({ error: 'Falta el titular' }, { status: 400 });
+
+      const cliente = supa();
+      const { data: prestadas } = await cliente.from('horarios_profesores')
+        .select('id, nombre_original_pdf').eq('titular_original_id', titular_id);
+
+      let devueltos = 0;
+      for (const h of (prestadas || [])) {
+        const { error } = await cliente.from('horarios_profesores')
+          .update({
+            profesor_id: titular_id,
+            profesor_nombre_pdf: h.nombre_original_pdf,
+            titular_original_id: null,
+            nombre_original_pdf: null,
+          })
+          .eq('id', h.id);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        devueltos++;
+      }
+
+      return Response.json({ ok: true, devueltos });
+    }
+
 
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (e) {
