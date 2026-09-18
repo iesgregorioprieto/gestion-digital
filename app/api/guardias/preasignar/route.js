@@ -39,19 +39,6 @@ function sumarDias(fecha, n) {
   return d.toISOString().slice(0, 10);
 }
 
-// Días lectivos del rango (sin fines de semana; los festivos se caen
-// solos porque en el horario no hay nada ese día).
-function diasDelRango(desde, hasta) {
-  const dias = [];
-  let f = desde;
-  for (let i = 0; i < MAX_DIAS; i++) {
-    const ds = diaSemanaEs(f);
-    if (ds !== 'sabado' && ds !== 'domingo') dias.push({ fecha: f, diaSemana: ds });
-    if (f >= hasta) break;
-    f = sumarDias(f, 1);
-  }
-  return dias;
-}
 
 // ¿Esta falta afecta a este día?
 /**
