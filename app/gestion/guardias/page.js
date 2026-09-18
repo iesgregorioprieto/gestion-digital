@@ -356,9 +356,6 @@ export default function GestionGuardias() {
     return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
   }
 
-  function sectorReal(nombreSector) {
-    return sectores.find(s => s.toUpperCase() === nombreSector.toUpperCase()) || nombreSector;
-  }
 
   // Profesores FP libres esta hora (para sugerir apoyos)
   function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null, sectorSolicitante = null) {
@@ -441,50 +438,6 @@ export default function GestionGuardias() {
     return libres;
   }
 
-  // Auto-asignación para esta hora
-  function asignacionAutomatica() {
-    const asignaciones = [];
-    const porSector = ausenciasPorSector();
-    const asignadosAbrev = new Set();
-    
-    // Set con las abreviaturas de los profesores ausentes esta hora
-    // (para no poder asignarles cubrir a otros - ellos también faltan)
-    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
-
-    for (const sectorSup of Object.keys(porSector)) {
-      const sReal = sectorReal(sectorSup);
-      const ausentes = porSector[sectorSup];
-      const guardiasDisp = guardiasDeSector(sReal);
-
-      for (const aus of ausentes) {
-        const clasesHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase');
-
-        for (const clase of clasesHora) {
-          let cubre = null;
-          for (const p of guardiasDisp) {
-            const key = normAbrev(p);
-            // Excluir: ya asignado a otra cosa, o él mismo está ausente
-            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreCorto(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
-            asignadosAbrev.add(key);
-            break;
-          }
-
-          if (!cubre) {
-            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
-            if (libres.length > 0) {
-              const primero = libres[0];
-              asignadosAbrev.add(normAbrev(primero.abrev));
-              cubre = { ...primero, tipo: 'apoyo_obligatorio', alternativas: libres.slice(1) };
-            }
-          }
-
-          asignaciones.push({ ausencia: aus, clase, cubre });
-        }
-      }
-    }
-    return asignaciones;
-  }
 
   // El auto-registro que había aquí (useEffect + autoRegistrarApoyosObligatorios)
   // se ha retirado: escribía en apoyos_asignados con la lógica antigua del
@@ -876,7 +829,7 @@ export default function GestionGuardias() {
           <div style={{ backgroundColor:'white', borderRadius:12, padding:30, textAlign:'center', color:'#666' }}>
             🏖️ Fin de semana
           </div>
-        ) : ausentesEstaHora().length === 0 ? (
+        ) : apoyosAsignados.filter(ap => horaCoincide(ap.hora, horaActiva)).length === 0 ? (
           errorCarga ? (
             <div style={{
               backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:12,
