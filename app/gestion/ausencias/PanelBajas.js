@@ -83,6 +83,8 @@ export default function PanelBajas() {
     setCargando(false);
   }
 
+  const nombreDe = p => `${p?.nombre || ''} ${p?.apellidos || ''}`.trim();
+
   function aviso(texto, tipo = 'ok') {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), 5000);
@@ -222,6 +224,65 @@ export default function PanelBajas() {
       cargar();
     } catch (e) {
       aviso('No se ha podido asignar: ' + e.message, 'error');
+    }
+    setTrabajando(false);
+  }
+
+  /**
+   * QUITAR EL SUSTITUTO SIN DAR DE ALTA AL TITULAR
+   *
+   * Hacía falta y no existía. Si la sustituta se pone enferma o se va a
+   * otro centro, hoy la única salida era pulsar «Se incorpora», que es
+   * mentira: el titular sigue de baja. Y mientras tanto su horario se
+   * quedaba en manos de alguien que ya no está.
+   *
+   * Esto devuelve el horario al titular —las filas vuelven a su nombre,
+   * abreviatura del cuadrante incluida— y rompe el enlace, dejando la
+   * baja abierta. Para cambiar de sustituto: quitar y asignar al nuevo.
+   */
+  async function quitarSustituto(titular, sustituto) {
+    if (!confirm(
+      `¿Quitar a ${nombreDe(sustituto)} como sustituto de ${nombreDe(titular)}?\n\n` +
+      `El horario vuelve al titular: sus clases y sus guardias dejan de ser ` +
+      `de ${sustituto.nombre}.\n\n` +
+      `${nombreDe(titular)} SIGUE DE BAJA, y sus grupos volverán a cubrirlos ` +
+      `los profesores de guardia.\n\n` +
+      `Si lo que quieres es cambiar de sustituto, quita este y asigna al nuevo.`
+    )) return;
+
+    setTrabajando(true);
+    try {
+      // 1. El horario vuelve a su dueño. Primero esto: si fallara, el
+      //    enlace sigue en pie y no se pierde de quién era cada hora.
+      const r = await fetch('/api/horarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+      });
+      const vuelta = await r.json();
+      if (vuelta.error) throw new Error(vuelta.error);
+
+      // 2. Romper el enlace por los dos lados. La baja se queda abierta.
+      await fetch('/api/profesores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'baja', id: titular.id,
+          datos: { sustituto_id: null, tipo_baja: 'sin_sustituto' } }),
+      });
+      await fetch('/api/profesores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'baja', id: sustituto.id, datos: { titular_id: null } }),
+      });
+
+      // 3. Su ausencia vuelve a generar horas que cubrir: ya no hay quien
+      //    dé sus clases.
+      await fetch('/api/ausencias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recalcular_dias', datos: { profesor_id: titular.id } }),
+      }).catch(() => {});
+
+      aviso(`Sustituto retirado. ${vuelta.devueltos || 0} horas vuelven a ${nombreDe(titular)}, que sigue de baja.`);
+      await cargar();
+    } catch (e) {
+      aviso('No se ha podido quitar: ' + e.message, 'error');
     }
     setTrabajando(false);
   }
@@ -411,12 +472,19 @@ export default function PanelBajas() {
               </div>
 
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {!sustituto && (
+                {!sustituto ? (
                   <button onClick={() => { setAsignandoA(p.id); setBusquedaSust(''); }}
                     disabled={trabajando}
                     style={{ padding: '8px 14px', borderRadius: 8, border: `1.5px solid ${azul}`,
                              backgroundColor: 'white', color: azul, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                     Asignar sustituto
+                  </button>
+                ) : (
+                  <button onClick={() => quitarSustituto(p, sustituto)} disabled={trabajando}
+                    title="Devuelve el horario al titular y deja la baja abierta"
+                    style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #d97706',
+                             backgroundColor: 'white', color: '#b45309', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    Quitar sustituto
                   </button>
                 )}
                 <button onClick={() => darDeAlta(p)} disabled={trabajando}
