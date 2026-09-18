@@ -203,6 +203,15 @@ export default function PanelBajas() {
           datos: { profesor_id: titular.id, fecha_fin: vispera.toISOString().slice(0, 10) } }),
       });
 
+      // El horario pasa a ser del sustituto, así que la ausencia del
+      // titular deja de generar horas que cubrir. Se rehace ahora mismo:
+      // si no, al de baja le quedarían guardadas las horas de antes y
+      // seguiría apareciendo como si hubiera que cubrirle.
+      await fetch('/api/ausencias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recalcular_dias', datos: { profesor_id: titular.id } }),
+      }).catch(() => {});
+
       aviso(`Sustituto asignado. Horario copiado (${copia.copiados || 0} registros).`);
       setAsignandoA(null); setBusquedaSust(''); setFechaIncorporacion(hoyISO());
       cargar();
@@ -250,6 +259,13 @@ export default function PanelBajas() {
         body: JSON.stringify({ accion: 'cerrar_baja',
           datos: { profesor_id: titular.id, fecha_fin: hoyISO() } }),
       });
+
+      // Vuelve a su horario: sus ausencias abiertas vuelven a generar
+      // horas que cubrir con normalidad.
+      await fetch('/api/ausencias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recalcular_dias', datos: { profesor_id: titular.id } }),
+      }).catch(() => {});
 
       aviso('Titular incorporado.');
       cargar();

@@ -260,12 +260,19 @@ async function calcularDias(fila) {
   const curso = await getCursoActual();
 
   const [{ data: profesores }, { data: equivalencias }] = await Promise.all([
-    cliente.from('profesores').select('id, nombre, apellidos, departamento'),
+    cliente.from('profesores').select('id, nombre, apellidos, departamento, en_baja, sustituto_id'),
     cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
   ]);
 
   const profesor = (profesores || []).find(p => p.id === fila.profesor_id);
   if (!profesor) return null;
+
+  // Si esta persona está de baja y ya tiene sustituto, sus horas las da él:
+  // ha asumido su horario entero, clases y guardias. Queda escrito en la
+  // propia ausencia para que nadie lo tenga que deducir más tarde.
+  const sustituto = profesor.sustituto_id
+    ? (profesores || []).find(p => p.id === profesor.sustituto_id) || null
+    : null;
 
   // El horario entero del curso, sin el tope de mil filas.
   let horarios = [];
@@ -287,6 +294,7 @@ async function calcularDias(fila) {
     horarios,
     profesores: profesores || [],
     equivalencias: equivalencias || [],
+    sustituto,
   });
 }
 
@@ -297,6 +305,43 @@ export async function POST(request) {
 
     const { accion, id, datos } = await request.json();
     if (!accion) return Response.json({ error: 'Falta la acción' }, { status: 400 });
+
+    /**
+     * Rehacer los días de las ausencias abiertas de una persona.
+     *
+     * Se llama cuando cambia algo que afecta a todo su horario: se le
+     * asigna un sustituto, se le quita, o se registra el alta. Sin esto,
+     * al titular le quedarían guardadas las horas de antes y seguiría
+     * apareciendo como si hubiera que cubrirle.
+     */
+    if (accion === 'recalcular_dias') {
+      if (!esDirectivo(sesion)) {
+        return Response.json({ error: 'Solo el equipo directivo' }, { status: 403 });
+      }
+      const profesorId = datos?.profesor_id;
+      if (!profesorId) return Response.json({ error: 'Falta el profesor' }, { status: 400 });
+
+      const hoy = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+
+      const { data: suyas } = await supa().from('ausencias')
+        .select('id, profesor_id, fecha_inicio, fecha_fin, horas')
+        .eq('profesor_id', profesorId)
+        .or(`fecha_fin.gte.${hoy},fecha_fin.is.null`);
+
+      let rehechas = 0;
+      for (const a of (suyas || [])) {
+        try {
+          const dias = await calcularDias(a);
+          await supa().from('ausencias').update({ dias }).eq('id', a.id);
+          rehechas++;
+        } catch (e) {
+          console.error('recalcular_dias:', e?.message);
+        }
+      }
+      return Response.json({ ok: true, rehechas });
+    }
 
     // ─── Notificar una ausencia ───
     if (accion === 'crear') {
