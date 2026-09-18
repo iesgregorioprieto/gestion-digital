@@ -205,6 +205,19 @@ export default function GestionAusencias() {
     return `/api/documento?url=${encodeURIComponent(url)}&descargar=${encodeURIComponent(nombre)}`;
   }
 
+  /**
+   * Los justificantes de una ausencia.
+   *
+   * Desde que se pueden adjuntar varios, van en 'justificacion_urls'. Las
+   * ausencias registradas antes tienen uno solo en 'justificacion_url':
+   * se siguen leyendo igual, así que no se pierde ninguno.
+   */
+  function justificantesDe(a) {
+    const varios = Array.isArray(a?.justificacion_urls) ? a.justificacion_urls.filter(Boolean) : [];
+    if (varios.length > 0) return varios;
+    return a?.justificacion_url ? [a.justificacion_url] : [];
+  }
+
   /** Ver el documento sin descargarlo */
   function urlVer(url) {
     if (!url) return '';
@@ -359,7 +372,9 @@ export default function GestionAusencias() {
     const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }) : '—';
     const esImagen = url => /\.(jpe?g|png|gif|webp|heic)$/i.test(url || '');
     const esPdf = url => /\.pdf$/i.test(url || '');
-    const just = a.justificacion_url;
+    // El primero, para la vista previa del informe. Los demás se
+    // listan debajo con su enlace de descarga.
+    const just = justificantesDe(a)[0] || null;
     // Supabase Storage fuerza la descarga con el parámetro ?download=
     // (el atributo download del navegador se ignora entre dominios distintos)
     const nombreArchivo = `justificante_${(a.profesor_nombre || 'profesor').replace(/[^a-zA-Z0-9]/g, '_')}_${a.fecha_inicio || ''}.${(just || '').split('.').pop().split('?')[0] || 'pdf'}`;
@@ -735,11 +750,11 @@ function descargarInforme() {
   ${a.motivo ? `<div class="fila"><span class="label">Motivo:</span><span class="valor">${a.motivo}</span></div>` : ''}
 </div>
 
-${a.justificacion_texto || a.justificacion_url ? `
+${a.justificacion_texto || justificantesDe(a).length ? `
 <div class="seccion">
   <h2>JUSTIFICACIÓN APORTADA POR EL PROFESOR</h2>
   ${a.justificacion_texto ? `<div class="fila"><span class="label">Texto:</span><span class="valor">${a.justificacion_texto}</span></div>` : ''}
-  ${a.justificacion_url ? `<div class="fila"><span class="label">Documento:</span><span class="valor"><a href="/api/documento?url=${encodeURIComponent(a.justificacion_url)}" target="_blank">📎 Ver documento adjunto</a></span></div>` : ''}
+  ${justificantesDe(a).map((u, i) => `<div class="fila"><span class="label">${i === 0 ? 'Documentos:' : ''}</span><span class="valor"><a href="/api/documento?url=${encodeURIComponent(u)}&descargar=${encodeURIComponent(`justificante_${(a.profesor_nombre||'').replace(/[^a-zA-Z0-9]/g,'_')}_${a.fecha_inicio}_${i + 1}`)}" target="_blank">📎 Justificante ${i + 1} — descargar</a></span></div>`).join('')}
   ${a.comentario_secretario ? `<div class="fila"><span class="label">Comentario secretaría:</span><span class="valor">${a.comentario_secretario}</span></div>` : ''}
 </div>` : '<div class="seccion"><h2>JUSTIFICACIÓN</h2><p style="color:#aaa;font-style:italic">El profesor aún no ha aportado justificación.</p></div>'}
 
@@ -888,9 +903,12 @@ ${a.observaciones_directivo ? `
                         a.estado || '',
                         grupos,
                         a.justificacion_texto || '',
+                        justificantesDe(a).length,
+                        justificantesDe(a).length ? 'SÍ' : 'NO',
+                        a.justificada_fuera_plazo ? 'FUERA DE PLAZO' : '',
                       ];
                     });
-                    const cab = ['Fecha notif.','Profesor','Departamento','Tipo','Fecha inicio','Fecha fin','Motivo','Estado','Grupos/Horas','Justificación'];
+                    const cab = ['Fecha notif.','Profesor','Departamento','Tipo','Fecha inicio','Fecha fin','Motivo','Estado','Grupos/Horas','Justificación','Nº justificantes','Con documento','Plazo'];
                     const csv = [cab, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
                     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
@@ -990,26 +1008,26 @@ ${a.observaciones_directivo ? `
                   {a.estado === 'pendiente' && a.justificacion_texto && (
                     <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: '#eff6ff', borderRadius: 8, fontSize: 13, border: '1px solid #93c5fd' }}>
                       <div style={{ fontWeight: 700, color: '#1e40af', marginBottom: 4 }}>📄 Justificación presentada:</div>
-                      <div style={{ color: '#1e40af', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>
-                      {a.justificacion_url && (
-                        <a href={urlDescarga(a.justificacion_url, a)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#1e40af', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                          📥 Descargar justificante
+                      <div style={{ color: '#1e40af', marginBottom: justificantesDe(a).length ? 8 : 0 }}>{a.justificacion_texto}</div>
+                      {justificantesDe(a).map((u, i) => (
+                        <a key={u} href={urlDescarga(u, a)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', marginRight: 6, marginTop: 4, backgroundColor: '#1e40af', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                          📥 Justificante{justificantesDe(a).length > 1 ? ` ${i + 1}` : ''}
                         </a>
-                      )}
+                      ))}
                     </div>
                   )}
 
-                  {a.estado === 'justificada' && (a.justificacion_texto || a.justificacion_url) && (
+                  {a.estado === 'justificada' && (a.justificacion_texto || justificantesDe(a).length > 0) && (
                     <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8, fontSize: 13, border: '1px solid #6ee7b7' }}>
                       <div style={{ fontWeight: 700, color: '#065f46', marginBottom: 4 }}>✅ Justificación aprobada:</div>
-                      {a.justificacion_texto && <div style={{ color: '#065f46', marginBottom: a.justificacion_url ? 8 : 0 }}>{a.justificacion_texto}</div>}
-                      {a.justificacion_url && (
-                        <a href={urlDescarga(a.justificacion_url, a)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#065f46', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
-                          📥 Descargar justificante
+                      {a.justificacion_texto && <div style={{ color: '#065f46', marginBottom: justificantesDe(a).length ? 8 : 0 }}>{a.justificacion_texto}</div>}
+                      {justificantesDe(a).map((u, i) => (
+                        <a key={u} href={urlDescarga(u, a)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', marginRight: 6, marginTop: 4, backgroundColor: '#065f46', color: 'white', borderRadius: 7, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+                          📥 Justificante{justificantesDe(a).length > 1 ? ` ${i + 1}` : ''}
                         </a>
-                      )}
+                      ))}
                     </div>
                   )}
 
