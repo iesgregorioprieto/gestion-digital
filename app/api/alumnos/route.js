@@ -51,6 +51,35 @@ async function todasLasFilas(columnas) {
   return filas;
 }
 
+
+/**
+ * LOS GRUPOS QUE APARECEN EN EL HORARIO
+ *
+ * Es la fuente más fiable: un grupo existe desde que tiene clases, aunque
+ * su matrícula todavía no se haya importado. Eso es justo lo que pasaba
+ * con GM-1SMR.B, que tiene horario pero ningún alumno cargado: no salía
+ * en el desplegable y su tutor no podía seleccionarlo.
+ *
+ * El horario guarda el grupo dentro de un código largo de Delphos
+ * ("IPCG-3095215GS-1GVEC(6 F109 COM)"), así que se extrae de dentro.
+ */
+const CODIGO_GRUPO = /(ESO|BTO|GB|GM|GS|FPPE)-\d+[A-ZÑ0-9.]*/g;
+
+async function gruposDelHorario() {
+  const encontrados = new Set();
+  for (let desde = 0; ; desde += 1000) {
+    const { data, error } = await supa()
+      .from('horarios_profesores').select('grupo').range(desde, desde + 999);
+    if (error || !data || data.length === 0) break;
+    data.forEach(h => {
+      const texto = (h.grupo || '').toUpperCase();
+      for (const m of texto.matchAll(CODIGO_GRUPO)) encontrados.add(m[0]);
+    });
+    if (data.length < 1000) break;
+  }
+  return [...encontrados];
+}
+
 export async function GET(request) {
   // La lista de códigos de grupo no contiene ningún dato personal, y hace
   // falta en el formulario de alta, donde todavía no hay sesión: es donde
@@ -70,14 +99,16 @@ export async function GET(request) {
      * matrícula aún no se ha subido no aparecía por ninguna parte: su
      * tutor no podía ni seleccionarlo.
      */
-    const [{ data: oficiales }, alumnado] = await Promise.all([
+    const [{ data: oficiales }, alumnado, deHorarios] = await Promise.all([
       supa().from('grupos').select('codigo'),
       todasLasFilas('grupo'),
+      gruposDelHorario(),
     ]);
 
     const grupos = [...new Set([
       ...(oficiales || []).map(g => g.codigo),
       ...alumnado.map(a => a.grupo),
+      ...deHorarios,
     ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 
     return Response.json({ grupos });
