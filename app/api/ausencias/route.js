@@ -4,6 +4,7 @@ import { computaComoFalta } from '@/lib/motivosAusencia';
 import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
+import { diasDeLaAusencia } from '@/lib/diasAusencia';
 
 /**
  * Departamentos de FP con cuadrante de guardias propio.
@@ -247,6 +248,48 @@ async function limpiarGuardias(profesorId, desde = null) {
   }
 }
 
+
+/**
+ * Expande una ausencia en sus días con sus horas, leyendo el horario del
+ * profesor que ya está cargado en la aplicación.
+ */
+async function calcularDias(fila) {
+  if (!fila?.profesor_id || !fila?.fecha_inicio) return null;
+
+  const cliente = supa();
+  const curso = await getCursoActual();
+
+  const [{ data: profesores }, { data: equivalencias }] = await Promise.all([
+    cliente.from('profesores').select('id, nombre, apellidos, departamento'),
+    cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
+  ]);
+
+  const profesor = (profesores || []).find(p => p.id === fila.profesor_id);
+  if (!profesor) return null;
+
+  // El horario entero del curso, sin el tope de mil filas.
+  let horarios = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data } = await cliente
+      .from('horarios_profesores')
+      .select('profesor_nombre_pdf, hora_id, dia, tipo, grupo, materia, aula')
+      .eq('curso_academico', curso)
+      .range(desde, desde + 999);
+    if (!data || data.length === 0) break;
+    horarios = horarios.concat(data);
+    if (data.length < 1000) break;
+  }
+  if (horarios.length === 0) return null;
+
+  return diasDeLaAusencia({
+    ausencia: fila,
+    profesor,
+    horarios,
+    profesores: profesores || [],
+    equivalencias: equivalencias || [],
+  });
+}
+
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
@@ -278,6 +321,27 @@ export async function POST(request) {
       // justificar ni cuenta como falta.
       if (fila.subtipo && !computaComoFalta(fila.subtipo)) {
         fila.estado = 'justificada';
+      }
+
+      /**
+       * Las horas se resuelven AQUÍ, día a día, contra el horario real.
+       *
+       * Antes se guardaba una sola lista para toda la ausencia, y una
+       * lista vacía quería decir dos cosas distintas: "falto el día
+       * entero" en una baja y "no rellené las horas" en un análisis de
+       * sangre de dos horas. El motor daba por hecho lo primero y cubría
+       * clases que la persona iba a dar. Y en una ausencia de varios días
+       * esa misma lista se aplicaba igual al lunes que al jueves.
+       *
+       * Ahora queda escrito qué tiene esa persona a cada hora de cada
+       * día. El campo 'horas' se sigue guardando igual que siempre: no se
+       * pierde nada de lo ya registrado ni de lo que mande el formulario.
+       */
+      try {
+        fila.dias = await calcularDias(fila);
+      } catch (e) {
+        // Que esto falle no puede impedir registrar una ausencia.
+        console.error('ausencias: no se han podido calcular los días:', e?.message);
       }
 
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
@@ -380,6 +444,19 @@ export async function POST(request) {
           const limite = new Date(fechaInicio + 'T00:00:00');
           limite.setDate(limite.getDate() + 3);
           cambios.justificada_fuera_plazo = new Date() > limite;
+        }
+      }
+
+      // Si se cambian las fechas o las horas, los días hay que rehacerlos:
+      // si no, quedarían los del registro anterior.
+      if ('horas' in cambios || 'fecha_inicio' in cambios || 'fecha_fin' in cambios) {
+        try {
+          const { data: previa } = await supa().from('ausencias')
+            .select('profesor_id, fecha_inicio, fecha_fin, horas').eq('id', id);
+          const antes = (previa || [])[0];
+          if (antes) cambios.dias = await calcularDias({ ...antes, ...cambios });
+        } catch (e) {
+          console.error('ausencias: no se han podido rehacer los días:', e?.message);
         }
       }
 
