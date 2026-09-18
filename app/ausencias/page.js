@@ -80,8 +80,9 @@ export default function Ausencias() {
   const [gruposUnicos, setGruposUnicos] = useState([]); // para ausencias largas (3+ días)
   const [tareasBloque, setTareasBloque] = useState({}); // {grupo_materia: {instrucciones, archivo, archivoNombre}}
   const [justTexto, setJustTexto] = useState('');
-  const [justArchivo, setJustArchivo] = useState(null);
-  const [justArchNombre, setJustArchNombre] = useState('');
+  const [justArchivos, setJustArchivos] = useState([]);   // varios, no uno
+  const [justError, setJustError] = useState('');
+  const [justProgreso, setJustProgreso] = useState('');
   const [enviandoJust, setEnviandoJust] = useState(false);
 
   // Días de la semana
@@ -264,17 +265,63 @@ export default function Ausencias() {
   }
 
   // ===== SUBIR ARCHIVO =====
+  /**
+   * Sube un archivo y AVISA SI FALLA.
+   *
+   * Antes devolvía null en silencio ante cualquier problema, y quien
+   * llamaba seguía adelante: la ausencia quedaba marcada como justificada
+   * con el documento vacío y al profesor le salía el mensaje verde de
+   * "justificada correctamente". Ante la Delegación eso es una falta sin
+   * justificante con el sello puesto.
+   */
   async function subirArchivo(archivo, carpeta) {
-    if (!archivo) return null;
     const form = new FormData();
     form.append('archivo', archivo);
     form.append('carpeta', carpeta);
     form.append('bucket', 'ausencias-docs');
+
+    let r;
     try {
-      const r = await fetch('/api/documento', { method: 'POST', body: form });
-      const d = await r.json();
-      return d.url || null;
-    } catch { return null; }
+      r = await fetch('/api/documento', { method: 'POST', body: form });
+    } catch {
+      throw new Error('No hay conexión. Inténtalo otra vez cuando tengas cobertura.');
+    }
+
+    if (r.status === 413) {
+      throw new Error(`«${archivo.name}» es demasiado grande para enviarlo. Hazle una foto con menos calidad o mándalo en PDF.`);
+    }
+    let d = {};
+    try { d = await r.json(); } catch {}
+    if (!r.ok || !d.url) {
+      throw new Error(d.error || `No se ha podido subir «${archivo.name}».`);
+    }
+    return d.url;
+  }
+
+  /**
+   * Las fotos de móvil pesan cinco o seis megas y no llegan a pasar: el
+   * servidor corta las peticiones muy por debajo de eso. Aquí se reducen
+   * antes de enviarlas, que para leer un parte médico sobra de largo.
+   * Si algo falla, se manda el original y que el servidor decida.
+   */
+  async function encogerSiEsFoto(archivo) {
+    if (!archivo.type?.startsWith('image/')) return archivo;
+    if (archivo.size < 800 * 1024) return archivo;
+    try {
+      const bitmap = await createImageBitmap(archivo);
+      const LADO = 1800;
+      const escala = Math.min(1, LADO / Math.max(bitmap.width, bitmap.height));
+      const lienzo = document.createElement('canvas');
+      lienzo.width = Math.round(bitmap.width * escala);
+      lienzo.height = Math.round(bitmap.height * escala);
+      lienzo.getContext('2d').drawImage(bitmap, 0, 0, lienzo.width, lienzo.height);
+      const blob = await new Promise(res => lienzo.toBlob(res, 'image/jpeg', 0.82));
+      if (!blob || blob.size >= archivo.size) return archivo;
+      const base = archivo.name.replace(/\.[^.]+$/, '');
+      return new File([blob], `${base}.jpg`, { type: 'image/jpeg' });
+    } catch {
+      return archivo;
+    }
   }
 
   // ===== ENVIAR AUSENCIA =====
@@ -489,37 +536,94 @@ export default function Ausencias() {
   }
 
   // ===== JUSTIFICAR =====
-  async function justificar() {
-    if (!justTexto.trim() && !justArchivo) {
-      mostrarMensaje('Añade una explicación o adjunta un documento.', 'error'); return;
-    }
-    setEnviandoJust(true);
-    let url = null;
-    if (justArchivo) url = await subirArchivo(justArchivo, 'justificantes');
 
-    // Dejar constancia si se entrega fuera de plazo
+  function anadirJustificantes(lista) {
+    const nuevos = Array.from(lista || []);
+    if (nuevos.length === 0) return;
+    setJustError('');
+    setJustArchivos(prev => {
+      const juntos = [...prev];
+      nuevos.forEach(f => {
+        if (!juntos.some(x => x.name === f.name && x.size === f.size)) juntos.push(f);
+      });
+      return juntos.slice(0, 6);
+    });
+  }
+
+  function quitarJustificante(i) {
+    setJustArchivos(prev => prev.filter((_, n) => n !== i));
+  }
+
+  /**
+   * Una ausencia solo queda justificada si TODO ha llegado.
+   *
+   * Si falla la subida de un archivo, no se marca nada: se dice qué ha
+   * pasado y los archivos siguen ahí para reintentarlo. Antes se daba por
+   * justificada igualmente y el documento se perdía sin que nadie se
+   * enterara.
+   */
+  async function justificar() {
+    setJustError('');
+    if (!justTexto.trim() && justArchivos.length === 0) {
+      setJustError('Adjunta el justificante o explica por escrito por qué no lo tienes.');
+      return;
+    }
+
+    setEnviandoJust(true);
+    const urls = [];
+    try {
+      for (let i = 0; i < justArchivos.length; i++) {
+        setJustProgreso(`Subiendo ${i + 1} de ${justArchivos.length}…`);
+        const listo = await encogerSiEsFoto(justArchivos[i]);
+        urls.push(await subirArchivo(listo, 'justificantes'));
+      }
+    } catch (e) {
+      setJustProgreso('');
+      setEnviandoJust(false);
+      setJustError(`${e.message} La ausencia NO se ha justificado; tus archivos siguen aquí para volver a intentarlo.`);
+      return;
+    }
+
+    setJustProgreso('Guardando…');
     const fueraDePlazo = ausenciaJustificando.estado === 'sin_justificar'
       || diasParaJustificar(ausenciaJustificando.fecha_inicio) <= 0;
 
-    await fetch('/api/ausencias', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'editar',
-        id: ausenciaJustificando.id,
-        datos: {
-          estado: 'justificada',
-          justificacion_texto: justTexto.trim() || null,
-          justificacion_url: url,
-          justificada_at: new Date().toISOString(),
-          justificada_fuera_plazo: fueraDePlazo,
-        },
-      }),
-    });
+    let r;
+    try {
+      r = await fetch('/api/ausencias', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'editar',
+          id: ausenciaJustificando.id,
+          datos: {
+            estado: 'justificada',
+            justificacion_texto: justTexto.trim() || null,
+            // Se sigue guardando el primero en la columna de siempre, para
+            // que nada de lo ya registrado deje de verse.
+            justificacion_url: urls[0] || null,
+            justificacion_urls: urls,
+            justificada_at: new Date().toISOString(),
+            justificada_fuera_plazo: fueraDePlazo,
+          },
+        }),
+      });
+    } catch {
+      setJustProgreso(''); setEnviandoJust(false);
+      setJustError('Los archivos se han subido pero no se ha podido guardar. Inténtalo de nuevo.');
+      return;
+    }
 
+    setJustProgreso('');
     setEnviandoJust(false);
+
+    if (!r.ok) {
+      setJustError('No se ha podido guardar la justificación. Inténtalo de nuevo.');
+      return;
+    }
+
     setAusenciaJustificando(null);
-    setJustTexto(''); setJustArchivo(null); setJustArchNombre('');
+    setJustTexto(''); setJustArchivos([]);
     mostrarMensaje(
       fueraDePlazo
         ? '✅ Justificación enviada. Se ha registrado que se entregó fuera de plazo.'
@@ -1229,7 +1333,7 @@ export default function Ausencias() {
                           ⏰ Plazo vencido — puedes justificarla igualmente
                         </div>
                       )}
-                      <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivo(null); setJustArchNombre(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivos([]); setJustError(''); setJustProgreso(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                         📄 Justificar ausencia
                       </button>
                     </div>
@@ -1264,23 +1368,42 @@ export default function Ausencias() {
               <label style={{ fontSize: 13, fontWeight: 600, color: azul, display: 'block', marginBottom: 6 }}>📝 Explicación</label>
               <textarea value={justTexto} onChange={e => setJustTexto(e.target.value)} placeholder="Explica el motivo justificado de tu ausencia..." rows={4} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
-            <div style={{ marginBottom: 20 }}>
-              {!justArchNombre ? (
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, border: '2px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  <span style={{ fontSize: 20 }}>📎</span>
-                  <span>Adjuntar documento justificante</span>
-                  <input type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" onChange={e => { const f = e.target.files[0]; if (f) { setJustArchivo(f); setJustArchNombre(f.name); }}} style={{ display: 'none' }} />
-                </label>
-              ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8 }}>
-                  <span>✅</span>
-                  <span style={{ fontSize: 13, color: verde, fontWeight: 600, flex: 1 }}>📎 {justArchNombre}</span>
-                  <button onClick={() => { setJustArchivo(null); setJustArchNombre(''); }} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, border: '2px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                <span style={{ fontSize: 20 }}>📎</span>
+                <span>{justArchivos.length === 0 ? 'Adjuntar justificante' : 'Añadir otro'}</span>
+                <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.webp,.heic,.doc,.docx"
+                  onChange={e => { anadirJustificantes(e.target.files); e.target.value = ''; }}
+                  style={{ display: 'none' }} />
+              </label>
+              <div style={{ fontSize: 11.5, color: '#888', marginTop: 5 }}>
+                Puedes adjuntar varios. Las fotos se reducen solas antes de enviarlas.
+              </div>
+
+              {justArchivos.map((f, i) => (
+                <div key={f.name + f.size} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, marginTop: 7 }}>
+                  <span>{f.type?.startsWith('image/') ? '🖼️' : '📄'}</span>
+                  <span style={{ fontSize: 12.5, color: verde, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {f.name}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#999' }}>
+                    {f.size > 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.round(f.size / 1024)} KB`}
+                  </span>
+                  <button onClick={() => quitarJustificante(i)} disabled={enviandoJust}
+                    title="Quitar este archivo"
+                    style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 15, cursor: 'pointer' }}>✕</button>
                 </div>
-              )}
+              ))}
             </div>
+
+            {justError && (
+              <div style={{ padding: '10px 13px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', color: '#991b1b', fontSize: 12.5, fontWeight: 600, marginBottom: 14, lineHeight: 1.5 }}>
+                ⚠️ {justError}
+              </div>
+            )}
+
             <button onClick={justificar} disabled={enviandoJust} style={{ width: '100%', padding: 13, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviandoJust ? 'not-allowed' : 'pointer', opacity: enviandoJust ? 0.7 : 1 }}>
-              {enviandoJust ? '⏳ Enviando...' : '✅ Enviar justificación'}
+              {enviandoJust ? `⏳ ${justProgreso || 'Enviando…'}` : '✅ Enviar justificación'}
             </button>
           </div>
         </div>
