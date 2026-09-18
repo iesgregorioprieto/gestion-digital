@@ -160,18 +160,14 @@ export default function Guardias() {
   const [horaActiva, setHoraActiva]     = useState('1');
   const [sectores, setSectores]         = useState([]);
   const [horarioGuardias, setHG]        = useState({});
-  const [horariosClase, setHC]          = useState([]);
   const [ausenciasDia, setAusDia]       = useState([]);
   const [cargandoDia, setCargandoDia]   = useState(false);
   const [popupAbierto, setPopupAbierto] = useState(null);
   const [profesorNombre, setPN]         = useState('');
   const [profesorId, setProfId]         = useState('');
-  const [miEspecialidad, setMiEsp]      = useState('');
   const [esDirectivo, setEsDir]         = useState(false);
   const [mapaProfesores, setMapaProf]   = useState({});
   const [profesoresList, setProfsList]  = useState([]);
-  const [contadorApoyos, setContApoyos] = useState({});
-  const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
   const [fichandoId, setFichandoId]       = useState(null);
@@ -207,20 +203,24 @@ export default function Guardias() {
   async function cargarBase(id) {
     setCargando(true);
 
-    let horarios = [];
-    let offset = 0;
-    const limit = 1000;
-    while (true) {
+    // Solo las filas de guardia. Antes se descargaba el horario entero del
+    // centro —miles de filas, en cada carga y para 150 personas— para
+    // alimentar un cálculo del reparto que se hacía aquí, en el navegador.
+    // Ese cálculo ya no existe: el reparto lo hace el servidor y esta
+    // pantalla solo enseña lo que él ha guardado. De todo aquello queda
+    // únicamente el cuadrante, para saber quién está de guardia a cada hora.
+    const curso = await getCursoActual();
+    let guardias = [];
+    for (let offset = 0; ; offset += 1000) {
       const { data } = await consulta('horarios_profesores')
-        .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
-        .eq('curso_academico',await getCursoActual())
-        .range(offset, offset + limit - 1);
+        .select('profesor_nombre_pdf,hora_id,dia,grupo,materia,aula')
+        .eq('curso_academico', curso)
+        .eq('tipo', 'guardia')
+        .range(offset, offset + 999);
       if (!data || data.length === 0) break;
-      horarios = horarios.concat(data);
-      if (data.length < limit) break;
-      offset += limit;
+      guardias = guardias.concat(data);
+      if (data.length < 1000) break;
     }
-    setHC(horarios);
 
     const { data: profes } = await consulta('profesores')
       .select('id,nombre,apellidos,departamento,especialidad');
@@ -234,39 +234,11 @@ export default function Guardias() {
     setMapaProf(mapa);
     setProfsList(profes || []);
 
-    // Contador de apoyos por sector del curso (necesario para la rotación)
-    const { data: apoyosCurso } = await consulta('apoyos_asignados')
-      .select('sector_apoyo,profesor_id,estado')
-      .eq('curso_academico', await getCursoActual());
-    const contSector = {};
-    const contProfesor = {};
-    (apoyosCurso || []).forEach(a => {
-      if (a.estado === 'confirmado' || a.estado === 'realizado') {
-        contSector[a.sector_apoyo] = (contSector[a.sector_apoyo] || 0) + 1;
-        if (a.profesor_id) contProfesor[a.profesor_id] = (contProfesor[a.profesor_id] || 0) + 1;
-      }
-    });
-    setContApoyos(contSector);
-    setApoyosPorProfesor(contProfesor);
-
-    // Mi especialidad
-    const yo = (profes||[]).find(p => p.id === id);
-    setMiEsp(yo?.especialidad || '');
-
-    // Contador de apoyos por sector
-    const { data: apoyos } = await consulta('apoyos_asignados')
-      .select('sector_apoyo,estado')
-      .eq('curso_academico', await getCursoActual());
-    const cont = {};
-    (apoyos || []).forEach(a => {
-      if (a.estado === 'confirmado' || a.estado === 'realizado') {
-        cont[a.sector_apoyo] = (cont[a.sector_apoyo] || 0) + 1;
-      }
-    });
-    setContApoyos(cont);
+    // Los contadores de la rotación se han quitado: los usaba el cálculo
+    // del navegador. La rotación la lleva el servidor, que además solo
+    // cuenta las guardias fichadas.
 
     // Sectores del cuadrante
-    const guardias = horarios.filter(h => h.tipo === 'guardia');
     const porSector = {};
     guardias.forEach(g => {
       const sector = g.grupo?.trim() || g.materia?.trim() || 'Sin clasificar';
@@ -392,205 +364,16 @@ export default function Guardias() {
 
   // === LÓGICA CENTRAL POR HORA ===
 
-  // Profesores ausentes esta hora concreta
-  function ausentesEstaHora() {
-    return ausenciasDia.filter(a =>
-      a.horas.some(h => horaCoincide(h.hora, horaActiva))
-    );
-  }
 
   // Profesores de guardia en un sector esta hora
   function guardiasDeSector(sector) {
     return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
   }
 
-  // Ausencias por sector esta hora (agrupadas)
-  function ausenciasPorSector() {
-    const grupos = {};
-    ausentesEstaHora().forEach(a => {
-      const s = a.sector.toUpperCase();
-      if (!grupos[s]) grupos[s] = [];
-      grupos[s].push(a);
-    });
-    return grupos;
-  }
 
-  // Todos los sectores con actividad hoy (con ausencia o con guardia)
-  function sectoresConActividad() {
-    const set = new Set();
-    ausentesEstaHora().forEach(a => set.add(a.sector.toUpperCase()));
-    sectores.forEach(s => {
-      const sup = s.toUpperCase();
-      if (guardiasDeSector(s).length > 0) set.add(sup);
-    });
-    return Array.from(set).sort((a, b) => {
-      // GENERAL al final
-      if (a === 'GENERAL' && b !== 'GENERAL') return 1;
-      if (b === 'GENERAL' && a !== 'GENERAL') return -1;
-      return a.localeCompare(b);
-    });
-  }
 
-  // Encontrar el sector real (case-sensitive) para acceder a horarioGuardias
-  function sectorReal(nombreSector) {
-    return sectores.find(s => s.toUpperCase() === nombreSector.toUpperCase()) || nombreSector;
-  }
 
-  // Auto-asignación: para cada clase huérfana de esta hora, decidir quién cubre
-  // Devuelve: { ausenciaId, hora, tipo:'guardia_sector'|'apoyo_cruzado', profesorCubre: {nombre,abrev,sectorOriginal}, alternativas: [] }
-  function asignacionAutomatica() {
-    const asignaciones = [];
-    const porSector = ausenciasPorSector();
 
-    // Trackear profesores ya asignados esta hora para no doblarles
-    const asignadosAbrev = new Set();
-
-    // Set con las abreviaturas de los profesores ausentes esta hora
-    // (para no poder asignarles cubrir a otros - ellos también faltan)
-    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
-
-    // Trackear cuántas asignaciones lleva cada sector (para reparto interno)
-    const usadosDelSector = {};
-
-    for (const sectorSup of Object.keys(porSector)) {
-      const sReal = sectorReal(sectorSup);
-      const ausentes = porSector[sectorSup];
-      const guardiasDisp = guardiasDeSector(sReal);
-
-      for (const aus of ausentes) {
-        const clasesHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'clase');
-        const guardiasHora = aus.horas.filter(h => horaCoincide(h.hora, horaActiva) && h.tipo === 'guardia');
-
-        // Procesar clases huérfanas → necesitan sustituto con tarea
-        for (const clase of clasesHora) {
-          let cubre = null;
-          for (const p of guardiasDisp) {
-            const key = normAbrev(p);
-            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
-            asignadosAbrev.add(key);
-            usadosDelSector[sectorSup] = (usadosDelSector[sectorSup] || 0) + 1;
-            break;
-          }
-          if (!cubre) {
-            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
-            if (libres.length > 0) {
-              const primero = libres[0];
-              asignadosAbrev.add(normAbrev(primero.abrev));
-              cubre = { ...primero, tipo: 'apoyo_cruzado', alternativas: libres.slice(1, 5) };
-            }
-          }
-          asignaciones.push({ ausencia: aus, clase, tipoHora: 'clase', cubre });
-        }
-
-        // Procesar guardias huérfanas → asignar automáticamente al mejor candidato
-        for (const guardia of guardiasHora) {
-          // Mismo criterio que las clases: primero el propio sector, luego GENERAL, luego FP
-          let cubre = null;
-          for (const p of guardiasDisp) {
-            const key = normAbrev(p);
-            if (asignadosAbrev.has(key) || ausentesAbrev.has(key)) continue;
-            cubre = { nombre: nombreLargo(mapaProfesores, p), abrev: p, sectorOriginal: sectorSup, tipo: 'guardia_sector' };
-            asignadosAbrev.add(key);
-            break;
-          }
-          if (!cubre) {
-            const libres = profesoresLibresParaApoyo(asignadosAbrev, porSector, sectorSup);
-            if (libres.length > 0) {
-              const primero = libres[0];
-              asignadosAbrev.add(normAbrev(primero.abrev));
-              cubre = { ...primero, tipo: 'guardia_sector', alternativas: libres.slice(1, 5) };
-            }
-          }
-          asignaciones.push({
-            ausencia: aus,
-            clase: { ...guardia, grupo: guardia.grupo || sectorSup },
-            tipoHora: 'guardia',
-            cubre,
-          });
-        }
-      }
-    }
-    return asignaciones;
-  }
-
-  // Profesores FP libres esta hora (no dan clase, no ausentes, no ya asignados)
-  // Ordenados por menos apoyos previos
-  // SOLO cuentan sectores FP reales (no BIBLIOTECA, no ACOMPAÑAMIENTO, no GENERAL)
-  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null, sectorSolicitante = null) {
-    if (porSector === null) porSector = ausenciasPorSector();
-
-    const ocupadosEnClase = new Set(
-      horariosClase
-        .filter(h => h.tipo === 'clase' && (h.dia||'').toLowerCase() === diaSem && normHora(h.hora_id) === horaActiva)
-        .map(h => normAbrev(h.profesor_nombre_pdf))
-    );
-    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
-
-    // TODOS los sectores, incluidos los que tienen ausentes.
-    // Un sector puede tener 1 ausente y 3 de guardia disponibles:
-    // excluir el sector entero dejaba sin candidatos al propio GENERAL.
-    const libres = [];
-    for (const sector of sectores) {
-      const guardiasFP = guardiasDeSector(sector);
-      guardiasFP.forEach(p => {
-        const key = normAbrev(p);
-        if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key) && !asignadosAbrev.has(key)) {
-          const profCompleto = profesoresList.find(pf =>
-            claveAbreviatura(pf.apellidos, pf.nombre) === key
-          );
-          libres.push({
-            abrev: p,
-            sectorOriginal: sector.toUpperCase(),
-            nombre: nombreLargo(mapaProfesores, p),
-            profesorId: profCompleto?.id || null,
-            apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
-            apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
-          });
-        }
-      });
-    }
-    // Mismo orden que en gestión (dirección, agosto 2026):
-    //   Falta alguien de FP:        1º su departamento  2º otro de FP   3º generales
-    //   Falta alguien de generales: 1º su departamento  2º generales    3º FP
-    // Dentro de cada escalón manda la rotación: quien menos apoyos lleva.
-    const sectorAusente = (sectorSolicitante || '').toUpperCase();
-    const ausenteEsFP = esSectorFP(sectorAusente);
-    const prioridadDe = p => {
-      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;
-      const candidatoEsFP = esSectorFP(p.sectorOriginal);
-      if (ausenteEsFP) return candidatoEsFP ? 1 : 2;
-      return candidatoEsFP ? 2 : 1;
-    };
-
-    // Afinidad por departamento dentro de cada nivel de sector.
-    // Si falta alguien de Matemáticas y hay un profesor de Matemáticas
-    // de guardia, ese cubre antes que el de Lengua, aunque los dos
-    // estén en el sector GENERAL. Lo mismo para FP: un profesor de
-    // TMV cubre antes a otro de TMV que a uno de Hostelería.
-    const ausDelSector = porSector
-      ? (porSector[sectorSolicitante] || porSector[(sectorSolicitante || '').toUpperCase()] || [])
-      : [];
-    const dptoAusente = (ausDelSector[0]?.departamento || '').toLowerCase();
-
-    const afinidadDpto = p => {
-      const profObj = profesoresList.find(pf => claveAbreviatura(pf.apellidos, pf.nombre) === normAbrev(p.abrev));
-      const dpto = (profObj?.departamento || '').toLowerCase();
-      return dpto && dpto === dptoAusente ? 0 : 1;
-    };
-
-    libres.sort((a, b) => {
-      const pa = prioridadDe(a), pb = prioridadDe(b);
-      if (pa !== pb) return pa - pb;
-      // Mismo nivel de sector: el del mismo departamento primero
-      const da = afinidadDpto(a), db = afinidadDpto(b);
-      if (da !== db) return da - db;
-      if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
-      if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
-      return a.nombre.localeCompare(b.nombre);
-    });
-    return libres;
-  }
 
   // === Registro automático ===
   // Si hay un candidato asignado y no está ya registrado en apoyos_asignados,
@@ -635,36 +418,6 @@ export default function Guardias() {
   }
 
 
-  // El propio profesor se apunta para cubrir una guardia huérfana
-  async function activarApoyo(candidato, sector, apoyosFijados) {
-    if (!candidato.profesorId && candidato.profesorId !== profesorId) {
-      alert('No se puede activar: ficha no encontrada para este compañero.');
-      return;
-    }
-    const r = await fetch('/api/apoyos', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'autoasignar',
-        datos: {
-          fecha,
-          hora: horaActiva,
-          sector_apoyo: sector,
-          profesor_id: candidato.profesorId,
-          curso_academico: await getCursoActual(),
-        },
-      }),
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      alert(e.error || 'No se ha podido activar la guardia.');
-      return;
-    }
-    // Recargar apoyos
-    const { data } = await consulta('apoyos_asignados')
-      .select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
-    setApAsig(data || []);
-  }
 
   // Cambiar el profesor asignado a un apoyo (solo directivos)
   async function cambiarApoyo(apoyoId, nuevoProfesor) {
@@ -810,7 +563,14 @@ export default function Guardias() {
         <div style={{ flex:1, textAlign:'center' }}>
           <div style={{ fontWeight:800, fontSize:15, color:azul, textTransform:'capitalize' }}>{fechaCorta(fecha)}</div>
           <div style={{ fontSize:12, color:'#666', marginTop:2 }}>
-            {esFinde ? '🏖️ Fin de semana' : `${ausentesEstaHora().length === 0 ? '✅ Sin ausencias' : `🚨 ${ausenciasDia.length} profesor${ausenciasDia.length!==1?'es':''} ausente${ausenciasDia.length!==1?'s':''}`}`}
+            {(() => {
+              if (esFinde) return '🏖️ Fin de semana';
+              // Lo que hay que cubrir a esta hora sale de lo que el servidor
+              // ha repartido, no de una cuenta hecha aquí.
+              const n = apoyosAsignados.filter(a => horaCoincide(a.hora, horaActiva)).length;
+              if (n === 0) return '✅ Nada que cubrir a esta hora';
+              return `🚨 ${n} ${n === 1 ? 'grupo que cubrir' : 'grupos que cubrir'}`;
+            })()}
           </div>
         </div>
         <button onClick={() => setFecha(sumarDias(fecha, 1))} style={btnNav}>→</button>
