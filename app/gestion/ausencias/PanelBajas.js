@@ -154,9 +154,11 @@ export default function PanelBajas() {
     if (!confirm(
       `¿Asignar a ${sustituto.nombre} ${sustituto.apellidos} como sustituto de ` +
       `${titular.nombre} ${titular.apellidos}?\n\n` +
-      `Se le copiará el horario completo del titular y se incorporará el ` +
-      `${fechaLarga(fechaIncorporacion)}.\n\n` +
-      `Las guardias de sus grupos se mantienen hasta el día anterior.`
+      `El horario del titular PASA A SER SUYO: sus clases y sus guardias. ` +
+      `El titular deja de aparecer en el cuadrante.\n\n` +
+      `Se incorpora el ${fechaLarga(fechaIncorporacion)}. Las guardias de sus ` +
+      `grupos se mantienen hasta el día anterior.\n\n` +
+      `Si ya era su sustituto, esto repara el horario y no duplica nada.`
     )) return;
 
     setTrabajando(true);
