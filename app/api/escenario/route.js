@@ -36,14 +36,25 @@ async function sesionDe(request) {
 }
 
 export async function GET(request) {
-  // Solo se exige sesión, no ser directivo. El escenario muestra quién
-  // falta (nombre y motivo genérico), nunca datos médicos ni justificantes.
-  // Lo usan las pantallas de gestión de ausencias, DLD, actividades y
-  // jefatura de estudios, que son de dirección; pero antes lo leía el
-  // navegador sin comprobar nada, y el dato no es más sensible que la
-  // pantalla de la sala de profesores.
+  /**
+   * SOLO EL EQUIPO DIRECTIVO.
+   *
+   * El escenario del día no es una lista de quién falta: trae el motivo
+   * tal como lo escribió cada uno, y ahí hay cosas como «visita
+   * ginecología» o «pruebas del preoperatorio de mi hijo». Eso es un dato
+   * de salud, y solo lo puede ver quien tramita la justificación.
+   *
+   * Antes bastaba con tener la sesión iniciada. Las cuatro pantallas que
+   * lo usan son de dirección y están bien protegidas, pero eso no
+   * protegía nada: cualquier profesor podía pedir este endpoint desde el
+   * navegador y leer el escenario de cualquier día. La comprobación tiene
+   * que estar aquí, que es por donde salen los datos.
+   */
   const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
+  if (!esDirectivo(sesion)) {
+    return Response.json({ error: 'solo_equipo_directivo' }, { status: 403 });
+  }
 
   const fecha = new URL(request.url).searchParams.get('fecha');
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {

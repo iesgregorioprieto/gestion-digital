@@ -28,12 +28,26 @@ export default function EscenarioDia({ fecha, compacto = false }) {
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
 
+  const [actualizado, setActualizado] = useState(null);
+
+  /**
+   * Se refresca solo, como el panel de la sala de profesores.
+   *
+   * Durante la mañana entran ausencias nuevas —alguien llama a las diez
+   * diciendo que no viene a 3ª— y esta pantalla se queda abierta en el
+   * despacho. Si no se actualiza sola, se está mirando la foto de las
+   * nueve y se toman decisiones con datos viejos.
+   *
+   * La primera carga muestra «cargando»; las siguientes se hacen por
+   * detrás, sin parpadeo, para no molestar a quien esté leyendo.
+   */
   useEffect(() => {
     if (!fecha) { setItems([]); setCargando(false); return; }
     let cancelado = false;
+    let primera = true;
 
-    (async () => {
-      setCargando(true);
+    const traer = async () => {
+      if (primera) setCargando(true);
       setError('');
       try {
         const r = await fetch(`/api/escenario?fecha=${fecha}`);
@@ -41,19 +55,34 @@ export default function EscenarioDia({ fecha, compacto = false }) {
         const d = await r.json();
 
         if (!r.ok || d.error) {
-          setError(d.error || 'No se ha podido cargar el escenario del día.');
+          setError(d.error === 'solo_equipo_directivo'
+            ? 'El escenario del día es solo para el equipo directivo.'
+            : (d.error || 'No se ha podido cargar el escenario del día.'));
           setCargando(false);
           return;
         }
 
         setItems(d.items || []);
+        setActualizado(new Date());
       } catch (e) {
         if (!cancelado) setError('No se ha podido cargar el escenario del día.');
       }
-      if (!cancelado) setCargando(false);
-    })();
+      if (!cancelado) { setCargando(false); primera = false; }
+    };
 
-    return () => { cancelado = true; };
+    traer();
+    const reloj = setInterval(traer, 60000);
+
+    // Al volver a la pestaña, al momento: no tiene sentido esperar al
+    // siguiente minuto si alguien acaba de sentarse delante.
+    const alVolver = () => { if (document.visibilityState === 'visible') traer(); };
+    document.addEventListener('visibilitychange', alVolver);
+
+    return () => {
+      cancelado = true;
+      clearInterval(reloj);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, [fecha]);
 
   const totalProfes = new Set(items.map(i => i.profesor)).size;
@@ -93,6 +122,12 @@ export default function EscenarioDia({ fecha, compacto = false }) {
             ? 'No hay nadie fuera del centro este día.'
             : `${totalProfes === 1 ? 'profesor/a fuera' : 'profesores/as fuera'} del centro este día.`}
         </span>
+        {actualizado && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, color: '#9ca3af', whiteSpace: 'nowrap' }}
+            title="Se actualiza solo cada minuto">
+            🔄 {actualizado.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        )}
       </div>
 
       {/* BLOQUES POR PRIORIDAD */}
