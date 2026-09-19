@@ -906,10 +906,19 @@ ${a.observaciones_directivo ? `
                         justificantesDe(a).length,
                         justificantesDe(a).length ? 'SÍ' : 'NO',
                         a.justificada_fuera_plazo ? 'FUERA DE PLAZO' : '',
+                        // Enlace directo a cada justificante: desde la hoja se
+                        // abre y se guarda. Sin esto habría que ir uno a uno por
+                        // la pantalla, y al cerrar el curso se perderían.
+                        justificantesDe(a).map(u => `${window.location.origin}${urlDescarga(u, a)}`).join(' | '),
                       ];
                     });
-                    const cab = ['Fecha notif.','Profesor','Departamento','Tipo','Fecha inicio','Fecha fin','Motivo','Estado','Grupos/Horas','Justificación','Nº justificantes','Con documento','Plazo'];
-                    const csv = [cab, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+                    const cab = ['Fecha notif.','Profesor','Departamento','Tipo','Fecha inicio','Fecha fin','Motivo','Estado','Grupos/Horas','Justificación','Nº justificantes','Con documento','Plazo','Enlaces a los justificantes'];
+                    // Punto y coma, no coma: Excel en español espera punto y
+                    // coma y con comas lo metía todo en una sola columna.
+                    // La marca del principio es para que respete las tildes.
+                    const csv = [cab, ...filas]
+                      .map(f => f.map(c => `"${String(c).replace(/"/g,'""')}"`).join(';'))
+                      .join('\r\n');
                     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
@@ -917,6 +926,21 @@ ${a.observaciones_directivo ? `
                     a.download = `ausencias_${new Date().toLocaleDateString('es-ES').replace(/\//g,'-')}.csv`;
                     a.click();
                     URL.revokeObjectURL(url);
+
+                    // El listado NO se lleva los documentos dentro. Quien lo
+                    // descarga tiene que saberlo: al cerrar el curso, lo que
+                    // no se haya guardado fuera se pierde.
+                    const conDoc = ausenciasFiltradas.reduce((n, x) => n + justificantesDe(x).length, 0);
+                    if (conDoc > 0) {
+                      alert(
+                        `Listado descargado.\n\n` +
+                        `⚠️ Este archivo NO contiene los justificantes: lleva ` +
+                        `los ENLACES a los ${conDoc} documentos, en la última columna.\n\n` +
+                        `Si necesitas conservarlos, ábrelos desde ahí y guárdalos ` +
+                        `fuera de la aplicación. Al cerrar el curso, lo que no se ` +
+                        `haya guardado se pierde.`
+                      );
+                    }
                   }} style={{ width: '100%', padding: '7px 10px', borderRadius: 7, border: '1.5px solid #cbd5e1', backgroundColor: '#f1f5f9', color: '#475569', fontSize: 12, cursor: 'pointer', fontWeight: 600 }}>📊 Descargar en Excel</button>
 
                   {/* Informe oficial para la Delegación */}
