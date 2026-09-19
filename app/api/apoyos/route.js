@@ -54,6 +54,46 @@ export async function POST(request) {
     // porque el reloj del navegador lo cambia cualquiera.
     //
     // Las observaciones son opcionales y van en el mismo gesto.
+    /**
+     * ANOTAR UNA INCIDENCIA DURANTE LA GUARDIA
+     *
+     * Las observaciones solo se podían escribir en el momento de fichar, y
+     * las cosas pasan después: un alumno que se va, un grupo que no
+     * aparece, un aula cerrada. El profesorado pedía poder ir anotándolas
+     * mientras dura la hora.
+     *
+     * Se puede antes o después de fichar, pero solo durante la franja de
+     * esa guardia y solo en la propia. Se añade a lo que ya hubiera, con
+     * la hora delante, para que quede el orden de lo que fue ocurriendo.
+     */
+    if (accion === 'anotar_incidencia') {
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+      const texto = (datos?.texto || '').trim();
+      if (!texto) return Response.json({ error: 'Falta el texto' }, { status: 400 });
+
+      const { data: fila } = await supa().from('apoyos_asignados')
+        .select('id, fecha, hora, incidencia').eq('id', id).eq('profesor_id', sesion.id);
+      const guardia = (fila || [])[0];
+      if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
+
+      if (!dentroDeFranja(guardia.hora, guardia.fecha)) {
+        return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
+      }
+
+      const ahora = new Intl.DateTimeFormat('es-ES', {
+        timeZone: 'Europe/Madrid', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(new Date());
+      const anotado = guardia.incidencia
+        ? `${guardia.incidencia}\n${ahora} · ${texto}`
+        : `${ahora} · ${texto}`;
+
+      const { error } = await supa().from('apoyos_asignados')
+        .update({ incidencia: anotado }).eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      return Response.json({ ok: true, incidencia: anotado });
+    }
+
     if (accion === 'fichar') {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 

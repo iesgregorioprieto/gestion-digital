@@ -174,6 +174,9 @@ export default function Guardias() {
   // El curso salía escrito a mano en el código y llevaba todo el año
   // diciendo 2025-2026.
   const [cursoTexto, setCursoTexto]       = useState('');
+  const [anotandoId, setAnotandoId]       = useState(null);
+  const [textoIncidencia, setTextoIncidencia] = useState('');
+  const [anotando, setAnotando]           = useState(false);
   const [observaciones, setObservaciones] = useState('');
   const [fichando, setFichando]           = useState(false);
   const [verAyuda, setVerAyuda]           = useState(false);
@@ -452,6 +455,86 @@ export default function Guardias() {
   if (cargando) return <div style={{ padding:40, textAlign:'center', fontFamily:'system-ui' }}>Cargando cuadrante…</div>;
 
   // ── Modal de incidencia ──
+  /**
+   * Anotar una incidencia mientras dura la guardia.
+   *
+   * Antes solo se podía escribir al fichar, y lo que pasa en el aula pasa
+   * después: un alumno que se marcha, un grupo que no aparece. Se puede
+   * anotar antes o después de fichar, mientras la hora esté en curso.
+   */
+  async function anotarIncidencia() {
+    const texto = textoIncidencia.trim();
+    if (!texto) return;
+    setAnotando(true);
+    try {
+      const r = await fetch('/api/apoyos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'anotar_incidencia', id: anotandoId, datos: { texto } }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        alert(d.error === 'fuera_de_franja'
+          ? 'Solo se pueden anotar incidencias mientras dura la guardia.'
+          : 'No se ha podido anotar. Inténtalo de nuevo.');
+      } else {
+        setApAsig(prev => prev.map(x =>
+          x.id === anotandoId ? { ...x, incidencia: d.incidencia } : x));
+        setAnotandoId(null);
+        setTextoIncidencia('');
+      }
+    } catch {
+      alert('No se ha podido anotar. Inténtalo de nuevo.');
+    }
+    setAnotando(false);
+  }
+
+  const modalIncidencia = anotandoId ? (() => {
+    const g = apoyosAsignados.find(x => x.id === anotandoId);
+    return (
+      <div style={{ position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.5)', zIndex:100,
+        display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+        onClick={() => setAnotandoId(null)}>
+        <div onClick={e => e.stopPropagation()} style={{ backgroundColor:'white', borderRadius:14,
+          padding:22, maxWidth:460, width:'100%' }}>
+          <div style={{ fontSize:17, fontWeight:800, color:'#b45309', marginBottom:4 }}>
+            ⚠️ Anotar una incidencia
+          </div>
+          <div style={{ fontSize:12.5, color:'#666', marginBottom:12 }}>
+            Queda con la hora a la que la escribes. Puedes anotar varias.
+          </div>
+
+          {g?.incidencia && (
+            <div style={{ fontSize:12.5, color:'#374151', backgroundColor:'#fffbeb',
+              border:'1px solid #fde68a', borderRadius:8, padding:'8px 10px', marginBottom:12,
+              whiteSpace:'pre-wrap' }}>
+              {g.incidencia}
+            </div>
+          )}
+
+          <textarea value={textoIncidencia} onChange={e => setTextoIncidencia(e.target.value)}
+            placeholder="Ej.: el grupo no estaba en el aula; falta material; un alumno se ha marchado a las 12:10"
+            rows={4} autoFocus
+            style={{ width:'100%', padding:10, borderRadius:8, border:'1.5px solid #ddd',
+              fontSize:14, fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }} />
+
+          <div style={{ display:'flex', gap:8, marginTop:14 }}>
+            <button onClick={anotarIncidencia} disabled={anotando || !textoIncidencia.trim()}
+              style={{ flex:1, padding:'11px', borderRadius:9, border:'none',
+                backgroundColor: textoIncidencia.trim() ? '#b45309' : '#d1d5db',
+                color:'white', fontSize:15, fontWeight:800, cursor:'pointer' }}>
+              {anotando ? 'Guardando…' : 'Anotar'}
+            </button>
+            <button onClick={() => { setAnotandoId(null); setTextoIncidencia(''); }}
+              style={{ padding:'11px 18px', borderRadius:9, border:'1.5px solid #ddd',
+                backgroundColor:'white', color:'#666', fontSize:14, fontWeight:700, cursor:'pointer' }}>
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  })() : null;
+
   const modalFichaje = fichandoId ? (() => {
     const g = apoyosAsignados.find(a => a.id === fichandoId) || {};
     return (
@@ -541,6 +624,7 @@ export default function Guardias() {
     return (
     <div style={{ minHeight:'100vh', backgroundColor:'#f9fafb', fontFamily:'system-ui,sans-serif', paddingBottom:60 }}>
       {modalFichaje}
+      {modalIncidencia}
       {modalAyuda}
 
       {/* ¿Eres tú? También aquí, por si se le pasó en la portada. */}
@@ -623,6 +707,14 @@ export default function Guardias() {
                   </div>
 
                   <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+                    {abierto && (
+                      <button onClick={() => { setAnotandoId(g.id); setTextoIncidencia(''); }}
+                        style={{ padding:'11px 18px', borderRadius:9, border:'1.5px solid #d97706',
+                          backgroundColor:'white', color:'#b45309', fontSize:14, fontWeight:800,
+                          cursor:'pointer', order:2 }}>
+                        ⚠️ Incidencia{g.incidencia ? ' (anotada)' : ''}
+                      </button>
+                    )}
                     {fichada ? (
                       <span style={{ padding:'10px 18px', borderRadius:9, backgroundColor:verde,
                         color:'white', fontSize:14, fontWeight:800 }}>✅ Fichada</span>
