@@ -334,109 +334,58 @@ export default function GestionGuardias() {
   // su nombre y apellidos a partir de una fila de apoyos_asignados.
   const fichaPorId = id => (profesoresList || []).find(p => String(p.id) === String(id));
 
+  useEffect(() => {
+    if (!fecha || !horaActiva) return;
+    let vivo = true;
+    fetch(`/api/guardias/libres?fecha=${fecha}&hora=${horaActiva}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (vivo) setLibresHora(d && d.ok ? d : null); })
+      .catch(() => { if (vivo) setLibresHora(null); });
+    return () => { vivo = false; };
+  }, [fecha, horaActiva, apoyosAsignados.length]);
+
   const diaSem = diaSemanaEs(fecha);
   const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
   const horaInfo = HORAS.find(h => h.id === horaActiva);
 
-  function ausentesEstaHora() {
-    return ausenciasDia.filter(a => a.horas.some(h => horaCoincide(h.hora, horaActiva)));
-  }
 
-  function ausenciasPorSector() {
-    const grupos = {};
-    ausentesEstaHora().forEach(a => {
-      const s = a.sector.toUpperCase();
-      if (!grupos[s]) grupos[s] = [];
-      grupos[s].push(a);
-    });
-    return grupos;
-  }
 
   function guardiasDeSector(sector) {
     return horarioGuardias[sector]?.[diaSem]?.[horaActiva] || [];
   }
 
 
-  // Profesores FP libres esta hora (para sugerir apoyos)
-  function profesoresLibresParaApoyo(asignadosAbrev = new Set(), porSector = null, sectorSolicitante = null) {
-    if (porSector === null) porSector = ausenciasPorSector();
-
-    const ocupadosEnClase = new Set(
-      horariosClase
-        .filter(h => h.tipo === 'clase' && (h.dia||'').toLowerCase() === diaSem && normHora(h.hora_id) === horaActiva)
-        .map(h => normAbrev(h.profesor_nombre_pdf))
-    );
-    const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
-
-    // TODOS los sectores, sin excluir ninguno.
-    //
-    // Antes solo entraban los sectores SIN ausencias propias esa hora
-    // (`sectores.filter(s => !porSector[s.toUpperCase()])`). Eso descartaba
-    // en bloque a un sector entero en cuanto faltaba UNA persona de él:
-    // si a esa hora faltaba un profesor de GENERAL, ningún general
-    // aparecía en el desplegable, aunque hubiera tres de guardia libres.
-    //
-    // Quién está realmente libre ya se comprueba abajo, uno a uno: no
-    // está en clase, no está ausente y no tiene ya otra guardia asignada.
-    // Excluir sectores enteros por adelantado sobraba y ocultaba a gente
-    // disponible justo cuando más falta hacía.
-    const sectoresLibres = sectores;
-
-    const libres = [];
-    for (const sector of sectoresLibres) {
-      const guardiasFP = guardiasDeSector(sector);
-      guardiasFP.forEach(p => {
-        const key = normAbrev(p);
-        if (!ocupadosEnClase.has(key) && !ausentesAbrev.has(key) && !asignadosAbrev.has(key)) {
-          const profCompleto = profesoresList.find(pf =>
-            claveAbreviatura(pf.apellidos, pf.nombre) === key
-          );
-          libres.push({
-            abrev: p,
-            sectorOriginal: sector.toUpperCase(),
-            nombre: nombreCorto(mapaProfesores, p),
-            profesorId: profCompleto?.id || null,
-            apoyosPrevios: profCompleto?.id ? (apoyosPorProfesor[profCompleto.id] || 0) : 0,
-            apoyosSector: contadorApoyos[sector.toUpperCase()] || 0,
-          });
-        }
-      });
-    }
-    // Orden acordado con jefatura de estudios:
-    //   1º  la propia familia del profesor ausente
-    //   2º  guardias generales
-    //   3º  otras familias, por rotación
-    //
-    // Dentro de cada grupo manda la rotación: quien menos apoyos ha
-    // prestado, después el sector con menos apoyos acumulados.
-    // Orden de preferencia fijado por dirección (agosto 2026):
-    //
-    //   Si falta alguien de FP (p. ej. Hostelería):
-    //     1º su propio departamento  2º otro departamento de FP  3º generales
-    //
-    //   Si falta alguien de guardias generales (p. ej. Matemáticas):
-    //     1º su propio departamento  2º generales  3º departamentos de FP
-    //
-    // Es decir: primero los suyos, después los de su mismo mundo, y
-    // en último lugar el otro bloque.
-    const sectorAusente = (sectorSolicitante || '').toUpperCase();
-    const ausenteEsFP = esSectorFP(sectorAusente);
-    const prioridadDe = p => {
-      if (sectorAusente && p.sectorOriginal === sectorAusente) return 0;
-      const candidatoEsFP = esSectorFP(p.sectorOriginal);
-      if (ausenteEsFP) return candidatoEsFP ? 1 : 2;
-      return candidatoEsFP ? 2 : 1;
-    };
-
-    libres.sort((a, b) => {
-      const pa = prioridadDe(a), pb = prioridadDe(b);
-      if (pa !== pb) return pa - pb;
-      if (a.apoyosPrevios !== b.apoyosPrevios) return a.apoyosPrevios - b.apoyosPrevios;
-      if (a.apoyosSector !== b.apoyosSector) return a.apoyosSector - b.apoyosSector;
-      return a.nombre.localeCompare(b.nombre);
-    });
-    return libres;
+  /**
+   * QUIÉN PUEDE CUBRIR ESTA HORA
+   *
+   * Antes esto se calculaba aquí, en el navegador, y se equivocaba en lo
+   * que más importa: no sabía quién está de baja, ni quién tiene
+   * sustituto, ni quién YA está cubriendo otra guardia a esa misma hora.
+   * Así que proponía a gente que no está en el centro y podía poner a la
+   * misma persona en dos aulas a la vez.
+   *
+   * Ahora lo calcula el servidor con los mismos datos que el reparto, y
+   * aquí solo se pinta. Se devuelven TODOS los de guardia de esa hora, de
+   * todos los departamentos, con su estado: no se oculta a nadie, se
+   * marca. Quien decide es jefatura.
+   */
+  function profesoresLibresParaApoyo(asignadosAbrev = new Set()) {
+    const todos = Object.values(libresHora?.sectores || {}).flat();
+    return todos
+      .filter(p => !asignadosAbrev.has(normAbrev(p.nombre)))
+      .map(p => ({
+        abrev: p.nombre,
+        nombre: p.nombre,
+        profesorId: p.profesorId,
+        sectorOriginal: p.sector,
+        departamento: p.departamento,
+        estado: p.estado,
+        disponible: p.estado === 'libre',
+        apoyosPrevios: 0,
+        apoyosSector: 0,
+      }));
   }
+
 
 
   // El auto-registro que había aquí (useEffect + autoRegistrarApoyosObligatorios)
@@ -1029,7 +978,7 @@ export default function GestionGuardias() {
                                   ) : (
                                     (() => {
                                       // Sugerencias para sustituir esta guardia
-                                      const sugerencias = profesoresLibresParaApoyo(new Set(), ausenciasPorSector(), sectorSup);
+                                      const sugerencias = profesoresLibresParaApoyo();
                                       if (sugerencias.length === 0) return null;
                                       return (
                                         <details open style={{ marginTop:6, backgroundColor:'#fffbeb', borderRadius:8, border:'1px dashed #fbbf24' }}>
@@ -1133,8 +1082,7 @@ export default function GestionGuardias() {
                         // apoyo obligatorio: mismos candidatos que ya se calculan
                         // para las sugerencias de refuerzo, un poco más abajo.
                         alternativas: filaReal.tipo_apoyo !== 'sector'
-                          ? profesoresLibresParaApoyo(new Set([normAbrev(filaReal.profesor_nombre_pdf)]),
-                              ausenciasPorSector(), asig.ausencia.sector?.toUpperCase())
+                          ? profesoresLibresParaApoyo(new Set([normAbrev(filaReal.profesor_nombre_pdf)]))
                           : [],
                       } : null;
 
@@ -1150,7 +1098,7 @@ export default function GestionGuardias() {
                       // Sugerencias para "apoyo urgente" cuando el sector YA está cubierto
                       const sectorEstaCubierto = cubre?.tipo === 'guardia_sector';
                       const sugerenciasBackup = sectorEstaCubierto
-                        ? profesoresLibresParaApoyo(new Set([normAbrev(cubre.abrev)]), ausenciasPorSector(), asig.ausencia.sector?.toUpperCase())
+                        ? profesoresLibresParaApoyo(new Set([normAbrev(cubre.abrev)]))
                         : [];
 
                       // Ya hay un apoyo urgente activado para esta clase específica?
