@@ -500,6 +500,28 @@ export async function POST(request) {
             asignado_por: null,          // la propuso el sistema, no una persona
             estado: 'pendiente',
             tipo_apoyo: asig.escalon === 0 ? 'sector' : 'obligatorio',
+            /**
+             * POR QUÉ LE HA TOCADO A ESTA PERSONA
+             *
+             * El motor ya sabía el motivo y el escalón, pero se perdían al
+             * guardar. Quien recibe una guardia de otro departamento tiene
+             * derecho a saber por qué: no es un capricho del programa, es
+             * que en ese departamento no quedaba nadie libre a esa hora.
+             * Explicarlo evita la mitad de las quejas.
+             */
+            escalon: asig.escalon,
+            motivo_asignacion: (() => {
+              const suyo = asig.hueco?.sector || 'su departamento';
+              if (asig.escalon === 0) return `Guardia de ${suyo}, tu propio departamento.`;
+              if (asig.escalon === 1) {
+                return `A esta hora no quedaba nadie de guardia en ${suyo}, `
+                  + `así que se ha pedido fuera. Te ha tocado por rotación: `
+                  + `de los disponibles, eres quien menos guardias lleva hechas.`;
+              }
+              return `A esta hora no quedaba nadie libre ni en ${suyo} ni en las `
+                + `guardias generales. Te ha tocado por rotación entre los `
+                + `departamentos, repartiendo según el tamaño de cada uno.`;
+            })(),
             curso_academico: curso,
           });
         }

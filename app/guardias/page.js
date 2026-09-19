@@ -702,6 +702,14 @@ export default function Guardias() {
                     </div>
                   )}
 
+                  {g.motivo_asignacion && g.escalon > 0 && (
+                    <div style={{ fontSize:12.5, color:'#1e3a8a', marginTop:8, padding:'9px 11px',
+                      backgroundColor:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:8,
+                      lineHeight:1.5 }}>
+                      ℹ️ {g.motivo_asignacion}
+                    </div>
+                  )}
+
                   <div style={{ fontSize:11.5, color:'#92400e', marginTop:7 }}>
                     Puede cambiar si falta algún compañero más.
                   </div>
