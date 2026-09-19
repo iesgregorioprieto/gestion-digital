@@ -171,6 +171,9 @@ export default function Guardias() {
   const [apoyosAsignados, setApAsig]    = useState([]);
   const [modalCambiar, setModalCambiar] = useState(null); // apoyo a cambiar
   const [fichandoId, setFichandoId]       = useState(null);
+  // El curso salía escrito a mano en el código y llevaba todo el año
+  // diciendo 2025-2026.
+  const [cursoTexto, setCursoTexto]       = useState('');
   const [observaciones, setObservaciones] = useState('');
   const [fichando, setFichando]           = useState(false);
   const [verAyuda, setVerAyuda]           = useState(false);
@@ -210,6 +213,7 @@ export default function Guardias() {
     // pantalla solo enseña lo que él ha guardado. De todo aquello queda
     // únicamente el cuadrante, para saber quién está de guardia a cada hora.
     const curso = await getCursoActual();
+    setCursoTexto(curso ? `Curso ${curso}` : '');
     let guardias = [];
     for (let offset = 0; ; offset += 1000) {
       const { data } = await consulta('horarios_profesores')
@@ -551,10 +555,103 @@ export default function Guardias() {
           }} style={{ backgroundColor:'transparent', border:'none', color:'white', cursor:'pointer', fontSize:20 }}>←</button>
           <div>
             <div style={{ fontSize:15, fontWeight:800 }}>🛡️ Guardias</div>
-            <div style={{ fontSize:11, opacity:0.85 }}>Curso 2025-2026</div>
+            <div style={{ fontSize:11, opacity:0.85 }}>{cursoTexto || ' '}</div>
           </div>
         </div>
       </div>
+
+
+      {/* LO TUYO, ANTES QUE NADA
+          Quien entra entre clase y clase quiere saber si le toca algo y
+          dónde. El navegador de días y horas queda debajo, para consultar
+          el cuadrante con calma. */}
+      {!esFinde && fecha === hoyLocal() && (() => {
+        const mias = apoyosAsignados
+          .filter(g => g.profesor_id && String(g.profesor_id) === String(profesorId))
+          .sort((a, b) => String(normHora(a.hora)).localeCompare(String(normHora(b.hora))));
+
+        if (mias.length === 0) {
+          return (
+            <div style={{ margin:'12px 16px', padding:'16px 18px', borderRadius:12,
+              backgroundColor:'#f0fdf4', border:`1.5px solid #bbf7d0` }}>
+              <div style={{ fontSize:15, fontWeight:800, color:verde }}>
+                ✅ Hoy no tienes ninguna guardia asignada
+              </div>
+              <div style={{ fontSize:12.5, color:'#166534', marginTop:5, lineHeight:1.5 }}>
+                Puede cambiar durante la mañana si falta algún compañero.
+                Vuelve a mirar si te avisan.
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ margin:'12px 16px' }}>
+            {mias.map(g => {
+              const h = normHora(g.hora);
+              const abierto  = dentroDeFranja(g.hora, g.fecha);
+              const fichada  = g.estado === 'confirmado' || g.estado === 'realizado';
+              const perdida  = !fichada && franjaTerminada(g.hora, g.fecha);
+              const etiqueta = HORAS.find(x => x.id === h);
+
+              return (
+                <div key={g.id} style={{
+                  padding:'16px 18px', borderRadius:12, marginBottom:10,
+                  backgroundColor: fichada ? '#f0fdf4' : perdida ? '#fef2f2' : '#fffbeb',
+                  border:`2px solid ${fichada ? verde : perdida ? rojo : '#fbbf24'}`,
+                }}>
+                  <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
+                    🛡️ Tienes guardia a {etiqueta?.label || `${h}ª`}
+                    <span style={{ fontSize:12.5, fontWeight:600, color:'#92400e', marginLeft:8 }}>
+                      {etiqueta ? etiqueta.horario : ''}
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize:15, fontWeight:700, color:'#1f2937', marginTop:6 }}>
+                    {limpiarGrupo(g.grupo) || 'Grupo sin especificar'}
+                    {g.aula ? <span style={{ color:'#6b7280', fontWeight:600 }}> · aula {g.aula}</span> : null}
+                  </div>
+                  {g.tarea && (
+                    <div style={{ fontSize:13, color:'#374151', marginTop:6, padding:'8px 10px',
+                      backgroundColor:'white', borderRadius:8, border:'1px solid #e5e7eb' }}>
+                      📝 {g.tarea}
+                    </div>
+                  )}
+
+                  <div style={{ fontSize:11.5, color:'#92400e', marginTop:7 }}>
+                    Puede cambiar si falta algún compañero más.
+                  </div>
+
+                  <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+                    {fichada ? (
+                      <span style={{ padding:'10px 18px', borderRadius:9, backgroundColor:verde,
+                        color:'white', fontSize:14, fontWeight:800 }}>✅ Fichada</span>
+                    ) : perdida ? (
+                      <span style={{ padding:'10px 18px', borderRadius:9, backgroundColor:'#fee2e2',
+                        border:`1.5px solid ${rojo}`, color:rojo, fontSize:14, fontWeight:800 }}>
+                        ❌ No realizada
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => abierto
+                          ? (setFichandoId(g.id), setObservaciones(''))
+                          : alert(`El check se abre de ${etiqueta?.horario || ''}, durante la propia guardia.`)}
+                        style={{
+                          padding:'11px 22px', borderRadius:9, border:'none',
+                          backgroundColor: abierto ? verde : '#d1d5db',
+                          color: abierto ? 'white' : '#6b7280',
+                          fontSize:15, fontWeight:800, cursor:'pointer',
+                        }}>
+                        {abierto ? '✅ Fichar la guardia' : `🔒 Se abre a las ${(etiqueta?.horario || '').split('–')[0]}`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* NAV FECHA */}
 
