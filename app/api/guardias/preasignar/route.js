@@ -550,6 +550,52 @@ export async function POST(request) {
     const { error } = await cliente.from('apoyos_asignados').insert(nuevas);
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
+    /**
+     * AVISAR A QUIEN LE ACABA DE TOCAR
+     *
+     * El cuadrante se rehace durante la mañana: alguien se va a las once y
+     * a las 11:35 el reparto cambia. Si no se avisa, el compañero se
+     * entera cuando el grupo lleva diez minutos solo, o no se entera.
+     *
+     * Solo se avisa de las guardias de HOY y que empiezan a partir de
+     * ahora: una de mañana no urge, y una cuya hora ya pasó solo serviría
+     * para quedar mal. Y nunca puede tumbar el reparto: si el aviso falla,
+     * la guardia está guardada igual.
+     */
+    const ahoraMadrid = ahoraEnCentro();
+    const aAvisar = nuevas.filter(n =>
+      n.profesor_id
+      && n.fecha === ahoraMadrid.fecha
+      && !esSectorRecreo(n.sector_apoyo)
+      && (() => {
+        const f = franja(normHora(n.hora));
+        if (!f) return false;
+        const fin = Number(f.fin.slice(0, 2)) * 60 + Number(f.fin.slice(3, 5));
+        return ahoraMadrid.minutos < fin;      // aún no ha terminado
+      })());
+
+    const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+    await Promise.all(aAvisar.map(n => {
+      const f = franja(normHora(n.hora));
+      const cuando = f ? `${f.label} (${f.inicio})` : `${n.hora}ª`;
+      const donde = (n.grupo || '').replace(/^[A-Z0-9-]+?(?=[A-Z]{2,})/, '').trim() || n.grupo || '';
+      return fetch(`${base}/api/push`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.CRON_SECRET || ''}`,
+          cookie: request.headers.get('cookie') || '',
+        },
+        body: JSON.stringify({
+          accion: 'enviar',
+          profesor_id: n.profesor_id,
+          titulo: `🛡️ Guardia a ${cuando}`,
+          cuerpo: donde ? `Te toca cubrir ${donde}${n.aula ? ` · aula ${n.aula}` : ''}` : 'Tienes una guardia asignada',
+          url: '/guardias',
+        }),
+      }).catch(() => {});
+    }));
+
     return Response.json({
       ok: true,
       creadas: nuevas.length,

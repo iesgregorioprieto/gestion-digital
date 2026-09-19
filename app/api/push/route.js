@@ -61,12 +61,20 @@ export async function GET(request) {
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
-    if (!sesion?.id) {
-      return Response.json({ error: 'sin_sesion' }, { status: 401 });
-    }
-
     const body = await request.json();
     const { accion } = body;
+
+    // El propio sistema avisa de una guardia recién asignada a media
+    // mañana, y entonces no hay sesión de nadie: se identifica con la
+    // clave interna. Para todo lo demás sigue haciendo falta sesión.
+    const cronSecret = process.env.CRON_SECRET;
+    const esElSistema = !!cronSecret
+      && request.headers.get('authorization') === `Bearer ${cronSecret}`
+      && accion === 'enviar';
+
+    if (!sesion?.id && !esElSistema) {
+      return Response.json({ error: 'sin_sesion' }, { status: 401 });
+    }
 
     // ── Guardar suscripción del navegador ──
     // Siempre para uno mismo: el profesor_id sale de la sesión.
@@ -110,9 +118,12 @@ export async function POST(request) {
       if (!profesor_id) return Response.json({ error: 'Falta profesor_id' }, { status: 400 });
 
       // A uno mismo puede cualquiera (es el botón de "probar").
-      // A otra persona, solo el equipo directivo.
-      const esParaMi = String(profesor_id) === String(sesion.id);
-      if (!esParaMi && !esDirectivo(sesion)) {
+      // A otra persona, solo el equipo directivo... o el propio sistema,
+      // que es quien avisa de una guardia recién asignada a media mañana.
+      // Sin esto, el aviso solo salía si el reparto lo lanzaba una persona
+      // de dirección, y no cuando lo lanza el cron o el propio horario.
+      const esParaMi = sesion && String(profesor_id) === String(sesion.id);
+      if (!esElSistema && !esParaMi && !esDirectivo(sesion)) {
         return Response.json({ error: 'No autorizado' }, { status: 403 });
       }
 
