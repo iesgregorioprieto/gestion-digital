@@ -294,16 +294,77 @@ export async function POST(request) {
       const { alumnos, curso, reemplazar } = cuerpo;
       if (!Array.isArray(alumnos)) return Response.json({ error: 'Datos incorrectos' }, { status: 400 });
 
-      if (reemplazar && curso) {
+      /**
+       * SE ACTUALIZA, NO SE BORRA.
+       *
+       * Antes esto borraba el alumnado entero del curso y volvía a
+       * insertarlo. Se iban las filas completas y con ellas los seguros
+       * escolares y las autorizaciones que los tutores marcan uno a uno:
+       * 314 seguros y 1.062 autorizaciones de imagen, el trabajo de un
+       * trimestre de 75 personas.
+       *
+       * Ahora cada alumno se reconoce por su identificador de Delphos
+       * (columna ALUMNO del fichero de matrículas). Si ya existe, se le
+       * cambia el grupo, el nombre y el expediente, que es lo que de
+       * verdad cambia, y se le respeta TODO lo demás. Si es nuevo, se
+       * crea. A nadie se le borra.
+       *
+       * El borrado sigue existiendo, pero hay que pedirlo a propósito y
+       * solo se hace si TODOS los alumnos traen identificador; si no, no
+       * habría forma de recuperar lo marcado.
+       */
+      const conId = alumnos.filter(a => a.alumno_id);
+      const sinId = alumnos.filter(a => !a.alumno_id);
+
+      if (reemplazar === true && curso && conId.length === alumnos.length) {
         await supa().from('alumnos').delete().eq('curso_academico', curso);
       }
 
-      const LOTE = 500;
-      for (let i = 0; i < alumnos.length; i += LOTE) {
-        const { error } = await supa().from('alumnos').insert(alumnos.slice(i, i + LOTE));
-        if (error) return Response.json({ error: error.message, insertados: i }, { status: 500 });
+      let actualizados = 0;
+      let creados = 0;
+
+      // Lo que ya está, por identificador de Delphos.
+      const { data: existentes } = await supa()
+        .from('alumnos').select('id, alumno_id').not('alumno_id', 'is', null);
+      const porIdDelphos = new Map((existentes || []).map(a => [String(a.alumno_id), a.id]));
+
+      for (const a of conId) {
+        const yaEsta = porIdDelphos.get(String(a.alumno_id));
+        if (yaEsta) {
+          // Solo lo que cambia de un curso a otro. Ni se menciona el
+          // seguro ni las autorizaciones: así no se pueden tocar.
+          const { error } = await supa().from('alumnos').update({
+            nombre: a.nombre,
+            apellidos: a.apellidos,
+            grupo: a.grupo,
+            num_expediente: a.num_expediente,
+            curso_academico: a.curso_academico,
+          }).eq('id', yaEsta);
+          if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
+          actualizados++;
+        } else {
+          const { error } = await supa().from('alumnos').insert([a]);
+          if (error) return Response.json({ error: error.message, creados }, { status: 500 });
+          creados++;
+        }
       }
-      return Response.json({ ok: true, insertados: alumnos.length });
+
+      // Los que llegan sin identificador se insertan como antes: no hay
+      // forma de saber si ya estaban.
+      const LOTE = 500;
+      for (let i = 0; i < sinId.length; i += LOTE) {
+        const { error } = await supa().from('alumnos').insert(sinId.slice(i, i + LOTE));
+        if (error) return Response.json({ error: error.message, creados }, { status: 500 });
+        creados += Math.min(LOTE, sinId.length - i);
+      }
+
+      return Response.json({
+        ok: true,
+        actualizados,
+        creados,
+        sin_identificador: sinId.length,
+        insertados: actualizados + creados,
+      });
     }
 
     // Borrar el alumnado de un grupo (antes de reimportarlo)

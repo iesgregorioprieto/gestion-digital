@@ -230,6 +230,9 @@ export default function GestionDatos() {
       apellidos: cabecera.findIndex(c => c === 'APELLIDOS'),
       grupo: cabecera.findIndex(c => c === 'GRUPO'),
       numExp: cabecera.findIndex(c => c === 'NUM_EXP_CENTRO'),
+      // El identificador de Delphos. Es lo que permite reconocer a cada
+      // alumno aunque cambie de grupo, y por tanto actualizar sin borrar.
+      alumnoId: cabecera.findIndex(c => c === 'ALUMNO'),
     };
     if (idx.nombre === -1 || idx.apellidos === -1 || idx.grupo === -1) {
       mostrarMensaje('❌ El CSV debe tener columnas NOMBRE, APELLIDOS y GRUPO.', 'error');
@@ -245,6 +248,7 @@ export default function GestionDatos() {
         apellidos: cols[idx.apellidos] || '',
         grupo,
         num_expediente: idx.numExp !== -1 ? cols[idx.numExp] : null,
+        alumno_id: idx.alumnoId !== -1 ? (cols[idx.alumnoId] || null) : null,
         curso_academico: cursoNuevo,
       });
     }
@@ -385,6 +389,10 @@ export default function GestionDatos() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         accion: 'importar',
+        // NO se borra nada: se actualiza por el identificador de Delphos.
+        // Un borrado se llevaría por delante los seguros escolares y las
+        // autorizaciones que los tutores marcan uno a uno.
+        reemplazar: false,
         alumnos: alumnosNuevos,
         curso: cursoNuevo,
         reemplazar: true,
@@ -398,10 +406,23 @@ export default function GestionDatos() {
       mostrarMensaje(motivo, 'error');
       setProcesando(false); setModalAlumnos(false); return;
     }
+    const resumen = await respImp.json().catch(() => ({}));
     const fechaImport = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
     setProcesando(false);
     setModalAlumnos(false);
-    mostrarMensaje(`✅ ${alumnosNuevos.length} alumnos y ${gruposNuevos.length} grupos importados para ${cursoNuevo} — ${fechaImport}`, 'ok');
+    mostrarMensaje((() => {
+      // Que se vea qué ha pasado de verdad: cuántos se han actualizado y
+      // cuántos son nuevos. Si sale algún "sin identificador", ese fichero
+      // no traía la columna ALUMNO y habría que revisarlo.
+      const d = resumen || {};
+      const partes = [];
+      if (d.actualizados) partes.push(`${d.actualizados} actualizados`);
+      if (d.creados) partes.push(`${d.creados} nuevos`);
+      if (d.sin_identificador) partes.push(`⚠️ ${d.sin_identificador} sin identificador`);
+      return `✅ ${partes.join(' · ') || `${alumnosNuevos.length} alumnos`} `
+        + `y ${gruposNuevos.length} grupos, curso ${cursoNuevo} — ${fechaImport}. `
+        + `No se ha borrado nada: seguros y autorizaciones intactos.`;
+    })(), 'ok');
     setPreviewAlumnos([]);
     setUltimaImportacion(fechaImport);
     try { localStorage.setItem('ultima_importacion_alumnos', fechaImport); } catch {}
