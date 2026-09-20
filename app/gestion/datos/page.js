@@ -216,6 +216,9 @@ export default function GestionDatos() {
 
   // ===== IMPORTAR ALUMNOS =====
   const [identificando, setIdentificando] = useState(false);
+  // El resultado se queda escrito debajo de los botones: un mensaje que
+  // aparece arriba y se va no sirve para comprobar nada.
+  const [resultadoCarga, setResultadoCarga] = useState(null);
 
   /**
    * PASO 1 · datAlumnos
@@ -258,10 +261,20 @@ export default function GestionDatos() {
       if (!r.ok) {
         mostrarMensaje('❌ ' + (d.error || 'No se ha podido identificar'), 'error');
       } else {
-        mostrarMensaje(
-          `✅ ${d.identificados} alumnos identificados (${d.por_dni} por DNI, ${d.por_nombre} por nombre). `
-          + (d.sin_pareja ? `${d.sin_pareja} del fichero no están todavía en la aplicación: los creará el paso 2.` : 'Ninguno sin reconocer.'),
-          'ok');
+        setResultadoCarga({
+          paso: 1,
+          bien: true,
+          titulo: `${d.identificados} alumnos identificados`,
+          lineas: [
+            `${d.por_dni} reconocidos por su DNI (sin margen de error)`,
+            `${d.por_nombre} reconocidos por apellidos y nombre`,
+            d.sin_pareja
+              ? `${d.sin_pareja} del fichero todavía no están en la aplicación: los creará el paso 2`
+              : 'Todos los del fichero estaban ya en la aplicación',
+          ],
+          aviso: 'Ahora sube datMatriculas. Ya no se puede duplicar a nadie que se haya identificado aquí.',
+          nombres: d.nombres_sin_pareja || [],
+        });
       }
     } catch {
       mostrarMensaje('❌ No se ha podido leer el archivo.', 'error');
@@ -464,6 +477,22 @@ export default function GestionDatos() {
     const fechaImport = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
     setProcesando(false);
     setModalAlumnos(false);
+    setResultadoCarga((() => {
+      const d = resumen || {};
+      return {
+        paso: 2,
+        bien: true,
+        titulo: `${(d.actualizados || 0) + (d.creados || 0)} alumnos cargados`,
+        lineas: [
+          `${d.actualizados || 0} ya estaban: solo se les ha cambiado el grupo`,
+          d.adoptados ? `${d.adoptados} reconocidos por su nombre` : null,
+          `${d.creados || 0} son nuevos en el centro`,
+          `${gruposNuevos.length} grupos`,
+        ].filter(Boolean),
+        aviso: 'El seguro escolar y las autorizaciones no se han tocado. Compruébalo en Gestión de Autorizaciones.',
+        nombres: [],
+      };
+    })());
     mostrarMensaje((() => {
       // Que se vea qué ha pasado de verdad: cuántos se han actualizado y
       // cuántos son nuevos. Si sale algún "sin identificador", ese fichero
@@ -1316,6 +1345,38 @@ export default function GestionDatos() {
                 </div>
                 <input ref={fileRefAlumnos} type="file" accept=".csv,.txt" onChange={procesarCSVAlumnos} style={{ display: 'none' }} disabled={procesando} />
               </label>
+
+              {/* El resultado se queda aquí, debajo de los botones, hasta
+                  que se haga otra carga. Es lo único que permite comprobar
+                  que ha ido bien. */}
+              {resultadoCarga && (
+                <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 10,
+                  backgroundColor: '#f0fdf4', border: '1.5px solid #86efac' }}>
+                  <div style={{ fontSize: 14, fontWeight: 800, color: '#166534' }}>
+                    ✅ Paso {resultadoCarga.paso} terminado — {resultadoCarga.titulo}
+                  </div>
+                  <ul style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: 13, color: '#166534', lineHeight: 1.7 }}>
+                    {resultadoCarga.lineas.map((l, i) => <li key={i}>{l}</li>)}
+                  </ul>
+                  {resultadoCarga.aviso && (
+                    <div style={{ marginTop: 9, fontSize: 12.5, color: '#1e3a8a',
+                      backgroundColor: '#eff6ff', border: '1px solid #bfdbfe',
+                      borderRadius: 7, padding: '8px 10px' }}>
+                      👉 {resultadoCarga.aviso}
+                    </div>
+                  )}
+                  {resultadoCarga.nombres?.length > 0 && (
+                    <details style={{ marginTop: 9, fontSize: 12.5, color: '#78350f' }}>
+                      <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
+                        Ver los {resultadoCarga.nombres.length} que todavía no estaban
+                      </summary>
+                      <div style={{ marginTop: 6, lineHeight: 1.6 }}>
+                        {resultadoCarga.nombres.join(' · ')}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Grupos cargados */}
