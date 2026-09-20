@@ -287,6 +287,69 @@ export async function POST(request) {
     }
 
     // Importar la matrícula del curso (solo equipo directivo)
+    /**
+     * IDENTIFICAR AL ALUMNADO QUE YA ESTÁ (fichero datAlumnos de Delphos)
+     *
+     * Ese fichero trae el DNI, que el de matrículas no tiene. Con él se le
+     * pone a cada alumno su identificador de Delphos sin margen de error,
+     * y a partir de ahí el fichero de matrículas ya los reconoce a todos
+     * por ese identificador en vez de por el nombre.
+     *
+     * No crea ni borra a nadie: solo pone el identificador y el DNI a los
+     * que ya están. Se puede repetir las veces que haga falta.
+     */
+    if (accion === 'identificar') {
+      if (!esDirectivo(sesion)) {
+        return Response.json({ error: 'Sin permisos' }, { status: 403 });
+      }
+      const { alumnos: deDelphos } = cuerpo;
+      if (!Array.isArray(deDelphos)) {
+        return Response.json({ error: 'Datos incorrectos' }, { status: 400 });
+      }
+
+      const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      const ndni = t => (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre');
+      const porDni = new Map();
+      const porNombre = new Map();
+      existentes.forEach(a => {
+        if (ndni(a.dni)) porDni.set(ndni(a.dni), a.id);
+        const k = norm(a.apellidos) + '|' + norm(a.nombre);
+        porNombre.set(k, porNombre.has(k) ? null : a.id);
+      });
+
+      let porDniOk = 0, porNombreOk = 0, sinPareja = 0;
+      const nombresSinPareja = [];
+
+      for (const d of deDelphos) {
+        if (!d.alumno_id) continue;
+        let id = ndni(d.dni) ? porDni.get(ndni(d.dni)) : null;
+        let via = 'dni';
+        if (!id) { id = porNombre.get(norm(d.apellidos) + '|' + norm(d.nombre)) || null; via = 'nombre'; }
+        if (!id) {
+          sinPareja++;
+          if (nombresSinPareja.length < 40) nombresSinPareja.push(`${d.apellidos}, ${d.nombre}`);
+          continue;
+        }
+        const datos = { alumno_id: String(d.alumno_id) };
+        if (ndni(d.dni)) datos.dni = d.dni;     // se aprovecha para completarlo
+        const { error } = await supa().from('alumnos').update(datos).eq('id', id);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        if (via === 'dni') porDniOk++; else porNombreOk++;
+      }
+
+      return Response.json({
+        ok: true,
+        por_dni: porDniOk,
+        por_nombre: porNombreOk,
+        identificados: porDniOk + porNombreOk,
+        sin_pareja: sinPareja,
+        nombres_sin_pareja: nombresSinPareja,
+      });
+    }
+
     if (accion === 'importar') {
       if (!esDirectivo(sesion)) {
         return Response.json({ error: 'Sin permisos' }, { status: 403 });

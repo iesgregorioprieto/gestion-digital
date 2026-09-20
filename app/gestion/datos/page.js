@@ -215,6 +215,60 @@ export default function GestionDatos() {
   }
 
   // ===== IMPORTAR ALUMNOS =====
+  const [identificando, setIdentificando] = useState(false);
+
+  /**
+   * PASO 1 · datAlumnos
+   *
+   * Solo pone a cada alumno que ya está su identificador de Delphos y su
+   * DNI. No crea ni borra a nadie, y se puede repetir. Hecho esto, el
+   * fichero de matrículas reconoce a todos por el identificador en vez de
+   * por el nombre, que es donde se perdía uno de cada cien.
+   */
+  async function identificarAlumnos(archivo) {
+    if (!archivo) return;
+    setIdentificando(true);
+    try {
+      const texto = await archivo.text();
+      const lineas = texto.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
+      const sep = lineas[0].includes(';') ? ';' : ',';
+      const parte = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+      const cab = parte(lineas[0]).map(c => c.toUpperCase());
+      const col = n => cab.indexOf(n);
+      if (col('ALUMNO') === -1 || col('APELLIDOS') === -1) {
+        mostrarMensaje('❌ Ese archivo no es datAlumnos: faltan las columnas ALUMNO y APELLIDOS.', 'error');
+        setIdentificando(false); return;
+      }
+      const lista = [];
+      for (let i = 1; i < lineas.length; i++) {
+        const c = parte(lineas[i]);
+        if (!c[col('ALUMNO')]) continue;
+        lista.push({
+          alumno_id: c[col('ALUMNO')],
+          apellidos: c[col('APELLIDOS')] || '',
+          nombre: col('NOMBRE') !== -1 ? (c[col('NOMBRE')] || '') : '',
+          dni: col('DNI') !== -1 ? (c[col('DNI')] || '') : '',
+        });
+      }
+      const r = await fetch('/api/alumnos', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'identificar', alumnos: lista }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        mostrarMensaje('❌ ' + (d.error || 'No se ha podido identificar'), 'error');
+      } else {
+        mostrarMensaje(
+          `✅ ${d.identificados} alumnos identificados (${d.por_dni} por DNI, ${d.por_nombre} por nombre). `
+          + (d.sin_pareja ? `${d.sin_pareja} del fichero no están todavía en la aplicación: los creará el paso 2.` : 'Ninguno sin reconocer.'),
+          'ok');
+      }
+    } catch {
+      mostrarMensaje('❌ No se ha podido leer el archivo.', 'error');
+    }
+    setIdentificando(false);
+  }
+
   async function procesarCSVAlumnos(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -1219,15 +1273,45 @@ export default function GestionDatos() {
             <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
               <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>📊 Subir CSV de matrículas de Delphos</div>
               <div style={{ fontSize: 13, color: '#666', marginBottom: 6, lineHeight: 1.5 }}>
-                Este archivo carga <strong>simultáneamente</strong> los grupos y los alumnos del centro. Formato: CSV exportado desde Delphos.
+                Este archivo carga <strong>simultáneamente</strong> los grupos y los alumnos del centro.
               </div>
-              <div style={{ fontSize: 12, backgroundColor: '#f0f7ff', padding: '8px 12px', borderRadius: 7, color: '#1e40af', marginBottom: 14 }}>
-                🖥️ <strong>Delphos:</strong> Alumnado → Matrículas → Exportar CSV · Columnas necesarias: <strong>NOMBRE, APELLIDOS, GRUPO</strong>
+
+              {/* Las instrucciones escritas aquí, para no tener que
+                  acordarse de nada el curso que viene. */}
+              <div style={{ fontSize: 12.5, backgroundColor: '#f0f7ff', padding: '12px 14px', borderRadius: 8, color: '#1e3a8a', marginBottom: 14, lineHeight: 1.6 }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>🖥️ Son DOS ficheros y van en este orden</div>
+                <div style={{ marginBottom: 6 }}>
+                  <strong>1º · datAlumnos</strong> — Delphos › Alumnado › Alumnos › Exportar.
+                  Trae el DNI y sirve para reconocer a los que ya están sin
+                  equivocarse. <strong>No crea ni borra a nadie.</strong>
+                </div>
+                <div style={{ marginBottom: 6 }}>
+                  <strong>2º · datMatriculas</strong> — Delphos › Alumnado › Matrículas › Exportar.
+                  Trae el grupo de cada uno. Actualiza a los que ya están y crea
+                  a los nuevos.
+                </div>
+                <div style={{ color: '#7f1d1d', fontWeight: 600 }}>
+                  ⚠️ El seguro escolar y las autorizaciones NO se tocan nunca.
+                  Aun así, haz antes la copia en Gestión de Autorizaciones.
+                </div>
               </div>
+
+              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 18px', borderRadius: 10, border: '2.5px dashed #86efac', backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginBottom: 10 }}>
+                <span style={{ fontSize: 26 }}>🪪</span>
+                <div>
+                  <div>{identificando ? '⏳ Identificando…' : '1º · Subir datAlumnos (identificar)'}</div>
+                  <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.75, marginTop: 2 }}>
+                    Con DNI. Solo reconoce; no crea ni borra.
+                  </div>
+                </div>
+                <input type="file" accept=".csv,.txt" disabled={identificando}
+                  onChange={e => { identificarAlumnos(e.target.files?.[0]); e.target.value = ''; }}
+                  style={{ display: 'none' }} />
+              </label>
               <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '16px 20px', borderRadius: 10, border: '2.5px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
                 <span style={{ fontSize: 28 }}>📊</span>
                 <div>
-                  <div>{procesando ? '⏳ Procesando...' : 'Toca aquí para subir el CSV de matrículas'}</div>
+                  <div>{procesando ? '⏳ Procesando...' : '2º · Subir datMatriculas (grupos)'}</div>
                   <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>Formato: .csv exportado desde Delphos</div>
                 </div>
                 <input ref={fileRefAlumnos} type="file" accept=".csv,.txt" onChange={procesarCSVAlumnos} style={{ display: 'none' }} disabled={procesando} />
