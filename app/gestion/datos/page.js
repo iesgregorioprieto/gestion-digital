@@ -417,6 +417,7 @@ export default function GestionDatos() {
       const d = resumen || {};
       const partes = [];
       if (d.actualizados) partes.push(`${d.actualizados} actualizados`);
+      if (d.adoptados) partes.push(`${d.adoptados} reconocidos por su nombre`);
       if (d.creados) partes.push(`${d.creados} nuevos`);
       if (d.sin_identificador) partes.push(`⚠️ ${d.sin_identificador} sin identificador`);
       return `✅ ${partes.join(' · ') || `${alumnosNuevos.length} alumnos`} `

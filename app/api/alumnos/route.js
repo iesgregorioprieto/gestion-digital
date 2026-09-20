@@ -323,13 +323,45 @@ export async function POST(request) {
       let actualizados = 0;
       let creados = 0;
 
-      // Lo que ya está, por identificador de Delphos.
-      const { data: existentes } = await supa()
-        .from('alumnos').select('id, alumno_id').not('alumno_id', 'is', null);
-      const porIdDelphos = new Map((existentes || []).map(a => [String(a.alumno_id), a.id]));
+      /**
+       * RECONOCER A LOS QUE YA ESTÁN, AUNQUE NO TENGAN IDENTIFICADOR.
+       *
+       * Los 1.076 alumnos que ya hay se cargaron antes de que existiera el
+       * identificador de Delphos. Si solo se buscara por ahí, no se
+       * reconocería a ninguno y se crearían todos otra vez: quedarían
+       * duplicados, los viejos con sus autorizaciones y los nuevos en
+       * blanco.
+       *
+       * Por eso se busca en tres pasos: primero por identificador, luego
+       * por DNI y, si no, por apellidos y nombre. En este centro no hay
+       * dos alumnos que se llamen igual, así que el nombre identifica sin
+       * ambigüedad. Al reconocerlo se le pone además su identificador, de
+       * modo que a partir del año que viene ya baste con el primero.
+       */
+      const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+      const ndni = t => (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+
+      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre');
+      const porIdDelphos = new Map();
+      const porDni = new Map();
+      const porNombre = new Map();
+      existentes.forEach(a => {
+        if (a.alumno_id) porIdDelphos.set(String(a.alumno_id), a.id);
+        if (ndni(a.dni)) porDni.set(ndni(a.dni), a.id);
+        const clave = norm(a.apellidos) + '|' + norm(a.nombre);
+        // Si dos se llamaran igual, se descarta esa clave: mejor crear uno
+        // nuevo que asignarle las autorizaciones a quien no es.
+        porNombre.set(clave, porNombre.has(clave) ? null : a.id);
+      });
+
+      let adoptados = 0;
 
       for (const a of conId) {
-        const yaEsta = porIdDelphos.get(String(a.alumno_id));
+        let yaEsta = porIdDelphos.get(String(a.alumno_id));
+        if (!yaEsta && ndni(a.dni)) yaEsta = porDni.get(ndni(a.dni));
+        if (!yaEsta) yaEsta = porNombre.get(norm(a.apellidos) + '|' + norm(a.nombre)) || null;
+        if (yaEsta && !porIdDelphos.has(String(a.alumno_id))) adoptados++;
         if (yaEsta) {
           // Solo lo que cambia de un curso a otro. Ni se menciona el
           // seguro ni las autorizaciones: así no se pueden tocar.
@@ -339,6 +371,9 @@ export async function POST(request) {
             grupo: a.grupo,
             num_expediente: a.num_expediente,
             curso_academico: a.curso_academico,
+            // Se le queda puesto para siempre: el año que viene se le
+            // reconoce por aquí y no hará falta mirar el nombre.
+            alumno_id: a.alumno_id,
           }).eq('id', yaEsta);
           if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
           actualizados++;
@@ -361,6 +396,7 @@ export async function POST(request) {
       return Response.json({
         ok: true,
         actualizados,
+        adoptados,
         creados,
         sin_identificador: sinId.length,
         insertados: actualizados + creados,
