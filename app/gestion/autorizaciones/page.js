@@ -142,6 +142,164 @@ export default function GestionAutorizaciones() {
     setCargando(false);
   }
 
+  /**
+   * DESCARGAS PARA ADMINISTRACIÓN
+   *
+   * Lo que se marca aquí hay que grabarlo después en Delphos, y eso lo
+   * hacen los administrativos a mano. Necesitan el listado por grupos, no
+   * la pantalla.
+   *
+   * Y una copia de seguridad de todo, porque son 314 seguros y más de mil
+   * autorizaciones marcadas una a una por los tutores: si se pierden, se
+   * pierde el trabajo de un trimestre.
+   *
+   * Se separa por punto y coma para que Excel en español lo abra en
+   * columnas, y con la marca del principio para que respete las tildes.
+   */
+  const CABECERA = ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Seguro escolar',
+    'Forma de pago', 'Fecha pago', 'Imágenes (menor)', 'Salidas recreo',
+    'Actividades extraescolares', 'Informar progenitores', 'Imágenes (mayor)',
+    'Salida en convalidadas'];
+
+  const filaDe = a => [
+    a.grupo || '', a.apellidos || '', a.nombre || '', a.dni || '',
+    a.seguro_pagado ? 'SÍ' : 'NO', a.seguro_forma_pago || '', a.seguro_fecha || '',
+    a.auth_imagenes ? 'SÍ' : 'NO',
+    a.auth_salidas ? 'SÍ' : 'NO',
+    a.auth_actividades ? 'SÍ' : 'NO',
+    a.auth_informar_progeni ? 'SÍ' : 'NO',
+    a.auth_imagenes_mayor ? 'SÍ' : 'NO',
+    a.modulos_convalidados ? 'SÍ' : 'NO',
+  ];
+
+  function bajarCsv(filas, nombre) {
+    const csv = [CABECERA, ...filas]
+      .map(f => f.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';'))
+      .join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function descargarGrupo() {
+    if (!grupoSeleccionado || alumnos.length === 0) return;
+    bajarCsv(alumnos.map(filaDe),
+      `autorizaciones_${grupoSeleccionado.replace(/[^\w.-]/g, '_')}.csv`);
+  }
+
+  const [copiando, setCopiando] = useState(false);
+
+  async function copiaDeSeguridad() {
+    setCopiando(true);
+    try {
+      const filas = [];
+      for (const g of grupos) {
+        const { alumnos: data } = await fetch(`/api/alumnos?grupo=${encodeURIComponent(g)}`)
+          .then(r => r.json()).catch(() => ({ alumnos: [] }));
+        (data || []).forEach(a => filas.push(filaDe(a)));
+      }
+      const hoy = new Date().toISOString().slice(0, 10);
+      bajarCsv(filas, `copia-autorizaciones-${hoy}.csv`);
+      alert(
+        `Copia descargada: ${filas.length} alumnos de ${grupos.length} grupos.\n\n` +
+        `Guárdala en la carpeta de copias del centro:\n` +
+        `Equipo Directivo › Curso 26-27 › APrieto › Copias de Seguridad`
+      );
+    } catch {
+      alert('No se ha podido completar la copia. Inténtalo de nuevo.');
+    }
+    setCopiando(false);
+  }
+
+  /**
+   * RESTAURAR UNA COPIA
+   *
+   * Una copia que no se puede recargar no sirve de nada. Esto lee el CSV
+   * que genera el botón de copia de seguridad y devuelve a cada alumno lo
+   * que tenía marcado: el seguro y las cinco autorizaciones.
+   *
+   * No crea ni borra alumnos: solo repone lo marcado en los que ya están,
+   * emparejando por apellidos y nombre. Si alguien de la copia ya no está
+   * en la aplicación, se cuenta y se dice, pero no se toca nada más.
+   */
+  const [restaurando, setRestaurando] = useState(false);
+
+  async function restaurarCopia(archivo) {
+    if (!archivo) return;
+    const texto = await archivo.text();
+    const lineas = texto.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
+    const sep = lineas[0].includes(';') ? ';' : ',';
+    const parte = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, '').replace(/""/g, '"'));
+    const cab = parte(lineas[0]);
+    const col = n => cab.findIndex(c => c.toLowerCase() === n.toLowerCase());
+
+    const iAp = col('Apellidos'), iNo = col('Nombre');
+    if (iAp === -1 || iNo === -1) {
+      alert('Ese archivo no parece una copia de autorizaciones: faltan las columnas Apellidos y Nombre.');
+      return;
+    }
+    const si = v => String(v).trim().toUpperCase() === 'SÍ' || String(v).trim().toUpperCase() === 'SI';
+    const campos = [
+      ['Seguro escolar', 'seguro_pagado'],
+      ['Imágenes (menor)', 'auth_imagenes'],
+      ['Salidas recreo', 'auth_salidas'],
+      ['Actividades extraescolares', 'auth_actividades'],
+      ['Informar progenitores', 'auth_informar_progeni'],
+      ['Imágenes (mayor)', 'auth_imagenes_mayor'],
+      ['Salida en convalidadas', 'modulos_convalidados'],
+    ].filter(([c]) => col(c) !== -1);
+
+    const norm = t => (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase().replace(/\s+/g, ' ').trim();
+
+    const copia = new Map();
+    for (let i = 1; i < lineas.length; i++) {
+      const c = parte(lineas[i]);
+      if (!c[iAp]) continue;
+      const datos = {};
+      campos.forEach(([cab2, campo]) => { datos[campo] = si(c[col(cab2)]); });
+      copia.set(norm(c[iAp]) + '|' + norm(c[iNo]), datos);
+    }
+
+    if (!confirm(
+      `La copia trae ${copia.size} alumnos.\n\n` +
+      `Se les devolverá lo que tenían marcado: seguro y autorizaciones.\n` +
+      `NO se crea ni se borra ningún alumno.\n\n` +
+      `¿Continuar?`
+    )) return;
+
+    setRestaurando(true);
+    let repuestos = 0, noEstan = 0;
+    try {
+      for (const g of grupos) {
+        const { alumnos: data } = await fetch(`/api/alumnos?grupo=${encodeURIComponent(g)}`)
+          .then(r => r.json()).catch(() => ({ alumnos: [] }));
+        for (const a of (data || [])) {
+          const guardado = copia.get(norm(a.apellidos) + '|' + norm(a.nombre));
+          if (!guardado) continue;
+          const r = await fetch('/api/alumnos', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ accion: 'actualizar', id: a.id, datos: guardado }),
+          });
+          if (r.ok) { repuestos++; copia.delete(norm(a.apellidos) + '|' + norm(a.nombre)); }
+        }
+      }
+      noEstan = copia.size;
+      alert(
+        `Restauración terminada.\n\n` +
+        `${repuestos} alumnos con sus datos repuestos.\n` +
+        (noEstan ? `${noEstan} de la copia ya no están en la aplicación: no se ha tocado nada suyo.` : '')
+      );
+      if (grupoSeleccionado) cargarAlumnos(grupoSeleccionado);
+    } catch {
+      alert('La restauración se ha interrumpido. Vuelve a intentarlo: repetirla no hace daño.');
+    }
+    setRestaurando(false);
+  }
+
   function toggleAuth(alumnoId, campo) {
     const alumno = alumnos.find(a => a.id === alumnoId);
     const valorActual = cambios[alumnoId]?.[campo] !== undefined
@@ -293,6 +451,36 @@ export default function GestionAutorizaciones() {
                   fontWeight: 700, fontSize: 13.5, cursor: generandoInforme ? 'default' : 'pointer' }}>
                 {generandoInforme ? 'Generando…' : '📥 Descargar informe'}
               </button>
+
+              <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', width: '100%' }}>
+                <button onClick={descargarGrupo} disabled={!grupoSeleccionado || alumnos.length === 0}
+                  title="Listado del grupo que estás viendo, para pasárselo a administración"
+                  style={{ flex: '1 1 180px', padding: '9px 12px', borderRadius: 8,
+                    border: `1.5px solid ${grupoSeleccionado ? azul : '#ddd'}`, backgroundColor: 'white',
+                    color: grupoSeleccionado ? azul : '#aaa', fontSize: 13, fontWeight: 700,
+                    cursor: grupoSeleccionado ? 'pointer' : 'default' }}>
+                  📄 Descargar este grupo
+                </button>
+                <button onClick={copiaDeSeguridad} disabled={copiando || grupos.length === 0}
+                  title="Todos los grupos con TODO lo marcado: seguro y las autorizaciones"
+                  style={{ flex: '1 1 180px', padding: '9px 12px', borderRadius: 8,
+                    border: '1.5px solid #64748b', backgroundColor: 'white', color: '#475569',
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                  {copiando ? '⏳ Preparando…' : '💾 Copia de seguridad'}
+                </button>
+                <label style={{ flex: '1 1 180px', padding: '9px 12px', borderRadius: 8,
+                  border: '1.5px solid #b45309', backgroundColor: 'white', color: '#b45309',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}>
+                  {restaurando ? '⏳ Restaurando…' : '♻️ Restaurar una copia'}
+                  <input type="file" accept=".csv" disabled={restaurando}
+                    onChange={e => { restaurarCopia(e.target.files?.[0]); e.target.value = ''; }}
+                    style={{ display: 'none' }} />
+                </label>
+              </div>
+              <div style={{ fontSize: 11.5, color: '#888', marginTop: 6, width: '100%' }}>
+                La copia lleva el seguro Y las autorizaciones de todos los grupos.
+                Guárdala antes de actualizar las listas de alumnado.
+              </div>
             </div>
           </div>
         )}
