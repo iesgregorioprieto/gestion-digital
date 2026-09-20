@@ -216,6 +216,26 @@ export default function GestionDatos() {
 
   // ===== IMPORTAR ALUMNOS =====
   const [identificando, setIdentificando] = useState(false);
+
+  /**
+   * LEER UN CSV DE DELPHOS CON SUS TILDES
+   *
+   * Delphos exporta en la codificación antigua de Windows (Latin-1). Si
+   * se lee como si fuera moderna, "María" se convierte en "Marí\uFFFDa" y
+   * ese alumno deja de reconocerse: por eso 746 de 1.226 salían como
+   * nuevos.
+   *
+   * Se prueba primero la moderna; si aparece el carácter de sustitución
+   * —la señal de que no era—, se vuelve a leer como Latin-1.
+   */
+  async function leerCsv(archivo) {
+    const bytes = await archivo.arrayBuffer();
+    const moderno = new TextDecoder('utf-8').decode(bytes);
+    if (!moderno.includes('\uFFFD')) return moderno;
+    return new TextDecoder('windows-1252').decode(bytes);
+  }
+
+
   // El resultado se queda escrito debajo de los botones: un mensaje que
   // aparece arriba y se va no sirve para comprobar nada.
   const [resultadoCarga, setResultadoCarga] = useState(null);
@@ -232,7 +252,7 @@ export default function GestionDatos() {
     if (!archivo) return;
     setIdentificando(true);
     try {
-      const texto = await archivo.text();
+      const texto = await leerCsv(archivo);
       const lineas = texto.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
       const sep = lineas[0].includes(';') ? ';' : ',';
       const parte = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
@@ -286,9 +306,9 @@ export default function GestionDatos() {
     const file = e.target.files[0];
     if (!file) return;
     setProcesando(true);
-    const buffer = await file.arrayBuffer();
-    const decoder = new TextDecoder('iso-8859-1');
-    const texto = decoder.decode(buffer);
+    // El mismo lector que el paso 1: prueba la codificación moderna y, si
+    // las tildes salen rotas, la antigua de Windows que usa Delphos.
+    const texto = await leerCsv(file);
     const sep = texto.includes(';') ? ';' : ',';
     const lineas = texto.split('\n').filter(l => l.trim());
     const cabecera = lineas[0].split(sep).map(c => c.trim().replace(/"/g, '').toUpperCase());
