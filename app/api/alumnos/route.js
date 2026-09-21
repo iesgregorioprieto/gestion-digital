@@ -472,6 +472,20 @@ export async function POST(request) {
         }
       }
 
+      /**
+       * UNA SOLA FILA POR ALUMNO.
+       *
+       * El fichero de matrículas trae 1.243 filas pero 1.242 alumnos: hay
+       * quien está matriculado en dos sitios y aparece dos veces. Si van
+       * las dos en el mismo lote, la base de datos se niega a actualizar
+       * la misma fila dos veces en una sola orden y el lote entero falla.
+       * Se queda la última que aparece, que es la matrícula más reciente.
+       */
+      const unicosActualizar = [...new Map(aActualizar.map(a => [a.id, a])).values()];
+      const unicosCrear = [...new Map(aCrear.map(a => [String(a.alumno_id), a])).values()];
+      aActualizar.length = 0; aActualizar.push(...unicosActualizar);
+      aCrear.length = 0; aCrear.push(...unicosCrear);
+
       const LOTE = 500;
       for (let i = 0; i < aActualizar.length; i += LOTE) {
         const { error } = await supa().from('alumnos')
