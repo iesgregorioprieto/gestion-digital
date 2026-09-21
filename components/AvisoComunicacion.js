@@ -72,10 +72,14 @@ export default function AvisoComunicacion() {
         })
         .catch(() => {});
     };
+    // Una sola vez al abrir la aplicación. Las convocatorias de claustro
+    // son una por trimestre: preguntar cada pocos minutos, en todas las
+    // páginas y para todo el profesorado, gastaba peticiones sin sentido.
+    // Si hay una abierta, aparece al entrar; el reloj de la cuenta atrás
+    // es local y no hace ninguna petición.
     mirar();
-    const t = setInterval(() => { if (!document.hidden) mirar(); }, 120000);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { vivo = false; clearInterval(t); clearInterval(reloj); };
+    return () => { vivo = false; clearInterval(reloj); };
   }, []);
 
   if (fuera || !pendiente) return null;
