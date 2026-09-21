@@ -39,6 +39,65 @@ export default function CopiaSeguridad() {
   const [resultado, setResultado] = useState(null);
   const [ultimaCopia, setUltimaCopia] = useState(null);
 
+  // ── Restaurar ──
+  const [copiaLeida, setCopiaLeida] = useState(null);     // el archivo, ya leído
+  const [marcadas, setMarcadas] = useState({});           // qué tablas restaurar
+  const [restaurando, setRestaurando] = useState(false);
+  const [informe, setInforme] = useState(null);
+
+  /**
+   * Leer la copia NO restaura nada: solo la abre y enseña lo que trae,
+   * para que se vea de qué fecha es y cuántas filas hay de cada cosa
+   * antes de decidir. Ninguna tabla va marcada de entrada: hay que
+   * elegirlas a propósito.
+   */
+  async function leerCopia(archivo) {
+    setInforme(null);
+    if (!archivo) return;
+    try {
+      const c = JSON.parse(await archivo.text());
+      if (!c || !c.datos || typeof c.datos !== 'object') throw new Error();
+      setCopiaLeida(c);
+      setMarcadas({});
+    } catch {
+      alert('Ese archivo no es una copia de la aplicación. Tiene que ser el copia-portal-ies-AAAA-MM-DD.json que se descarga aquí.');
+      setCopiaLeida(null);
+    }
+  }
+
+  async function restaurar() {
+    const tablas = Object.keys(marcadas).filter(t => marcadas[t]);
+    if (tablas.length === 0) return;
+    const fecha = copiaLeida.generada
+      ? new Date(copiaLeida.generada).toLocaleString('es-ES') : 'fecha desconocida';
+    if (!confirm(
+      `Vas a restaurar ${tablas.length === 1 ? '1 tabla' : `${tablas.length} tablas`} ` +
+      `desde la copia del ${fecha}.\n\n` +
+      `Lo que tenía la copia se vuelve a escribir. NO se borra nada: lo que ` +
+      `se haya creado después de la copia se queda como está.\n\n¿Continuar?`
+    )) return;
+
+    setRestaurando(true);
+    const resultado = [];
+    for (const t of tablas) {
+      const filas = copiaLeida.datos[t] || [];
+      try {
+        const r = await fetch('/api/copia/restaurar', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tabla: t, filas }),
+        });
+        const d = await r.json();
+        resultado.push(r.ok
+          ? { tabla: t, bien: true, texto: `${d.repuestas} filas repuestas` }
+          : { tabla: t, bien: false, texto: d.error || 'error' });
+      } catch {
+        resultado.push({ tabla: t, bien: false, texto: 'sin conexión' });
+      }
+    }
+    setInforme(resultado);
+    setRestaurando(false);
+  }
+
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
     const rol = sessionStorage.getItem('profesor_rol_gestion');
@@ -238,6 +297,80 @@ export default function CopiaSeguridad() {
             >
               💾 Generar y descargar copia
             </button>
+
+            {/* RESTAURAR UNA COPIA */}
+            <div style={{
+              marginTop: 18, backgroundColor: 'white', borderRadius: 12,
+              padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              border: '1.5px solid #fde68a',
+            }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#92400e', marginBottom: 6 }}>
+                ♻️ Restaurar una copia
+              </div>
+              <div style={{ fontSize: 12.5, color: '#64748b', lineHeight: 1.6, marginBottom: 12 }}>
+                Primero se abre la copia y se ve lo que trae; no se toca nada
+                hasta que elijas qué tablas y confirmes. <strong>Nunca se borra
+                nada</strong>: lo que tenía la copia se vuelve a escribir, y lo
+                que se haya creado después se queda.
+              </div>
+
+              <label style={{ display: 'block', padding: '11px 14px', borderRadius: 9,
+                border: '1.5px dashed #d97706', backgroundColor: '#fffbeb', color: '#92400e',
+                fontSize: 13.5, fontWeight: 700, cursor: 'pointer', textAlign: 'center' }}>
+                📂 Abrir un archivo de copia (.json)
+                <input type="file" accept=".json,application/json"
+                  onChange={e => { leerCopia(e.target.files?.[0]); e.target.value = ''; }}
+                  style={{ display: 'none' }} />
+              </label>
+
+              {copiaLeida && (
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 13, color: '#1f2937', marginBottom: 10 }}>
+                    Copia del <strong>{copiaLeida.generada
+                      ? new Date(copiaLeida.generada).toLocaleString('es-ES') : '—'}</strong>
+                    {copiaLeida.generada_por ? <> · hecha por {copiaLeida.generada_por}</> : null}
+                    {copiaLeida.curso ? <> · curso {copiaLeida.curso}</> : null}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+                    Marca solo lo que quieras restaurar:
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {TABLAS.filter(t => Array.isArray(copiaLeida.datos[t.nombre])).map(t => (
+                      <label key={t.nombre} style={{ display: 'flex', alignItems: 'center', gap: 9,
+                        padding: '7px 10px', borderRadius: 7, cursor: 'pointer',
+                        backgroundColor: marcadas[t.nombre] ? '#fef3c7' : '#f8fafc',
+                        border: `1px solid ${marcadas[t.nombre] ? '#fcd34d' : '#e2e8f0'}` }}>
+                        <input type="checkbox" checked={!!marcadas[t.nombre]}
+                          onChange={e => setMarcadas(m => ({ ...m, [t.nombre]: e.target.checked }))} />
+                        <span style={{ flex: 1, fontSize: 13 }}>{t.emoji} {t.label}</span>
+                        <span style={{ fontSize: 12, color: '#64748b' }}>
+                          {copiaLeida.datos[t.nombre].length} filas
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <button onClick={restaurar}
+                    disabled={restaurando || !Object.values(marcadas).some(Boolean)}
+                    style={{ marginTop: 12, width: '100%', padding: '12px', borderRadius: 9,
+                      border: 'none', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                      backgroundColor: Object.values(marcadas).some(Boolean) ? '#b45309' : '#d1d5db',
+                      color: 'white' }}>
+                    {restaurando ? '⏳ Restaurando…' : '♻️ Restaurar lo marcado'}
+                  </button>
+                </div>
+              )}
+
+              {informe && (
+                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8,
+                  backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  {informe.map(r => (
+                    <div key={r.tabla} style={{ fontSize: 12.5, color: r.bien ? '#166534' : '#991b1b', padding: '2px 0' }}>
+                      {r.bien ? '✅' : '❌'} {r.tabla}: {r.texto}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* GUARDAR EN DRIVE DEL CENTRO */}
             <div style={{
