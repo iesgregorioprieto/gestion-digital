@@ -156,14 +156,15 @@ export default function GestionAutorizaciones() {
    * Se separa por punto y coma para que Excel en español lo abra en
    * columnas, y con la marca del principio para que respete las tildes.
    */
-  const CABECERA = ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Seguro escolar',
+  const CABECERA = ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Seguro escolar', 'Exento de seguro',
     'Forma de pago', 'Fecha pago', 'Imágenes (menor)', 'Salidas recreo',
     'Actividades extraescolares', 'Informar progenitores', 'Imágenes (mayor)',
     'Salida en convalidadas'];
 
   const filaDe = a => [
     a.grupo || '', a.apellidos || '', a.nombre || '', a.dni || '',
-    a.seguro_pagado ? 'SÍ' : 'NO', a.seguro_forma_pago || '', a.seguro_fecha || '',
+    a.seguro_pagado ? 'SÍ' : 'NO', a.seguro_exento ? 'SÍ' : 'NO',
+    a.seguro_forma_pago || '', a.seguro_fecha || '',
     a.auth_imagenes ? 'SÍ' : 'NO',
     a.auth_salidas ? 'SÍ' : 'NO',
     a.auth_actividades ? 'SÍ' : 'NO',
@@ -244,6 +245,7 @@ export default function GestionAutorizaciones() {
     const si = v => String(v).trim().toUpperCase() === 'SÍ' || String(v).trim().toUpperCase() === 'SI';
     const campos = [
       ['Seguro escolar', 'seguro_pagado'],
+      ['Exento de seguro', 'seguro_exento'],
       ['Imágenes (menor)', 'auth_imagenes'],
       ['Salidas recreo', 'auth_salidas'],
       ['Actividades extraescolares', 'auth_actividades'],
@@ -374,7 +376,11 @@ export default function GestionAutorizaciones() {
         f === 'transferencia' ? 'Transferencia' : f === 'metalico' ? 'Metálico' : '';
 
       const lineas = [
-        ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Pagado', 'Forma de pago', 'Fecha']
+        // "Situación" en vez de "Pagado": un exento no es alguien que no
+        // ha pagado, es alguien a quien no le corresponde. Mezclarlos en
+        // el mismo NO hacía que pareciera que faltaba cobrar a quien no
+        // debe nada.
+        ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Situación', 'Forma de pago', 'Fecha']
           .map(esc).join(';'),
         ...filas
           .sort((a, b) =>
@@ -382,7 +388,7 @@ export default function GestionAutorizaciones() {
             || (a.apellidos || '').localeCompare(b.apellidos || '', 'es'))
           .map(a => [
             a.grupo, a.apellidos, a.nombre, a.dni || '',
-            a.seguro_pagado ? 'SÍ' : 'NO',
+            a.seguro_exento ? 'EXENTO' : (a.seguro_pagado ? 'PAGADO' : 'PENDIENTE'),
             formaTexto(a.seguro_forma_pago),
             a.seguro_fecha || '',
           ].map(esc).join(';')),
@@ -399,7 +405,11 @@ export default function GestionAutorizaciones() {
       URL.revokeObjectURL(url);
 
       const pagados = filas.filter(x => x.seguro_pagado).length;
-      mostrarMensaje(`✅ Informe descargado · ${pagados} de ${filas.length} con el seguro pagado`, 'ok');
+      const exentos = filas.filter(x => x.seguro_exento).length;
+      const pendientes = filas.length - pagados - exentos;
+      mostrarMensaje(
+        `✅ Informe descargado · ${pagados} pagados · ${exentos} exentos · ${pendientes} pendientes`,
+        'ok');
     } catch (e) {
       mostrarMensaje('No se ha podido generar el informe', 'error');
     }

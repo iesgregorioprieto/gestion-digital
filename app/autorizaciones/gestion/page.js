@@ -155,14 +155,15 @@ export default function GestionAutorizaciones() {
    * Se separa por punto y coma para que Excel en español lo abra en
    * columnas, y con la marca del principio para que respete las tildes.
    */
-  const CABECERA = ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Seguro escolar',
+  const CABECERA = ['Grupo', 'Apellidos', 'Nombre', 'DNI', 'Seguro escolar', 'Exento de seguro',
     'Forma de pago', 'Fecha pago', 'Imágenes (menor)', 'Salidas recreo',
     'Actividades extraescolares', 'Informar progenitores', 'Imágenes (mayor)',
     'Salida en convalidadas'];
 
   const filaDe = a => [
     a.grupo || '', a.apellidos || '', a.nombre || '', a.dni || '',
-    a.seguro_pagado ? 'SÍ' : 'NO', a.seguro_forma_pago || '', a.seguro_fecha || '',
+    a.seguro_pagado ? 'SÍ' : 'NO', a.seguro_exento ? 'SÍ' : 'NO',
+    a.seguro_forma_pago || '', a.seguro_fecha || '',
     a.auth_imagenes ? 'SÍ' : 'NO',
     a.auth_salidas ? 'SÍ' : 'NO',
     a.auth_actividades ? 'SÍ' : 'NO',
@@ -243,6 +244,7 @@ export default function GestionAutorizaciones() {
     const si = v => String(v).trim().toUpperCase() === 'SÍ' || String(v).trim().toUpperCase() === 'SI';
     const campos = [
       ['Seguro escolar', 'seguro_pagado'],
+      ['Exento de seguro', 'seguro_exento'],
       ['Imágenes (menor)', 'auth_imagenes'],
       ['Salidas recreo', 'auth_salidas'],
       ['Actividades extraescolares', 'auth_actividades'],
@@ -327,6 +329,31 @@ export default function GestionAutorizaciones() {
         seguro_pagado: !pagadoAhora,
         seguro_forma_pago: !pagadoAhora ? (getValor(alumno, 'seguro_forma_pago') || null) : null,
         seguro_fecha: !pagadoAhora ? new Date().toISOString().slice(0, 10) : null,
+        // Pagar y estar exento se excluyen: si paga, ya no está exento.
+        ...(!pagadoAhora ? { seguro_exento: false } : {}),
+      },
+    }));
+  }
+
+  /**
+   * EXENTO DEL SEGURO ESCOLAR
+   *
+   * Están exentos el alumnado de 1º y 2º de ESO y el mayor de 28 años.
+   * Hasta ahora solo se podía marcar si había pagado, así que un exento
+   * salía en el informe igual que uno que no había pagado: no había
+   * forma de distinguir «no le toca» de «le toca y no ha pagado».
+   *
+   * Excluye el pago: al marcarlo exento se limpian el pago, la forma y
+   * la fecha.
+   */
+  function toggleExento(alumnoId, alumno) {
+    const exentoAhora = !!getValor(alumno, 'seguro_exento');
+    setCambios(c => ({
+      ...c,
+      [alumnoId]: {
+        ...c[alumnoId],
+        seguro_exento: !exentoAhora,
+        ...(!exentoAhora ? { seguro_pagado: false, seguro_forma_pago: null, seguro_fecha: null } : {}),
       },
     }));
   }
@@ -578,11 +605,12 @@ export default function GestionAutorizaciones() {
                       {/* SEGURO ESCOLAR */}
                       {(() => {
                         const pagado = getValor(alumno, 'seguro_pagado');
+                        const exento = !!getValor(alumno, 'seguro_exento');
                         const forma  = getValor(alumno, 'seguro_forma_pago');
                         return (
                           <div style={{ marginBottom: 16, padding: 12, borderRadius: 9,
-                            backgroundColor: pagado ? '#f0fdf4' : '#fafafa',
-                            border: `1.5px solid ${pagado ? '#6ee7b7' : '#e5e7eb'}` }}>
+                            backgroundColor: (pagado || exento) ? '#f0fdf4' : '#fafafa',
+                            border: `1.5px solid ${(pagado || exento) ? '#6ee7b7' : '#e5e7eb'}` }}>
 
                             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 9 }}>
                               <span style={{ fontSize: 12, fontWeight: 800, color: azul }}>
@@ -618,6 +646,25 @@ export default function GestionAutorizaciones() {
                                     registrado el {getValor(alumno, 'seguro_fecha')}
                                   </div>
                                 )}
+                              </div>
+                            </div>
+
+                            <div onClick={() => toggleExento(alumno.id, alumno)}
+                              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px',
+                                borderRadius: 8, cursor: 'pointer', marginTop: 7, marginBottom: pagado ? 9 : 0,
+                                backgroundColor: exento ? '#e0f2fe' : 'white',
+                                border: `1.5px solid ${exento ? '#7dd3fc' : '#ddd'}` }}>
+                              <span style={{ fontSize: 20, minWidth: 26, textAlign: 'center' }}>
+                                {exento ? '✅' : '⬜'}
+                              </span>
+                              <div style={{ flex: 1 }}>
+                                <div style={{ fontWeight: 700, fontSize: 13,
+                                  color: exento ? '#075985' : '#475569' }}>
+                                  Exento de pago
+                                </div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 1 }}>
+                                  1º y 2º de ESO, o mayor de 28 años
+                                </div>
                               </div>
                             </div>
 

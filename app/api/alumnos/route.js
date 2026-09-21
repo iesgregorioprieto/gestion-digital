@@ -193,7 +193,7 @@ export async function POST(request) {
       const permitidos = [
         'auth_imagenes', 'auth_salidas', 'auth_actividades',
         'auth_informar_progeni', 'auth_imagenes_mayor', 'dni',
-        'seguro_pagado', 'seguro_forma_pago', 'seguro_fecha',
+        'seguro_pagado', 'seguro_forma_pago', 'seguro_fecha', 'seguro_exento',
         'modulos_convalidados',
       ];
       const limpio = {};
@@ -217,7 +217,7 @@ export async function POST(request) {
       // Las convalidaciones NO: las puede marcar el tutor del grupo y
       // también el equipo directivo, que a menudo las tramita sin ser
       // tutor de ese grupo.
-      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha']
+      const tocaSeguro = ['seguro_pagado', 'seguro_forma_pago', 'seguro_fecha', 'seguro_exento']
         .some(k => k in limpio);
 
       if (tocaSeguro) {
