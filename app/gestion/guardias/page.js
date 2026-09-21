@@ -347,7 +347,11 @@ export default function GestionGuardias() {
       .then(d => { if (vivo) setLibresHora(d && d.ok ? d : null); })
       .catch(() => { if (vivo) setLibresHora(null); });
     return () => { vivo = false; };
-  }, [fecha, horaActiva, apoyosAsignados.length]);
+  // Se vuelve a pedir cuando cambia QUIÉN cubre, no solo cuántas guardias
+  // hay. Al cambiar a Carlos por Federico el número sigue siendo el mismo,
+  // y con solo mirar la cantidad el semáforo se quedaba con la foto de
+  // antes: Carlos en rojo estando ya libre.
+  }, [fecha, horaActiva, apoyosAsignados.map(a => `${a.id}:${a.profesor_id}`).join('|')]);
 
   const diaSem = diaSemanaEs(fecha);
   const esFinde = diaSem === 'sabado' || diaSem === 'domingo';
