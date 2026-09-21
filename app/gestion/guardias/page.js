@@ -1097,9 +1097,14 @@ export default function GestionGuardias() {
                         // Para poder seguir ofreciendo el botón "Cambiar ▾" en el
                         // apoyo obligatorio: mismos candidatos que ya se calculan
                         // para las sugerencias de refuerzo, un poco más abajo.
-                        alternativas: filaReal.tipo_apoyo !== 'sector'
-                          ? profesoresLibresParaApoyo(new Set([normAbrev(filaReal.profesor_nombre_pdf)]))
-                          : [],
+                        // Las alternativas se ofrecen SIEMPRE, sea la guardia del
+                        // mismo departamento o de otro. Antes solo se calculaban
+                        // cuando venía de fuera, así que no había forma de
+                        // cambiar a un compañero por otro del mismo
+                        // departamento: Carlos por Federico, en TMV, era
+                        // imposible desde la pantalla.
+                        alternativas: profesoresLibresParaApoyo(new Set([normAbrev(filaReal.profesor_nombre_pdf)])),
+                        apoyoId: filaReal.id,
                       } : null;
 
                       // Buscar apoyo registrado si es obligatorio
@@ -1165,6 +1170,21 @@ export default function GestionGuardias() {
                               <span style={{ fontWeight:700, color:verde }}>✅ CUBRE:</span>
                               <span style={{ fontWeight:800 }}>{cubre.nombre}</span>
                               <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>guardia {cubre.sectorOriginal}</span>
+                              {cubre.apoyoId && (
+                                <button
+                                  onClick={() => setModalActivar({
+                                    modo: 'cambiar',
+                                    apoyoId: cubre.apoyoId,
+                                    asig,
+                                    sugeridos: cubre.alternativas,
+                                    actual: cubre,
+                                  })}
+                                  style={{ padding:'4px 10px', borderRadius:6, border:'none',
+                                    backgroundColor:'#f59e0b', color:'white', fontSize:11,
+                                    fontWeight:700, cursor:'pointer' }}>
+                                  Cambiar ▾
+                                </button>
+                              )}
                             </div>
                           )}
 
