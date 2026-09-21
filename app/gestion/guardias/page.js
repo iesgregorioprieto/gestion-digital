@@ -374,6 +374,17 @@ export default function GestionGuardias() {
    * todos los departamentos, con su estado: no se oculta a nadie, se
    * marca. Quien decide es jefatura.
    */
+  // Un solo código de colores para toda la pantalla: la lista de la hora
+  // y el desplegable de Cambiar usan exactamente el mismo.
+  const SEMAFORO = {
+    libre:           { icono:'🟢', texto:'Libre a esta hora',                     fondo:'#f0fdf4', tinta:'#166534', borde:'#bbf7d0' },
+    ocupado:         { icono:'🔴', texto:'Ya está cubriendo otra guardia',        fondo:'#fee2e2', tinta:'#991b1b', borde:'#fca5a5' },
+    en_clase:        { icono:'🔴', texto:'Tiene clase a esta hora',               fondo:'#fee2e2', tinta:'#991b1b', borde:'#fca5a5' },
+    ausente:         { icono:'🚫', texto:'Hoy no está',                           fondo:'#f4f4f5', tinta:'#9ca3af', borde:'#d4d4d8', tachado:true },
+    de_baja:         { icono:'🚫', texto:'De baja',                               fondo:'#f4f4f5', tinta:'#9ca3af', borde:'#d4d4d8', tachado:true },
+    sin_identificar: { icono:'❓', texto:'En el cuadrante, pero sin identificar', fondo:'#fffbeb', tinta:'#92400e', borde:'#fde68a' },
+  };
+
   function profesoresLibresParaApoyo(asignadosAbrev = new Set()) {
     const todos = Object.values(libresHora?.sectores || {}).flat();
     return todos
@@ -1309,53 +1320,35 @@ export default function GestionGuardias() {
                 📊 Profesores de guardia esta hora — 🟢 libre · 🔴 ocupado · 🚫 no está
               </summary>
               <div style={{ padding:'0 16px 16px' }}>
-                {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
-                  const guardias = guardiasDeSector(s);
-                  const ausentesAbrev = new Set(ausenciasDia.map(a => normAbrev(a.abrev || '')));
-                  // Quien YA está cubriendo una guardia a esta hora no está
-                  // libre. Esta lista los pintaba a todos en verde y daba a
-                  // entender que había gente sin usar en el sector cuando no
-                  // la había.
-                  const yaCubriendo = new Set(
-                    (apoyosAsignados || [])
-                      .filter(a => horaCoincide(a.hora, horaActiva) && a.profesor_nombre_pdf)
-                      .map(a => normAbrev(a.profesor_nombre_pdf)));
-                  return (
-                    <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
-                      <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
-                        {emojiSector(s)} {s.toUpperCase()}
-                      </div>
-                      <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
-                        {guardias.map((p, i) => {
-                          const key = normAbrev(p);
-                          const nombre = nombreCorto(mapaProfesores, p);
-                          const estaAusente = ausentesAbrev.has(key);
-                          const ocupado = !estaAusente
-                            && yaCubriendo.has(normAbrev(nombreLargo(mapaProfesores, p)));
-                          // Semáforo: verde libre, rojo ocupado. El que hoy
-                          // no está va en gris y tachado, para no confundir
-                          // "no viene" con "está pero ya tiene guardia".
-                          const fondo  = estaAusente ? '#f4f4f5' : (ocupado ? '#fee2e2' : '#f0fdf4');
-                          const tinta  = estaAusente ? '#9ca3af' : (ocupado ? rojo : verde);
-                          const borde  = estaAusente ? '#d4d4d8' : (ocupado ? '#fca5a5' : '#bbf7d0');
-                          const pista  = estaAusente ? 'Hoy no está: tiene ausencia registrada'
-                            : (ocupado ? 'Ocupado: ya está cubriendo una guardia a esta hora'
-                                       : 'Libre a esta hora');
-                          return (
-                            <span key={i} title={pista} style={{
-                              padding:'4px 10px', borderRadius:20, fontSize:11, fontWeight:700,
-                              backgroundColor: fondo, color: tinta,
-                              border:'1.5px solid ' + borde,
-                              textDecoration: estaAusente ? 'line-through' : 'none',
-                            }}>
-                              {estaAusente ? '🚫 ' : (ocupado ? '🔴 ' : '🟢 ')}{nombre}
-                            </span>
-                          );
-                        })}
-                      </div>
+                {/* El estado de cada uno lo da el SERVIDOR, que sabe quién
+                    está cubriendo, quién está en clase y quién de baja.
+                    Antes se comparaban nombres aquí: «Carlos Romero» en el
+                    cuadrante frente a «Romero de Ávila Díaz de los
+                    Bernardos, Carlos» en la asignación. No casaban, y quien
+                    estaba cubriendo salía en verde como libre. */}
+                {!libresHora ? (
+                  <div style={{ fontSize:12.5, color:'#888', padding:'8px 0' }}>Cargando…</div>
+                ) : Object.entries(libresHora.sectores || {}).map(([sector, gente]) => (
+                  <div key={sector} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
+                    <div style={{ fontSize:12.5, fontWeight:800, color:azul, marginBottom:7 }}>
+                      {emojiSector(sector)} {sector}
                     </div>
-                  );
-                })}
+                    <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {gente.map((p, i) => {
+                        const est = SEMAFORO[p.estado] || SEMAFORO.libre;
+                        return (
+                          <span key={(p.profesorId || p.nombre) + i} title={est.texto}
+                            style={{ padding:'4px 10px', borderRadius:20, fontSize:11.5, fontWeight:700,
+                              backgroundColor: est.fondo, color: est.tinta,
+                              border:'1.5px solid ' + est.borde,
+                              textDecoration: est.tachado ? 'line-through' : 'none' }}>
+                            {est.icono} {p.nombre}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </details>
           </>
@@ -1372,39 +1365,72 @@ export default function GestionGuardias() {
             <div style={{ fontSize:12, color:'#666', marginBottom:14 }}>
               Grupo <strong>{modalActivar.asig.clase.grupo}</strong> · Actual: <strong>{modalActivar.actual.nombre}</strong>
             </div>
-            <div style={{ fontSize:12, fontWeight:700, marginBottom:8 }}>Selecciona nuevo profesor:</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              {[...modalActivar.sugeridos]
-                .sort((a, b) => (b.profesorId ? 1 : 0) - (a.profesorId ? 1 : 0))
-                .map((p, i) => {
-                // Los nombres del cuadrante que aún no están casados con una
-                // ficha no se pueden asignar: se marcan y se dejan al final,
-                // en vez de dejar que se pulsen y salte un error seco.
-                const identificado = !!p.profesorId;
-                return (
-                <button key={i} onClick={() => cambiarProfesor(modalActivar.apoyoId, p)} style={{
-                  padding:'10px 12px', borderRadius:10, cursor:'pointer', textAlign:'left',
-                  backgroundColor: !identificado ? '#fafafa' : (i === 0 ? '#fef3c7' : 'white'),
-                  border: !identificado ? '1.5px dashed #d4d4d4'
-                    : (i === 0 ? '2px solid #f59e0b' : '1.5px solid #e5e7eb'),
-                  display:'flex', alignItems:'center', gap:10,
-                  opacity: identificado ? 1 : 0.65,
-                }}>
-                  <span style={{ fontSize:14 }}>
-                    {!identificado ? '⚠️' : (i===0?'🥇':i===1?'🥈':i===2?'🥉':`#${i+1}`)}
-                  </span>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:700, fontSize:13 }}>{p.nombre}</div>
-                    <div style={{ fontSize:11, color: identificado ? '#666' : '#b45309' }}>
-                      {identificado
-                        ? `${p.sectorOriginal} · ${p.apoyosPrevios} apoyo${p.apoyosPrevios!==1?'s':''}`
-                        : 'sin asociar a ninguna ficha — resuélvelo en Personal → Nombres del horario'}
-                    </div>
-                  </div>
-                </button>
-                );
-              })}
+            <div style={{ fontSize:11.5, color:'#666', marginBottom:10 }}>
+              Todos los que están de guardia a esta hora. Los libres, primero.
             </div>
+
+            {/* Todos los de guardia de esa hora, agrupados por
+                departamento y con el mismo semáforo que la lista de abajo.
+                Se puede elegir a cualquiera: quien decide es jefatura.
+                Los ocupados no se esconden, se avisa. */}
+            {(() => {
+              const orden = { libre:0, sin_identificar:1, ocupado:2, en_clase:3, ausente:4, de_baja:5 };
+              const porSector = {};
+              (modalActivar.sugeridos || [])
+                .filter(p => p.nombre !== modalActivar.actual?.nombre)
+                .forEach(p => { (porSector[p.sectorOriginal] = porSector[p.sectorOriginal] || []).push(p); });
+
+              const sectoresOrd = Object.keys(porSector).sort((a, b) => {
+                const libresA = porSector[a].filter(p => p.estado === 'libre').length;
+                const libresB = porSector[b].filter(p => p.estado === 'libre').length;
+                return libresB - libresA || a.localeCompare(b, 'es');
+              });
+
+              if (sectoresOrd.length === 0) {
+                return <div style={{ fontSize:13, color:'#888', padding:'10px 0' }}>No hay nadie más de guardia a esta hora.</div>;
+              }
+
+              return sectoresOrd.map(sector => (
+                <div key={sector} style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11.5, fontWeight:800, color:azul, margin:'4px 0 6px' }}>
+                    {emojiSector(sector)} {sector}
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:5 }}>
+                    {[...porSector[sector]]
+                      .sort((a, b) => (orden[a.estado] ?? 9) - (orden[b.estado] ?? 9))
+                      .map((p, i) => {
+                        const est = SEMAFORO[p.estado] || SEMAFORO.libre;
+                        const sePuede = !!p.profesorId && p.estado !== 'de_baja' && p.estado !== 'ausente';
+                        return (
+                          <button key={(p.profesorId || p.nombre) + i}
+                            disabled={!sePuede}
+                            onClick={() => {
+                              if (p.estado !== 'libre' && !confirm(
+                                `${p.nombre}: ${est.texto.toLowerCase()}.\n\n¿Asignarle esta guardia de todas formas?`
+                              )) return;
+                              cambiarProfesor(modalActivar.apoyoId, p);
+                            }}
+                            style={{
+                              display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
+                              borderRadius:9, textAlign:'left', cursor: sePuede ? 'pointer' : 'not-allowed',
+                              backgroundColor: est.fondo, border:'1.5px solid ' + est.borde,
+                              opacity: sePuede ? 1 : 0.55,
+                            }}>
+                            <span style={{ fontSize:15 }}>{est.icono}</span>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:700, fontSize:13, color:est.tinta,
+                                textDecoration: est.tachado ? 'line-through' : 'none' }}>
+                                {p.nombre}
+                              </div>
+                              <div style={{ fontSize:11, color:'#6b7280' }}>{est.texto}</div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                  </div>
+                </div>
+              ));
+            })()}
             <button onClick={() => setModalActivar(null)} style={{ marginTop:14, padding:'8px 16px', width:'100%', borderRadius:8, border:'1px solid #ddd', backgroundColor:'white', color:'#666', cursor:'pointer', fontSize:13 }}>Cancelar</button>
           </div>
         </div>
