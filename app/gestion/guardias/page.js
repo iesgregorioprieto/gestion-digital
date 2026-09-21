@@ -136,6 +136,11 @@ export default function GestionGuardias() {
   const [mapaProfesores, setMapaProf] = useState({});
   const [ausenciasDia, setAusDia] = useState([]);
   const [apoyosAsignados, setApAsig] = useState([]);
+  // El cuadrante real de la hora que se está mirando, calculado en el
+  // servidor: quién está de guardia y en qué estado. Esta línea faltaba:
+  // se usaba en tres sitios sin estar declarada y la pantalla entera
+  // dejaba de cargar.
+  const [libresHora, setLibresHora] = useState(null);
   const [contadorApoyos, setContApoyos] = useState({});
   const [apoyosPorProfesor, setApoyosPorProfesor] = useState({});
   const [cargando, setCargando] = useState(true);
