@@ -468,7 +468,7 @@ export default function GestionDatos() {
       setProcesando(false); setModalAlumnos(false); return;
     }
 
-    // Borrar e insertar alumnos en lotes
+    // Actualizar e insertar alumnos. NO se borra nada.
     // La importación la hace el servidor: la tabla de alumnado ya no es
     // accesible desde el navegador.
     const respImp = await fetch('/api/alumnos', {
@@ -482,7 +482,6 @@ export default function GestionDatos() {
         reemplazar: false,
         alumnos: alumnosNuevos,
         curso: cursoNuevo,
-        reemplazar: true,
       }),
     });
     if (!respImp.ok) {

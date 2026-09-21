@@ -268,22 +268,34 @@ export async function POST(request) {
       const { grupos, curso } = cuerpo;
       if (!Array.isArray(grupos) || !curso) return Response.json({ error: 'Datos incorrectos' }, { status: 400 });
 
-      // 1. Vaciar alumnos (todos los cursos: la matrícula se reimporta entera)
-      const { error: eA } = await supa().from('alumnos').delete().gte('id', 0);
-      if (eA) return Response.json({ error: 'Alumnos: ' + eA.message }, { status: 500 });
+      /**
+       * LOS GRUPOS SE AÑADEN. LOS ALUMNOS NO SE TOCAN.
+       *
+       * Aquí había un borrado de TODOS los alumnos de TODOS los cursos
+       * antes de cargar los grupos: `delete from alumnos where id >= 0`.
+       * Escondido en el paso de grupos, se habría llevado por delante los
+       * seguros escolares y las autorizaciones aunque la importación de
+       * alumnos ya no borrara nada. Solo se salvaron porque la consulta
+       * falló: el identificador es de un tipo que no se compara con un 0.
+       *
+       * Ahora solo se añaden los grupos que no existan todavía para ese
+       * curso. Nada se borra: un grupo que ya no esté en el fichero se
+       * queda, y no hace ningún daño.
+       */
+      const { data: yaHay } = await supa().from('grupos')
+        .select('codigo').eq('curso_academico', curso);
+      const existentes = new Set((yaHay || []).map(g => g.codigo));
 
-      // 2. Vaciar grupos (todos los cursos)
-      const { error: eG } = await supa().from('grupos').delete().gte('id', 0);
-      if (eG) return Response.json({ error: 'Grupos: ' + eG.message }, { status: 500 });
+      const nuevos = grupos
+        .filter(g => g.codigo && !existentes.has(g.codigo))
+        .map(g => ({ ...g, curso_academico: curso }));
 
-      // 3. Insertar grupos nuevos en lotes
       const LOTE = 100;
-      const lista = grupos.map(g => ({ ...g, curso_academico: curso }));
-      for (let i = 0; i < lista.length; i += LOTE) {
-        const { error } = await supa().from('grupos').insert(lista.slice(i, i + LOTE));
+      for (let i = 0; i < nuevos.length; i += LOTE) {
+        const { error } = await supa().from('grupos').insert(nuevos.slice(i, i + LOTE));
         if (error) return Response.json({ error: 'Insertar grupos: ' + error.message }, { status: 500 });
       }
-      return Response.json({ ok: true, grupos: lista.length });
+      return Response.json({ ok: true, grupos: grupos.length, grupos_nuevos: nuevos.length });
     }
 
     // Importar la matrícula del curso (solo equipo directivo)
@@ -379,9 +391,10 @@ export async function POST(request) {
       const conId = alumnos.filter(a => a.alumno_id);
       const sinId = alumnos.filter(a => !a.alumno_id);
 
-      if (reemplazar === true && curso && conId.length === alumnos.length) {
-        await supa().from('alumnos').delete().eq('curso_academico', curso);
-      }
+      // Aquí había un borrado del curso entero si se pedía «reemplazar».
+      // La pantalla lo seguía pidiendo por un parámetro duplicado, y como
+      // el fichero de matrículas trae a todos con identificador, se habría
+      // borrado. Se quita del todo: esta acción ya no borra, nunca.
 
       let actualizados = 0;
       let creados = 0;
