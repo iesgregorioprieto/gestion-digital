@@ -73,7 +73,7 @@ export default function AvisoComunicacion() {
         .catch(() => {});
     };
     mirar();
-    const t = setInterval(mirar, 20000);
+    const t = setInterval(() => { if (!document.hidden) mirar(); }, 120000);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
     return () => { vivo = false; clearInterval(t); clearInterval(reloj); };
   }, []);

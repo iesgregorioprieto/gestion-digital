@@ -71,7 +71,7 @@ export default function EscenarioDia({ fecha, compacto = false }) {
     };
 
     traer();
-    const reloj = setInterval(traer, 60000);
+    const reloj = setInterval(() => { if (!document.hidden) traer(); }, 180000); // 3 min
 
     // Al volver a la pestaña, al momento: no tiene sentido esperar al
     // siguiente minuto si alguien acaba de sentarse delante.

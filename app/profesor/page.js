@@ -32,7 +32,7 @@ export default function PanelProfesor() {
         .catch(() => {});
     };
     mirarVotacion();
-    const t = setInterval(mirarVotacion, 30000);
+    const t = setInterval(() => { if (!document.hidden) mirarVotacion(); }, 120000);
     return () => { vivo = false; clearInterval(t); };
   }, []);
 

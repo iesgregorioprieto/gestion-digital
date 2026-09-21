@@ -74,7 +74,7 @@ export default function AvisoVotacion() {
     };
     mirar();
     // Cada 10 segundos: en un claustro, esperar más se hace largo.
-    const t = setInterval(mirar, 10000);
+    const t = setInterval(() => { if (!document.hidden) mirar(); }, 120000); // 2 min y solo con la pestaña a la vista
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
     return () => { vivo = false; clearInterval(t); clearInterval(reloj); };
   }, []);

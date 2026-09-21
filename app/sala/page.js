@@ -103,7 +103,18 @@ export default function SalaProfesores() {
   // profesores, así que es la que mejor puede dispararlo. Si no hay nadie
   // mirando, lo hará el primer profesor que abra sus guardias.
   useEffect(() => {
-    const alDia = () => fetch('/api/guardias/al-dia', { method: 'POST' }).catch(() => {});
+    // Solo dentro de los diez minutos antes de cada timbre, que es cuando
+    // sirve. Antes llamaba cada minuto, todo el día, y cada llamada cuenta
+    // en el límite gratuito de Vercel: pasado ese límite, pausan la
+    // aplicación entera.
+    const VENTANAS = [[555,565],[610,620],[665,675],[695,705],[750,760],[805,815],[860,870]];
+    const alDia = () => {
+      const d = new Date();
+      const m = d.getHours() * 60 + d.getMinutes();
+      if (VENTANAS.some(([a, b]) => m >= a && m < b)) {
+        fetch('/api/guardias/al-dia', { method: 'POST' }).catch(() => {});
+      }
+    };
     alDia();
     const t = setInterval(alDia, 60000);
     return () => clearInterval(t);
@@ -111,7 +122,7 @@ export default function SalaProfesores() {
 
   useEffect(() => {
     cargarDatos();
-    const intervalo = setInterval(cargarDatos, 30000); // cada 30 segundos
+    const intervalo = setInterval(cargarDatos, 120000); // cada 2 minutos: sobra para una tele
 
     // Noticias de la web del centro (se refrescan cada media hora)
     const traerNoticias = () => {

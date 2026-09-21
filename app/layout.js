@@ -60,7 +60,7 @@ export default function RootLayout({ children }) {
               window.addEventListener('load', function() {
                 navigator.serviceWorker.register('/sw.js').then(function(reg) {
                   function check() { reg.update().catch(function(){}); }
-                  setInterval(check, 30000);
+                  setInterval(check, 1800000); // 30 min: ya se mira al volver a la pestaña
                   window.addEventListener('focus', check);
                   document.addEventListener('visibilitychange', function() {
                     if (!document.hidden) check();
