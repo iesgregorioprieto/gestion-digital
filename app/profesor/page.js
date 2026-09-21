@@ -19,22 +19,9 @@ export default function PanelProfesor() {
 
 
 
-  useEffect(() => {
-    let vivo = true;
-    const mirarVotacion = () => {
-      fetch('/api/votaciones')
-        .then(r => r.json())
-        .then(d => {
-          if (!vivo) return;
-          const abierta = (d.votaciones || []).find(v => v.abierta && !v.yaVote);
-          setVotacionAbierta(abierta || null);
-        })
-        .catch(() => {});
-    };
-    mirarVotacion();
-    const t = setInterval(() => { if (!document.hidden) mirarVotacion(); }, 120000);
-    return () => { vivo = false; clearInterval(t); };
-  }, []);
+  // Las votaciones no están en uso. Aquí había una consulta cada pocos
+  // segundos, en la portada de cada profesor, a algo que no existe:
+  // gastaba del límite de peticiones de Vercel de todo el centro.
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');

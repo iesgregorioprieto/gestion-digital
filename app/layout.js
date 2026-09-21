@@ -1,5 +1,4 @@
 import "./globals.css";
-import AvisoVotacion from "@/components/AvisoVotacion";
 import AvisoComunicacion from "@/components/AvisoComunicacion";
 
 export const metadata = {
@@ -49,7 +48,6 @@ export default function RootLayout({ children }) {
           `
         }} />
         {children}
-        <AvisoVotacion />
         <AvisoComunicacion />
 
         <script dangerouslySetInnerHTML={{
