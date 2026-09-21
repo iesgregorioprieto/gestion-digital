@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { useState, useEffect } from 'react';
+import { reducirImagen } from '@/lib/reducirImagen';
 import { getSupabase } from '@/lib/supabase';
 
 const VERDE = '#1e6b2e';
@@ -66,7 +67,7 @@ export default function Incidencias() {
     const ext = (foto.name.split('.').pop() || 'png').toLowerCase();
     const nombre = `capturas/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
     const fd = new FormData();
-    fd.append('archivo', foto);
+    fd.append('archivo', await reducirImagen(foto));
     fd.append('carpeta', 'capturas');
     fd.append('bucket', 'incidencias-docs');
     try {

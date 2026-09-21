@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { reducirImagen } from '@/lib/reducirImagen';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 const ESTANCIAS = [
@@ -101,7 +102,9 @@ export default function Mantenimiento() {
       if (form.foto) {
         const nombreArchivo = `${Date.now()}_${form.foto.name}`;
         const fd = new FormData();
-        fd.append('archivo', form.foto);
+        // Reducida antes de subirla: una foto de móvil de 5 MB queda en
+        // unos 300 KB, y el espacio de Supabase da para un curso entero.
+        fd.append('archivo', await reducirImagen(form.foto));
         fd.append('carpeta', 'fotos');
         fd.append('bucket', 'mantenimiento-fotos');
         const upResp = await fetch('/api/documento', { method: 'POST', body: fd });

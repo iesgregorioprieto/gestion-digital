@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
+import { reducirImagen } from '@/lib/reducirImagen';
 import { hoyLocal } from '@/lib/fechas';
 import { createClient } from '@supabase/supabase-js';
 import jsQR from 'jsqr';
@@ -571,9 +572,10 @@ export default function Limpieza() {
     try {
       const ext = foto.name.split('.').pop() || 'jpg';
       const nombre = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.${ext}`;
+      const reducida = await reducirImagen(foto);
       const { data, error } = await supaLimpieza.storage
         .from('limpieza-incidencias-fotos')
-        .upload(nombre, foto, { cacheControl: '3600', upsert: false });
+        .upload(nombre, reducida, { cacheControl: '3600', upsert: false });
       if (error) {
         console.error('Error subiendo foto:', error);
         setSubiendoFoto(false);
