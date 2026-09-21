@@ -420,36 +420,60 @@ export async function POST(request) {
 
       let adoptados = 0;
 
+      /**
+       * POR LOTES, NO UNO A UNO.
+       *
+       * Antes se hacía una petición a la base de datos por cada alumno:
+       * 1.243 seguidas. El servidor cortaba antes de acabar y los nuevos
+       * no llegaban a crearse nunca.
+       *
+       * Ahora se separan en dos listas y se mandan de quinientos en
+       * quinientos: tres o cuatro peticiones en total.
+       *
+       * Para los que ya están se usa upsert con SOLO las columnas que
+       * cambian —nombre, grupo, expediente, curso e identificador—. En un
+       * upsert, lo que no se envía no se toca: el seguro escolar y las
+       * autorizaciones ni siquiera viajan, así que no se pueden pisar.
+       */
+      const aActualizar = [];
+      const aCrear = [];
+
       for (const a of conId) {
         let yaEsta = porIdDelphos.get(String(a.alumno_id));
         if (!yaEsta && ndni(a.dni)) yaEsta = porDni.get(ndni(a.dni));
         if (!yaEsta) yaEsta = porNombre.get(norm(a.apellidos) + '|' + norm(a.nombre)) || null;
-        if (yaEsta && !porIdDelphos.has(String(a.alumno_id))) adoptados++;
+
         if (yaEsta) {
-          // Solo lo que cambia de un curso a otro. Ni se menciona el
-          // seguro ni las autorizaciones: así no se pueden tocar.
-          const { error } = await supa().from('alumnos').update({
+          if (!porIdDelphos.has(String(a.alumno_id))) adoptados++;
+          aActualizar.push({
+            id: yaEsta,
             nombre: a.nombre,
             apellidos: a.apellidos,
             grupo: a.grupo,
             num_expediente: a.num_expediente,
             curso_academico: a.curso_academico,
-            // Se le queda puesto para siempre: el año que viene se le
-            // reconoce por aquí y no hará falta mirar el nombre.
-            alumno_id: a.alumno_id,
-          }).eq('id', yaEsta);
-          if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
-          actualizados++;
+            alumno_id: String(a.alumno_id),
+          });
         } else {
-          const { error } = await supa().from('alumnos').insert([a]);
-          if (error) return Response.json({ error: error.message, creados }, { status: 500 });
-          creados++;
+          aCrear.push(a);
         }
+      }
+
+      const LOTE = 500;
+      for (let i = 0; i < aActualizar.length; i += LOTE) {
+        const { error } = await supa().from('alumnos')
+          .upsert(aActualizar.slice(i, i + LOTE), { onConflict: 'id' });
+        if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
+        actualizados += Math.min(LOTE, aActualizar.length - i);
+      }
+      for (let i = 0; i < aCrear.length; i += LOTE) {
+        const { error } = await supa().from('alumnos').insert(aCrear.slice(i, i + LOTE));
+        if (error) return Response.json({ error: error.message, creados }, { status: 500 });
+        creados += Math.min(LOTE, aCrear.length - i);
       }
 
       // Los que llegan sin identificador se insertan como antes: no hay
       // forma de saber si ya estaban.
-      const LOTE = 500;
       for (let i = 0; i < sinId.length; i += LOTE) {
         const { error } = await supa().from('alumnos').insert(sinId.slice(i, i + LOTE));
         if (error) return Response.json({ error: error.message, creados }, { status: 500 });
