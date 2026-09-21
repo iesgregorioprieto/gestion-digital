@@ -1327,17 +1327,32 @@ export default function GestionDatos() {
               {/* Las instrucciones escritas aquí, para no tener que
                   acordarse de nada el curso que viene. */}
               <div style={{ fontSize: 12.5, backgroundColor: '#f0f7ff', padding: '12px 14px', borderRadius: 8, color: '#1e3a8a', marginBottom: 14, lineHeight: 1.6 }}>
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>🖥️ Son DOS ficheros y van en este orden</div>
-                <div style={{ marginBottom: 6 }}>
-                  <strong>1º · datAlumnos</strong> — Delphos › Alumnado › Alumnos › Exportar.
-                  Trae el DNI y sirve para reconocer a los que ya están sin
-                  equivocarse. <strong>No crea ni borra a nadie.</strong>
+                <div style={{ fontWeight: 800, marginBottom: 8 }}>🖥️ Qué fichero subir, según el caso</div>
+
+                <div style={{ marginBottom: 10, padding: '8px 10px', backgroundColor: 'white', borderRadius: 7, border: '1px solid #bfdbfe' }}>
+                  <div style={{ fontWeight: 800 }}>🔄 Actualizar las listas durante el curso</div>
+                  <div>
+                    Solo el <strong>2º · datMatriculas</strong> — Delphos › Alumnado › Matrículas › Exportar.
+                    Cambia de grupo a quien haya cambiado y añade a los que se han
+                    matriculado. <strong>No hace falta el 1º.</strong> Es lo normal: se
+                    puede hacer tantas veces como haga falta.
+                  </div>
                 </div>
-                <div style={{ marginBottom: 6 }}>
-                  <strong>2º · datMatriculas</strong> — Delphos › Alumnado › Matrículas › Exportar.
-                  Trae el grupo de cada uno. Actualiza a los que ya están y crea
-                  a los nuevos.
+
+                <div style={{ marginBottom: 10, padding: '8px 10px', backgroundColor: 'white', borderRadius: 7, border: '1px solid #bfdbfe' }}>
+                  <div style={{ fontWeight: 800 }}>🎓 Empezar un curso nuevo, o si faltan identificadores</div>
+                  <div>
+                    Los dos, en orden. Primero <strong>1º · datAlumnos</strong> — Delphos ›
+                    Alumnado › Alumnos › Exportar —, que trae el DNI y reconoce a los que ya
+                    están; no crea ni borra a nadie. Después el <strong>2º · datMatriculas</strong>.
+                  </div>
                 </div>
+
+                <div style={{ fontSize: 11.5, color: '#1e3a8a', marginBottom: 8 }}>
+                  Cómo saber si faltan identificadores: si al subir el 2º salen muchos
+                  como «nuevos» que ya estaban, sube el 1º y repite el 2º.
+                </div>
+
                 <div style={{ color: '#7f1d1d', fontWeight: 600 }}>
                   ⚠️ El seguro escolar y las autorizaciones NO se tocan nunca.
                   Aun así, haz antes la copia en Gestión de Autorizaciones.
