@@ -7,36 +7,35 @@ export async function GET() {
   const version = (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || '20260910-0647';
 
   const sw = [
-    "const SW_VERSION='" + version + "';",
-    "self.addEventListener('install',function(e){",
-    "  console.log('[SW] ' + SW_VERSION);",
-    "  self.skipWaiting();",
-    "});",
+    // ESTE COMPONENTE SE DESINSTALA A SÍ MISMO.
+    //
+    // La versión anterior interceptaba todas las peticiones del móvil y, si
+    // la red fallaba un instante, devolvía el texto «Sin conexion» en lugar
+    // de una pieza de la aplicación: la página no cargaba. Con la wifi del
+    // centro le pasaba a la mitad de los teléfonos, y los profesores no
+    // podían fichar.
+    //
+    // No basta con dejar de interceptar: cada móvil se quedaría con la
+    // versión vieja instalada hasta vaya a saber cuándo. Así que en cuanto
+    // este archivo llega al teléfono, borra las copias guardadas, se
+    // desinstala y recarga las pantallas abiertas. A partir de ahí la
+    // aplicación funciona como una web normal, sin nada intermedio que
+    // pueda fallar, y esto no vuelve a instalarse.
+    "self.addEventListener('install',function(){ self.skipWaiting(); });",
     "self.addEventListener('activate',function(e){",
-    "  e.waitUntil(Promise.all([",
-    "    self.clients.claim(),",
-    "    caches.keys().then(function(ns){",
-    "      return Promise.all(ns.map(function(n){ return caches.delete(n); }));",
-    "    })",
-    "  ]));",
+    "  e.waitUntil((async function(){",
+    "    try {",
+    "      var ns = await caches.keys();",
+    "      await Promise.all(ns.map(function(n){ return caches.delete(n); }));",
+    "    } catch (err) {}",
+    "    try { await self.registration.unregister(); } catch (err) {}",
+    "    try {",
+    "      var cs = await self.clients.matchAll({type:'window'});",
+    "      cs.forEach(function(c){ c.navigate(c.url); });",
+    "    } catch (err) {}",
+    "  })());",
     "});",
-    // SIN manejador de peticiones, a propósito.
-    //
-    // Antes interceptaba TODAS las peticiones del móvil y las volvía a pedir
-    // prohibiendo usar la copia. Con un corte de red de un instante, en vez
-    // de la pieza de la aplicación devolvía el texto «Sin conexion», el
-    // móvil intentaba ejecutarlo como código y la página no cargaba: pasaba
-    // en la mitad de los teléfonos con la wifi del centro. Además obligaba a
-    // descargar la aplicación entera en cada visita, que es gasto de
-    // peticiones de Vercel.
-    //
-    // Sin interceptar, el navegador usa su caché normal: las piezas de la
-    // aplicación llevan su versión en el nombre, así que nunca se sirve una
-    // vieja por error, y una vez descargadas no se vuelven a pedir.
-    "self.addEventListener('message',function(e){",
-    "  if(e.data==='skipWaiting')self.skipWaiting();",
-    "});",
-  ].join('\n');
+].join('\n');
 
   return new Response(sw, {
     headers: {

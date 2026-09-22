@@ -90,22 +90,24 @@ export default function RootLayout({ children }) {
               // recargar una y otra vez sin llegar a abrir nunca la página.
 
               if (!('serviceWorker' in navigator)) return;
-              
-              window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/sw.js').then(function(reg) {
-                  function check() { reg.update().catch(function(){}); }
-                  setInterval(check, 600000); // 10 min, además de al volver a la pestaña
-                  window.addEventListener('focus', check);
-                  document.addEventListener('visibilitychange', function() {
-                    if (!document.hidden) check();
-                  });
-                }).catch(function() {});
-              });
-              
-              // Antes, al subir una versión nueva, TODAS las pantallas abiertas
-              // se recargaban solas. Un profesor que estaba fichando veía cómo
-              // la página se le reiniciaba en la mano. Ya no: la versión nueva
-              // se carga la próxima vez que abra una página, sin interrumpir.
+
+              // Se desinstala cualquier componente que quede instalado de
+              // antes y se borran sus copias. La aplicación pasa a ser una
+              // web normal: el navegador gestiona la caché como en cualquier
+              // otra página, y ya no hay nada que pueda devolver «Sin
+              // conexion» en lugar de una pieza de la aplicación.
+              //
+              // Se hace en cada carga, sin coste: si no hay ninguno
+              // instalado, no hace nada.
+              navigator.serviceWorker.getRegistrations().then(function(rs) {
+                rs.forEach(function(r) { r.unregister().catch(function(){}); });
+              }).catch(function(){});
+
+              if (window.caches && caches.keys) {
+                caches.keys().then(function(ns) {
+                  ns.forEach(function(n) { caches.delete(n).catch(function(){}); });
+                }).catch(function(){});
+              }
             })();
           `
         }} />
