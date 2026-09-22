@@ -702,10 +702,22 @@ export default function Guardias() {
                     </span>
                   </div>
 
-                  <div style={{ fontSize:15, fontWeight:700, color:'#1f2937', marginTop:6 }}>
-                    {limpiarGrupo(g.grupo) || 'Grupo sin especificar'}
-                    {g.aula ? <span style={{ color:'#6b7280', fontWeight:600 }}> · aula {g.aula}</span> : null}
-                  </div>
+                  {(() => {
+                    // limpiarGrupo devuelve { grupo, aula }, no un texto. Al
+                    // pintarlo tal cual, React no puede dibujar un objeto y
+                    // tiraba la pantalla entera: le pasaba a todo el que
+                    // tuviera guardia, y por eso a unos les fallaba y a otros
+                    // no. De paso, el aula sale del propio código del grupo
+                    // cuando la columna viene vacía.
+                    const limpio = limpiarGrupo(g.grupo);
+                    const aula = g.aula || limpio.aula;
+                    return (
+                      <div style={{ fontSize:15, fontWeight:700, color:'#1f2937', marginTop:6 }}>
+                        {limpio.grupo || 'Grupo sin especificar'}
+                        {aula ? <span style={{ color:'#6b7280', fontWeight:600 }}> · aula {aula}</span> : null}
+                      </div>
+                    );
+                  })()}
                   {g.tarea && (
                     <div style={{ fontSize:13, color:'#374151', marginTop:6, padding:'8px 10px',
                       backgroundColor:'white', borderRadius:8, border:'1px solid #e5e7eb' }}>
