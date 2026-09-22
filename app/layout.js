@@ -85,12 +85,9 @@ export default function RootLayout({ children }) {
                 var r = e && e.reason;
                 if (esVersionVieja(r && (r.message || r.name || r))) recargarUnaVez();
               });
-              // Si la página carga bien, se borra la marca para la próxima vez.
-              window.addEventListener('load', function() {
-                setTimeout(function() {
-                  try { sessionStorage.removeItem('recargada_por_version'); } catch (e) {}
-                }, 5000);
-              });
+              // La marca NO se borra sola: se recarga como mucho una vez en toda
+              // la sesión. Si se borrara, un móvil con mala cobertura podría
+              // recargar una y otra vez sin llegar a abrir nunca la página.
 
               if (!('serviceWorker' in navigator)) return;
               
@@ -105,12 +102,10 @@ export default function RootLayout({ children }) {
                 }).catch(function() {});
               });
               
-              let reloaded = false;
-              navigator.serviceWorker.addEventListener('controllerchange', function() {
-                if (reloaded) return;
-                reloaded = true;
-                window.location.reload();
-              });
+              // Antes, al subir una versión nueva, TODAS las pantallas abiertas
+              // se recargaban solas. Un profesor que estaba fichando veía cómo
+              // la página se le reiniciaba en la mano. Ya no: la versión nueva
+              // se carga la próxima vez que abra una página, sin interrumpir.
             })();
           `
         }} />

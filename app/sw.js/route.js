@@ -20,13 +20,19 @@ export async function GET() {
     "    })",
     "  ]));",
     "});",
-    "self.addEventListener('fetch',function(e){",
-    "  var u=new URL(e.request.url);",
-    "  if(u.origin!==self.location.origin)return;",
-    "  e.respondWith(fetch(e.request,{cache:'no-store'}).catch(function(){",
-    "    return new Response('Sin conexion',{status:503});",
-    "  }));",
-    "});",
+    // SIN manejador de peticiones, a propósito.
+    //
+    // Antes interceptaba TODAS las peticiones del móvil y las volvía a pedir
+    // prohibiendo usar la copia. Con un corte de red de un instante, en vez
+    // de la pieza de la aplicación devolvía el texto «Sin conexion», el
+    // móvil intentaba ejecutarlo como código y la página no cargaba: pasaba
+    // en la mitad de los teléfonos con la wifi del centro. Además obligaba a
+    // descargar la aplicación entera en cada visita, que es gasto de
+    // peticiones de Vercel.
+    //
+    // Sin interceptar, el navegador usa su caché normal: las piezas de la
+    // aplicación llevan su versión en el nombre, así que nunca se sirve una
+    // vieja por error, y una vez descargadas no se vuelven a pedir.
     "self.addEventListener('message',function(e){",
     "  if(e.data==='skipWaiting')self.skipWaiting();",
     "});",
