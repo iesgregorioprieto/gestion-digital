@@ -150,6 +150,17 @@ function nombreLargo(mapa, abrev) {
     || mapa['~' + claveLaxaDeAbrev(abrev)]
     || abrev;
 }
+/**
+ * Clave de un nombre que no depende del orden ni de las tildes.
+ * La guardia guarda «María Isabel Martinez Aranda» y el cuadrante escribe
+ * «Martinez Aranda, María Isabel»: son las mismas palabras en otro orden.
+ * Comparándolas tal cual nunca coincidían, y quien estaba cubriendo salía
+ * en verde como libre.
+ */
+function claveNombre(str) {
+  return (str || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[,.]/g, ' ').split(/\s+/).filter(Boolean).sort().join(' ');
+}
 function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
 }
@@ -1006,7 +1017,7 @@ export default function Guardias() {
                   const yaCubriendo = new Set(
                     (apoyosAsignados || [])
                       .filter(a => horaCoincide(a.hora, horaActiva) && a.profesor_nombre_pdf)
-                      .map(a => normAbrev(a.profesor_nombre_pdf)));
+                      .map(a => claveNombre(a.profesor_nombre_pdf)));
                   return (
                     <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
                       <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
@@ -1017,7 +1028,7 @@ export default function Guardias() {
                           const key = normAbrev(p);
                           const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
-                          const ocupado = yaCubriendo.has(normAbrev(nombre));
+                          const ocupado = yaCubriendo.has(claveNombre(nombre));
                           // Semáforo: verde libre, rojo ya cubriendo.
                           return (
                             <span key={i}
