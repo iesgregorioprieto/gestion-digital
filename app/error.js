@@ -25,37 +25,46 @@ function esVersionVieja(error) {
 }
 
 export default function Error({ error, reset }) {
+  const esVieja = esVersionVieja(error);
+
   useEffect(() => {
-    if (!esVersionVieja(error)) return;
+    if (!esVieja) return;
     try {
       if (sessionStorage.getItem('recargada_por_version')) return;
       sessionStorage.setItem('recargada_por_version', '1');
     } catch {}
     window.location.reload();
-  }, [error]);
+  }, [esVieja]);
 
   const recargar = () => {
     try { sessionStorage.removeItem('recargada_por_version'); } catch {}
     window.location.reload();
   };
 
+  const detalle = `${error?.name || 'Error'}: ${error?.message || 'sin detalle'}`;
+
   return (
     <div style={{ minHeight: '70vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 24, fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ maxWidth: 380, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>🔄</div>
+      <div style={{ maxWidth: 420, textAlign: 'center' }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>{esVieja ? '🔄' : '⚠️'}</div>
+
         <div style={{ fontSize: 18, fontWeight: 800, color: '#1e3a5f', marginBottom: 8 }}>
-          Hay una versión nueva de la aplicación
+          {esVieja ? 'Hay una versión nueva de la aplicación' : 'Esta pantalla no ha podido abrirse'}
         </div>
-        <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6, marginBottom: 20 }}>
-          Pulsa el botón para cargarla. Si vuelve a aparecer este aviso,
-          cierra la aplicación del todo y ábrela otra vez.
+
+        <div style={{ fontSize: 14, color: '#555', lineHeight: 1.6, marginBottom: 18 }}>
+          {esVieja
+            ? 'Pulsa el botón para cargarla. Si vuelve a aparecer, cierra la aplicación del todo y ábrela otra vez.'
+            : 'Prueba a cargarla de nuevo. Si vuelve a fallar, manda una foto de esta pantalla con el detalle desplegado: así se puede arreglar.'}
         </div>
+
         <button onClick={recargar}
           style={{ padding: '12px 26px', borderRadius: 10, border: 'none',
             backgroundColor: '#166534', color: 'white', fontSize: 15, fontWeight: 800, cursor: 'pointer' }}>
           Cargar de nuevo
         </button>
+
         <div style={{ marginTop: 14 }}>
           <button onClick={() => reset()}
             style={{ background: 'none', border: 'none', color: '#888', fontSize: 13,
@@ -63,6 +72,26 @@ export default function Error({ error, reset }) {
             Reintentar sin recargar
           </button>
         </div>
+
+        {/* El detalle técnico, para poder diagnosticar. Antes esta pantalla
+            decía «hay una versión nueva» pasara lo que pasara, y disfrazaba
+            los fallos de verdad: no había forma de saber qué estaba
+            rompiéndose. */}
+        {!esVieja && (
+          <details style={{ marginTop: 20, textAlign: 'left' }}>
+            <summary style={{ cursor: 'pointer', fontSize: 12.5, color: '#64748b' }}>
+              Ver el detalle técnico
+            </summary>
+            <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8,
+              backgroundColor: '#f8fafc', border: '1px solid #e2e8f0',
+              fontSize: 11.5, color: '#334155', fontFamily: 'monospace',
+              wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+              {detalle}
+              {error?.digest ? `\n\nReferencia: ${error.digest}` : ''}
+              {`\n\nPágina: ${typeof window !== 'undefined' ? window.location.pathname : ''}`}
+            </div>
+          </details>
+        )}
       </div>
     </div>
   );
