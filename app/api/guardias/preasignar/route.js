@@ -22,7 +22,7 @@ import { verificarSesion, COOKIE } from '@/lib/sesion';
 import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
-  indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro,
+  indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo } from '@/lib/sectores';
 import { normGrupo } from '@/lib/grupos';
@@ -243,9 +243,9 @@ export async function POST(request) {
         horas: null, fecha_inicio: p.fecha_baja || fecha, fecha_fin: null,
       }));
 
-    if (faltas.length === 0) {
-      return Response.json({ ok: true, creadas: 0, motivo: 'sin_ausencias' });
-    }
+    // Aunque no falte nadie, NO se sale: el recreo se vigila todos los días
+    // y sus guardias hay que generarlas igual. Solo se saltan los repartos
+    // de las horas de clase, que sin ausencias no tienen nada que cubrir.
 
     // ─── Guardias ya registradas ───
     const [{ data: yaEnRango }, { data: delCurso }] = await Promise.all([
@@ -381,6 +381,48 @@ export async function POST(request) {
 
     for (const { fecha: diaFecha, diaSemana } of dias) {
       const delDia = faltas.filter(f => afectaA(f, diaFecha));
+      /**
+       * GUARDIAS DE RECREO
+       *
+       * El patio se vigila todos los días, falte quien falte: no son un
+       * reparto, son del cuadrante tal cual. Cada profesor con guardia de
+       * recreo recibe la suya, con su zona, para que salga en «Mis guardias»
+       * con su botón de fichar y el de incidencias como cualquier otra.
+       *
+       * Ya pasan por el relevo de sustitutos y por el cerrojo de bajas del
+       * cuadrante, así que las de alguien de baja las hace su sustituto. Y
+       * solo se crean las que falten: repetir el reparto no las duplica.
+       */
+      const deRecreo = fichajesDeRecreo({ cuadrante, dia: diaSemana });
+      const recreoYa = new Set(
+        (yaEnRango || [])
+          .filter(a => a.fecha === diaFecha && esSectorRecreo(a.sector_apoyo))
+          .map(a => a.profesor_id || a.profesor_nombre_pdf));
+      deRecreo.forEach(r => {
+        const clave = r.profesorId || r.nombre;
+        if (recreoYa.has(clave)) return;
+        recreoYa.add(clave);
+        nuevas.push({
+          fecha: diaFecha,
+          hora: 'recreo',
+          sector_apoyo: 'RECREO',
+          sector_destino: 'RECREO',
+          profesor_ausente_id: null,
+          profesor_id: r.profesorId || null,
+          profesor_nombre_pdf: r.nombre,
+          grupo: `Recreo · ${r.zona}`,
+          aula: r.zona,
+          materia: '',
+          tarea: '',
+          asignado_por: null,
+          estado: 'pendiente',
+          tipo_apoyo: 'recreo',
+          curso_academico: curso,
+          escalon: 0,
+          motivo_asignacion: `Guardia de recreo, zona ${r.zona}.`,
+        });
+      });
+
       if (delDia.length === 0) continue;
 
       // Las horas salen de lo que marcó el profesor; si dejó las tareas
