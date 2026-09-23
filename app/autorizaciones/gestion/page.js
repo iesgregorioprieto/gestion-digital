@@ -379,28 +379,81 @@ export default function GestionAutorizaciones() {
     return Object.keys(cambios).length > 0;
   }
 
+  /**
+   * GUARDAR LO MARCADO
+   *
+   * Antes, si la red daba un tirón a mitad —y en el centro pasa—, la
+   * función reventaba: los primeros alumnos quedaban guardados, el resto
+   * no, y el tutor NO veía ningún aviso. Se iba creyendo que estaba todo
+   * hecho y el dinero cobrado no constaba en ningún sitio.
+   *
+   * Ahora cada alumno se intenta por separado, los que fallan se
+   * conservan marcados para reintentarlos, y se dice con nombres quiénes
+   * no han podido guardarse.
+   */
   async function guardarCambios() {
     if (!hayPendientes()) return;
     setGuardando(true);
-    let errores = 0;
+
+    const fallidos = {};
+    const nombresFallidos = [];
+    let guardados = 0;
+
     for (const [id, datos] of Object.entries(cambios)) {
-      const resp = await fetch('/api/alumnos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'actualizar', id, datos }),
-      });
-      const error = resp.ok ? null : await resp.json();
-      if (error) errores++;
+      try {
+        const resp = await fetch('/api/alumnos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'actualizar', id, datos }),
+        });
+        if (resp.ok) {
+          guardados++;
+        } else {
+          fallidos[id] = datos;
+          const a = alumnos.find(x => x.id === id);
+          nombresFallidos.push(a ? `${a.apellidos}, ${a.nombre}` : id);
+        }
+      } catch {
+        // Corte de red: se conserva para reintentarlo, no se pierde.
+        fallidos[id] = datos;
+        const a = alumnos.find(x => x.id === id);
+        nombresFallidos.push(a ? `${a.apellidos}, ${a.nombre}` : id);
+      }
     }
+
     setGuardando(false);
-    if (errores > 0) {
-      mostrarMensaje(`⚠️ ${errores} errores al guardar`, 'error');
+    setCambios(fallidos);
+
+    if (nombresFallidos.length > 0) {
+      mostrarMensaje(
+        `⚠️ ${guardados} guardados, pero ${nombresFallidos.length} NO se han podido guardar: `
+        + nombresFallidos.slice(0, 6).join(' · ')
+        + (nombresFallidos.length > 6 ? ` y ${nombresFallidos.length - 6} más` : '')
+        + '. Siguen marcados: vuelve a pulsar Guardar.',
+        'error');
     } else {
-      mostrarMensaje(`✅ ${Object.keys(cambios).length} alumnos actualizados`, 'ok');
-      setCambios({});
+      mostrarMensaje(`✅ ${guardados} alumnos actualizados`, 'ok');
       cargarAlumnos(grupoSeleccionado);
     }
   }
+
+  /**
+   * Aviso al salir con cambios sin guardar.
+   *
+   * Marcar una casilla no guarda nada: hay que pulsar Guardar. Quien
+   * marcaba y cambiaba de grupo o cerraba la pestaña perdía el trabajo sin
+   * enterarse, y eso con el seguro escolar significa dinero cobrado que no
+   * consta.
+   */
+  useEffect(() => {
+    const avisar = e => {
+      if (!hayPendientes()) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', avisar);
+    return () => window.removeEventListener('beforeunload', avisar);
+  });
 
   function mostrarMensaje(texto, tipo) {
     setMensaje({ texto, tipo });
@@ -441,7 +494,13 @@ export default function GestionAutorizaciones() {
         {esDirectivo && (
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
             <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📚 Selecciona el grupo</label>
-            <select value={grupoSeleccionado} onChange={e => { setGrupoSeleccionado(e.target.value); cargarAlumnos(e.target.value); }}
+            <select value={grupoSeleccionado} onChange={e => {
+                if (hayPendientes() && !confirm(
+                  'Tienes marcas sin guardar en este grupo.\n\n'
+                  + 'Si cambias de grupo se pierden. ¿Cambiar de todas formas?'
+                )) { e.target.value = grupoSeleccionado; return; }
+                setGrupoSeleccionado(e.target.value); cargarAlumnos(e.target.value);
+              }}
               style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14 }}>
               <option value="">— Selecciona un grupo —</option>
               {grupos.map(g => <option key={g} value={g}>{g}</option>)}
