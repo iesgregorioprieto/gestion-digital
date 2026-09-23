@@ -1026,10 +1026,27 @@ export default function Guardias() {
                 {sectores.filter(s => guardiasDeSector(s).length > 0).map(s => {
                   const guardias = guardiasDeSector(s);
                   // Quien ya cubre una guardia a esta hora no está libre.
-                  const yaCubriendo = new Set(
-                    (apoyosAsignados || [])
-                      .filter(a => horaCoincide(a.hora, horaActiva) && a.profesor_nombre_pdf)
-                      .map(a => claveNombre(a.profesor_nombre_pdf)));
+                  // Comparar por el nombre escrito no basta: el motor guarda
+                  // unas veces la abreviatura del cuadrante y otras el nombre
+                  // completo, y hay guardias que solo traen el identificador
+                  // del profesor. Por eso se apunta también la FICHA de quien
+                  // cubre, que es la misma persona escriba como escriba.
+                  const yaCubriendo = new Set();
+                  (apoyosAsignados || [])
+                    .filter(a => horaCoincide(a.hora, horaActiva))
+                    .forEach(a => {
+                      if (a.profesor_nombre_pdf) {
+                        yaCubriendo.add(claveNombre(a.profesor_nombre_pdf));
+                        yaCubriendo.add(normAbrev(a.profesor_nombre_pdf));
+                        yaCubriendo.add(claveNombre(nombreLargo(mapaProfesores, a.profesor_nombre_pdf)));
+                      }
+                      const ficha = a.profesor_id ? fichaPorId(a.profesor_id) : null;
+                      if (ficha) {
+                        yaCubriendo.add(claveNombre(`${ficha.nombre || ''} ${ficha.apellidos || ''}`));
+                        yaCubriendo.add(claveNombre(`${ficha.apellidos || ''} ${ficha.nombre || ''}`));
+                      }
+                    });
+                  yaCubriendo.delete('');
                   return (
                     <div key={s} style={{ padding:'10px 0', borderTop:'1px solid #f3f4f6' }}>
                       <div style={{ fontSize:12, fontWeight:700, color:azul, marginBottom:6 }}>
@@ -1040,7 +1057,12 @@ export default function Guardias() {
                           const key = normAbrev(p);
                           const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
-                          const ocupado = yaCubriendo.has(claveNombre(nombre));
+                          const fichaChip = fichaPorAbrev(p);
+                          const ocupado = yaCubriendo.has(claveNombre(nombre))
+                            || yaCubriendo.has(normAbrev(p))
+                            || yaCubriendo.has(claveNombre(p))
+                            || (fichaChip && yaCubriendo.has(
+                                 claveNombre(`${fichaChip.nombre || ''} ${fichaChip.apellidos || ''}`)));
                           // Semáforo: verde libre, rojo ya cubriendo.
                           return (
                             <span key={i}
