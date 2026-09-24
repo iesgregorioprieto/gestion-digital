@@ -72,6 +72,51 @@ export default function GestionAutorizaciones() {
   const [grupoSeleccionado, setGrupoSeleccionado] = useState('');
   const [grupos, setGrupos] = useState([]);
   const [generandoInforme, setGenerandoInforme] = useState(false);
+  const [panel, setPanel] = useState(null);
+  const [cargandoPanel, setCargandoPanel] = useState(false);
+  const [precioSeguro, setPrecioSeguro] = useState(1.12);
+
+  /**
+   * PANEL DE SEGUROS ESCOLARES.
+   *
+   * Los mismos números que el informe descargable, pero a la vista al
+   * entrar en la pantalla. Cuenta pagados, exentos y pendientes; separa
+   * transferencia y metálico; identifica los pagos sin forma anotada; y
+   * detecta a los alumnos de 1º y 2º de ESO que están como pendientes
+   * cuando les corresponde ser exentos por edad.
+   */
+  async function cargarPanel() {
+    if (!esDirectivo || grupos.length === 0) return;
+    setCargandoPanel(true);
+    try {
+      const filas = [];
+      for (const g of grupos) {
+        const { alumnos: delGrupo } = await fetch(
+          `/api/alumnos?grupo=${encodeURIComponent(g)}`).then(r => r.json());
+        (delGrupo || []).forEach(a => filas.push({ grupo: g, ...a }));
+      }
+      const pagados = filas.filter(a => a.seguro_pagado);
+      const transf  = pagados.filter(a => a.seguro_forma_pago === 'transferencia').length;
+      const metal   = pagados.filter(a => a.seguro_forma_pago === 'metalico').length;
+      const sinForma = pagados.filter(a => !a.seguro_forma_pago || !a.seguro_forma_pago.trim());
+      const exentos = filas.filter(a => a.seguro_exento).length;
+      const esEsoBaja = a => (a.grupo || '').startsWith('ESO-1') || (a.grupo || '').startsWith('ESO-2');
+      const eso12PorMarcar = filas.filter(a => esEsoBaja(a) && !a.seguro_exento && !a.seguro_pagado).length;
+      setPanel({
+        total: filas.length,
+        pagados: pagados.length,
+        exentos,
+        pendientes: filas.length - pagados.length - exentos,
+        transf, metal,
+        sinForma: sinForma.map(a => ({ grupo: a.grupo, nombre: `${a.apellidos}, ${a.nombre}`, fecha: a.seguro_fecha || '' })),
+        eso12PorMarcar,
+      });
+    } finally {
+      setCargandoPanel(false);
+    }
+  }
+  // Se carga cuando el usuario ya es directivo y hay grupos disponibles.
+  useEffect(() => { cargarPanel(); }, [esDirectivo, grupos.length]);
   const [alumnos, setAlumnos] = useState([]);
   const [cambios, setCambios] = useState({}); // {id: {auth_imagenes: true/false, dni: ''}}
   const [cargando, setCargando] = useState(false);
@@ -444,6 +489,107 @@ export default function GestionAutorizaciones() {
       )}
 
       <div style={{ padding: 16 }}>
+
+        {/* PANEL DE SEGUROS ESCOLARES — solo directivos */}
+        {esDirectivo && panel && (() => {
+          const p = panel;
+          const num = n => (n * (precioSeguro || 0)).toLocaleString('es-ES',
+            { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+          return (
+            <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16,
+              boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, color: azul }}>
+                  🛡️ Seguros escolares — resumen
+                </div>
+                <button onClick={cargarPanel} disabled={cargandoPanel}
+                  style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #cbd5e1',
+                    backgroundColor: 'white', color: '#475569', fontSize: 11.5, cursor: 'pointer' }}>
+                  {cargandoPanel ? 'Actualizando…' : '↻ Actualizar'}
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+                gap: 10, marginBottom: 14 }}>
+                <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#166534' }}>{p.pagados}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748b' }}>han pagado</div>
+                </div>
+                <div style={{ background: '#e0f2fe', border: '1px solid #7dd3fc', borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#075985' }}>{p.exentos}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748b' }}>exentos marcados</div>
+                </div>
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#991b1b' }}>{p.pendientes}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748b' }}>pendientes</div>
+                </div>
+                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 10, padding: '11px 13px' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: '#b45309' }}>{p.eso12PorMarcar}</div>
+                  <div style={{ fontSize: 11.5, color: '#64748b' }}>de 1º-2º ESO por marcar exentos</div>
+                </div>
+              </div>
+
+              {p.eso12PorMarcar > 0 && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 9,
+                  padding: '9px 11px', fontSize: 12.5, color: '#78350f', marginBottom: 12 }}>
+                  Si esos <strong>{p.eso12PorMarcar}</strong> alumnos se marcan como exentos, los
+                  pendientes reales bajan a <strong>{p.pendientes - p.eso12PorMarcar}</strong>.
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5,
+                marginBottom: 10, flexWrap: 'wrap' }}>
+                <label>Importe por alumno:</label>
+                <input type="number" step="0.01" min="0" value={precioSeguro}
+                  onChange={e => setPrecioSeguro(parseFloat(e.target.value) || 0)}
+                  style={{ width: 80, padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1',
+                    fontSize: 13 }} /> €
+                <span style={{ color: '#94a3b8' }}>— cámbialo si el vuestro es otro</span>
+              </div>
+
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{ color: '#64748b', fontSize: 11.5, textTransform: 'uppercase' }}>
+                      <th style={{ textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid #e2e8f0' }}>Forma de pago</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0' }}>Alumnos</th>
+                      <th style={{ textAlign: 'right', padding: '6px 8px', borderBottom: '1px solid #e2e8f0' }}>Importe</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td style={{ padding: '6px 8px' }}>🏦 Transferencia</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{p.transf}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{num(p.transf)}</td></tr>
+                    <tr><td style={{ padding: '6px 8px' }}>💵 Metálico</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{p.metal}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{num(p.metal)}</td></tr>
+                    <tr><td style={{ padding: '6px 8px' }}>❓ Sin forma anotada</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{p.sinForma.length}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{num(p.sinForma.length)}</td></tr>
+                    <tr style={{ fontWeight: 800, background: '#f8fafc' }}>
+                      <td style={{ padding: '6px 8px' }}>Total cobrado</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{p.pagados}</td>
+                      <td style={{ padding: '6px 8px', textAlign: 'right' }}>{num(p.pagados)}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {p.sinForma.length > 0 && (
+                <details style={{ marginTop: 12 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 12.5, color: '#b45309', fontWeight: 700 }}>
+                    ⚠️ Ver los {p.sinForma.length} pagados sin forma anotada
+                  </summary>
+                  <div style={{ marginTop: 6, fontSize: 12.5, color: '#334155', lineHeight: 1.7 }}>
+                    {p.sinForma.map((x, i) => (
+                      <div key={i}>{x.grupo} — {x.nombre}{x.fecha ? ` · ${x.fecha}` : ''}</div>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+          );
+        })()}
 
         {/* INFORME DE SEGUROS — solo directivos */}
         {esDirectivo && (
