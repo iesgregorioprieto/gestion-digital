@@ -115,8 +115,9 @@ export default function GestionAutorizaciones() {
       setCargandoPanel(false);
     }
   }
-  // Se carga cuando el usuario ya es directivo y hay grupos disponibles.
-  useEffect(() => { cargarPanel(); }, [esDirectivo, grupos.length]);
+  // Se carga cuando hay grupos disponibles. La comprobación de rol la
+  // hace la propia función: si no es directivo, no hace nada.
+  // (No se puede referenciar esDirectivo aquí porque se declara más abajo.)
   const [alumnos, setAlumnos] = useState([]);
   const [cambios, setCambios] = useState({}); // {id: {auth_imagenes: true/false, dni: ''}}
   const [cargando, setCargando] = useState(false);
@@ -125,6 +126,9 @@ export default function GestionAutorizaciones() {
   const [alumnoExpandido, setAlumnoExpandido] = useState(null);
 
   const esDirectivo = ['jefe_estudios', 'secretario', 'director'].includes(rolGestion);
+
+  // Cargar el panel de seguros cuando ya sepamos si es directivo y haya grupos.
+  useEffect(() => { cargarPanel(); }, [esDirectivo, grupos.length]);
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
