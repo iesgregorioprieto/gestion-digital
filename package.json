@@ -16,7 +16,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^4.0.0",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

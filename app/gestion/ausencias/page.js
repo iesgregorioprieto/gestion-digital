@@ -235,130 +235,184 @@ export default function GestionAusencias() {
    * Se abre en una ventana con botón de imprimir: desde ahí se guarda
    * como PDF con "Guardar como PDF" del propio navegador.
    */
+  /**
+   * INFORME MENSUAL PARA LA DELEGACIÓN
+   *
+   * Reforma pedida por José María (13 sept.):
+   * - Detalle agrupado por meses.
+   * - Dentro del mes, ordenado por apellidos del profesor y por fecha.
+   * - Se quita la columna «Tipo».
+   * - En lugar del NÚMERO de horas de clase, sale QUÉ horas: 1ª, 2ª, 3ª,
+   *   4ª, 5ª, 6ª o «día completo» cuando marca todas.
+   * - Columna con enlace al justificante.
+   * - Los DLD entran en este listado.
+   * - Un botón «Tramitación en Delphos» por fila, para dejar constancia
+   *   de que se ha subido allí. Se marca localmente en el navegador: al
+   *   generar el informe se recuerda lo tramitado la última vez.
+   *
+   * La descarga masiva de justificantes en zip la sirve el servidor y
+   * se lanza desde el propio informe.
+   */
   function generarInformeMensual(lista) {
     if (!lista || lista.length === 0) {
       mostrarMensaje('No hay ausencias en el periodo seleccionado', 'error');
       return;
     }
 
-    const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+    const fmt = f => f ? new Date(f + 'T12:00:00').toLocaleDateString('es-ES',
+      { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—';
+    const mesLargo = c => new Date(c + '-01T12:00:00').toLocaleDateString('es-ES',
+      { month: 'long', year: 'numeric' });
 
-    // Periodo: el de los filtros, o el que abarquen las ausencias
-    const fechas = lista.map(a => a.fecha_inicio).filter(Boolean).sort();
-    const desde = filtroFechaDesde || fechas[0];
-    const hasta = filtroFechaHasta || (lista.map(a => a.fecha_fin || a.fecha_inicio).filter(Boolean).sort().pop());
+    // Los DLD también van en el informe, como pide José María.
+    const dld = (Array.isArray(dldAprobados) ? dldAprobados : [])
+      .map(d => ({
+        id: 'dld-' + d.id,
+        fecha_inicio: d.fecha, fecha_fin: d.fecha,
+        profesor_nombre: d.profesor_nombre, apellidos: d.apellidos || '',
+        nombre: d.nombre || '',
+        departamento: d.departamento || '—',
+        motivo: 'Día de libre disposición',
+        estado: 'justificada',
+        horas: [], // los DLD se cuentan como día completo
+        justificacion_urls: [], subtipo: null,
+        esDLD: true,
+      }));
+    const todo = [...lista, ...dld];
 
-    // ── Resumen por profesor ──
-    const porProfesor = {};
-    lista.forEach(a => {
-      const n = a.profesor_nombre || '—';
-      if (!porProfesor[n]) porProfesor[n] = { total: 0, dpto: a.departamento || '—', sinJust: 0 };
-      porProfesor[n].total++;
-      if (a.estado !== 'justificada') porProfesor[n].sinJust++;
+    // ── Qué horas de clase se perdieron, en texto ──
+    // Si el profesor tiene 6 horas y marcó las 6, sale «día completo»;
+    // si marcó algunas, salen enumeradas: «1ª, 3ª, 5ª».
+    const nombreHora = h => (h.hora || h.hora_id || '')
+      .toString().replace(/a$/i, 'ª').replace(/^r$/i, 'Recreo');
+    const horasClase = a => {
+      const c = (a.horas || []).filter(h => h.tipo === 'clase');
+      if (a.esDLD) return 'Día completo';
+      if (!c.length) return '—';
+      const dias = new Set(c.map(h => h.dia || h.fecha).filter(Boolean));
+      if (dias.size > 1) return `${c.length} clases · varios días`;
+      return c.map(nombreHora).join(', ');
+    };
+
+    // ── Agrupar por mes ──
+    const porMes = {};
+    todo.forEach(a => {
+      const clave = (a.fecha_inicio || '').slice(0, 7);
+      if (!clave) return;
+      (porMes[clave] = porMes[clave] || []).push(a);
     });
-    const profesores = Object.entries(porProfesor).sort((a, b) => b[1].total - a[1].total);
+    const meses = Object.keys(porMes).sort();
 
-    const filasResumen = profesores.map(([nombre, d]) => `
-      <tr>
-        <td><strong>${nombre}</strong></td>
-        <td>${d.dpto}</td>
-        <td class="c">${d.total}</td>
-        <td class="c">${d.sinJust > 0 ? `<span class="rojo">${d.sinJust}</span>` : '—'}</td>
-      </tr>`).join('');
+    // Al abrir el informe se recuerdan las tramitaciones marcadas.
+    let tramitados = {};
+    try {
+      tramitados = JSON.parse(localStorage.getItem('tramitados_delphos') || '{}');
+    } catch { tramitados = {}; }
 
-    const filasDetalle = lista
-      .slice()
-      .sort((a, b) => (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''))
-      .map(a => {
-        const horas = Array.isArray(a.horas) ? a.horas : [];
-        const clases = horas.filter(h => h.tipo === 'clase').length;
-        const est = a.estado === 'justificada' ? '<span class="ok">Justificada</span>'
-                  : a.estado === 'sin_justificar' ? '<span class="rojo">Sin justificar</span>'
-                  : '<span class="pend">Pendiente</span>';
-        return `
+    const filaDetalle = a => {
+      const nombre = (a.apellidos || '') + ', ' + (a.nombre || a.profesor_nombre || '');
+      const urls = Array.isArray(a.justificacion_urls) ? a.justificacion_urls : [];
+      const just = a.estado === 'justificada' ? '<span class="ok">Sí</span>'
+                 : a.estado === 'sin_justificar' ? '<span class="rojo">No</span>'
+                 : '<span class="pend">Pendiente</span>';
+      const enlaces = urls.length
+        ? urls.map((u, i) => `<a href="${u}" target="_blank" rel="noopener">📎${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ')
+        : '—';
+      const yaTram = tramitados[a.id] ? 'checked' : '';
+      const idAt = String(a.id).replace(/"/g, '&quot;');
+      return `
       <tr>
+        <td>${nombre.replace(/^,\s*/, '').replace(/,\s*$/, '') || '—'}</td>
         <td>${fmt(a.fecha_inicio)}${a.fecha_fin && a.fecha_fin !== a.fecha_inicio ? ' a ' + fmt(a.fecha_fin) : ''}</td>
-        <td>${a.profesor_nombre || '—'}</td>
-        <td>${a.departamento || '—'}</td>
-        <td>${a.tipo === 'prevista' ? 'Prevista' : 'Imprevista'}</td>
         <td>${(a.motivo || '—').replace(/</g, '&lt;')}</td>
-        <td class="c">${clases || '—'}</td>
-        <td class="c">${est}</td>
+        <td>${horasClase(a)}</td>
+        <td class="c">${just}</td>
+        <td class="c">${enlaces}</td>
+        <td class="c">
+          <label><input type="checkbox" data-id="${idAt}" ${yaTram} onchange="marcarTramitado(this)"> Sí</label>
+        </td>
       </tr>`;
-      }).join('');
+    };
 
-    const hoy = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+    const bloquesMes = meses.map(clave => {
+      const delMes = porMes[clave].slice().sort((a, b) =>
+        (a.apellidos || '').localeCompare(b.apellidos || '', 'es')
+        || (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''));
+      return `
+      <h2>${mesLargo(clave)} <span class="mes-total">· ${delMes.length} ausencias</span></h2>
+      <table>
+        <thead><tr>
+          <th>Profesor/a</th><th>Fecha</th><th>Motivo</th><th>Horas de clase</th>
+          <th class="c">Justif.</th><th class="c">Documento</th><th class="c">Tramitado</th>
+        </tr></thead>
+        <tbody>${delMes.map(filaDetalle).join('')}</tbody>
+      </table>`;
+    }).join('');
+
+    // ── Descarga masiva de justificantes ──
+    // El servidor arma el zip con los justificantes del rango que se
+    // esté viendo, renombrados: «Apellidos, Nombre - DD-MM».
+    const fechas = todo.map(a => a.fecha_inicio).filter(Boolean).sort();
+    const desde = filtroFechaDesde || fechas[0] || '';
+    const hasta = filtroFechaHasta || (todo.map(a => a.fecha_fin || a.fecha_inicio).filter(Boolean).sort().pop()) || '';
+
+    const hoy = new Date().toLocaleDateString('es-ES',
+      { day: 'numeric', month: 'long', year: 'numeric' });
 
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8">
 <title>Informe de ausencias — IES Gregorio Prieto</title>
 <style>
   @page { size: A4; margin: 18mm 14mm; }
-  body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 30px; color: #1a1a1a; font-size: 12px; }
-  .header { background: #1e3a5f; color: white; padding: 22px 26px; border-radius: 8px; margin-bottom: 22px; }
-  .header h1 { margin: 0 0 6px; font-size: 19px; }
+  body { font-family: Arial, Helvetica, sans-serif; margin: 0; padding: 28px; color: #1a1a1a; font-size: 12px; }
+  .header { background: #1e3a5f; color: white; padding: 20px 24px; border-radius: 8px; margin-bottom: 20px; }
+  .header h1 { margin: 0 0 4px; font-size: 19px; }
   .header p { margin: 2px 0; opacity: .9; font-size: 12px; }
-  h2 { font-size: 13px; color: #1e3a5f; margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 2px solid #dbeafe; }
-  .totales { display: flex; gap: 12px; margin-bottom: 8px; }
-  .caja { flex: 1; border: 1px solid #dbeafe; border-radius: 8px; padding: 14px; text-align: center; background: #f8fbff; }
-  .caja .n { font-size: 26px; font-weight: 800; color: #1e3a5f; }
-  .caja .t { font-size: 11px; color: #555; margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th { background: #1e3a5f; color: white; text-align: left; padding: 8px 9px; font-size: 11px; }
-  td { padding: 7px 9px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
+  .barra { display: flex; gap: 8px; margin: 10px 0 18px; flex-wrap: wrap; }
+  .btn { padding: 9px 14px; border-radius: 6px; border: none; font-size: 12.5px; font-weight: 700;
+    cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn-p { background: #1e3a5f; color: white; }
+  .btn-s { background: white; color: #1e3a5f; border: 1.5px solid #1e3a5f; }
+  h2 { font-size: 14px; color: #1e3a5f; margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 2px solid #dbeafe; text-transform: capitalize; }
+  h2 .mes-total { font-weight: 500; font-size: 12px; color: #666; }
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 12px; }
+  th { background: #1e3a5f; color: white; text-align: left; padding: 7px 8px; font-size: 11px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
   tr:nth-child(even) td { background: #fafbfc; }
   .c { text-align: center; }
   .ok { color: #065f46; font-weight: 700; }
   .rojo { color: #991b1b; font-weight: 700; }
   .pend { color: #92400e; font-weight: 700; }
-  .firmas { display: flex; gap: 60px; margin-top: 55px; page-break-inside: avoid; }
-  .firma { flex: 1; text-align: center; }
-  .linea { border-top: 1px solid #1a1a1a; margin-bottom: 6px; padding-top: 0; }
-  .firma .cargo { font-weight: 700; font-size: 12px; }
-  .firma .nota { font-size: 10px; color: #777; margin-top: 2px; }
-  footer { margin-top: 30px; padding-top: 10px; border-top: 1px solid #e0e0e0; font-size: 10px; color: #888; text-align: center; }
-  .btn { position: fixed; top: 16px; right: 16px; background: #1e3a5f; color: white; border: none; padding: 12px 22px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
-  @media print { .btn { display: none; } body { padding: 0; } }
+  a { color: #1e3a5f; }
+  input[type=checkbox] { transform: scale(1.15); margin-right: 4px; }
+  @media print {
+    .barra { display: none; }
+    a { color: #1a1a1a; text-decoration: none; }
+  }
 </style></head><body>
-
-<button class="btn" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
 
 <div class="header">
   <h1>Informe de ausencias del profesorado</h1>
-  <p><strong>IES Gregorio Prieto</strong> · Valdepeñas (Ciudad Real)</p>
-  <p>Periodo: ${fmt(desde)} — ${fmt(hasta)}</p>
+  <p><strong>IES Gregorio Prieto</strong> · Valdepeñas</p>
+  <p>Periodo: ${desde ? fmt(desde) : '—'} a ${hasta ? fmt(hasta) : '—'} · Emitido el ${hoy}</p>
+  <p>${todo.length} ausencias en total (incluye DLD)</p>
 </div>
 
-<div class="totales">
-  <div class="caja"><div class="n">${lista.length}</div><div class="t">Ausencias registradas</div></div>
-  <div class="caja"><div class="n">${profesores.length}</div><div class="t">Profesores afectados</div></div>
+<div class="barra">
+  <button class="btn btn-p" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
+  ${desde && hasta ? `<a class="btn btn-s" href="/api/ausencias/justificantes-zip?desde=${desde}&hasta=${hasta}" target="_blank" rel="noopener">📥 Descargar justificantes (zip)</a>` : ''}
 </div>
 
-<h2>RESUMEN POR PROFESOR</h2>
-<table>
-  <thead><tr><th>Profesor/a</th><th>Departamento</th><th class="c">Ausencias</th><th class="c">Sin justificar</th></tr></thead>
-  <tbody>${filasResumen}</tbody>
-</table>
+${bloquesMes || '<p>No hay ausencias en el periodo.</p>'}
 
-<h2>DETALLE DE AUSENCIAS</h2>
-<table>
-  <thead><tr><th>Fecha</th><th>Profesor/a</th><th>Departamento</th><th>Tipo</th><th>Motivo</th><th class="c">Horas clase</th><th class="c">Estado</th></tr></thead>
-  <tbody>${filasDetalle}</tbody>
-</table>
-
-<div class="firmas">
-  <div class="firma">
-    <div class="linea"></div>
-    <div class="cargo">EL SECRETARIO</div>
-    <div class="nota">Fdo.: ______________________</div>
-  </div>
-  <div class="firma">
-    <div class="linea"></div>
-    <div class="cargo">V.º B.º EL DIRECTOR</div>
-    <div class="nota">Fdo.: ______________________</div>
-  </div>
-</div>
-
-<footer>Documento generado el ${hoy} desde el portal de gestión del IES Gregorio Prieto · Contiene datos de carácter personal (RGPD)</footer>
+<script>
+function marcarTramitado(chk) {
+  var mapa = {};
+  try { mapa = JSON.parse(localStorage.getItem('tramitados_delphos') || '{}'); } catch(e){}
+  if (chk.checked) mapa[chk.dataset.id] = new Date().toISOString();
+  else delete mapa[chk.dataset.id];
+  localStorage.setItem('tramitados_delphos', JSON.stringify(mapa));
+}
+</script>
 </body></html>`;
 
     const v = window.open('', '_blank');
