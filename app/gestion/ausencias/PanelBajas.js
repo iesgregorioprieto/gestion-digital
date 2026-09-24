@@ -287,12 +287,104 @@ export default function PanelBajas() {
     setTrabajando(false);
   }
 
-  async function darDeAlta(titular) {
+  /**
+   * EDITAR una baja registrada.
+   *
+   * Se pregunta solo la fecha, que es lo más frecuente de rectificar:
+   * meter una baja del jueves en el miércoles pasa. El motivo y las
+   * observaciones se editan desde la ficha del profesor, como el resto
+   * de datos.
+   */
+  async function editarFechaBaja(titular) {
+    const nueva = prompt(
+      `Fecha de baja de ${titular.nombre} ${titular.apellidos} (AAAA-MM-DD):`,
+      titular.fecha_baja || hoyISO(),
+    );
+    if (!nueva || nueva === titular.fecha_baja) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nueva)) {
+      alert('La fecha debe tener el formato AAAA-MM-DD.'); return;
+    }
+
+    setTrabajando(true);
+    const r = await fetch('/api/profesores', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'baja', id: titular.id,
+        datos: { fecha_baja: nueva } }),
+    });
+    setTrabajando(false);
+    if (!r.ok) { alert('No se pudo cambiar la fecha.'); return; }
+    setMensaje({ tipo: 'ok', texto: `Fecha actualizada al ${fechaLarga(nueva)}` });
+    cargar();
+  }
+
+  /**
+   * ELIMINAR una baja registrada por error.
+   *
+   * Deshace todo: si tenía sustituto, le devuelve el horario y lo
+   * desactiva; y quita la baja del titular. NO llama a incorporación
+   * porque la baja no fue real: no hay fecha de alta que registrar,
+   * simplemente no existió.
+   */
+  async function eliminarBaja(titular) {
     const sustituto = titular.sustituto_id
       ? profesores.find(p => p.id === titular.sustituto_id) : null;
 
     if (!confirm(
-      `¿${titular.nombre} ${titular.apellidos} se incorpora?\n\n` +
+      `¿ELIMINAR la baja de ${titular.nombre} ${titular.apellidos}?\n\n` +
+      `Se borra por completo, como si no se hubiera registrado.\n` +
+      (sustituto
+        ? `Además, ${sustituto.nombre} ${sustituto.apellidos} volverá a estar libre y perderá el horario copiado.\n\n`
+        : '') +
+      `Solo debe usarse para corregir un error al registrarla.`
+    )) return;
+
+    setTrabajando(true);
+    try {
+      if (sustituto) {
+        await fetch('/api/horarios', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustituto.id }),
+        });
+        await fetch('/api/profesores', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accion: 'baja', id: sustituto.id,
+            datos: { titular_id: null, estado: 'inactivo' } }),
+        });
+      }
+      const r = await fetch('/api/profesores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'baja', id: titular.id,
+          // Al no ser un alta real, no se guarda fecha_alta: la baja
+          // simplemente desaparece.
+          datos: { en_baja: false, tipo_baja: null, fecha_baja: null,
+                   sustituto_id: null, fecha_alta: null } }),
+      });
+      if (!r.ok) throw new Error();
+      setMensaje({ tipo: 'ok', texto: `Baja de ${titular.apellidos} eliminada` });
+      cargar();
+    } catch {
+      setMensaje({ tipo: 'error', texto: 'No se pudo eliminar la baja' });
+    }
+    setTrabajando(false);
+  }
+
+  async function darDeAlta(titular) {
+    const sustituto = titular.sustituto_id
+      ? profesores.find(p => p.id === titular.sustituto_id) : null;
+
+    // Se pregunta la fecha de vuelta: sin ella la baja quedaba cerrada
+    // pero sin constar cuándo terminó. Por defecto, hoy.
+    const fechaAlta = prompt(
+      `Fecha de incorporación de ${titular.nombre} ${titular.apellidos} (AAAA-MM-DD):`,
+      hoyISO(),
+    );
+    if (!fechaAlta) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaAlta)) {
+      alert('La fecha debe tener el formato AAAA-MM-DD.'); return;
+    }
+
+    if (!confirm(
+      `¿${titular.nombre} ${titular.apellidos} se incorpora el ${fechaLarga(fechaAlta)}?\n\n` +
       (sustituto
         ? `${sustituto.nombre} ${sustituto.apellidos} perderá el horario copiado y quedará desactivado.`
         : `Sus grupos dejarán de salir en el cuadrante de guardias.`)
@@ -315,7 +407,12 @@ export default function PanelBajas() {
       await fetch('/api/profesores', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion: 'baja', id: titular.id,
-          datos: { en_baja: false, tipo_baja: null, fecha_baja: null, sustituto_id: null } }),
+          datos: {
+            en_baja: false, tipo_baja: null, sustituto_id: null,
+            // fecha_baja se conserva como inicio y se añade la de alta,
+            // para que en el histórico conste el tramo cerrado.
+            fecha_alta: fechaAlta,
+          } }),
       });
 
       // Cierra la ausencia abierta si quedaba alguna, y con ella se van
@@ -487,10 +584,22 @@ export default function PanelBajas() {
                     Quitar sustituto
                   </button>
                 )}
+                <button onClick={() => editarFechaBaja(p)} disabled={trabajando}
+                  title="Cambiar la fecha de inicio si se registró mal"
+                  style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #94a3b8',
+                           backgroundColor: 'white', color: '#334155', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  Editar fecha
+                </button>
                 <button onClick={() => darDeAlta(p)} disabled={trabajando}
                   style={{ padding: '8px 14px', borderRadius: 8, border: 'none',
                            backgroundColor: '#059669', color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
                   Se incorpora
+                </button>
+                <button onClick={() => eliminarBaja(p)} disabled={trabajando}
+                  title="Solo para deshacer una baja registrada por error"
+                  style={{ padding: '8px 14px', borderRadius: 8, border: '1.5px solid #dc2626',
+                           backgroundColor: 'white', color: '#dc2626', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                  Eliminar
                 </button>
               </div>
             </div>
