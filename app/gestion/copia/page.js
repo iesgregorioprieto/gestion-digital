@@ -59,10 +59,11 @@ const TIPOS_COPIA = [
     ],
   },
   {
-    emoji: '☁️', titulo: 'Copias automáticas de Supabase', etiqueta: 'Depende del plan contratado', color: '#475569',
+    emoji: '☁️', titulo: 'Copias automáticas de Supabase', etiqueta: 'No las tenemos', color: '#b91c1c',
     filas: [
-      ['Plan gratuito', 'Supabase no deja recuperar sus copias automáticas. La copia de datos de esta página es la única que tenemos.'],
-      ['Plan Pro', 'Copias diarias de los últimos 7 días, en Supabase → Database → Backups. Si algo se borra y nadie lo nota en una semana, se pierde.'],
+      ['Nuestro plan', 'El centro está en el plan GRATUITO de Supabase, que no deja recuperar copias automáticas.'],
+      ['Qué significa', 'La copia de datos de esta página es la ÚNICA que existe. Si algo se borra por error, solo se recupera desde el último archivo guardado en Drive.'],
+      ['Plan Pro', 'Si algún día se contrata, añade copias diarias de los últimos 7 días (Supabase → Database → Backups). Aun así, la copia mensual seguiría haciendo falta.'],
     ],
   },
 ];
