@@ -11,6 +11,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { esSectorFP } from '@/lib/sectores';
 
 let _cliente = null;
 function supa() {
@@ -68,19 +69,27 @@ export async function GET(request) {
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
+  const fichaDe = id => (profesores || []).find(x => x.id === id);
   const nombreDe = id => {
-    const p = (profesores || []).find(x => x.id === id);
+    const p = fichaDe(id);
     return p ? `${p.apellidos}, ${p.nombre}` : '';
   };
+  // Departamento de la ficha; si no hay ficha, el sector que consta en la guardia
+  const dptoDe = (id, sector) => fichaDe(id)?.departamento || sector || '';
 
-  const filas = (apoyos || []).map(a => ({
+  // A 6ª hora los sectores de FP no tienen guardias: esas filas no van al informe
+  const validos = (apoyos || []).filter(a =>
+    !(String(a.hora) === '6' && esSectorFP(a.sector_apoyo))
+  );
+
+  const filas = validos.map(a => ({
     fecha: a.fecha,
     hora: a.hora,
     horaTexto: ETIQUETA_HORA[a.hora] || a.hora,
-    ausente: nombreDe(a.profesor_ausente_id) || `(${a.sector_destino || 'sin identificar'})`,
-    departamentoAusente: a.sector_destino || '',
+    ausente: nombreDe(a.profesor_ausente_id) || 'Sin identificar',
+    departamentoAusente: dptoDe(a.profesor_ausente_id, a.sector_destino),
     cubre: nombreDe(a.profesor_id) || '—',
-    departamentoCubre: a.sector_apoyo || '',
+    departamentoCubre: dptoDe(a.profesor_id, a.sector_apoyo),
     grupo: a.grupo || '',
     aula: a.aula || '',
     materia: a.materia || '',

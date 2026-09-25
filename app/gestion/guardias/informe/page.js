@@ -120,8 +120,8 @@ export default function InformeGuardias() {
       <tr>
         <td>${e(fechaCorta(f.fecha))}</td>
         <td>${e(f.horaTexto)}</td>
-        <td><strong>${e(f.ausente)}</strong></td>
-        <td>${e(f.cubre)}</td>
+        <td><strong>${e(f.ausente)}</strong>${f.departamentoAusente ? ` (${e(f.departamentoAusente)})` : ''}</td>
+        <td>${e(f.cubre)}${f.cubre !== '—' && f.departamentoCubre ? ` (${e(f.departamentoCubre)})` : ''}</td>
         <td>${e(f.grupo)}</td>
         <td>${e(f.aula)}</td>
         <td style="text-align:center">${f.confirmada ? 'Sí' : '—'}</td>
@@ -284,8 +284,14 @@ export default function InformeGuardias() {
                       <tr key={i} style={{ borderTop: '1px solid #f1f5f9' }}>
                         <td style={{ padding: '7px 9px', whiteSpace: 'nowrap' }}>{fechaCorta(f.fecha)}</td>
                         <td style={{ padding: '7px 9px', whiteSpace: 'nowrap' }}>{f.horaTexto}</td>
-                        <td style={{ padding: '7px 9px', fontWeight: 700 }}>{f.ausente}</td>
-                        <td style={{ padding: '7px 9px' }}>{f.cubre}</td>
+                        <td style={{ padding: '7px 9px' }}>
+                          <span style={{ fontWeight: 700 }}>{f.ausente}</span>
+                          {f.departamentoAusente && <span style={{ color: '#64748b' }}> ({f.departamentoAusente})</span>}
+                        </td>
+                        <td style={{ padding: '7px 9px' }}>
+                          {f.cubre}
+                          {f.cubre !== '—' && f.departamentoCubre && <span style={{ color: '#64748b' }}> ({f.departamentoCubre})</span>}
+                        </td>
                         <td style={{ padding: '7px 9px' }}>{f.grupo}</td>
                         <td style={{ padding: '7px 9px' }}>{f.aula}</td>
                         <td style={{ padding: '7px 9px', textAlign: 'center' }}>
