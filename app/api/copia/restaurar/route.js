@@ -18,17 +18,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
+import { NOMBRES_COPIA } from '@/lib/tablasCopia';
 
 export const dynamic = 'force-dynamic';
 
-// Solo las tablas que genera la copia. Cualquier otra se rechaza: esto no
-// puede servir para escribir donde no toca.
-const PERMITIDAS = new Set([
-  'profesores', 'grupos', 'alumnos', 'horarios_profesores', 'ausencias', 'dld',
-  'apoyos_asignados', 'apoyos_guardia', 'apoyos_realizados', 'guardias_manuales',
-  'mantenimiento', 'compras', 'actividades', 'config_centro',
-  'periodos_no_lectivos', 'avisos_sala',
-]);
+// Solo las tablas que genera la copia (lista compartida en lib/tablasCopia).
+// Cualquier otra se rechaza: esto no puede servir para escribir donde no toca.
+const PERMITIDAS = NOMBRES_COPIA;
 
 let _cliente = null;
 function supa() {

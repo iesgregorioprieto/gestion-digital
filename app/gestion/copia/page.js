@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
+import { TABLAS_COPIA } from '@/lib/tablasCopia';
 import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1e3a5f';
@@ -10,25 +10,8 @@ const verde = '#1e6b2e';
 const rojo = '#b91c1c';
 const naranja = '#b45309';
 
-// Tablas que se incluyen en la copia
-const TABLAS = [
-  { nombre: 'profesores',          label: 'Profesorado',            emoji: '👥' },
-  { nombre: 'grupos',              label: 'Grupos',                 emoji: '🏫' },
-  { nombre: 'alumnos',             label: 'Alumnado',               emoji: '🎓' },
-  { nombre: 'horarios_profesores', label: 'Horarios',               emoji: '🕐' },
-  { nombre: 'ausencias',           label: 'Ausencias',              emoji: '🏥' },
-  { nombre: 'dld',                 label: 'Días libre disposición', emoji: '📄' },
-  { nombre: 'apoyos_asignados',    label: 'Apoyos de guardia',      emoji: '🛡️' },
-  { nombre: 'apoyos_guardia',      label: 'Apoyos (histórico)',     emoji: '🔄' },
-  { nombre: 'apoyos_realizados',   label: 'Apoyos realizados',      emoji: '✅' },
-  { nombre: 'guardias_manuales',   label: 'Guardias manuales',      emoji: '✏️' },
-  { nombre: 'mantenimiento',       label: 'Mantenimiento',          emoji: '🔧' },
-  { nombre: 'compras',             label: 'Compras',                emoji: '🛒' },
-  { nombre: 'actividades',         label: 'Actividades complementarias', emoji: '🎒' },
-  { nombre: 'config_centro',       label: 'Datos del curso',        emoji: '📅' },
-  { nombre: 'periodos_no_lectivos',label: 'Vacaciones y festivos',  emoji: '🏖️' },
-  { nombre: 'avisos_sala',         label: 'Avisos de sala',         emoji: '📢' },
-];
+// Tablas que se incluyen en la copia: lista única en lib/tablasCopia.js
+const TABLAS = TABLAS_COPIA;
 
 const CLAVE_ULTIMA = 'ies_ultima_copia';
 
@@ -124,29 +107,39 @@ export default function CopiaSeguridad() {
   async function generarCopia() {
     setGenerando(true);
     setResultado(null);
-    const supabase = getSupabase();
     const datos = {};
     const errores = [];
+    const noExisten = [];
     let totalFilas = 0;
 
+    /**
+     * Se lee por el servidor, a trozos de 1.000 filas. Cada respuesta dice
+     * cuántas filas tiene la tabla en total: si al acabar no cuadra, la
+     * tabla se da por fallida. Una tabla vacía por error ya no pasa por
+     * buena, que es lo que ocurría antes.
+     */
     for (let i = 0; i < TABLAS.length; i++) {
       const t = TABLAS[i];
       setProgreso({ actual: i + 1, total: TABLAS.length, tabla: t.label });
 
       try {
-        // Paginación: Supabase devuelve como máximo 1000 filas por consulta
         let todas = [];
+        let total = 0;
         let desde = 0;
-        const tamano = 1000;
+        let saltar = false;
         while (true) {
-          const { data, error } = await supabase
-            .from(t.nombre)
-            .select('*')
-            .range(desde, desde + tamano - 1);
-          if (error) throw error;
-          todas = todas.concat(data || []);
-          if (!data || data.length < tamano) break;
-          desde += tamano;
+          const r = await fetch(`/api/copia/generar?tabla=${encodeURIComponent(t.nombre)}&desde=${desde}`);
+          const d = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(d.error || `error ${r.status}`);
+          if (d.noExiste) { saltar = true; break; }
+          total = d.total;
+          todas = todas.concat(d.filas || []);
+          if (!d.filas || d.filas.length === 0 || todas.length >= total) break;
+          desde += d.filas.length;
+        }
+        if (saltar) { noExisten.push(t.label); continue; }
+        if (todas.length !== total) {
+          throw new Error(`se leyeron ${todas.length} filas de ${total}`);
         }
         datos[t.nombre] = todas;
         totalFilas += todas.length;
@@ -156,6 +149,12 @@ export default function CopiaSeguridad() {
       }
     }
 
+    // Sin profesores no hay copia que valga: es la tabla de la que cuelga todo.
+    if (!errores.length && !(datos.profesores || []).length) {
+      errores.push({ tabla: 'Profesorado', mensaje: 'ha llegado vacía; la copia no es válida' });
+    }
+    const completa = errores.length === 0;
+
     // Construir el archivo
     const ahora = new Date();
     const copia = {
@@ -163,7 +162,9 @@ export default function CopiaSeguridad() {
       generada: ahora.toISOString(),
       generada_por: nombre,
       curso: await getCursoActual(),
-      version_formato: 1,
+      version_formato: 2,
+      completa,
+      errores,
       resumen: Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, v.length])),
       datos,
     };
@@ -172,7 +173,7 @@ export default function CopiaSeguridad() {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
 
-    const fecha = ahora.toISOString().split('T')[0];
+    const fecha = ahora.toISOString().split('T')[0] + (completa ? '' : '-INCOMPLETA');
     const enlace = document.createElement('a');
     enlace.href = url;
     enlace.download = `copia-portal-ies-${fecha}.json`;
@@ -181,8 +182,8 @@ export default function CopiaSeguridad() {
     document.body.removeChild(enlace);
     URL.revokeObjectURL(url);
 
-    // Registrar la fecha
-    try {
+    // Registrar la fecha, solo si la copia ha salido entera
+    if (completa) try {
       localStorage.setItem(CLAVE_ULTIMA, ahora.toISOString());
       setUltimaCopia(ahora.toISOString());
     } catch (e) {
@@ -198,6 +199,8 @@ export default function CopiaSeguridad() {
         filas: v.length,
       })),
       errores,
+      noExisten,
+      completa,
       tamano: (blob.size / 1024 / 1024).toFixed(2),
     });
     setGenerando(false);
@@ -278,8 +281,8 @@ export default function CopiaSeguridad() {
             ))}
           </div>
           <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 10 }}>
-            No se incluyen los archivos adjuntos (justificantes, fotos). Esos están en el
-            almacenamiento de Supabase y se conservan aparte.
+            No se incluyen los archivos adjuntos (justificantes, fotos) ni las contraseñas.
+            Los archivos están en el almacenamiento de Supabase y se descargan aparte.
           </div>
         </div>
 
@@ -439,12 +442,22 @@ export default function CopiaSeguridad() {
         {/* RESULTADO */}
         {resultado && (
           <div style={{
-            marginTop: 18, backgroundColor: '#f0fdf4', border: '2px solid #86efac',
+            marginTop: 18, backgroundColor: resultado.completa ? '#f0fdf4' : '#fef2f2',
+            border: `2px solid ${resultado.completa ? '#86efac' : '#f87171'}`,
             borderRadius: 12, padding: 18,
           }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: verde, marginBottom: 8 }}>
-              ✅ Copia descargada
-            </div>
+            {resultado.completa ? (
+              <div style={{ fontSize: 15, fontWeight: 800, color: verde, marginBottom: 8 }}>
+                ✅ Copia descargada y completa
+              </div>
+            ) : (
+              <div style={{ fontSize: 15, fontWeight: 800, color: rojo, marginBottom: 8, lineHeight: 1.4 }}>
+                ❌ La copia NO está completa. No la guardes como buena.
+                <div style={{ fontSize: 12.5, fontWeight: 600, marginTop: 4 }}>
+                  El archivo lleva «INCOMPLETA» en el nombre. Mira abajo qué tablas fallaron y avisa antes de hacer otra.
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: 13, color: '#166534', marginBottom: 14 }}>
               {resultado.totalFilas.toLocaleString('es-ES')} registros · {resultado.tamano} MB
               <br />
@@ -469,6 +482,12 @@ export default function CopiaSeguridad() {
                 ))}
               </div>
             </details>
+
+            {resultado.noExisten?.length > 0 && (
+              <div style={{ marginTop: 10, fontSize: 11, color: '#64748b' }}>
+                No existen en la base de datos (no pasa nada): {resultado.noExisten.join(', ')}
+              </div>
+            )}
 
             {resultado.errores.length > 0 && (
               <div style={{ marginTop: 12, padding: '10px 12px', backgroundColor: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8 }}>
