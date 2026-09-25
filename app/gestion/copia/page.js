@@ -15,6 +15,58 @@ const TABLAS = TABLAS_COPIA;
 
 const CLAVE_ULTIMA = 'ies_ultima_copia';
 
+const DRIVE_COPIAS = 'https://drive.google.com/drive/folders/1tFYGMxqae2aYFmboIlk0binDOr6yd4WT';
+
+/**
+ * GUÍA DE LOS TIPOS DE COPIA
+ * Para que dentro de unos meses se sepa, sin preguntar a nadie, qué es
+ * cada cosa, cuándo se hace y dónde se guarda.
+ */
+const TIPOS_COPIA = [
+  {
+    emoji: '💾', titulo: 'Copia de datos', etiqueta: 'El botón de esta página', color: '#1e3a5f',
+    filas: [
+      ['Qué guarda', 'Todas las tablas del portal: profesorado, alumnado con seguros y autorizaciones, horarios, nombres del cuadrante, guardias, ausencias, DLD, claustro, actividades, mantenimiento y calendario.'],
+      ['Qué NO guarda', 'Los archivos (justificantes y fotos) ni las contraseñas.'],
+      ['Cuándo', 'Una vez al mes. Y siempre ANTES de importar alumnado, subir horarios nuevos o cerrar el curso.'],
+      ['Dónde', 'En la carpeta de copias del Drive del centro. El archivo se llama copia-portal-ies-AAAA-MM-DD.json.'],
+      ['Cómo saber que vale', 'Al terminar sale un recuadro VERDE «completa». Si sale ROJO, o el archivo lleva INCOMPLETA en el nombre, no vale: no la guardes como buena.'],
+    ],
+    enlace: { texto: '📁 Abrir la carpeta de copias en Drive', url: DRIVE_COPIAS },
+  },
+  {
+    emoji: '♻️', titulo: 'Restaurar', etiqueta: 'Más abajo, en esta página', color: '#92400e',
+    filas: [
+      ['Qué hace', 'Vuelve a escribir las filas que tenía una copia. Eliges tú qué tablas.'],
+      ['Qué NO hace', 'Nunca borra nada. Lo creado después de la copia se queda. Las contraseñas actuales no se tocan.'],
+      ['Cuándo', 'Si se ha borrado o estropeado algo por error. Antes, haz una copia de cómo está ahora.'],
+    ],
+  },
+  {
+    emoji: '📎', titulo: 'Justificantes y fotos', etiqueta: 'Aparte, fuera del archivo', color: '#6d28d9',
+    filas: [
+      ['Dónde están', 'En el almacenamiento de archivos de Supabase, no en las tablas. Por eso no van en la copia de datos.'],
+      ['Justificantes', 'Al cierre de curso hay que descargarlos y guardarlos fuera de la aplicación. Mientras tanto, jefatura los descarga uno a uno desde Ausencias.'],
+      ['Fotos de mantenimiento', 'Se borran al resolver la incidencia. No hace falta guardarlas: queda el registro de cada actuación.'],
+    ],
+  },
+  {
+    emoji: '🗄️', titulo: 'Copia de una tabla en Supabase', etiqueta: 'Se hace con SQL, por seguridad', color: '#0f766e',
+    filas: [
+      ['Qué es', 'Un duplicado de una sola tabla dentro de la propia base de datos, con la fecha en el nombre. Ejemplo: alumnos_respaldo_2026_09_23.'],
+      ['Cuándo', 'Justo antes de una operación delicada sobre esa tabla (una importación, un borrado masivo), para poder deshacerla en el momento.'],
+      ['Ojo', 'Ocupa espacio en Supabase. Bórrala cuando ya no haga falta. No sustituye a la copia mensual.'],
+    ],
+  },
+  {
+    emoji: '☁️', titulo: 'Copias automáticas de Supabase', etiqueta: 'Depende del plan contratado', color: '#475569',
+    filas: [
+      ['Plan gratuito', 'Supabase no deja recuperar sus copias automáticas. La copia de datos de esta página es la única que tenemos.'],
+      ['Plan Pro', 'Copias diarias de los últimos 7 días, en Supabase → Database → Backups. Si algo se borra y nadie lo nota en una semana, se pierde.'],
+    ],
+  },
+];
+
 export default function CopiaSeguridad() {
   const [nombre, setNombre] = useState('');
   const [generando, setGenerando] = useState(false);
@@ -251,17 +303,35 @@ export default function CopiaSeguridad() {
           </div>
         )}
 
-        {/* EXPLICACIÓN */}
+        {/* TIPOS DE COPIA */}
         <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 18, marginBottom: 18, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <div style={{ fontSize: 14, fontWeight: 800, color: azul, marginBottom: 10 }}>
-            ¿Para qué sirve esto?
+          <div style={{ fontSize: 15, fontWeight: 800, color: azul, marginBottom: 4 }}>
+            Tipos de copia: qué es cada cosa
           </div>
-          <div style={{ fontSize: 13, color: '#444', lineHeight: 1.6 }}>
-            Supabase guarda copias automáticas de los últimos <strong>7 días</strong>. Si algo se borra por
-            error y nadie lo advierte en ese plazo, no hay forma de recuperarlo.
-            <br /><br />
-            Este botón descarga un archivo con <strong>todos los datos del portal</strong>. Guárdalo en el
-            Drive del centro una vez al mes y tendrás un histórico al que volver.
+          <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 14, lineHeight: 1.5 }}>
+            Hay cinco formas de guardar o recuperar datos. Esta guía es para recordar qué hace cada una.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {TIPOS_COPIA.map(t => (
+              <div key={t.titulo} style={{ borderRadius: 10, border: '1px solid #e5e7eb', borderLeft: `5px solid ${t.color}`, padding: '12px 14px', backgroundColor: '#fcfcfd' }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: 14.5, fontWeight: 800, color: t.color }}>{t.emoji} {t.titulo}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>{t.etiqueta}</span>
+                </div>
+                {t.filas.map(([k, v]) => (
+                  <div key={k} style={{ display: 'flex', gap: 10, fontSize: 12.5, lineHeight: 1.5, marginBottom: 5, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 130, fontWeight: 700, color: '#334155' }}>{k}</div>
+                    <div style={{ flex: 1, minWidth: 200, color: '#475569' }}>{v}</div>
+                  </div>
+                ))}
+                {t.enlace && (
+                  <a href={t.enlace.url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'inline-block', marginTop: 6, fontSize: 12.5, fontWeight: 700, color: t.color, textDecoration: 'none' }}>
+                    {t.enlace.texto} →
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         </div>
 
@@ -503,19 +573,6 @@ export default function CopiaSeguridad() {
             )}
           </div>
         )}
-
-        {/* CÓMO RESTAURAR */}
-        <div style={{ marginTop: 24, padding: '14px 18px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>
-            Si alguna vez hay que restaurar
-          </div>
-          <div style={{ fontSize: 12, color: '#1e3a8a', lineHeight: 1.55 }}>
-            El archivo es un JSON legible con todos los registros. Restaurarlo requiere ayuda técnica:
-            hay que volcarlo a las tablas de Supabase respetando las relaciones entre ellas.
-            No es algo que se pueda hacer desde el portal, pero teniendo el archivo la recuperación
-            siempre es posible.
-          </div>
-        </div>
 
       </div>
     </div>
