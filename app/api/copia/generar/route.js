@@ -50,6 +50,22 @@ export async function GET(request) {
 
   const url = new URL(request.url);
   const tabla = url.searchParams.get('tabla');
+
+  // La ESTRUCTURA de la base de datos (tablas, permisos, funciones...).
+  // La describe la función exportar_estructura(), que se crea una sola vez
+  // con supabase/exportar_estructura.sql.
+  if (tabla === '__estructura__') {
+    const { data, error } = await supa().rpc('exportar_estructura');
+    if (error) {
+      const falta = /exportar_estructura/.test(error.message || '') && /(not find|does not exist|no existe)/i.test(error.message || '');
+      return Response.json({
+        error: falta
+          ? 'Falta crear la función en Supabase: ejecuta supabase/exportar_estructura.sql en el SQL Editor'
+          : error.message,
+      }, { status: 500 });
+    }
+    return Response.json({ estructura: data || '' });
+  }
   const desde = Math.max(0, parseInt(url.searchParams.get('desde') || '0', 10) || 0);
   if (!NOMBRES_COPIA.has(tabla)) {
     return Response.json({ error: `La tabla «${tabla}» no está en la copia` }, { status: 400 });

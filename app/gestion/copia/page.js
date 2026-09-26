@@ -27,6 +27,7 @@ const TIPOS_COPIA = [
     emoji: '💾', titulo: 'Copia de datos', etiqueta: 'El botón de esta página', color: '#1e3a5f',
     filas: [
       ['Qué guarda', 'Todas las tablas del portal: profesorado, alumnado con seguros y autorizaciones, horarios, nombres del cuadrante, guardias, ausencias, DLD, claustro, actividades, mantenimiento y calendario.'],
+      ['Y además', 'La ESTRUCTURA de la base de datos: cómo son las tablas, sus permisos y sus funciones. Con los datos y la estructura se puede rehacer el portal entero en un Supabase nuevo.'],
       ['Qué NO guarda', 'Los archivos (justificantes y fotos) ni las contraseñas.'],
       ['Cuándo', 'Una vez al mes. Y siempre ANTES de importar alumnado, subir horarios nuevos o cerrar el curso.'],
       ['Dónde', 'En la carpeta de copias del Drive del centro. El archivo se llama copia-portal-ies-AAAA-MM-DD.json.'],
@@ -202,6 +203,19 @@ export default function CopiaSeguridad() {
       }
     }
 
+    // La estructura de la base de datos, para poder reconstruirla desde cero
+    let estructura = '';
+    setProgreso({ actual: TABLAS.length, total: TABLAS.length, tabla: 'Estructura de la base de datos' });
+    try {
+      const r = await fetch('/api/copia/generar?tabla=__estructura__');
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `error ${r.status}`);
+      estructura = d.estructura || '';
+      if (!estructura.includes('CREATE TABLE')) throw new Error('ha llegado vacía');
+    } catch (e) {
+      errores.push({ tabla: 'Estructura de la base de datos', mensaje: e.message || 'Error desconocido' });
+    }
+
     // Sin profesores no hay copia que valga: es la tabla de la que cuelga todo.
     if (!errores.length && !(datos.profesores || []).length) {
       errores.push({ tabla: 'Profesorado', mensaje: 'ha llegado vacía; la copia no es válida' });
@@ -215,11 +229,14 @@ export default function CopiaSeguridad() {
       generada: ahora.toISOString(),
       generada_por: nombre,
       curso: await getCursoActual(),
-      version_formato: 2,
+      version_formato: 3,
       completa,
       errores,
       resumen: Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, v.length])),
       datos,
+      // Para reconstruir la base de datos: se pega en el SQL Editor de un
+      // proyecto nuevo y luego se restauran los datos desde esta página.
+      estructura,
     };
 
     const json = JSON.stringify(copia, null, 2);
