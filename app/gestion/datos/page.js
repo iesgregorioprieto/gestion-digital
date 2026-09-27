@@ -68,6 +68,7 @@ export default function GestionDatos() {
   const [ultimaHorarios, setUltimaHorarios] = useState(() => {
     try { return localStorage.getItem('ultima_importacion_horarios') || ''; } catch { return ''; }
   });
+  const [archivosGuardias, setArchivosGuardias] = useState([]);
   const [ultimaGuardias, setUltimaGuardias] = useState(() => {
     try { return localStorage.getItem('ultima_importacion_guardias') || ''; } catch { return ''; }
   });
@@ -1013,6 +1014,7 @@ export default function GestionDatos() {
       });
     }
 
+    setArchivosGuardias(archivos.map(f => ({ nombre: f.name, fecha: f.lastModified })));
     setPreviewGuardias(registros);
     setModalGuardias(true);
     setProcesando(false);
@@ -1779,6 +1781,25 @@ export default function GestionDatos() {
             <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
               <strong>{previewGuardias.length}</strong> registros detectados en {[...new Set(previewGuardias.map(g => g.sector))].length} sectores.
             </div>
+
+            {/* FECHA DE CADA ARCHIVO: para no subir por error una carpeta vieja */}
+            {archivosGuardias.length > 0 && (() => {
+              const inicioCurso = new Date(new Date().getMonth() >= 8 ? new Date().getFullYear() : new Date().getFullYear() - 1, 8, 1).getTime();
+              const viejos = archivosGuardias.filter(a => a.fecha < inicioCurso);
+              return (
+                <div style={{ marginBottom: 14, padding: 10, borderRadius: 8, border: `1.5px solid ${viejos.length ? '#ef4444' : '#e2e8f0'}`, backgroundColor: viejos.length ? '#fef2f2' : '#f8fafc' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: viejos.length ? '#991b1b' : '#475569', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    📁 Archivos y su fecha{viejos.length ? ` — ⚠️ ${viejos.length} de antes de septiembre: ¿es la carpeta buena?` : ''}
+                  </div>
+                  {archivosGuardias.map(a => (
+                    <div key={a.nombre} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: a.fecha < inicioCurso ? '#b91c1c' : '#334155', fontWeight: a.fecha < inicioCurso ? 700 : 400 }}>
+                      <span>{a.nombre}</span>
+                      <span>{new Date(a.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* DESGLOSE POR DÍA - detecta días vacíos */}
             <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
