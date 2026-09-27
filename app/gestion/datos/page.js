@@ -1082,7 +1082,7 @@ export default function GestionDatos() {
                   {
                     paso: 3,
                     titulo: 'Cuadrante de guardias',
-                    descripcion: 'Delphos → Complementarias → Exportar → Carpeta HTML',
+                    descripcion: 'Peñalara → cuadrante de guardias en HTML (una carpeta, un archivo por sector)',
                     tab: 'guardias',
                     emoji: '🛡️',
                     completado: stats.guardias,
@@ -1552,7 +1552,7 @@ export default function GestionDatos() {
       {vistaTab === 'guardias' && (
         <div style={{ padding: '0 16px 24px' }}>
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-            <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Delphos)</div>
+            <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Peñalara)</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
               Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias. Cada archivo es un sector (TMV, FOL, Recreo Activos...).
             </div>
