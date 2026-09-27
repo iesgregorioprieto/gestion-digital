@@ -886,6 +886,40 @@ export default function GestionDatos() {
 
     const errores = [];
 
+    /**
+     * RECREOS (Peñalara, «GUARDIA 1er recreo, 11:15-11:45»)
+     * Otra forma de tabla: las filas 1, 2, 3… son PUESTOS, no horas, y cada
+     * celda lleva la zona entre paréntesis y un número al final:
+     *   (RECREO S1) Her. V, G ~300072
+     *   (BIBLIOTECA (Recreo)) Ant. T, AR ~38155
+     * Todo es el mismo recreo: sector RECREO, hora «recreo» y la zona en el
+     * aula, que es como lo espera el motor.
+     */
+    function zonaDeRecreo(txt) {
+      let z = txt.replace(/\(recreo\)/i, '').replace(/^recreo\s+/i, '').trim();
+      z = z.toLowerCase().replace(/(^|\s)\S/g, c => c.toUpperCase());   // «EDIFICIO A» → «Edificio A»
+      return z.replace(/\bA(\d{3})S\b/gi, 'A$1s').replace(/\bY\b/g, 'y');
+    }
+    function leerRecreos(doc) {
+      const salida = [];
+      for (const fila of Array.from(doc.querySelectorAll('tr'))) {
+        const celdas = Array.from(fila.children);
+        if (celdas.length < 6) continue;
+        celdas.slice(1, 6).forEach((celda, c) => {
+          const tmp = document.createElement('div');
+          tmp.innerHTML = celda.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+          (tmp.textContent || '').split('\n').forEach(linea => {
+            const t = linea.replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+            // «(ZONA) Nombre ~número»; la zona puede llevar paréntesis dentro
+            const m = t.match(/^\((.+)\)\s*([^()~]+?)\s*(?:~\s*\d+)?$/);
+            if (!m || !/recreo|biblioteca/i.test(m[1])) return;
+            salida.push({ sector: 'RECREO', dia: DIAS_GUARDIAS[c], hora_id: 'recreo', nombre_abrev: m[2].trim(), aula: zonaDeRecreo(m[1]) });
+          });
+        });
+      }
+      return salida;
+    }
+
     for (let i = 0; i < archivos.length; i++) {
       const archivo = archivos[i];
       setProgresoGuardias({ actual: i + 1, total: archivos.length, mensaje: `Leyendo ${archivo.name}...` });
@@ -903,6 +937,13 @@ export default function GestionDatos() {
       } catch (err) {
         errores.push(archivo.name);
         continue;
+      }
+
+      // ¿Es el cuadrante de recreos? (el título habla de recreo)
+      const titulo = Array.from(doc.querySelectorAll('th, td')).slice(0, 5).map(x => x.textContent).join(' ');
+      if (/recreo/i.test(titulo) || /recreo/i.test(archivo.name)) {
+        const deRecreo = leerRecreos(doc);
+        if (deRecreo.length) { registros.push(...deRecreo); continue; }
       }
 
       // Nombre del sector: primer th con colspan >= 5
@@ -1018,11 +1059,12 @@ export default function GestionDatos() {
     for (let i = 0; i < previewGuardias.length; i += LOTE) {
       const lote = previewGuardias.slice(i, i + LOTE).map(g => ({
         profesor_nombre_pdf: g.nombre_abrev,
-        hora_id: g.hora_id + 'a',
+        hora_id: g.hora_id === 'recreo' ? 'recreo' : g.hora_id + 'a',
         dia: g.dia,
         tipo: 'guardia',
         grupo: g.sector,
         materia: '',
+        aula: g.aula || '',
         curso_academico: cursoNuevo,
       }));
       setProgresoGuardias({ actual: i + LOTE, total: previewGuardias.length, mensaje: `Guardando ${i}/${previewGuardias.length}...` });
