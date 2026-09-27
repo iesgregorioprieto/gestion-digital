@@ -110,12 +110,27 @@ export default function HojaServicios({ profesorId = null, ficha = {}, onGuardad
       {/* Subida */}
       {!lectura && (
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <input type="file" accept="application/pdf,.pdf"
-            onChange={e => { setArchivo(e.target.files?.[0] || null); setError(''); setHecho(''); }}
-            style={{ fontSize: 12.5, flex: '1 1 220px' }} />
-          <button type="button" onClick={leer} disabled={leyendo} style={{
-            padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white',
-            fontSize: 13, fontWeight: 700, cursor: leyendo ? 'wait' : 'pointer', opacity: leyendo ? 0.7 : 1,
+          {/* El selector nativo queda oculto: los estilos globales le quitan
+              el aspecto de botón y no parecía que se pudiera pulsar. */}
+          <label style={{
+            flex: '1 1 220px', display: 'flex', alignItems: 'center', gap: 8, minWidth: 0,
+            padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+            border: `2px dashed ${archivo ? '#15803d' : '#93c5fd'}`,
+            backgroundColor: archivo ? '#f0fdf4' : 'white',
+            color: archivo ? '#166534' : '#1e40af', fontSize: 13, fontWeight: 700,
+          }}>
+            <input type="file" accept="application/pdf,.pdf"
+              onChange={e => { setArchivo(e.target.files?.[0] || null); setError(''); setHecho(''); }}
+              style={{ display: 'none' }} />
+            <span>{archivo ? '✅' : '📎'}</span>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {archivo ? archivo.name : 'Pulsa aquí para elegir el PDF'}
+            </span>
+          </label>
+          <button type="button" onClick={leer} disabled={leyendo || !archivo} style={{
+            padding: '9px 16px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white',
+            fontSize: 13, fontWeight: 700, cursor: leyendo ? 'wait' : (archivo ? 'pointer' : 'not-allowed'),
+            opacity: leyendo || !archivo ? 0.55 : 1,
           }}>{leyendo ? 'Leyendo…' : 'Leer hoja'}</button>
         </div>
       )}
