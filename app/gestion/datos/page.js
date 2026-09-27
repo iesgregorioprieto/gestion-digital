@@ -1055,14 +1055,12 @@ export default function GestionDatos() {
     if (!previewGuardias.length) return;
     setProcesando(true);
 
-    // Se sustituye todo el cuadrante salvo los RECREOS que no vengan en
-    // esta carga: así los recreos se pueden subir aparte sin que una carga
-    // borre la otra.
-    const sectoresNuevos = [...new Set(previewGuardias.map(g => g.sector))];
+    // Cuadrante nuevo = se borran TODAS las guardias anteriores (recreos
+    // incluidos) y se cargan estas. Si no se puede borrar todo, no se carga.
     const rb = await fetch('/api/horarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia', sectoresNuevos }),
+      body: JSON.stringify({ accion: 'borrar_todas_las_guardias' }),
     });
     if (!rb.ok) {
       const e = await rb.json().catch(() => ({}));
@@ -1654,7 +1652,7 @@ export default function GestionDatos() {
             <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Peñalara)</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
               Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias que genera Peñalara. Cada archivo es un sector (TMV, FOL, Recreo...).
-              Cada carga sustituye el cuadrante entero, <strong>salvo los recreos</strong>: esos se pueden subir aparte, antes o después, y no se borran al subir el resto.
+              Cada carga <strong>borra todas las guardias anteriores</strong> (recreos incluidos) y deja solo las de la carpeta que subes. Sube siempre la carpeta completa, con el archivo de recreos dentro.
             </div>
 
             <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
@@ -1674,7 +1672,7 @@ export default function GestionDatos() {
                     ))}
                   </div>
                   {!stats.sectoresGuardia.some(s => /recreo/i.test(s.sector)) && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ Falta el cuadrante de los <strong>recreos</strong>. Cuando lo tengas, súbelo aparte: no borrará lo demás.</div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ No hay recreos cargados. Vuelve a subir la carpeta completa con el archivo de recreos dentro.</div>
                   )}
                 </>
               )}
@@ -1828,21 +1826,7 @@ export default function GestionDatos() {
               ))}
             </div>
             <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8 }}>
-              {(() => {
-                const clave = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
-                const nuevos = [...new Set(previewGuardias.map(g => g.sector))];
-                const claves = new Set(nuevos.map(clave));
-                const esRecreo = s => /RECREO/.test(clave(s));
-                const soloRecreos = nuevos.every(esRecreo);
-                const quedan = (stats.sectoresGuardia || []).map(s => s.sector)
-                  .filter(s => soloRecreos ? !claves.has(clave(s)) : (esRecreo(s) && !claves.has(clave(s))));
-                return (<>
-                  {soloRecreos
-                    ? <>⚠️ Solo se sustituirán los recreos: {nuevos.join(', ')}.</>
-                    : <>⚠️ Se sustituirá el cuadrante de guardias por lo que traes: {nuevos.join(', ')}.</>}
-                  {quedan.length > 0 && <> Se conserva lo ya cargado de: {quedan.join(', ')}.</>}
-                </>);
-              })()}
+              ⚠️ Se borrarán <strong>todas las guardias anteriores</strong>, recreos incluidos, y quedarán solo estas: {[...new Set(previewGuardias.map(g => g.sector))].join(', ')}.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={confirmarGuardias} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>

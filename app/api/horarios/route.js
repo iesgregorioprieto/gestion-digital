@@ -45,6 +45,23 @@ export async function POST(request) {
     const datosExtra = cuerpo;
 
     // ─── Borrar los horarios de un curso (antes de reimportarlos) ───
+    /**
+     * CUADRANTE DE GUARDIAS NUEVO: fuera TODAS las guardias anteriores, de
+     * cualquier curso y recreos incluidos. Y se comprueba que no queda
+     * ninguna antes de dejar cargar las nuevas: mezclar un cuadrante viejo
+     * con el nuevo pone guardias a quien ya no las tiene.
+     */
+    if (accion === 'borrar_todas_las_guardias') {
+      const cliente = supa();
+      const { error } = await cliente.from('horarios_profesores').delete().eq('tipo', 'guardia');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      const { count, error: e2 } = await cliente.from('horarios_profesores')
+        .select('id', { count: 'exact', head: true }).eq('tipo', 'guardia');
+      if (e2) return Response.json({ error: e2.message }, { status: 500 });
+      if (count > 0) return Response.json({ error: `No se han podido borrar ${count} guardias antiguas. No se ha cargado nada.` }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     if (accion === 'borrar_curso') {
       if (!curso) return Response.json({ error: 'Falta el curso' }, { status: 400 });
 
