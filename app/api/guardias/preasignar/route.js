@@ -24,7 +24,7 @@ import {
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
 } from '@/lib/asignacionGuardias';
-import { normSector, esSectorRecreo } from '@/lib/sectores';
+import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo } from '@/lib/grupos';
 
 const FICHADAS = ['confirmado', 'realizado'];
@@ -555,14 +555,19 @@ export async function POST(request) {
             motivo_asignacion: (() => {
               const suyo = asig.hueco?.sector || 'su departamento';
               if (asig.escalon === 0) return `Guardia de ${suyo}, tu propio departamento.`;
+              const huecoFP = esSectorFP(asig.hueco?.sector);
               if (asig.escalon === 1) {
-                return `A esta hora no quedaba nadie de guardia en ${suyo}, `
-                  + `así que se ha pedido fuera. Te ha tocado por rotación: `
-                  + `de los disponibles, eres quien menos guardias lleva hechas.`;
+                return huecoFP
+                  ? `A esta hora no quedaba nadie de guardia en ${suyo}, así que `
+                    + `le apoya otra familia profesional. Te ha tocado por rotación `
+                    + `entre las familias, repartiendo según el tamaño de cada una.`
+                  : `A esta hora no quedaba nadie de guardia en ${suyo}, así que `
+                    + `se ha pedido a FP. Te ha tocado por rotación: de los `
+                    + `disponibles, eres quien menos guardias lleva hechas.`;
               }
-              return `A esta hora no quedaba nadie libre ni en ${suyo} ni en las `
-                + `guardias generales. Te ha tocado por rotación entre los `
-                + `departamentos, repartiendo según el tamaño de cada uno.`;
+              return `A esta hora no quedaba nadie libre en ${suyo} ni en ninguna `
+                + `otra familia profesional. Para no dejar el grupo sin nadie, `
+                + `te ha tocado como último recurso, por rotación.`;
             })(),
             curso_academico: curso,
           });
