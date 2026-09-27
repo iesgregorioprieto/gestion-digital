@@ -1,5 +1,6 @@
 import "./globals.css";
 import AvisoComunicacion from "@/components/AvisoComunicacion";
+import Recordatorios from "@/components/Recordatorios";
 
 export const metadata = {
   title: "APrieto · IES Gregorio Prieto",
@@ -49,6 +50,7 @@ export default function RootLayout({ children }) {
         }} />
         {children}
         <AvisoComunicacion />
+        <Recordatorios />
 
         <script dangerouslySetInnerHTML={{
           __html: `

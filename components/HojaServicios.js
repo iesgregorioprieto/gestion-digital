@@ -55,6 +55,8 @@ export default function HojaServicios({ profesorId = null, ficha = {}, onGuardad
       if (!r.ok) throw new Error(d.error || 'No se ha podido guardar.');
       setHecho(`Guardado: ${tiempo(lectura.total)} de servicio a ${fechaES(lectura.fecha)}.`);
       setLectura(null); setArchivo(null);
+      // Que se vaya la pestaña de «pendiente» en el acto (solo si es la suya)
+      if (!profesorId) window.dispatchEvent(new Event('recordatorios:actualizar'));
       onGuardado?.({ servicios_dias: lectura.dias, servicios_fecha: lectura.fecha, servicios_origen: 'hoja', anio_cuerpo: d.anio_cuerpo });
     } catch (e) {
       setError(e.message);
@@ -64,7 +66,7 @@ export default function HojaServicios({ profesorId = null, ficha = {}, onGuardad
   }
 
   return (
-    <div style={{ border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', backgroundColor: '#f8fbff', marginBottom: 14 }}>
+    <div id="hoja-servicios" style={{ border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '14px 16px', backgroundColor: '#f8fbff', marginBottom: 14, scrollMarginTop: 16 }}>
       <div style={{ fontSize: 14, fontWeight: 800, color: azul, marginBottom: 6 }}>📄 Antigüedad desde la hoja de servicios</div>
 
       {/* Estado actual */}

@@ -53,6 +53,12 @@ export default function MisDatos() {
   const [verAyudaCentro, setVerAyudaCentro] = useState(false);
   const [verAyudaCuerpo, setVerAyudaCuerpo] = useState(false);
   const [servicios, setServicios] = useState({});
+
+  // Al llegar desde el aviso del panel, bajar directo al recuadro
+  useEffect(() => {
+    if (cargando || typeof window === 'undefined' || window.location.hash !== '#hoja-servicios') return;
+    setTimeout(() => document.getElementById('hoja-servicios')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+  }, [cargando]);
   const [verAyudaEdad, setVerAyudaEdad] = useState(false);
   const [form, setForm] = useState({
     nombre: '', apellidos: '', departamento: '', especialidad: '',

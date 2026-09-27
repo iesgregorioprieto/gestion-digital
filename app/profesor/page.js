@@ -7,6 +7,7 @@ import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
+import AvisoHojaServicios from '@/components/AvisoHojaServicios';
 import ValoracionModulo from '@/components/ValoracionModulo';
 
 export default function PanelProfesor() {
@@ -336,6 +337,9 @@ export default function PanelProfesor() {
             Solo lo ve quien aparece en el cuadrante con un nombre que no
             casa con su ficha; al resto no le sale nada. */}
         <AvisoCuadrante />
+
+        {/* Hoja de servicios: solo a quien aún no la ha subido */}
+        <AvisoHojaServicios />
 
         {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
         {profId && <AvisoNotificaciones profesorId={profId} />}
