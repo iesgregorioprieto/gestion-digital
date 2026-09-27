@@ -13,6 +13,7 @@ const COLOR = {
   alto:   { fondo: '#fef2f2', borde: '#fca5a5', texto: '#b91c1c', etiqueta: 'Por encima' },
   bajo:   { fondo: '#eff6ff', borde: '#bfdbfe', texto: '#1d4ed8', etiqueta: 'Por debajo' },
   normal: { fondo: 'white',   borde: '#e5e7eb', texto: '#334155', etiqueta: '' },
+  apoyo:  { fondo: '#f0fdf4', borde: '#bbf7d0', texto: '#15803d', etiqueta: 'Cubre sin tener guardias' },
 };
 
 export default function ContadorGuardias() {
@@ -71,6 +72,7 @@ export default function ContadorGuardias() {
                   <p style={{ margin: '0 0 6px' }}><strong>Le tocarían</strong>: lo que llevaría si todos los de su sector hubieran entrado en proporción a sus horas de guardia. Quien tiene 3 horas a la semana entra más que quien tiene 1, y es lo normal: por eso se compara con esto y no con la media a secas.</p>
                   <p style={{ margin: '0 0 6px' }}><strong>Fuera</strong>: cuántas de sus guardias fueron cubriendo a otro sector.</p>
                   <p style={{ margin: '0 0 6px' }}><strong>Sin fichar</strong>: asignadas en días pasados que no se ficharon.</p>
+                  <p style={{ margin: '0 0 6px' }}>En <strong style={{ color: '#15803d' }}>verde</strong>, quien ha cubierto guardias sin tenerlas en su horario (las ficha jefatura). No cuentan para la media de su sector.</p>
                   <p style={{ margin: 0 }}>Sale en <strong style={{ color: '#b91c1c' }}>rojo</strong> quien lleva al menos 2 más de lo que le toca y un 50 % por encima. Suele ser por necesidad: si a su hora de guardia solo hay dos personas de su sector y faltan tres, entran las dos sí o sí.</p>
                 </div>
               )}

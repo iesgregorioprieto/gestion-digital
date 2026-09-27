@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
-import { dentroDeFranja } from '@/lib/asignacionGuardias';
+import { dentroDeFranja, franjaEmpezada } from '@/lib/asignacionGuardias';
+import { departamentoASector } from '@/lib/sectores';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 
@@ -172,6 +173,89 @@ export async function POST(request) {
       const { data, error } = await supa().from('apoyos_asignados').insert(conAutor).select();
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true, apoyos: data || [] });
+    }
+
+    /**
+     * ─── Jefatura: guardias de un día que ya han pasado y nadie fichó ───
+     * Incluye las que salieron en rojo (sin cubrir): a veces las cubrió
+     * alguien que no estaba de guardia (p. ej. el propio departamento).
+     */
+    if (accion === 'listar_sin_fichar') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      const fecha = datos?.fecha;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) return Response.json({ error: 'Fecha no válida' }, { status: 400 });
+
+      const [{ data: filas, error }, { data: profes }] = await Promise.all([
+        supa().from('apoyos_asignados')
+          .select('id, fecha, hora, grupo, aula, estado, profesor_id, profesor_nombre_pdf, profesor_ausente_id, sector_apoyo, sector_destino')
+          .eq('fecha', fecha).in('estado', ['pendiente', 'sin_cubrir']),
+        supa().from('profesores').select('id, nombre, apellidos'),
+      ]);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      const nombre = pid => { const p = (profes || []).find(x => x.id === pid); return p ? `${p.apellidos}, ${p.nombre}` : null; };
+      const orden = ['1', '2', '3', '4', '5', '6'];
+      const lista = (filas || [])
+        .filter(a => String(a.hora) !== 'recreo' && !/recreo/i.test(a.sector_apoyo || ''))
+        .filter(a => franjaEmpezada(a.hora, a.fecha))
+        .map(a => ({
+          id: a.id, hora: String(a.hora), grupo: a.grupo || '', aula: a.aula || '', estado: a.estado,
+          sector: a.sector_destino || a.sector_apoyo || '',
+          ausente: nombre(a.profesor_ausente_id) || '—',
+          asignadoId: a.profesor_id || null,
+          asignado: nombre(a.profesor_id) || a.profesor_nombre_pdf || null,
+        }))
+        .sort((a, b) => orden.indexOf(a.hora) - orden.indexOf(b.hora) || a.ausente.localeCompare(b.ausente));
+      return Response.json({ ok: true, lista });
+    }
+
+    /**
+     * ─── Jefatura: dar por hecha una guardia ───
+     * Para cuando la hizo el asignado y no fichó, o la hizo OTRA persona
+     * (esté o no de guardia). Queda constancia de quién la fichó y, si
+     * cambió la persona, de a quién se la había asignado la app.
+     * Solo guardias que ya han empezado: nunca una de mañana.
+     */
+    if (accion === 'fichar_jefatura') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const { data: fila } = await supa().from('apoyos_asignados')
+        .select('id, fecha, hora, profesor_id, estado').eq('id', id);
+      const guardia = (fila || [])[0];
+      if (!guardia) return Response.json({ error: 'No existe esa guardia' }, { status: 404 });
+      if (['confirmado', 'incidencia'].includes(guardia.estado)) {
+        return Response.json({ error: 'Esa guardia ya está fichada' }, { status: 409 });
+      }
+      if (!franjaEmpezada(guardia.hora, guardia.fecha)) {
+        return Response.json({ error: 'No se puede fichar una guardia que todavía no ha empezado' }, { status: 409 });
+      }
+
+      const quien = datos?.profesor_id || guardia.profesor_id;
+      if (!quien) return Response.json({ error: 'Elige quién hizo la guardia' }, { status: 400 });
+
+      const cambios = {
+        estado: 'confirmado',
+        confirmado_at: new Date().toISOString(),
+        cuenta_reparto: true,
+        sin_cubrir: false,
+        fichado_por: sesion.id,
+        incidencia: (datos?.observaciones || '').trim() || null,
+      };
+      if (quien !== guardia.profesor_id) {
+        const { data: p } = await supa().from('profesores').select('id, departamento').eq('id', quien);
+        if (!(p || [])[0]) return Response.json({ error: 'Ese profesor no existe' }, { status: 400 });
+        cambios.profesor_id = quien;
+        cambios.profesor_nombre_pdf = null;
+        cambios.sector_apoyo = departamentoASector(p[0].departamento);
+        cambios.asignado_original_id = guardia.profesor_id || null;
+      }
+
+      const { error } = await supa().from('apoyos_asignados').update(cambios).eq('id', id);
+      if (error) {
+        const falta = /fichado_por|asignado_original_id/.test(error.message || '');
+        return Response.json({ error: falta ? 'Falta ejecutar supabase/fichaje_jefatura.sql en Supabase.' : error.message }, { status: 500 });
+      }
+      return Response.json({ ok: true });
     }
 
     // ─── Cambiar el profesor de un apoyo ya asignado ───

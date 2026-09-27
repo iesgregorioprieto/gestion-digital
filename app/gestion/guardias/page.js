@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 // v3.0 - GESTIÓN COMPLETA CON CONTADOR Y APOYOS MANUALES
 
 import { useState, useEffect } from 'react';
+import FicharPorJefatura from '@/components/FicharPorJefatura';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
@@ -591,6 +592,8 @@ export default function GestionGuardias() {
       {/* CONTADOR DE GUARDIAS: el antiguo contaba solo los apoyos de FP a
           GENERAL (regla de agosto). El nuevo, en su propia pantalla, cuenta a
           todos los profesores de todos los sectores. */}
+      {/* Fichar desde jefatura las guardias que nadie fichó */}
+      <FicharPorJefatura fecha={fecha} />
       <a href="/gestion/guardias/contador" style={{ display:'block', backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb', padding:'12px 16px', fontSize:12, fontWeight:800, color:azul, textDecoration:'none' }}>
         📊 Contador de guardias del curso: quién lleva cuántas, y si alguien va por encima de lo que le toca →
       </a>
