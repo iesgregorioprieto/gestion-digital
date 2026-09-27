@@ -7,6 +7,7 @@ import { consulta, consultaRpc } from '@/lib/consulta';
 import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
+import { indiceProfesores, buscaProfesor } from '@/lib/asignacionGuardias';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 
@@ -69,6 +70,7 @@ export default function GestionDatos() {
     try { return localStorage.getItem('ultima_importacion_horarios') || ''; } catch { return ''; }
   });
   const [archivosGuardias, setArchivosGuardias] = useState([]);
+  const [conflictosGuardias, setConflictosGuardias] = useState(null);
   const [ultimaGuardias, setUltimaGuardias] = useState(() => {
     try { return localStorage.getItem('ultima_importacion_guardias') || ''; } catch { return ''; }
   });
@@ -851,6 +853,43 @@ export default function GestionDatos() {
   };
   const DIAS_GUARDIAS = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes'];
 
+  /**
+   * ¿Hay alguien de guardia a una hora en la que su horario dice que tiene
+   * clase? Es la señal de un cuadrante que no corresponde a los horarios
+   * cargados (p. ej. el de verano con los horarios de septiembre).
+   */
+  async function comprobarConHorarios(registros) {
+    setConflictosGuardias(null);
+    try {
+      const [rp, filas] = await Promise.all([
+        fetch('/api/profesores').then(r => r.json()),
+        (async () => {
+          let todas = [];
+          for (let desde = 0; ; desde += 1000) {
+            const { data } = await consulta('horarios_profesores').select('profesor_nombre_pdf, dia, hora_id, tipo')
+              .eq('tipo', 'clase').range(desde, desde + 999);
+            todas = todas.concat(data || []);
+            if (!data || data.length < 1000) break;
+          }
+          return todas;
+        })(),
+      ]);
+      const indice = indiceProfesores(rp.profesores || []);
+      const enClase = new Set();
+      for (const h of filas) {
+        const p = buscaProfesor(indice, h.profesor_nombre_pdf);
+        if (p) enClase.add(`${p.id}|${h.dia}|${String(h.hora_id).replace(/a$/, '')}`);
+      }
+      const choques = [];
+      for (const g of registros) {
+        if (g.hora_id === 'recreo') continue;
+        const p = buscaProfesor(indice, g.nombre_abrev);
+        if (p && enClase.has(`${p.id}|${g.dia}|${g.hora_id}`)) choques.push(`${g.nombre_abrev} (${g.sector}, ${g.dia} ${g.hora_id}ª)`);
+      }
+      setConflictosGuardias({ lista: choques, horarios: filas.length });
+    } catch { setConflictosGuardias({ error: true }); }
+  }
+
   async function procesarCarpetaGuardias(e) {
     const archivos = Array.from(e.target.files || []).filter(f =>
       f.name.toLowerCase().match(/\.(htm|html)$/)
@@ -858,6 +897,18 @@ export default function GestionDatos() {
     if (archivos.length === 0) {
       setMensaje({ tipo: 'error', texto: '❌ No se encontraron archivos HTM/HTML' });
       return;
+    }
+    // Dos archivos del mismo sector (p. ej. TMV.htm en dos subcarpetas):
+    // el navegador los mete todos y entraba el que llegase último. Se para.
+    {
+      const porNombre = {};
+      for (const f of archivos) (porNombre[f.name.toLowerCase()] ||= []).push(f.webkitRelativePath || f.name);
+      const repetidos = Object.values(porNombre).filter(l => l.length > 1);
+      if (repetidos.length) {
+        setMensaje({ tipo: 'error', texto: `❌ La carpeta tiene archivos repetidos, seguramente en subcarpetas (un cuadrante viejo y otro nuevo): ${repetidos.map(l => l.join(' y ')).join(' · ')}. Deja en una carpeta solo los archivos buenos y vuelve a seleccionarla.` });
+        if (fileRefGuardias.current) fileRefGuardias.current.value = '';
+        return;
+      }
     }
     setProcesando(true);
     setProgresoGuardias({ actual: 0, total: archivos.length, mensaje: 'Analizando...' });
@@ -1014,7 +1065,8 @@ export default function GestionDatos() {
       });
     }
 
-    setArchivosGuardias(archivos.map(f => ({ nombre: f.name, fecha: f.lastModified })));
+    setArchivosGuardias(archivos.map(f => ({ nombre: f.webkitRelativePath || f.name, fecha: f.lastModified })));
+    comprobarConHorarios(registros);
     setPreviewGuardias(registros);
     setModalGuardias(true);
     setProcesando(false);
@@ -1683,6 +1735,13 @@ export default function GestionDatos() {
                 {procesando ? '⏳ Procesando...' : '📁 Seleccionar carpeta de Guardias'}
               </div>
             </label>
+            <div style={{ textAlign: 'center', fontSize: 12, color: '#94a3b8', margin: '8px 0' }}>— o, más seguro, elige los archivos uno a uno —</div>
+            <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
+              <input type="file" accept=".htm,.html" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
+              <div style={{ padding: '12px', borderRadius: 10, border: '2px dashed #7c3aed', color: '#6d28d9', backgroundColor: '#faf5ff', fontWeight: 700, fontSize: 13, textAlign: 'center' }}>
+                📄 Seleccionar los archivos HTM sueltos (todos a la vez, recreos incluidos)
+              </div>
+            </label>
           </div>
         </div>
       )}
@@ -1798,6 +1857,24 @@ export default function GestionDatos() {
                 </div>
               );
             })()}
+
+            {/* CRUCE CON LOS HORARIOS CARGADOS */}
+            {conflictosGuardias === null && (
+              <div style={{ marginBottom: 14, fontSize: 12, color: '#64748b' }}>⏳ Comprobando el cuadrante con los horarios…</div>
+            )}
+            {conflictosGuardias && !conflictosGuardias.error && conflictosGuardias.horarios > 0 && (
+              conflictosGuardias.lista.length === 0 ? (
+                <div style={{ marginBottom: 14, padding: 10, borderRadius: 8, backgroundColor: '#f0fdf4', border: '1.5px solid #86efac', fontSize: 12.5, color: '#166534', fontWeight: 600 }}>
+                  ✅ Cuadrante coherente con los horarios: nadie sale de guardia a una hora en la que tiene clase.
+                </div>
+              ) : (
+                <div style={{ marginBottom: 14, padding: 10, borderRadius: 8, backgroundColor: '#fef2f2', border: '1.5px solid #ef4444', fontSize: 12.5, color: '#991b1b', lineHeight: 1.5 }}>
+                  <strong>⚠️ {conflictosGuardias.lista.length} guardias caen en horas en las que esa persona tiene clase.</strong>{' '}
+                  {conflictosGuardias.lista.length > 5 ? 'Casi seguro es un cuadrante que no corresponde a estos horarios (¿uno viejo?). Revisa la carpeta antes de confirmar.' : 'Revísalas antes de confirmar.'}
+                  <div style={{ marginTop: 6, fontSize: 11.5, maxHeight: 90, overflowY: 'auto' }}>{conflictosGuardias.lista.slice(0, 30).join(' · ')}{conflictosGuardias.lista.length > 30 ? ' …' : ''}</div>
+                </div>
+              )
+            )}
 
             {/* DESGLOSE POR DÍA - detecta días vacíos */}
             <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
