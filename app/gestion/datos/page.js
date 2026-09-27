@@ -176,10 +176,10 @@ export default function GestionDatos() {
 
   async function cargarStats() {
     setCargando(true);
-    const [{ data: gs }, { data: als }, { data: hrs }, { data: profs }, { data: guards }] = await Promise.all([
+    const [{ data: gs }, { data: als }, { data: hrs, count: nHorarios }, { data: profs }, { data: guards }] = await Promise.all([
       consulta('grupos').select('codigo, curso_academico').order('codigo'),
       fetch('/api/alumnos?recuento=1').then(r => r.json()).then(d => ({ data: d.alumnos || [] })),
-      consulta('horarios_profesores').select('id, curso_academico'),
+      consulta('horarios_profesores').select('id', { count: 'exact', head: true }),
       consulta('profesores').select('id, estado'),
       consulta('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
     ]);
@@ -193,7 +193,7 @@ export default function GestionDatos() {
     setStats({
       grupos: gruposDelCurso?.length || 0,
       alumnos: als?.length || 0,
-      horarios: hrs?.length || 0,
+      horarios: nHorarios ?? hrs?.length ?? 0,
       profesores: profs?.filter(p => p.estado === 'activo').length || 0,
       profesoresTotal: profs?.length || 0,
       guardias: guards?.length > 0,
@@ -1450,13 +1450,13 @@ export default function GestionDatos() {
               <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 16 }}>
                 <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 14 }}>📋 Estado actual de horarios</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{ fontSize: 28 }}>{stats.horarios === '✅' ? '✅' : '❌'}</span>
+                  <span style={{ fontSize: 28 }}>{stats.horarios > 0 ? '✅' : '❌'}</span>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, color: stats.horarios === '✅' ? '#065f46' : '#991b1b' }}>
-                      {stats.horarios === '✅' ? 'Horarios cargados correctamente' : 'No hay horarios cargados'}
+                    <div style={{ fontWeight: 600, fontSize: 14, color: stats.horarios > 0 ? '#065f46' : '#991b1b' }}>
+                      {stats.horarios > 0 ? `Horarios cargados: ${stats.horarios.toLocaleString('es-ES')} horas${ultimaHorarios ? ' · ' + ultimaHorarios : ''}` : 'No hay horarios cargados'}
                     </div>
                     <div style={{ fontSize: 12, color: '#888' }}>
-                      {stats.horarios === '✅' ? 'DLD y Ausencias cargarán el horario automáticamente' : 'Sin horarios, los profesores deberán rellenar manualmente'}
+                      {stats.horarios > 0 ? 'DLD y Ausencias cargarán el horario automáticamente' : 'Sin horarios, los profesores deberán rellenar manualmente'}
                     </div>
                   </div>
                 </div>
