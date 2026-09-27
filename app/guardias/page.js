@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import MiContadorGuardias from '@/components/MiContadorGuardias';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
@@ -655,6 +656,9 @@ export default function Guardias() {
         </div>
       </div>
 
+
+      {/* Cuántas lleva y la media de su sector */}
+      <div style={{ padding: '12px 16px 0' }}><MiContadorGuardias /></div>
 
       {/* LO TUYO, ANTES QUE NADA
           Quien entra entre clase y clase quiere saber si le toca algo y

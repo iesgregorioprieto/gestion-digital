@@ -583,82 +583,17 @@ export default function GestionGuardias() {
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <a href="/gestion/guardias/informe" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>📄 Informe</a>
+          <a href="/gestion/guardias/contador" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>📊 Contador</a>
                   <a href="/gestion" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>← Volver</a>
         </div>
       </div>
 
-      {/* CONTADOR ROTATORIO DE APOYOS DEL CURSO */}
-      <details open style={{ backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb' }}>
-        <summary style={{ padding:'12px 16px', cursor:'pointer', fontSize:11, fontWeight:800, color:'#555', textTransform:'uppercase', letterSpacing:0.5, userSelect:'none' }}>
-          🔄 Rotación de apoyos al cuadrante general{cursoRotulo ? ` — curso ${cursoRotulo}` : ''}
-        </summary>
-        <div style={{ padding:'0 16px 14px' }}>
-          <div style={{ fontSize:11, color:'#6b7280', marginBottom:10 }}>
-            Ordenados de menos a más guardias prestadas fuera de su sector. El primero de la lista es el siguiente al que le toca.
-          </div>
-          <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
-            {SECTORES_FP
-              .map(s => ({ sector: s, cnt: contadorApoyos[s] || 0 }))
-              .sort((a, b) => a.cnt - b.cnt || a.sector.localeCompare(b.sector))
-              .map((item, i, arr) => {
-                const esSiguiente = i === 0 || item.cnt === arr[0].cnt;
-                return (
-                  <span key={item.sector} style={{
-                    padding:'5px 12px', borderRadius:20, fontSize:11, fontWeight:700,
-                    backgroundColor: esSiguiente ? '#dcfce7' : 'white',
-                    color: esSiguiente ? verde : '#64748b',
-                    border:'1.5px solid ' + (esSiguiente ? verde : '#d1d5db'),
-                    display:'inline-flex', alignItems:'center', gap:5,
-                  }}>
-                    {esSiguiente && <span title="Le toca antes">⭐</span>}
-                    {emojiSector(item.sector)} {item.sector}
-                    <strong style={{
-                      backgroundColor: esSiguiente ? verde : '#e5e7eb',
-                      color: esSiguiente ? 'white' : '#475569',
-                      borderRadius:10, padding:'1px 7px', fontSize:10,
-                    }}>{item.cnt}</strong>
-                  </span>
-                );
-              })}
-          </div>
-          {(() => {
-            const total = SECTORES_FP.reduce((s, sec) => s + (contadorApoyos[sec] || 0), 0);
-            // Desglose por profesor: quién ha apoyado y cuántas veces
-            const porProfesor = Object.entries(apoyosPorProfesor)
-              .map(([id, n]) => {
-                const p = profesoresList.find(x => x.id === id);
-                return p ? { nombre: `${p.apellidos}, ${p.nombre}`, n } : null;
-              })
-              .filter(Boolean)
-              .sort((a, b) => b.n - a.n || a.nombre.localeCompare(b.nombre));
-
-            return (
-              <div style={{ marginTop:10, paddingTop:8, borderTop:'1px solid #e5e7eb' }}>
-                <div style={{ fontSize:11, color:'#6b7280', marginBottom: porProfesor.length ? 8 : 0 }}>
-                  Total de guardias prestadas al cuadrante general este curso: <strong style={{ color:azul }}>{total}</strong>
-                </div>
-                {porProfesor.length > 0 && (
-                  <details>
-                    <summary style={{ fontSize:11, color:'#64748b', cursor:'pointer', fontWeight:700, userSelect:'none' }}>
-                      Ver desglose por profesor ({porProfesor.length})
-                    </summary>
-                    <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginTop:8 }}>
-                      {porProfesor.map((p, i) => (
-                        <span key={i} style={{
-                          padding:'3px 9px', borderRadius:20, fontSize:10, fontWeight:600,
-                          backgroundColor:'white', color:'#475569', border:'1px solid #d1d5db',
-                        }}>
-                          {p.nombre} <strong style={{ color:azul }}>{p.n}</strong>
-                        </span>
-                      ))}
-                    </div>
-                  </details>
-                )}
-              </div>
-            );
-          })()}
-        </div>
-      </details>
+      {/* CONTADOR DE GUARDIAS: el antiguo contaba solo los apoyos de FP a
+          GENERAL (regla de agosto). El nuevo, en su propia pantalla, cuenta a
+          todos los profesores de todos los sectores. */}
+      <a href="/gestion/guardias/contador" style={{ display:'block', backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb', padding:'12px 16px', fontSize:12, fontWeight:800, color:azul, textDecoration:'none' }}>
+        📊 Contador de guardias del curso: quién lleva cuántas, y si alguien va por encima de lo que le toca →
+      </a>
 
 
       {/* NAV FECHA */}
