@@ -29,6 +29,15 @@ async function sesionDe(request) {
   return verificarSesion(m[1], secreto);
 }
 
+// Columnas de la hoja de servicios. Si aún no se ha ejecutado
+// supabase/hoja_servicios.sql no existen: se lee sin ellas y no se rompe nada.
+const SERVICIOS = ', servicios_dias, servicios_fecha, servicios_origen, servicios_leido';
+async function leerConServicios(columnas, montar) {
+  let r = await montar(columnas + SERVICIOS);
+  if (r.error && /servicios_/.test(r.error.message || '')) r = await montar(columnas);
+  return r;
+}
+
 export async function GET(request) {
   const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
@@ -39,10 +48,9 @@ export async function GET(request) {
 
   // ─── Mi propia ficha ───
   if (mia) {
-    const { data, error } = await supa()
-      .from('profesores')
-      .select('id, nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento, telefono, rol, rol_gestion, grupo_tutoria')
-      .eq('id', sesion.id);
+    const { data, error } = await leerConServicios(
+      'id, nombre, apellidos, email, departamento, especialidad, tipo_contrato, antiguedad_centro, antiguedad_cuerpo, anio_centro, anio_cuerpo, anio_nacimiento, telefono, rol, rol_gestion, grupo_tutoria',
+      cols => supa().from('profesores').select(cols).eq('id', sesion.id));
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
     return Response.json({ profesor: (data || [])[0] || null });
@@ -63,10 +71,11 @@ export async function GET(request) {
     'autorizado, solicitud_acceso, email_verificado, en_baja, tipo_baja, fecha_baja, ' +
     'sustituto_id, titular_id, created_at';
 
-  let consulta = supa().from('profesores').select(COLUMNAS).order('apellidos', { ascending: true });
-  if (estado) consulta = consulta.eq('estado', estado);
-
-  const { data, error } = await consulta;
+  const { data, error } = await leerConServicios(COLUMNAS, cols => {
+    let consulta = supa().from('profesores').select(cols).order('apellidos', { ascending: true });
+    if (estado) consulta = consulta.eq('estado', estado);
+    return consulta;
+  });
   if (error) return Response.json({ error: error.message, profesores: [] }, { status: 500 });
 
   return Response.json({ profesores: data || [] });
@@ -93,6 +102,14 @@ export async function POST(request) {
         if (datos && k in datos) limpio[k] = datos[k];
       }
 
+      // Si su antigüedad sale de la hoja de servicios, no se toca a mano:
+      // para cambiarla hay que subir una hoja nueva.
+      const { data: actual } = await supa().from('profesores').select('servicios_origen').eq('id', sesion.id);
+      if ((actual || [])[0]?.servicios_origen === 'hoja') {
+        delete limpio.anio_cuerpo;
+        delete limpio.antiguedad_cuerpo;
+      }
+
       const { error } = await supa().from('profesores').update(limpio).eq('id', sesion.id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
@@ -103,7 +120,18 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
-      const { error } = await supa().from('profesores').update(datos || {}).eq('id', id);
+      // Si secretaría cambia a mano el año de ingreso que venía de la hoja
+      // de servicios, queda constancia de que ya no es el dato oficial.
+      const cambios = { ...(datos || {}) };
+      if ('anio_cuerpo' in cambios) {
+        const { data: actual } = await supa().from('profesores').select('anio_cuerpo, servicios_origen').eq('id', id);
+        const a = (actual || [])[0];
+        if (a?.servicios_origen === 'hoja' && String(a.anio_cuerpo ?? '') !== String(cambios.anio_cuerpo ?? '')) {
+          cambios.servicios_origen = 'manual';
+        }
+      }
+
+      const { error } = await supa().from('profesores').update(cambios).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
     }

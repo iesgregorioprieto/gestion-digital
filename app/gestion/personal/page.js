@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import HojaServicios from '@/components/HojaServicios';
 import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
@@ -542,7 +543,19 @@ export default function PanelSecretario() {
               const a = antiguedadReal(profesorSeleccionado.anio_cuerpo, profesorSeleccionado.antiguedad_cuerpo);
               return a ? `${a} años${profesorSeleccionado.anio_cuerpo ? ` (desde ${profesorSeleccionado.anio_cuerpo})` : ''}` : '—';
             })()} />
+            <FilaInfo label="Origen antigüedad cuerpo" valor={
+              profesorSeleccionado.servicios_origen === 'hoja' ? `Hoja de servicios (a ${String(profesorSeleccionado.servicios_fecha || '').split('-').reverse().join('/')})`
+              : profesorSeleccionado.servicios_origen === 'manual' ? 'Cambiado a mano tras la hoja'
+              : 'Escrito a mano'} />
             <FilaInfo label="Estado" valor={badgeEstado(profesorSeleccionado.estado).texto} />
+            <div style={{ marginTop: 14 }}>
+              <HojaServicios profesorId={profesorSeleccionado.id} ficha={profesorSeleccionado} onGuardado={d => {
+                const actualizar = p => (p.id === profesorSeleccionado.id
+                  ? { ...p, ...d, antiguedad_cuerpo: Math.floor(d.servicios_dias / 360) } : p);
+                setProfesorSeleccionado(actualizar);
+                setProfesores(lista => lista.map(actualizar));
+              }} />
+            </div>
             <FilaInfo label="Registrado" valor={new Date(profesorSeleccionado.created_at).toLocaleDateString('es-ES')} />
             <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
               <button onClick={() => abrirEdicion(profesorSeleccionado)} style={{ ...btnEstilo('#e8f0fe', '#1a56db', '#1a56db'), padding: '10px 20px' }}>✏️ Editar datos</button>
@@ -618,6 +631,11 @@ export default function PanelSecretario() {
           </div>
 
           <div style={{ padding: '11px 14px', borderRadius: 9, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12, color: '#1e3a5f', lineHeight: 1.65, marginTop: -6, marginBottom: 14 }}>
+            {profesorSeleccionado.servicios_origen === 'hoja' && (
+              <div style={{ color: '#92400e', fontWeight: 700, marginBottom: 6 }}>
+                ⚠️ Este año sale de su hoja de servicios. Si lo cambias a mano, dejará de constar como dato oficial.
+              </div>
+            )}
             <strong>Antigüedad en el cuerpo:</strong> todo el tiempo de servicio docente
             reconocido, incluidos los años de interinidad. Es el mismo que cuenta para
             trienios y sexenios, y se ve en la nómina. Sirve para desempatar las

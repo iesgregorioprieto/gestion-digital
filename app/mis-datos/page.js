@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import HojaServicios from '@/components/HojaServicios';
 import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
 import { getSupabase } from '@/lib/supabase';
 import GestionNotificaciones from '@/components/GestionNotificaciones';
@@ -51,6 +52,7 @@ export default function MisDatos() {
   const [email, setEmail] = useState('');
   const [verAyudaCentro, setVerAyudaCentro] = useState(false);
   const [verAyudaCuerpo, setVerAyudaCuerpo] = useState(false);
+  const [servicios, setServicios] = useState({});
   const [verAyudaEdad, setVerAyudaEdad] = useState(false);
   const [form, setForm] = useState({
     nombre: '', apellidos: '', departamento: '', especialidad: '',
@@ -83,6 +85,11 @@ export default function MisDatos() {
       const p = cuerpo.profesor;
       if (p) {
         setEmail(p.email || '');
+        setServicios({
+          servicios_origen: p.servicios_origen || null,
+          servicios_fecha: p.servicios_fecha || null,
+          servicios_dias: p.servicios_dias ?? null,
+        });
         setForm({
           nombre:            p.nombre        || '',
           apellidos:         p.apellidos     || '',
@@ -367,8 +374,9 @@ export default function MisDatos() {
               </Campo>
 
               <Campo label="Año de ingreso en el cuerpo">
-                <select value={form.anio_cuerpo}
-                  onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo}>
+                <select value={form.anio_cuerpo} disabled={servicios.servicios_origen === 'hoja'}
+                  onChange={e => set('anio_cuerpo', e.target.value)}
+                  style={{ ...inputEstilo, ...(servicios.servicios_origen === 'hoja' ? { backgroundColor: '#f1f5f9', color: '#475569' } : {}) }}>
                   <option value="">— Elige el año —</option>
                   {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
                 </select>
@@ -400,9 +408,9 @@ export default function MisDatos() {
                   que se te reconoce para trienios y sexenios.
                 </p>
                 <p style={{ margin: '0 0 9px' }}>
-                  <strong>La forma más fácil de saberlo:</strong> míralo en tu nómina. Los
-                  trienios y sexenios que cobras reflejan ese tiempo reconocido. Resta esos
-                  años al actual y ese es tu año de ingreso.
+                  <strong>Lo mejor es subir tu hoja de servicios</strong> (justo debajo): el
+                  portal lee el tiempo exacto del registro oficial de la Junta y rellena este
+                  año por ti. Así no hay dudas ni discusiones en los desempates.
                 </p>
                 <p style={{ margin: 0, fontSize: 11.5, color: '#475569' }}>
                   Se usa para ordenar las solicitudes de días de libre disposición cuando hay
@@ -411,6 +419,16 @@ export default function MisDatos() {
                 </p>
               </div>
             )}
+
+            {servicios.servicios_origen === 'hoja' && (
+              <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+                🔒 El año de ingreso en el cuerpo sale de tu hoja de servicios. Para cambiarlo, sube una hoja nueva.
+              </div>
+            )}
+            <HojaServicios ficha={servicios} onGuardado={d => {
+              setServicios(d);
+              if (d.anio_cuerpo) set('anio_cuerpo', String(d.anio_cuerpo));
+            }} />
 
             <div style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#166534', lineHeight: 1.6, marginBottom: 13 }}>
               💡 Indica el <strong>año</strong>, no los años que llevas. Así no hay que
