@@ -802,7 +802,8 @@ export default function GestionDatos() {
       const tsHor = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
       setUltimaHorarios(tsHor);
       try { localStorage.setItem('ultima_importacion_horarios', tsHor); } catch {}
-      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}` });
+      const sust = await reaplicarSustituciones();
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}` });
       setModalHorarios(false);
       setPreviewHorarios(null);
       cargarStats();
@@ -979,6 +980,20 @@ export default function GestionDatos() {
     }
   }
 
+  // Peñalara trae el horario a nombre del titular aunque esté de baja: tras
+  // cada carga se vuelven a pasar a cada sustituto las horas de su titular.
+  async function reaplicarSustituciones() {
+    try {
+      const r = await fetch('/api/horarios', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'reaplicar_sustituciones', curso: cursoNuevo }) });
+      const d = await r.json();
+      if (!r.ok) return ` ⚠️ No se pudieron pasar los horarios a los sustitutos (${d.error || 'error'}): hazlo desde cada baja.`;
+      if (!d.sustituciones) return '';
+      const lista = (d.detalle || []).filter(x => x.horas).map(x => `${x.sustituto} (${x.horas} h de ${x.titular})`);
+      return lista.length ? ` 🔄 Pasado a sus sustitutos: ${lista.join(' · ')}.` : ' 🔄 Sustitutos al día.';
+    } catch { return ' ⚠️ No se pudieron pasar los horarios a los sustitutos: hazlo desde cada baja.'; }
+  }
+
   async function confirmarGuardias() {
     if (!previewGuardias.length) return;
     setProcesando(true);
@@ -1026,7 +1041,8 @@ export default function GestionDatos() {
     const tsGua = new Date().toLocaleString('es-ES', { dateStyle:'short', timeStyle:'short' });
     setUltimaGuardias(tsGua);
     try { localStorage.setItem('ultima_importacion_guardias', tsGua); } catch {}
-    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}` });
+    const sust = await reaplicarSustituciones();
+    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}.${sust}` });
     setModalGuardias(false);
     setPreviewGuardias([]);
     setProcesando(false);
@@ -1472,6 +1488,16 @@ export default function GestionDatos() {
                     <div style={{ fontSize: 12, color: '#888' }}>
                       {stats.horarios > 0 ? 'DLD y Ausencias cargarán el horario automáticamente' : 'Sin horarios, los profesores deberán rellenar manualmente'}
                     </div>
+                    {stats.horarios > 0 && (
+                      <button type="button" disabled={procesando} onClick={async () => {
+                        setProcesando(true);
+                        const t = await reaplicarSustituciones();
+                        setMensaje({ tipo: t.includes('⚠️') ? 'error' : 'ok', texto: t.trim() || 'No hay ninguna sustitución vigente.' });
+                        setProcesando(false);
+                      }} style={{ marginTop: 8, padding: '6px 12px', borderRadius: 7, border: '1px solid #cbd5e1', background: 'white', color: azul, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        🔄 Pasar a los sustitutos el horario de sus titulares
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

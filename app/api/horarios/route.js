@@ -176,6 +176,61 @@ export async function POST(request) {
     }
 
     /**
+     * VOLVER A APLICAR LAS SUSTITUCIONES (tras cargar horarios o cuadrante)
+     *
+     * Peñalara trae el horario a nombre del TITULAR aunque esté de baja.
+     * Cada carga nueva devolvía sus clases y guardias al titular, y había
+     * que repetir «Asignar sustituto» baja por baja. Ahora, para cada
+     * sustitución vigente (el sustituto tiene anotado su titular y el
+     * titular sigue de baja), se pasan al sustituto las filas que sigan a
+     * nombre del titular.
+     *
+     * A diferencia del traspaso inicial, aquí NO se borra nada del
+     * sustituto: lo que ya tenía pasado de antes (sus clases, si ahora se
+     * ha subido solo el cuadrante) se queda donde está.
+     */
+    if (accion === 'reaplicar_sustituciones') {
+      const cliente = supa();
+      const cursoActivo = curso || await getCursoActual();
+
+      const { data: profesores } = await cliente
+        .from('profesores').select('id,nombre,apellidos,en_baja,titular_id,estado');
+      const porId = new Map((profesores || []).map(p => [p.id, p]));
+      const pares = (profesores || [])
+        .filter(s => s.titular_id && s.estado !== 'inactivo' && porId.get(s.titular_id)?.en_baja)
+        .map(s => ({ sustituto: s, titular: porId.get(s.titular_id) }));
+      if (pares.length === 0) return Response.json({ ok: true, sustituciones: 0, traspasados: 0, detalle: [] });
+
+      const indice = indiceProfesores(profesores || []);
+      let horarios = [];
+      for (let offset = 0; ; offset += 1000) {
+        const { data } = await cliente.from('horarios_profesores')
+          .select('id, profesor_nombre_pdf').eq('curso_academico', cursoActivo).range(offset, offset + 999);
+        if (!data || data.length === 0) break;
+        horarios = horarios.concat(data);
+        if (data.length < 1000) break;
+      }
+
+      let total = 0;
+      const detalle = [];
+      for (const { titular, sustituto } of pares) {
+        const suyas = horarios.filter(h => buscaProfesor(indice, h.profesor_nombre_pdf)?.id === titular.id);
+        for (const h of suyas) {
+          const { error } = await cliente.from('horarios_profesores').update({
+            profesor_id: sustituto.id,
+            profesor_nombre_pdf: nombreDe(sustituto),
+            titular_original_id: titular.id,
+            nombre_original_pdf: h.profesor_nombre_pdf,
+          }).eq('id', h.id);
+          if (error) return Response.json({ error: error.message }, { status: 500 });
+        }
+        total += suyas.length;
+        detalle.push({ titular: nombreDe(titular), sustituto: nombreDe(sustituto), horas: suyas.length });
+      }
+      return Response.json({ ok: true, sustituciones: pares.length, traspasados: total, detalle });
+    }
+
+    /**
      * DEVOLVER EL HORARIO AL TITULAR
      *
      * El día del alta, cada fila vuelve a su dueño con el nombre que
