@@ -17,6 +17,7 @@ const PORTAL = 'https://portalpersonaldocente.jccm.es/misdatos/administrativosyf
 
 export default function AvisoHojaServicios() {
   const [ver, setVer] = useState(false);
+  const [verMas, setVerMas] = useState(false);
 
   useEffect(() => {
     try { if (sessionStorage.getItem(CLAVE)) return; } catch {}
@@ -40,44 +41,33 @@ export default function AvisoHojaServicios() {
 
   return (
     <div style={{
-      backgroundColor: '#eff6ff', border: '2px solid #93c5fd', borderRadius: 12,
-      padding: '16px 18px', marginBottom: 18,
+      backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', borderRadius: 10,
+      padding: '9px 12px', marginBottom: 14, fontSize: 13, color: '#1e3a5f',
     }}>
-      <div style={{ fontSize: 15.5, fontWeight: 800, color: '#1e3a5f', marginBottom: 6 }}>
-        📄 Sube tu hoja de servicios
-      </div>
-      <p style={{ margin: '0 0 10px', fontSize: 13.5, color: '#1e3a5f', lineHeight: 1.6 }}>
-        Tu antigüedad en el cuerpo sirve para ordenar los días de libre disposición cuando
-        coinciden varios el mismo día y para saber quién tiene derecho al día CANOSO. A partir
-        de ahora se toma de tu <strong>hoja de servicios oficial</strong>, no de lo que cada uno
-        escriba. Se hace una sola vez y se tarda un par de minutos.
-      </p>
-      <ol style={{ margin: '0 0 12px', paddingLeft: 20, fontSize: 13, color: '#1e3a5f', lineHeight: 1.7 }}>
-        <li>
-          Descárgala en PDF del{' '}
-          <a href={PORTAL} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 700 }}>
-            Portal del Personal Docente
-          </a>{' '}(tal cual, sin escanear ni hacer foto).
-        </li>
-        <li>Súbela en Mis datos, comprueba lo que sale y pulsa «Es correcto, guardar».</li>
-      </ol>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 800, flex: '1 1 200px' }}>📄 Sube tu hoja de servicios</span>
         <a href="/mis-datos#hoja-servicios" style={{
-          padding: '9px 16px', borderRadius: 8, backgroundColor: '#1e3a5f', color: 'white',
-          fontSize: 13.5, fontWeight: 700, textDecoration: 'none',
-        }}>Subir mi hoja ahora</a>
-        <button type="button" onClick={ahoraNo} style={{
-          padding: '9px 16px', borderRadius: 8, border: '1px solid #93c5fd', backgroundColor: 'white',
-          color: '#1e3a5f', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-        }}>Ahora no</button>
+          padding: '6px 12px', borderRadius: 7, backgroundColor: '#1e3a5f', color: 'white',
+          fontSize: 12.5, fontWeight: 700, textDecoration: 'none',
+        }}>Subir</a>
+        <button type="button" onClick={() => setVerMas(v => !v)} style={{
+          padding: '6px 10px', borderRadius: 7, border: '1px solid #93c5fd', backgroundColor: 'white',
+          color: '#1e3a5f', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+        }}>{verMas ? 'Menos' : '¿Por qué?'}</button>
+        <button type="button" onClick={ahoraNo} aria-label="Ocultar" title="Ocultar (queda el recordatorio 📌 abajo)" style={{
+          border: 'none', background: 'none', color: '#64748b', fontSize: 16, cursor: 'pointer', padding: '0 2px',
+        }}>✕</button>
       </div>
-      <div style={{ marginTop: 9, fontSize: 11.5, color: '#64748b' }}>
-        📌 Si lo dejas para luego, te quedará un recordatorio pequeño abajo a la izquierda, con estas
-        instrucciones y el enlace, hasta que la subas.
-      </div>
-      <div style={{ marginTop: 4, fontSize: 11.5, color: '#64748b' }}>
-        🔒 El PDF no se guarda: se lee, se toma el tiempo de servicio y se descarta.
-      </div>
+      {verMas && (
+        <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.6 }}>
+          Tu antigüedad en el cuerpo (desempates de los días de libre disposición y día CANOSO) se
+          toma ahora de la hoja oficial. Descárgala en PDF del{' '}
+          <a href={PORTAL} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 700 }}>
+            Portal del Personal Docente</a>{' '}
+          y súbela en Mis datos. Se hace una vez; el PDF no se guarda. Si lo ocultas, queda un
+          recordatorio 📌 abajo a la izquierda hasta que la subas.
+        </div>
+      )}
     </div>
   );
 }
