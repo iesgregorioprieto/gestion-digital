@@ -803,7 +803,8 @@ export default function GestionDatos() {
       setUltimaHorarios(tsHor);
       try { localStorage.setItem('ultima_importacion_horarios', tsHor); } catch {}
       const sust = await reaplicarSustituciones();
-      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}` });
+      const reca = await recalcularProximos();
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}${reca}` });
       setModalHorarios(false);
       setPreviewHorarios(null);
       cargarStats();
@@ -1035,6 +1036,19 @@ export default function GestionDatos() {
     } catch { return ' ⚠️ No se pudieron pasar los horarios a los sustitutos: hazlo desde cada baja.'; }
   }
 
+  // Tras subir horarios o cuadrante, rehacer ya el reparto de guardias de
+  // hoy y el siguiente día lectivo. Si no, lo ya asignado seguía con el
+  // horario viejo (o una regla anterior) hasta el recálculo de las 7:00.
+  async function recalcularProximos() {
+    try {
+      const d = new Date();
+      const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const r = await fetch('/api/guardias/preasignar', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha: hoy }) });
+      return r.ok ? ' 🛡️ Guardias de hoy y del próximo día lectivo recalculadas.' : ' ⚠️ No se pudieron recalcular las guardias: pulsa «Recalcular» en Gestión de guardias.';
+    } catch { return ' ⚠️ No se pudieron recalcular las guardias: pulsa «Recalcular» en Gestión de guardias.'; }
+  }
+
   async function confirmarGuardias() {
     if (!previewGuardias.length) return;
     setProcesando(true);
@@ -1084,7 +1098,8 @@ export default function GestionDatos() {
     setUltimaGuardias(tsGua);
     try { localStorage.setItem('ultima_importacion_guardias', tsGua); } catch {}
     const sust = await reaplicarSustituciones();
-    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}.${sust}` });
+    const reca = await recalcularProximos();
+    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}.${sust}${reca}` });
     setModalGuardias(false);
     setPreviewGuardias([]);
     setProcesando(false);
