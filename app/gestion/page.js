@@ -143,7 +143,7 @@ export default function PanelGestion() {
       id: 'datos',
       emoji: '📊',
       titulo: 'Datos del Centro',
-      descripcion: 'Carga grupos, alumnos y horarios desde Delphos',
+      descripcion: 'Carga grupos y alumnos (Delphos) y horarios (Peñalara)',
       href: '/gestion/datos',
       bg: '#eff6ff',
       border: '#bfdbfe',

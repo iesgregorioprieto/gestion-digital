@@ -378,7 +378,7 @@ export default function CambioCurso() {
             <strong>Después de esto tendrás que:</strong>
             <div style={{ lineHeight: 2, marginTop: 8 }}>
               1. Crear el curso nuevo en <strong>📅 Datos del curso</strong><br />
-              2. Cargar los grupos y horarios nuevos desde Delphos<br />
+              2. Cargar los grupos (Delphos) y los horarios nuevos (Peñalara)<br />
               3. Los profesores nuevos se registrarán ellos mismos
             </div>
           </Nota>
@@ -434,7 +434,7 @@ export default function CambioCurso() {
 
           <div style={{ fontSize: 13, color: '#666', lineHeight: 1.7, marginBottom: 20 }}>
             Ahora crea el curso nuevo en <strong>📅 Datos del curso</strong> y
-            carga los grupos y horarios desde Delphos.
+            carga los grupos desde Delphos y los horarios desde Peñalara.
           </div>
 
           <button onClick={() => { setPaso(0); cargar(); }} style={{

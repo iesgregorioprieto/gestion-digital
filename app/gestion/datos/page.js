@@ -40,9 +40,9 @@ const PASOS_INICIO_CURSO = [
   {
     num: 2,
     emoji: '🗂️',
-    titulo: 'RAR de horarios del profesorado (Delphos)',
-    desc: 'Exporta desde Delphos los horarios en formato HTML. Genera un documento índice y carpetas con los horarios de cada profesor.',
-    como: 'Delphos → Horarios → Exportar → HTML indexado',
+    titulo: 'Horarios del profesorado (Peñalara)',
+    desc: 'Exporta desde Peñalara los horarios del profesorado en HTML. Genera un documento índice y una carpeta con el horario de cada profesor.',
+    como: 'Peñalara → exportar horarios del profesorado en HTML',
     tab: 'horarios',
     color: '#065f46',
     bg: '#d1fae5',
@@ -1073,7 +1073,7 @@ export default function GestionDatos() {
                   {
                     paso: 2,
                     titulo: 'Carpeta de horarios HTML',
-                    descripcion: 'Delphos → Horarios → Exportar → HTML indexado (descomprimir RAR)',
+                    descripcion: 'Peñalara → horarios del profesorado en HTML (carpeta Profesores/)',
                     tab: 'horarios',
                     emoji: '🕐',
                     completado: stats.horarios > 0,
@@ -1438,12 +1438,12 @@ export default function GestionDatos() {
         {vistaTab === 'horarios' && (
           <div>
             <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🗂️ Horarios del profesorado (HTML de Delphos)</div>
+              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🗂️ Horarios del profesorado (HTML de Peñalara)</div>
               <div style={{ fontSize: 13, color: '#666', marginBottom: 6, lineHeight: 1.5 }}>
-                Delphos genera una carpeta llamada <strong>Profesores/</strong> con un archivo HTML por cada profesor. Selecciona esa carpeta completa y el sistema procesará todos los horarios automáticamente.
+                Peñalara genera una carpeta llamada <strong>Profesores/</strong> con un archivo HTML por cada profesor. Selecciona esa carpeta completa y el sistema procesará todos los horarios automáticamente.
               </div>
               <div style={{ fontSize: 12, backgroundColor: '#f0fdf4', padding: '8px 12px', borderRadius: 7, color: '#065f46', marginBottom: 16 }}>
-                🖥️ <strong>Delphos:</strong> Horarios → Imprimir/Exportar → HTML indexado → Se generará un RAR con carpeta <strong>Profesores/</strong>. Descomprime el RAR y selecciona la carpeta <strong>Profesores/</strong>.
+                🖥️ <strong>Peñalara:</strong> exporta los horarios del profesorado en HTML. Si te lo entrega comprimido, descomprímelo y selecciona la carpeta <strong>Profesores/</strong>. El archivo índice (Profesores.html) se descarta solo: el aviso «no se pudo extraer datos» sobre él es normal.
               </div>
 
               {/* ESTADO ACTUAL */}
