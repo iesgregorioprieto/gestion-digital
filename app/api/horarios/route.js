@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { indiceProfesores, buscaProfesor, nombreDe } from '@/lib/asignacionGuardias';
 import { getCursoActual } from '@/lib/curso';
+import { esSectorRecreo } from '@/lib/sectores';
 
 /**
  * HORARIOS DEL PROFESORADO
@@ -49,9 +50,38 @@ export async function POST(request) {
 
       let consulta = supa().from('horarios_profesores').delete().eq('curso_academico', curso);
       if (tipo) consulta = consulta.eq('tipo', tipo);   // solo guardias, por ejemplo
-      // Solo esos sectores del cuadrante: subir la carpeta de los recreos
-      // no debe borrar TMV, GENERAL... que ya estaban cargados.
-      if (Array.isArray(cuerpo.grupos) && cuerpo.grupos.length) consulta = consulta.in('grupo', cuerpo.grupos);
+
+      /**
+       * Carga del cuadrante de guardias: se sustituye TODO lo de guardia
+       * (como siempre) salvo los sectores de RECREO que no vengan en esta
+       * carga. Así los recreos se pueden subir aparte, en otro momento,
+       * sin que una carga borre la otra.
+       * Los nombres se comparan sin tildes: «HOSTELERÍA» y «HOSTELERIA»
+       * son el mismo sector.
+       */
+      if (Array.isArray(cuerpo.sectoresNuevos)) {
+        const clave = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
+        const nuevos = new Set(cuerpo.sectoresNuevos.map(clave));
+        const { data: filas } = await supa().from('horarios_profesores')
+          .select('grupo').eq('curso_academico', curso).eq('tipo', 'guardia');
+        const existentes = [...new Set((filas || []).map(f => f.grupo))];
+        // Si la carga trae SOLO recreos, se sustituyen solo esos. Si trae
+        // el cuadrante normal, se sustituye todo salvo los recreos que no
+        // vengan en ella.
+        const soloRecreos = cuerpo.sectoresNuevos.length > 0 && cuerpo.sectoresNuevos.every(esSectorRecreo);
+        const borrar = existentes.filter(g => g && (soloRecreos
+          ? nuevos.has(clave(g))
+          : !(esSectorRecreo(g) && !nuevos.has(clave(g)))));
+        if (borrar.length) {
+          const { error } = await supa().from('horarios_profesores').delete()
+            .eq('curso_academico', curso).eq('tipo', 'guardia').in('grupo', borrar);
+          if (error) return Response.json({ error: error.message }, { status: 500 });
+        }
+        // Filas de guardia sin sector (no deberían existir): fuera también
+        await supa().from('horarios_profesores').delete()
+          .eq('curso_academico', curso).eq('tipo', 'guardia').or('grupo.is.null,grupo.eq.');
+        return Response.json({ ok: true, borrados: borrar });
+      }
 
       const { error } = await consulta;
       if (error) return Response.json({ error: error.message }, { status: 500 });

@@ -998,14 +998,14 @@ export default function GestionDatos() {
     if (!previewGuardias.length) return;
     setProcesando(true);
 
-    // Sustituir SOLO los sectores que vienen en esta carpeta. Antes se
-    // borraba el cuadrante entero: subir después la carpeta de los recreos
-    // dejaba el centro sin ninguna otra guardia.
+    // Se sustituye todo el cuadrante salvo los RECREOS que no vengan en
+    // esta carga: así los recreos se pueden subir aparte sin que una carga
+    // borre la otra.
     const sectoresNuevos = [...new Set(previewGuardias.map(g => g.sector))];
     const rb = await fetch('/api/horarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia', grupos: sectoresNuevos }),
+      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia', sectoresNuevos }),
     });
     if (!rb.ok) {
       const e = await rb.json().catch(() => ({}));
@@ -1595,7 +1595,7 @@ export default function GestionDatos() {
             <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Peñalara)</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
               Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias que genera Peñalara. Cada archivo es un sector (TMV, FOL, Recreo...).
-              Se pueden subir por partes: <strong>cada carpeta sustituye solo los sectores que trae</strong> y deja los demás como están.
+              Cada carga sustituye el cuadrante entero, <strong>salvo los recreos</strong>: esos se pueden subir aparte, antes o después, y no se borran al subir el resto.
             </div>
 
             <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
@@ -1615,7 +1615,7 @@ export default function GestionDatos() {
                     ))}
                   </div>
                   {!stats.sectoresGuardia.some(s => /recreo/i.test(s.sector)) && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ Falta el cuadrante de los <strong>recreos</strong>. Cuando lo tengas, sube solo esa carpeta: no borrará lo demás.</div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ Falta el cuadrante de los <strong>recreos</strong>. Cuando lo tengas, súbelo aparte: no borrará lo demás.</div>
                   )}
                 </>
               )}
@@ -1751,11 +1751,18 @@ export default function GestionDatos() {
             </div>
             <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8 }}>
               {(() => {
+                const clave = t => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
                 const nuevos = [...new Set(previewGuardias.map(g => g.sector))];
-                const quedan = (stats.sectoresGuardia || []).map(s => s.sector).filter(s => !nuevos.includes(s));
+                const claves = new Set(nuevos.map(clave));
+                const esRecreo = s => /RECREO/.test(clave(s));
+                const soloRecreos = nuevos.every(esRecreo);
+                const quedan = (stats.sectoresGuardia || []).map(s => s.sector)
+                  .filter(s => soloRecreos ? !claves.has(clave(s)) : (esRecreo(s) && !claves.has(clave(s))));
                 return (<>
-                  ⚠️ Se sustituirán <strong>solo estos sectores</strong>: {nuevos.join(', ')}.
-                  {quedan.length > 0 && <> El resto del cuadrante se conserva como está: {quedan.join(', ')}.</>}
+                  {soloRecreos
+                    ? <>⚠️ Solo se sustituirán los recreos: {nuevos.join(', ')}.</>
+                    : <>⚠️ Se sustituirá el cuadrante de guardias por lo que traes: {nuevos.join(', ')}.</>}
+                  {quedan.length > 0 && <> Se conserva lo ya cargado de: {quedan.join(', ')}.</>}
                 </>);
               })()}
             </div>
