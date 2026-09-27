@@ -181,7 +181,7 @@ export default function GestionDatos() {
       fetch('/api/alumnos?recuento=1').then(r => r.json()).then(d => ({ data: d.alumnos || [] })),
       consulta('horarios_profesores').select('id', { count: 'exact', head: true }),
       consulta('profesores').select('id, estado'),
-      consulta('horarios_profesores').select('tipo').eq('tipo', 'guardia').limit(1),
+      consulta('horarios_profesores').select('grupo, profesor_nombre_pdf').eq('tipo', 'guardia'),
     ]);
     // El curso que más grupos tiene (no el primero: puede haber restos del año pasado)
     const cursoCounts = {};
@@ -197,6 +197,12 @@ export default function GestionDatos() {
       profesores: profs?.filter(p => p.estado === 'activo').length || 0,
       profesoresTotal: profs?.length || 0,
       guardias: guards?.length > 0,
+      sectoresGuardia: Object.values((guards || []).reduce((m, g) => {
+        const s = (m[g.grupo] ||= { sector: g.grupo, filas: 0, nombres: new Set() });
+        s.filas++; s.nombres.add(g.profesor_nombre_pdf);
+        return m;
+      }, {})).map(s => ({ sector: s.sector, filas: s.filas, profesores: s.nombres.size }))
+        .sort((a, b) => a.sector.localeCompare(b.sector)),
       cursoActual: curso,
     });
     cargarPGA();
@@ -977,12 +983,20 @@ export default function GestionDatos() {
     if (!previewGuardias.length) return;
     setProcesando(true);
 
-    // Borrar guardias existentes del curso
-    await fetch('/api/horarios', {
+    // Sustituir SOLO los sectores que vienen en esta carpeta. Antes se
+    // borraba el cuadrante entero: subir después la carpeta de los recreos
+    // dejaba el centro sin ninguna otra guardia.
+    const sectoresNuevos = [...new Set(previewGuardias.map(g => g.sector))];
+    const rb = await fetch('/api/horarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia' }),
+      body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, tipo: 'guardia', grupos: sectoresNuevos }),
     });
+    if (!rb.ok) {
+      const e = await rb.json().catch(() => ({}));
+      setMensaje({ tipo: 'error', texto: `❌ No se pudo preparar la carga: ${e.error || 'error'}` });
+      setProcesando(false); return;
+    }
 
     // Insertar en lotes
     const LOTE = 200;
@@ -1554,7 +1568,31 @@ export default function GestionDatos() {
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
             <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Peñalara)</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
-              Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias. Cada archivo es un sector (TMV, FOL, Recreo Activos...).
+              Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias que genera Peñalara. Cada archivo es un sector (TMV, FOL, Recreo...).
+              Se pueden subir por partes: <strong>cada carpeta sustituye solo los sectores que trae</strong> y deja los demás como están.
+            </div>
+
+            <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontWeight: 700, color: azul, marginBottom: 8, fontSize: 14 }}>
+                📋 Estado actual del cuadrante{ultimaGuardias ? <span style={{ fontWeight: 500, color: '#64748b', fontSize: 12 }}> · última carga {ultimaGuardias}</span> : null}
+              </div>
+              {(stats.sectoresGuardia || []).length === 0 ? (
+                <div style={{ fontSize: 13, color: '#991b1b', fontWeight: 600 }}>❌ No hay cuadrante de guardias cargado</div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {stats.sectoresGuardia.map(s => (
+                      <div key={s.sector} style={{ padding: '6px 10px', borderRadius: 7, backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe', fontSize: 12 }}>
+                        <strong style={{ color: '#6d28d9' }}>✅ {s.sector}</strong>
+                        <span style={{ color: '#64748b' }}> · {s.profesores} prof. · {s.filas} horas</span>
+                      </div>
+                    ))}
+                  </div>
+                  {!stats.sectoresGuardia.some(s => /recreo/i.test(s.sector)) && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ Falta el cuadrante de los <strong>recreos</strong>. Cuando lo tengas, sube solo esa carpeta: no borrará lo demás.</div>
+                  )}
+                </>
+              )}
             </div>
             <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
               <input ref={fileRefGuardias} type="file" webkitdirectory="" directory="" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
@@ -1686,7 +1724,14 @@ export default function GestionDatos() {
               ))}
             </div>
             <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8 }}>
-              ⚠️ Se borrarán las guardias del curso <strong>{cursoNuevo}</strong> y se reemplazarán.
+              {(() => {
+                const nuevos = [...new Set(previewGuardias.map(g => g.sector))];
+                const quedan = (stats.sectoresGuardia || []).map(s => s.sector).filter(s => !nuevos.includes(s));
+                return (<>
+                  ⚠️ Se sustituirán <strong>solo estos sectores</strong>: {nuevos.join(', ')}.
+                  {quedan.length > 0 && <> El resto del cuadrante se conserva como está: {quedan.join(', ')}.</>}
+                </>);
+              })()}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={confirmarGuardias} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>

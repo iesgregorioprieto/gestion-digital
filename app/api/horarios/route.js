@@ -49,6 +49,9 @@ export async function POST(request) {
 
       let consulta = supa().from('horarios_profesores').delete().eq('curso_academico', curso);
       if (tipo) consulta = consulta.eq('tipo', tipo);   // solo guardias, por ejemplo
+      // Solo esos sectores del cuadrante: subir la carpeta de los recreos
+      // no debe borrar TMV, GENERAL... que ya estaban cargados.
+      if (Array.isArray(cuerpo.grupos) && cuerpo.grupos.length) consulta = consulta.in('grupo', cuerpo.grupos);
 
       const { error } = await consulta;
       if (error) return Response.json({ error: error.message }, { status: 500 });
