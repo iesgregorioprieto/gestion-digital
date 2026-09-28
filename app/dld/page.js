@@ -190,26 +190,21 @@ export default function DLD() {
       setAvisoPlazo(p.estado === 'ok' ? null : p);
     } catch (e) { setAvisoPlazo(null); }
 
-    let nPdf = nombrePdf;
-    if (!nPdf) {
-      const id = sessionStorage.getItem('profesor_id');
-      const { data: rows0 } = await consulta('profesores').select('nombre, apellidos').eq('id', id);
-      if (rows0?.[0]) {
-        const { nombre, apellidos } = rows0[0];
-        // Usar función SQL unaccent para ignorar acentos
-        const { data: fnResult } = await consultaRpc('buscar_profesor_horario', { p_nombre: nombre.split(' ')[0], p_apellido: apellidos.split(' ')[0] });
-        if (fnResult) {
-          nPdf = fnResult;
-          setNombrePdf(nPdf);
-        }
-      }
-    }
-    if (!nPdf) {
-      setError('ℹ️ No se encontró tu horario en la base de datos. Rellena el horario manualmente abajo.');
+    // El horario se reconoce en el servidor con el mismo método que el
+    // reparto de guardias (antes: primer nombre + primer apellido, y con
+    // dos «María Martínez» salía el horario de la otra).
+    let horas = [];
+    try {
+      const rh = await fetch(`/api/horario-de?de=mi&dia=${diaSemana}`);
+      const dh = await rh.json();
+      horas = dh.horas || [];
+      if (dh.nombres?.[0]) setNombrePdf(dh.nombres[0]);
+    } catch {}
+    if (!horas.length) {
+      setError(' No se encontró tu horario de ese día. Rellena el horario manualmente abajo.');
       setCargandoHorario(false);
       return;
     }
-    const { data: horas } = await consulta('horarios_profesores').select('hora_id, tipo, grupo, materia').eq('profesor_nombre_pdf', nPdf).eq('dia', diaSemana).eq('curso_academico', await getCursoActual());
     if (horas?.length > 0) {
       const nuevoHorario = {};
       horas.forEach(h => { 

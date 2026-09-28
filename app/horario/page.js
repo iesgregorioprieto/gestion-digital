@@ -54,58 +54,12 @@ function HorarioContenido() {
       .eq('estado', 'activo').order('apellidos').then(({ data }) => setCompanyeros(data || []));
   }, []);
 
-  /**
-   * Busca el nombre exacto en horarios_profesores usando primero el nombre
-   * completo (nombre + ambos apellidos) para desambiguar homónimos de primer
-   * apellido. Si no hay coincidencia exacta, cae al primer apellido solo.
-   */
-  async function buscarNombrePDF(nombre, apellidos) {
-    const primerNombre = nombre.split(' ')[0];
-    const primerApellido = apellidos.split(' ')[0];
-    const segundoApellido = apellidos.split(' ')[1] || '';
-
-    // Intento 1: RPC estándar con primer nombre + primer apellido
-    const { data: nPdf1 } = await consultaRpc('buscar_profesor_horario', {
-      p_nombre: primerNombre,
-      p_apellido: primerApellido,
-    });
-
-    if (!nPdf1) return null;
-
-    // Si hay segundo apellido, verificar que el resultado lo contiene.
-    // Así "Jiménez Jiménez" y "Jiménez Núñez" no se confunden aunque
-    // la RPC devuelva el mismo primero en la lista.
-    if (segundoApellido) {
-      const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      if (norm(nPdf1).includes(norm(segundoApellido))) return nPdf1;
-
-      // El resultado no tiene el segundo apellido correcto: buscar en
-      // el listado de horarios por las dos primeras letras del segundo apellido
-      const { data: candidatos } = await consulta('horarios_profesores')
-        .select('profesor_nombre_pdf')
-        .ilike('profesor_nombre_pdf', '%' + primerApellido + '%')
-        .limit(20);
-
-      const match = (candidatos || []).find(c =>
-        norm(c.profesor_nombre_pdf).includes(norm(primerNombre)) &&
-        norm(c.profesor_nombre_pdf).includes(norm(segundoApellido))
-      );
-      if (match) return match.profesor_nombre_pdf;
-    }
-
-    return nPdf1;
-  }
-
   async function verHorarioProf(prof) {
     setProfVista(prof);
     setBusqueda('');
     setCargando(true);
-    const nPdf = await buscarNombrePDF(prof.nombre, prof.apellidos);
-    if (!nPdf) { setHorario([]); setNombre(prof.apellidos + ', ' + prof.nombre); setCargando(false); return; }
-    const { data } = await consulta('horarios_profesores')
-      .select('dia, hora_id, tipo, grupo, materia, aula')
-      .eq('profesor_nombre_pdf', nPdf)
-      .eq('curso_academico', await getCursoActual());
+    const r = await fetch(`/api/horario-de?de=${prof.id}`).then(x => x.json()).catch(() => ({}));
+    const data = r.horas || [];
     setHorario(data || []);
     setNombre(prof.apellidos + ', ' + prof.nombre);
     setCargando(false);
@@ -132,14 +86,12 @@ function HorarioContenido() {
       if (!prof) { setError('No se encontró tu perfil. Contacta con secretaría.'); setCargando(false); return; }
 
       setNombre(prof.apellidos + ', ' + prof.nombre);
-      const nPdf = await buscarNombrePDF(prof.nombre, prof.apellidos);
-
-      if (!nPdf) { setError('No se encontró tu horario. Contacta con secretaría.'); setCargando(false); return; }
-
-      const { data } = await consulta('horarios_profesores')
-        .select('dia, hora_id, tipo, grupo, materia, aula')
-        .eq('profesor_nombre_pdf', nPdf)
-        .eq('curso_academico', await getCursoActual());
+      // Reconocido en el servidor con el mismo método que el reparto de
+      // guardias (antes, dos «María Martínez» podían verse el horario la una
+      // de la otra).
+      const r = await fetch('/api/horario-de?de=mi').then(x => x.json()).catch(() => ({}));
+      const data = r.horas || [];
+      if (!data.length) { setError('No se encontró tu horario. Contacta con secretaría.'); setCargando(false); return; }
 
       setHorario(data || []);
     } catch (e) {

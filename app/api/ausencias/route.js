@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { nombresEnHorario } from '@/lib/horarioDeProfesor';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { computaComoFalta } from '@/lib/motivosAusencia';
 import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
@@ -107,38 +108,18 @@ export async function GET(request) {
     const profesorIdParam = url.searchParams.get('profesor_id');
     const idBuscado = (profesorIdParam && esDirectivo(sesion)) ? profesorIdParam : sesion.id;
 
-    // Buscar el nombre PDF del profesor
-    const { data: prof } = await supa().from('profesores').select('nombre, apellidos').eq('id', idBuscado);
-    let nombrePdf = null;
-    if (prof?.[0]) {
-      const { nombre, apellidos } = prof[0];
-      const p1 = nombre.split(' ')[0];
-      const a1 = apellidos.split(' ')[0];
-
-      // Intentar con la función SQL
-      const { data: fn } = await supa().rpc('buscar_profesor_horario', { p_nombre: p1, p_apellido: a1 });
-      if (fn) { nombrePdf = fn; }
-      else {
-        // Fallback: buscar por apellido
-        const { data: rows } = await supa()
-          .from('horarios_profesores')
-          .select('profesor_nombre_pdf')
-          .ilike('profesor_nombre_pdf', '%' + a1 + '%')
-          .limit(5);
-        if (rows?.length > 0) {
-          const mejor = rows.find(r => r.profesor_nombre_pdf.toLowerCase().includes(p1.toLowerCase()));
-          nombrePdf = mejor ? mejor.profesor_nombre_pdf : rows[0].profesor_nombre_pdf;
-        }
-      }
-    }
-
+    // Reconocer su nombre en el horario con el mismo método que el reparto
+    // de guardias (antes: primer nombre + primer apellido, sin mirar el
+    // segundo; con dos «María Martínez» salían los grupos de la otra).
+    const nombresPdf = await nombresEnHorario(supa(), idBuscado, curso);
+    const nombrePdf = nombresPdf[0] || null;
     if (!nombrePdf) return Response.json({ horas: [], gruposUnicos: [], nombrePdf: null });
 
     // Horario del día concreto
     const { data: horas } = await supa()
       .from('horarios_profesores')
       .select('hora_id, hora_label, tipo, grupo, materia')
-      .eq('profesor_nombre_pdf', nombrePdf)
+      .in('profesor_nombre_pdf', nombresPdf)
       .eq('dia', diaSemana)
       .eq('curso_academico', curso);
 
@@ -146,7 +127,7 @@ export async function GET(request) {
     const { data: todos } = await supa()
       .from('horarios_profesores')
       .select('grupo, materia, tipo')
-      .eq('profesor_nombre_pdf', nombrePdf)
+      .in('profesor_nombre_pdf', nombresPdf)
       .eq('tipo', 'clase')
       .eq('curso_academico', curso);
 
