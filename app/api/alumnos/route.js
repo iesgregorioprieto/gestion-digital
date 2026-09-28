@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { claveGrupo } from '@/lib/grupos';
 import { mismoGrupo, resolverGrupo } from '@/lib/grupos';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
@@ -63,7 +64,9 @@ async function todasLasFilas(columnas) {
  * El horario guarda el grupo dentro de un código largo de Delphos
  * ("IPCG-3095215GS-1GVEC(6 F109 COM)"), así que se extrae de dentro.
  */
-const CODIGO_GRUPO = /(ESO|BTO|GB|GM|GS|FPPE)-\d+[A-ZÑ0-9.]*/g;
+// El código termina donde empieza el siguiente: en «BTO-1CTBBTO-1HCS» hay
+// dos grupos (BTO-1CTB y BTO-1HCS), no uno llamado «BTO-1CTBBTO».
+const CODIGO_GRUPO = /(ESO|BTO|GB|GM|GS|FPPE)-\d+[A-ZÑ0-9.]*?(?=(?:ESO|BTO|GB|GM|GS|FPPE)-|[^A-ZÑ0-9.]|$)/g;
 
 async function gruposDelHorario() {
   const encontrados = new Set();
@@ -105,11 +108,18 @@ export async function GET(request) {
       gruposDelHorario(),
     ]);
 
-    const grupos = [...new Set([
-      ...(oficiales || []).map(g => g.codigo),
-      ...alumnado.map(a => a.grupo),
-      ...deHorarios,
-    ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+    // Un mismo grupo puede llegar escrito de varias formas (Delphos
+    // «4ESO-C», Peñalara «ESO-4C»). Se deja uno solo, y se prefiere el
+    // nombre del ALUMNADO, que es con el que están guardados seguros y
+    // autorizaciones; luego el de la lista oficial; el del horario solo
+    // si el grupo no aparece en ninguna de las otras dos.
+    const porClave = new Map();
+    for (const g of [...alumnado.map(a => a.grupo), ...(oficiales || []).map(g => g.codigo), ...deHorarios]) {
+      if (!g) continue;
+      const k = claveGrupo(g);
+      if (!porClave.has(k)) porClave.set(k, g);
+    }
+    const grupos = [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'));
 
     return Response.json({ grupos });
   }
