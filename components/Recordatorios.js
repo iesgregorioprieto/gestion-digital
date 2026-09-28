@@ -25,6 +25,7 @@
  */
 import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
+import { mismoGrupo } from '@/lib/grupos';
 
 const PORTAL_DOCENTE = 'https://portalpersonaldocente.jccm.es/misdatos/administrativosyformacion';
 const CACHE = 'recordatorios_pendientes';
@@ -57,6 +58,33 @@ const RECORDATORIOS = [
       </>
     ),
     accion: { texto: 'Subir mi hoja', href: '/mis-datos#hoja-servicios' },
+  },
+  {
+    id: 'grupo_tutoria',
+    titulo: 'Elige tu grupo de tutoría',
+    // Tutor cuyo grupo de tutoría no coincide con ningún grupo del
+    // alumnado: no ve a sus alumnos en autorizaciones ni en el seguro.
+    pendiente: async () => {
+      const r = await fetch('/api/profesores?mi_ficha=1');
+      if (!r.ok) return false;
+      const p = (await r.json()).profesor;
+      if (!p) return false;
+      const esTutor = (Array.isArray(p.rol) ? p.rol : []).includes('tutor') || !!p.grupo_tutoria;
+      if (!esTutor) return false;
+      if (!p.grupo_tutoria) return true;
+      const rg = await fetch('/api/alumnos?grupos=1');
+      if (!rg.ok) return false;
+      const grupos = (await rg.json()).grupos || [];
+      return grupos.length > 0 && !grupos.some(g => mismoGrupo(g, p.grupo_tutoria));
+    },
+    cuerpo: (
+      <p style={{ margin: 0 }}>
+        Tu grupo de tutoría no coincide con ninguno de los grupos del alumnado, así que no ves a tus
+        alumnos en autorizaciones ni en el seguro escolar. Elígelo de la lista en Mis datos: son los
+        grupos oficiales de este curso.
+      </p>
+    ),
+    accion: { texto: 'Elegir mi grupo', href: '/mis-datos#tutoria' },
   },
 ];
 

@@ -45,8 +45,9 @@ export default function MisDatos() {
 
   // Al llegar desde el aviso del panel, bajar directo al recuadro
   useEffect(() => {
-    if (cargando || typeof window === 'undefined' || window.location.hash !== '#hoja-servicios') return;
-    setTimeout(() => document.getElementById('hoja-servicios')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
+    const ancla = typeof window !== 'undefined' ? window.location.hash.slice(1) : '';
+    if (cargando || !['hoja-servicios', 'tutoria'].includes(ancla)) return;
+    setTimeout(() => document.getElementById(ancla)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 150);
   }, [cargando]);
   const [verAyudaEdad, setVerAyudaEdad] = useState(false);
   const [form, setForm] = useState({
@@ -154,6 +155,8 @@ export default function MisDatos() {
 
       sessionStorage.setItem('profesor_nombre', form.nombre.trim() + ' ' + form.apellidos.trim());
       sessionStorage.setItem('profesor_roles', JSON.stringify(rolNuevo));
+      // Que se vaya en el acto el recordatorio de «Elige tu grupo de tutoría»
+      window.dispatchEvent(new Event('recordatorios:actualizar'));
       aviso('✅ Datos guardados correctamente', 'ok');
     } catch (e) {
       aviso('Error inesperado: ' + e.message, 'error');
@@ -464,6 +467,7 @@ export default function MisDatos() {
 
             {form.esTutor && (
               <Campo label="¿De qué grupo? *">
+                <div id="tutoria" style={{ scrollMarginTop: 16 }} />
                 <SelectorGrupoTutoria
                   valor={form.grupoTutoria}
                   onChange={g => set('grupoTutoria', g)}
