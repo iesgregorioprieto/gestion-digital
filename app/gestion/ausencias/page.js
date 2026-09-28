@@ -74,6 +74,8 @@ export default function GestionAusencias() {
   const [filtroEstado, setFiltroEstado] = useState('todos');
   const [filtroProfesor, setFiltroProfesor] = useState('');
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
+  // DLD aprobados: el informe para la Delegación los incluye como «día completo»
+  const [dldAprobados, setDldAprobados] = useState([]);
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
@@ -141,6 +143,13 @@ export default function GestionAusencias() {
     setAusencias(aus || []);
     setProfesores(profs || []);
     setCargando(false);
+
+    // DLD aprobados, para el informe. Si falla, el informe sale igual sin ellos.
+    try {
+      const rd = await fetch('/api/dld');
+      const dd = await rd.json();
+      setDldAprobados((dd.solicitudes || []).filter(d => d.estado === 'aprobada'));
+    } catch { setDldAprobados([]); }
   }
 
   function mostrarMensaje(texto, tipo) {
@@ -265,13 +274,20 @@ export default function GestionAusencias() {
       { month: 'long', year: 'numeric' });
 
     // Los DLD también van en el informe, como pide José María.
+    // Con los mismos filtros que el resto del informe (fechas y profesor).
+    const fichaDe = id => profesores.find(p => p.id === id) || {};
     const dld = (Array.isArray(dldAprobados) ? dldAprobados : [])
+      .filter(d => d.fecha_solicitada
+        && (!filtroFechaDesde || d.fecha_solicitada >= filtroFechaDesde)
+        && (!filtroFechaHasta || d.fecha_solicitada <= filtroFechaHasta)
+        && (!filtroProfesor || (d.profesor_nombre || '').toLowerCase().includes(filtroProfesor.toLowerCase())))
       .map(d => ({
         id: 'dld-' + d.id,
-        fecha_inicio: d.fecha, fecha_fin: d.fecha,
-        profesor_nombre: d.profesor_nombre, apellidos: d.apellidos || '',
-        nombre: d.nombre || '',
-        departamento: d.departamento || '—',
+        fecha_inicio: d.fecha_solicitada, fecha_fin: d.fecha_solicitada,
+        profesor_nombre: d.profesor_nombre,
+        apellidos: fichaDe(d.profesor_id).apellidos || '',
+        nombre: fichaDe(d.profesor_id).nombre || d.profesor_nombre || '',
+        departamento: fichaDe(d.profesor_id).departamento || '—',
         motivo: 'Día de libre disposición',
         estado: 'justificada',
         horas: [], // los DLD se cuentan como día completo
