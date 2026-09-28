@@ -335,7 +335,7 @@ export default function GestionAusencias() {
                  : a.estado === 'sin_justificar' ? '<span class="rojo">No</span>'
                  : '<span class="pend">Pendiente</span>';
       const enlaces = urls.length
-        ? urls.map((u, i) => `<a href="${u}" target="_blank" rel="noopener">📎${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ')
+        ? urls.map((u, i) => `<a href="${location.origin}/api/documento?url=${encodeURIComponent(u)}" target="_blank" rel="noopener">📎${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ')
         : '—';
       const yaTram = tramitados[a.id] ? 'checked' : '';
       const idAt = String(a.id).replace(/"/g, '&quot;');
@@ -418,7 +418,7 @@ export default function GestionAusencias() {
 
 <div class="barra">
   <button class="btn btn-p" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>
-  ${desde && hasta ? `<a class="btn btn-s" href="/api/ausencias/justificantes-zip?desde=${desde}&hasta=${hasta}" target="_blank" rel="noopener">📥 Descargar justificantes (zip)</a>` : ''}
+  ${desde && hasta ? `<a class="btn btn-s" href="${location.origin}/api/ausencias/justificantes-zip?desde=${desde}&hasta=${hasta}" target="_blank" rel="noopener">📥 Descargar justificantes (zip)</a>` : ''}
 </div>
 
 ${bloquesMes || '<p>No hay ausencias en el periodo.</p>'}

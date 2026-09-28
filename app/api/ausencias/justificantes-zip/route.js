@@ -67,9 +67,14 @@ export async function GET(req) {
     const mes = a.fecha_inicio ? a.fecha_inicio.slice(5, 7) : '00';
     for (let i = 0; i < urls.length; i++) {
       try {
-        const r = await fetch(urls[i]);
-        if (!r.ok) continue;
-        const bytes = await r.arrayBuffer();
+        // El almacén es PRIVADO: pedir el archivo por su dirección pública
+        // devolvía un error y se saltaban todos. Se descarga con la clave
+        // del servidor a partir del almacén y la ruta.
+        const m = String(urls[i]).match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/);
+        if (!m) continue;
+        const { data: blob, error: eDesc } = await supa().storage.from(m[1]).download(decodeURIComponent(m[2]));
+        if (eDesc || !blob) continue;
+        const bytes = await blob.arrayBuffer();
         // se conserva la extensión del original
         const ext = (urls[i].split('.').pop() || 'bin').split(/[?#]/)[0].slice(0, 5);
         const sufijo = urls.length > 1 ? ` (${i + 1})` : '';
