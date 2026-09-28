@@ -376,7 +376,7 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) {
         return Response.json({ error: 'Sin permisos' }, { status: 403 });
       }
-      const { alumnos, curso, reemplazar } = cuerpo;
+      const { alumnos } = cuerpo;   // cada alumno trae su curso_academico; «reemplazar» ya no existe
       if (!Array.isArray(alumnos)) return Response.json({ error: 'Datos incorrectos' }, { status: 400 });
 
       /**
@@ -394,9 +394,9 @@ export async function POST(request) {
        * verdad cambia, y se le respeta TODO lo demás. Si es nuevo, se
        * crea. A nadie se le borra.
        *
-       * El borrado sigue existiendo, pero hay que pedirlo a propósito y
-       * solo se hace si TODOS los alumnos traen identificador; si no, no
-       * habría forma de recuperar lo marcado.
+       * YA NO HAY BORRADO: si la pantalla manda «reemplazar», se ignora.
+       * Ningún camino de esta API borra alumnado (ver también que se quitó
+       * 'borrar_grupo'), para que nunca se vayan seguros ni autorizaciones.
        */
       const conId = alumnos.filter(a => a.alumno_id);
       const sinId = alumnos.filter(a => !a.alumno_id);

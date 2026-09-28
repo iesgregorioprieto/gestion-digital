@@ -20,7 +20,6 @@
 
 import { useState, useEffect } from 'react';
 import { consulta } from '@/lib/consulta';
-import { getCursoActual } from '@/lib/curso';
 
 const azul = '#1a56db';
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { consulta } from '@/lib/consulta';
 
 const VERDE = '#166534';
 const ROJO  = '#991b1b';

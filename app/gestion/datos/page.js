@@ -2,8 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useRef } from 'react';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
@@ -27,34 +26,12 @@ function detectarFamilia(grupo) {
   return null;
 }
 
-const PASOS_INICIO_CURSO = [
-  {
-    num: 1,
-    emoji: '📊',
-    titulo: 'CSV de matrículas (Delphos)',
-    desc: 'Exporta desde Delphos el listado de matrículas en formato CSV. Este archivo carga los grupos y alumnos del centro.',
-    como: 'Delphos → Alumnado → Matrículas → Exportar CSV',
-    tab: 'alumnos',
-    color: '#1e40af',
-    bg: '#dbeafe',
-  },
-  {
-    num: 2,
-    emoji: '🗂️',
-    titulo: 'Horarios del profesorado (Peñalara)',
-    desc: 'Exporta desde Peñalara los horarios del profesorado en HTML. Genera un documento índice y una carpeta con el horario de cada profesor.',
-    como: 'Peñalara → exportar horarios del profesorado en HTML',
-    tab: 'horarios',
-    color: '#065f46',
-    bg: '#d1fae5',
-  },
-];
 
 export default function GestionDatos() {
   const [nombre, setNombre] = useState('');
   const [stats, setStats] = useState({ grupos: 0, alumnos: 0, horarios: 0, cursoActual: '' });
   const [grupos, setGrupos] = useState([]);
-  const [cargando, setCargando] = useState(true);
+  const [, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState(null);
   const [vistaTab, setVistaTab] = useState('alumnos');
   const [mostrarGuia, setMostrarGuia] = useState(true);
@@ -93,11 +70,10 @@ export default function GestionDatos() {
   // Guardias
   const [previewGuardias, setPreviewGuardias] = useState([]);
   const [modalGuardias, setModalGuardias] = useState(false);
-  const [progresoGuardias, setProgresoGuardias] = useState({ actual: 0, total: 0, mensaje: '' });
+  const [, setProgresoGuardias] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefGuardias = useRef(null);
 
   // Profesorado
-  const [statsProfesores, setStatsProfesores] = useState({ total: 0, nuevos: 0, actualizados: 0 });
 
   useEffect(() => {
     const id = sessionStorage.getItem('profesor_id');
@@ -144,7 +120,6 @@ export default function GestionDatos() {
     setMensaje(null);
     try {
       const ext = file.name.split('.').pop().toLowerCase();
-      const nombre = `calendario_${cursoNuevo || 'curso'}_${Date.now()}.${ext}`;
 
       const fd = new FormData();
       fd.append('archivo', file);
@@ -821,26 +796,6 @@ export default function GestionDatos() {
   // PARSER CSV DE PROFESORES DE DELPHOS
   // ═══════════════════════════════════════════════════════════════
   
-  function parsearLineaCSV(linea) {
-    // Parser robusto que respeta comillas dobles
-    const resultado = [];
-    let campo = '';
-    let dentroCom = false;
-    for (let i = 0; i < linea.length; i++) {
-      const c = linea[i];
-      if (c === '"') {
-        if (dentroCom && linea[i+1] === '"') { campo += '"'; i++; }
-        else { dentroCom = !dentroCom; }
-      } else if (c === ',' && !dentroCom) {
-        resultado.push(campo.trim());
-        campo = '';
-      } else {
-        campo += c;
-      }
-    }
-    resultado.push(campo.trim());
-    return resultado;
-  }
 
   // ═══════════════════════════════════════════════════════════════
   // PARSER HTML DE GUARDIAS DE DELPHOS
@@ -1163,7 +1118,7 @@ export default function GestionDatos() {
 
       {/* HEADER */}
       <div style={{ backgroundColor: azul, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => { const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = '/gestion'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+        <button onClick={() => { window.location.href = '/gestion'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 22 }}>📊</span>
         <div>
           <div style={{ fontWeight: 800, fontSize: 17 }}>Gestión de Datos del Centro</div>

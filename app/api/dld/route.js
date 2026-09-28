@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
-import { getConfigCurso, calcularAntiguedad } from '@/lib/curso';
+import { getConfigCurso, calcularAntiguedad, calcularDiasDLD } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
 
 /**
@@ -161,6 +161,27 @@ export async function POST(request) {
     if (accion === 'solicitar') {
       if (!datos?.fecha_solicitada) {
         return Response.json({ error: 'Falta la fecha' }, { status: 400 });
+      }
+
+      /**
+       * ¿Le corresponde ese tipo? El formulario ya lo bloquea, pero aquí se
+       * comprueba otra vez con los datos de la ficha (la antigüedad sale de
+       * la hoja de servicios): antes el servidor aceptaba cualquier tipo y
+       * solo frenaba a un CANOSO sin derecho que dirección se diera cuenta.
+       */
+      if (datos.tipo_dld === 'canoso' || datos.tipo_dld === '2_lectivo') {
+        const { data: pr } = await supa().from('profesores')
+          .select('tipo_contrato, anio_cuerpo, antiguedad_cuerpo, anio_nacimiento').eq('id', sesion.id);
+        const p = (pr || [])[0] || {};
+        const cfg = await getConfigCurso();
+        const { moscosos, tieneDerechoCanoso } = calcularDiasDLD(
+          p.tipo_contrato || '', calcularAntiguedad(p.anio_cuerpo, p.antiguedad_cuerpo, cfg), p.anio_nacimiento || null);
+        if (datos.tipo_dld === 'canoso' && !tieneDerechoCanoso) {
+          return Response.json({ error: 'No te corresponde el día CANOSO: hacen falta 55 años o 18 años de servicio. Revisa tus datos en Mis datos (año de nacimiento y hoja de servicios).' }, { status: 400 });
+        }
+        if (datos.tipo_dld === '2_lectivo' && moscosos < 2) {
+          return Response.json({ error: 'Con tu tipo de nombramiento no te corresponde un segundo día lectivo.' }, { status: 400 });
+        }
       }
 
       const fila = { ...datos };

@@ -3,8 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { adjuntosDe, enlaceDocumento } from '@/lib/adjuntos';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo } from '@/lib/motivosAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -65,7 +64,7 @@ export default function GestionAusencias() {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [tipo, setTipo] = useState('imprevista');
+  const [, setTipo] = useState('imprevista');
   const [subtipo, setSubtipo] = useState('');
   const [horario, setHorario] = useState({});
   const [horaEditando, setHoraEditando] = useState(null);

@@ -567,26 +567,6 @@ function FilaInfo({ label, valor }) {
   );
 }
 
-function Campo({ label, value, onChange, tipo = 'text' }) {
-  return (
-    <div>
-      <label style={labelEstilo}>{label}</label>
-      <input type={tipo} value={value || ''} onChange={e => onChange(e.target.value)} style={inputEstilo} />
-    </div>
-  );
-}
-
-function CampoSelect({ label, value, onChange, opciones }) {
-  return (
-    <div>
-      <label style={labelEstilo}>{label}</label>
-      <select value={value || ''} onChange={e => onChange(e.target.value)} style={inputEstilo}>
-        {opciones.map(o => <option key={o} value={o}>{o}</option>)}
-      </select>
-    </div>
-  );
-}
-
 function btnEstilo(bg, color, border) {
   return {
     padding: '7px 14px', borderRadius: 7, border: `1.5px solid ${border}`,

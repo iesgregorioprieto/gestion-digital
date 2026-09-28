@@ -5,8 +5,8 @@ import { useState, useEffect } from 'react';
 import { enlaceDocumento } from '@/lib/adjuntos';
 import MiContadorGuardias from '@/components/MiContadorGuardias';
 import { hoyLocal } from '@/lib/fechas';
-import { consulta, consultaRpc } from '@/lib/consulta';
-import { departamentoASector, SECTORES_FP, esSectorFP } from '@/lib/sectores';
+import { consulta } from '@/lib/consulta';
+import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
 
@@ -14,7 +14,6 @@ const azul = '#1e3a5f';
 const marron = '#7c2d12';
 const verde = '#1e6b2e';
 const rojo = '#b91c1c';
-const naranja = '#c2410c';
 
 const HORAS = [
   { id: '1',      label: '1ª',     horario: '8:30–9:25'   },
@@ -175,10 +174,9 @@ export default function Guardias() {
   const [horarioGuardias, setHG]        = useState({});
   const [ausenciasDia, setAusDia]       = useState([]);
   const [cargandoDia, setCargandoDia]   = useState(false);
-  const [popupAbierto, setPopupAbierto] = useState(null);
   const [profesorNombre, setPN]         = useState('');
   const [profesorId, setProfId]         = useState('');
-  const [esDirectivo, setEsDir]         = useState(false);
+  const [, setEsDir]         = useState(false);
   const [mapaProfesores, setMapaProf]   = useState({});
   const [profesoresList, setProfsList]  = useState([]);
   const [apoyosAsignados, setApAsig]    = useState([]);
@@ -1079,7 +1077,6 @@ export default function Guardias() {
                       </div>
                       <div style={{ display:'flex', flexWrap:'wrap', gap:5 }}>
                         {guardias.map((p, i) => {
-                          const key = normAbrev(p);
                           const nombre = nombreLargo(mapaProfesores, p);
                           const esYo = p && profesorNombre && p.toLowerCase().includes(profesorNombre.toLowerCase().split(' ')[0]);
                           const fichaChip = fichaPorAbrev(p);

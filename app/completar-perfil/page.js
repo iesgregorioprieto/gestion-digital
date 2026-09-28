@@ -2,8 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 
 const VERDE = '#1e6b2e';
 
@@ -26,7 +25,7 @@ function anios(desde, hasta) {
 }
 
 export default function CompletarPerfil() {
-  const [profId,   setProfId]   = useState(null);
+  const [,   setProfId]   = useState(null);
   const [cargando, setCargando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [error,    setError]    = useState('');

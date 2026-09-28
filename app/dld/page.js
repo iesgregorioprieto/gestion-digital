@@ -2,9 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
-import { getConfigCurso, esDiaLectivo, calcularAntiguedad, limiteDLD, getCursoActual, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
+import { getConfigCurso, esDiaLectivo, limiteDLD, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
@@ -82,7 +80,7 @@ export default function DLD() {
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [textoOtro, setTextoOtro] = useState('');
-  const [nombrePdf, setNombrePdf] = useState('');
+  const [, setNombrePdf] = useState('');
   const [cargandoHorario, setCargandoHorario] = useState(false);
   const [avisoPlazo, setAvisoPlazo] = useState(null);
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
@@ -328,7 +326,6 @@ export default function DLD() {
       for (const [horaId, val] of Object.entries(horarioConUrls)) {
         if (val.archivo instanceof File) {
           const ext = val.archivo.name.split('.').pop();
-          const nombreArchivo = `dld_${profesorId}_${Date.now()}_${horaId}.${ext}`;
           const fd = new FormData();
           fd.append('archivo', val.archivo);
           fd.append('carpeta', 'dld_tareas');
@@ -625,17 +622,23 @@ export default function DLD() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
                 {TIPOS_DLD.map(t => {
                   const yaUsado = misSolicitudes.some(s => s.tipo_dld === t.valor && s.estado === 'aprobada');
+                  // Sin derecho a ese tipo (canoso, 2º lectivo): bloqueado y con el motivo
+                  const sinDerecho = !tieneDerecho(t.valor);
+                  const bloqueado = yaUsado || sinDerecho;
                   return (
-                    <div key={t.valor} onClick={() => !yaUsado && setForm(f => ({ ...f, tipo_dld: t.valor }))} style={{
+                    <div key={t.valor} onClick={() => !bloqueado && setForm(f => ({ ...f, tipo_dld: t.valor }))} style={{
                       display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 10,
-                      border: `2px solid ${form.tipo_dld === t.valor ? verde : yaUsado ? '#ddd' : '#e0e0e0'}`,
-                      backgroundColor: form.tipo_dld === t.valor ? verdeClaro : yaUsado ? '#f5f5f5' : 'white',
-                      cursor: yaUsado ? 'not-allowed' : 'pointer', opacity: yaUsado ? 0.6 : 1,
+                      border: `2px solid ${form.tipo_dld === t.valor ? verde : bloqueado ? '#ddd' : '#e0e0e0'}`,
+                      backgroundColor: form.tipo_dld === t.valor ? verdeClaro : bloqueado ? '#f5f5f5' : 'white',
+                      cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.6 : 1,
                     }}>
                       <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${form.tipo_dld === t.valor ? verde : '#ccc'}`, backgroundColor: form.tipo_dld === t.valor ? verde : 'white', flexShrink: 0 }} />
                       <span style={{ fontSize: 20 }}>{t.emoji}</span>
                       <span style={{ fontSize: 14, fontWeight: form.tipo_dld === t.valor ? 700 : 400, color: form.tipo_dld === t.valor ? verde : '#444' }}>{t.label}</span>
                       {yaUsado && <span style={{ marginLeft: 'auto', fontSize: 12, color: '#888' }}>Ya utilizado</span>}
+                      {!yaUsado && sinDerecho && <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#888', textAlign: 'right' }}>
+                        {t.valor === 'canoso' ? 'Sin derecho: 55 años o 18 de servicio' : 'No te corresponde'}
+                      </span>}
                     </div>
                   );
                 })}

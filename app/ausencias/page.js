@@ -4,9 +4,8 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { adjuntosDe, enlaceDocumento, MAX_ADJUNTOS } from '@/lib/adjuntos';
 import { hoyLocal } from '@/lib/fechas';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
-import { getCursoActual, cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
+import { consulta } from '@/lib/consulta';
+import { cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
@@ -90,7 +89,7 @@ export default function Ausencias() {
   const [profesorId, setProfesorId] = useState('');
   const [profesorNombre, setProfesorNombre] = useState('');
   const [departamento, setDepartamento] = useState('');
-  const [nombrePdf, setNombrePdf] = useState(''); // nombre en horarios_profesores
+  const [, setNombrePdf] = useState(''); // nombre en horarios_profesores
   const [esDirectivo, setEsDirectivo] = useState(false); // 🔑 aviso de acceso a panel completo
   const [vista, setVista] = useState('formulario');
   const [historial, setHistorial] = useState([]);
@@ -106,7 +105,7 @@ export default function Ausencias() {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [tipo, setTipo] = useState('');
+  const [, setTipo] = useState('');
   const [subtipo, setSubtipo] = useState('');
   const [datosExtra, setDatosExtra] = useState({});
   // Configuración del curso, para saber si el día elegido tiene clases
@@ -123,8 +122,6 @@ export default function Ausencias() {
   const [justProgreso, setJustProgreso] = useState('');
   const [enviandoJust, setEnviandoJust] = useState(false);
 
-  // Días de la semana
-  const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
   // buscarNombrePdf ya no existe: el servidor lo resuelve dentro de
   // /api/ausencias?horario_dia=1. Si hace falta el nombre por separado,
@@ -298,9 +295,6 @@ export default function Ausencias() {
     setHorario(h => ({ ...h, [horaId]: { ...h[horaId], instrucciones } }));
   }
 
-  function setArchivoHora(horaId, archivo) {
-    setHorario(h => ({ ...h, [horaId]: { ...h[horaId], archivo, archivoNombre: archivo?.name || '' } }));
-  }
 
   // ===== SUBIR ARCHIVO =====
   /**
@@ -1266,7 +1260,6 @@ export default function Ausencias() {
               const est = ESTADOS[a.estado] || ESTADOS.pendiente;
               const dias = diasParaJustificar(a.fecha_inicio);
               const horas = Array.isArray(a.horas) ? a.horas : [];
-              const horasClase = horas.filter(h => h.tipo === 'clase');
               return (
                 <div key={a.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>

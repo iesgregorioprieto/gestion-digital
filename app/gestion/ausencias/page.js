@@ -7,9 +7,7 @@ import EditarHorasAusencia from '@/components/EditarHorasAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
-import { getCursoActual } from '@/lib/curso';
+import { consulta } from '@/lib/consulta';
 import PanelBajas from './PanelBajas';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
@@ -95,7 +93,7 @@ export default function GestionAusencias() {
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
   const [motivo, setMotivo] = useState('');
-  const [tipo, setTipo] = useState('imprevista');
+  const [, setTipo] = useState('imprevista');
   const [subtipo, setSubtipo] = useState('');
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
@@ -174,11 +172,6 @@ export default function GestionAusencias() {
   // guardias, pero no son faltas: no entran en estos recuentos.
   const soloFaltas = ausencias.filter(a => !a.subtipo || computaComoFalta(a.subtipo));
 
-  const contadores = {
-    pendiente:      soloFaltas.filter(a => a.estado === 'pendiente').length,
-    justificada:    soloFaltas.filter(a => a.estado === 'justificada').length,
-    sin_justificar: soloFaltas.filter(a => a.estado === 'sin_justificar').length,
-  };
 
   // ===== MÉTRICAS DEL DASHBOARD =====
   const hoyStr = hoyLocal();
@@ -870,7 +863,7 @@ ${a.observaciones_directivo ? `
 
       {/* HEADER */}
       <div style={{ backgroundColor: naranja, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button onClick={() => { const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = '/gestion'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
+        <button onClick={() => { window.location.href = '/gestion'; }} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 22 }}>🏥</span>
         <div>
           <div style={{ fontWeight: 800, fontSize: 17 }}>Gestión de Ausencias</div>

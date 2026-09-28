@@ -1,9 +1,8 @@
 "use client";
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
-import { getCursoActual } from '@/lib/curso';
 
 const DIAS = ['lunes','martes','miercoles','jueves','viernes'];
 const DIAS_LABEL = { lunes: 'Lunes', martes: 'Martes', miercoles: 'Miércoles', jueves: 'Jueves', viernes: 'Viernes' };

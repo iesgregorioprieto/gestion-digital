@@ -4,10 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import HojaServicios from '@/components/HojaServicios';
 import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
-import { hoyLocal } from '@/lib/fechas';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
-import { getCursoActual } from '@/lib/curso';
+import { consulta } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 import PanelConflictos from './PanelConflictos';
 import FormProvisional from './FormProvisional';
@@ -48,10 +45,7 @@ export default function PanelSecretario() {
   const [formEdicion, setFormEdicion] = useState({});
   const [guardando, setGuardando] = useState(false);
   const [aprobandoId, setAprobandoId] = useState(null);
-  const [resumenMasivo, setResumenMasivo] = useState(null);
   const [pestanaFicha, setPestanaFicha] = useState('datos'); // 'datos' | 'baja'
-  const [gestionandoBaja, setGestionandoBaja] = useState(false);
-  const [fechaBaja, setFechaBaja] = useState(hoyLocal());
   const [mensaje, setMensaje] = useState(null);
   const [nombreUsuario, setNombreUsuario] = useState('');
 
@@ -337,8 +331,6 @@ export default function PanelSecretario() {
     );
   }
 
-  // Función de activación masiva para el claustro
-  const esperar = ms => new Promise(r => setTimeout(r, ms));
 
   /**
    * Activación masiva pensada para el claustro entero en septiembre.
@@ -358,7 +350,7 @@ export default function PanelSecretario() {
           <div style={{ fontSize: 13, opacity: 0.8 }}>IES Gregorio Prieto · {nombreUsuario}</div>
         </div>
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          <a href="#" onClick={(e) => { e.preventDefault(); const r = sessionStorage.getItem('profesor_rol_gestion'); window.location.href = '/gestion'; }} style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
+          <a href="#" onClick={(e) => { e.preventDefault(); window.location.href = '/gestion'; }} style={{ color: 'white', textDecoration: 'none', fontSize: 14 }}>← Inicio</a>
           <button onClick={cerrarSesion} style={{
             padding: '7px 14px', borderRadius: 8, border: '1.5px solid rgba(255,255,255,0.4)',
             backgroundColor: 'transparent', color: 'white', cursor: 'pointer', fontSize: 13

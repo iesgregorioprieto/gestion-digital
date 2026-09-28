@@ -3,8 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
 import AvisoHojaServicios from '@/components/AvisoHojaServicios';
@@ -69,7 +68,7 @@ export default function PanelProfesor() {
   const [actualizando, setActualizando] = useState(false);
   // Votación en marcha, para avisar en grande. Fuera de los claustros
   // esto está vacío y no se enseña nada.
-  const [votacionAbierta, setVotacionAbierta] = useState(null);
+  const [votacionAbierta] = useState(null);
 
   async function forzarActualizacion() {
     setActualizando(true);

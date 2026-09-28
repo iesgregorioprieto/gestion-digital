@@ -4,7 +4,6 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import HojaServicios from '@/components/HojaServicios';
 import SelectorGrupoTutoria from '@/components/SelectorGrupoTutoria';
-import { getSupabase } from '@/lib/supabase';
 import GestionNotificaciones from '@/components/GestionNotificaciones';
 import TamanoLetra from '@/components/TamanoLetra';
 import { DEPARTAMENTOS } from '@/lib/sectores';
@@ -19,16 +18,6 @@ const ESPECIALIDADES = [
   { valor: 'ADMINISTRACIÓN', emoji: '🏢' }, { valor: 'ESO/BACHILLERATO', emoji: '🎓' },
 ];
 
-async function hashPassword(password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const encoder = new TextEncoder();
-  const km = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' }, km, 256
-  );
-  const hex = a => Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
-  return hex(salt) + ':' + hex(new Uint8Array(bits));
-}
 
 /**
  * Listas de años para los desplegables.
