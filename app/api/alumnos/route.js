@@ -527,19 +527,10 @@ export async function POST(request) {
       });
     }
 
-    // Borrar el alumnado de un grupo (antes de reimportarlo)
-    // Solo equipo directivo: es una acción destructiva y sin vuelta atrás.
-    // Antes bastaba con tener sesión de profesor.
-    if (accion === 'borrar_grupo') {
-      if (!esDirectivo(sesion)) {
-        return Response.json({ error: 'Sin permisos' }, { status: 403 });
-      }
-      const { grupo } = cuerpo;
-      if (!grupo) return Response.json({ error: 'Falta el grupo' }, { status: 400 });
-      const { error } = await supa().from('alumnos').delete().eq('grupo', grupo);
-      if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true });
-    }
+    // Aquí había 'borrar_grupo': borraba el alumnado entero de un grupo, con
+    // sus seguros y autorizaciones. Ninguna pantalla lo usaba ya (la
+    // importación actualiza sin borrar). Se quita para que no exista ningún
+    // camino que pueda llevarse ese trabajo por delante.
 
     return Response.json({ error: 'Acción desconocida' }, { status: 400 });
   } catch (e) {
