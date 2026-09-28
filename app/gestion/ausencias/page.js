@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import EditarHorasAusencia from '@/components/EditarHorasAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -76,6 +77,7 @@ export default function GestionAusencias() {
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
   // DLD aprobados: el informe para la Delegación los incluye como «día completo»
   const [dldAprobados, setDldAprobados] = useState([]);
+  const [editandoHoras, setEditandoHoras] = useState(null);
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
@@ -871,6 +873,14 @@ ${a.observaciones_directivo ? `
         </div>
       </div>
 
+      {editandoHoras && (
+        <EditarHorasAusencia ausencia={editandoHoras} onCerrar={() => setEditandoHoras(null)}
+          onGuardado={horas => {
+            setAusencias(l => l.map(x => x.id === editandoHoras.id ? { ...x, horas } : x));
+            setEditandoHoras(null);
+            mostrarMensaje('Horas cambiadas y guardias recalculadas', 'ok');
+          }} />
+      )}
       {mensaje && (
         <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : rojo, fontWeight: 600, fontSize: 14 }}>
           {mensaje.texto}
@@ -1126,7 +1136,15 @@ ${a.observaciones_directivo ? `
                   )}
 
                   {/* Informe para la Delegación */}
-                  <div style={{ marginTop: 10 }}>
+                  <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    {/* Cambiar horas: solo ausencias de un día, de hoy o futuras */}
+                    {(a.fecha_inicio === (a.fecha_fin || a.fecha_inicio)) && Array.isArray(a.horas) && a.horas.length > 0
+                      && a.fecha_inicio >= new Date().toLocaleDateString('sv-SE') && (
+                      <button onClick={() => setEditandoHoras(a)} style={{
+                        padding: '7px 14px', borderRadius: 7, border: '1.5px solid #b45309', backgroundColor: '#fffbeb',
+                        color: '#92400e', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      }} title="Añadir o quitar horas (p. ej. el médico se retrasa o sale antes)">🕐 Cambiar horas</button>
+                    )}
                     <button
                       onClick={() => generarInformeAusencia(a)}
                       style={{
