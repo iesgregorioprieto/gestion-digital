@@ -78,6 +78,7 @@ export default function GestionAusencias() {
   const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
   // DLD aprobados: el informe para la Delegación los incluye como «día completo»
   const [dldAprobados, setDldAprobados] = useState([]);
+  const [periodoInforme, setPeriodoInforme] = useState(null);   // ventana para elegir el periodo
   const [editandoHoras, setEditandoHoras] = useState(null);
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
@@ -265,7 +266,10 @@ export default function GestionAusencias() {
    * La descarga masiva de justificantes en zip la sirve el servidor y
    * se lanza desde el propio informe.
    */
-  function generarInformeMensual(lista) {
+  function generarInformeMensual(lista, rango = {}) {
+    // Periodo elegido en la ventana; si no, los filtros de la lista
+    const rDesde = rango.desde ?? filtroFechaDesde;
+    const rHasta = rango.hasta ?? filtroFechaHasta;
     if (!lista || lista.length === 0) {
       mostrarMensaje('No hay ausencias en el periodo seleccionado', 'error');
       return;
@@ -281,8 +285,8 @@ export default function GestionAusencias() {
     const fichaDe = id => profesores.find(p => p.id === id) || {};
     const dld = (Array.isArray(dldAprobados) ? dldAprobados : [])
       .filter(d => d.fecha_solicitada
-        && (!filtroFechaDesde || d.fecha_solicitada >= filtroFechaDesde)
-        && (!filtroFechaHasta || d.fecha_solicitada <= filtroFechaHasta)
+        && (!rDesde || d.fecha_solicitada >= rDesde)
+        && (!rHasta || d.fecha_solicitada <= rHasta)
         && (!filtroProfesor || (d.profesor_nombre || '').toLowerCase().includes(filtroProfesor.toLowerCase())))
       .map(d => ({
         id: 'dld-' + d.id,
@@ -372,8 +376,8 @@ export default function GestionAusencias() {
     // El servidor arma el zip con los justificantes del rango que se
     // esté viendo, renombrados: «Apellidos, Nombre - DD-MM».
     const fechas = todo.map(a => a.fecha_inicio).filter(Boolean).sort();
-    const desde = filtroFechaDesde || fechas[0] || '';
-    const hasta = filtroFechaHasta || (todo.map(a => a.fecha_fin || a.fecha_inicio).filter(Boolean).sort().pop()) || '';
+    const desde = rDesde || fechas[0] || '';
+    const hasta = rHasta || (todo.map(a => a.fecha_fin || a.fecha_inicio).filter(Boolean).sort().pop()) || '';
 
     const hoy = new Date().toLocaleDateString('es-ES',
       { day: 'numeric', month: 'long', year: 'numeric' });
@@ -874,6 +878,77 @@ ${a.observaciones_directivo ? `
         </div>
       </div>
 
+      {periodoInforme && (() => {
+        const iso = d => d.toLocaleDateString('sv-SE');
+        const hoy = new Date();
+        const lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+        const domingo = d => { const x = new Date(d); x.setDate(x.getDate() + 6); return x; };
+        const lunesPasado = new Date(lunes); lunesPasado.setDate(lunes.getDate() - 7);
+        const ini = (a, m) => new Date(a, m, 1), fin = (a, m) => new Date(a, m + 1, 0);
+        const OPC = {
+          semana:      { t: 'Esta semana',     d: iso(lunes),                                  h: iso(domingo(lunes)) },
+          semana_pas:  { t: 'Semana pasada',   d: iso(lunesPasado),                            h: iso(domingo(lunesPasado)) },
+          mes:         { t: 'Este mes',        d: iso(ini(hoy.getFullYear(), hoy.getMonth())), h: iso(fin(hoy.getFullYear(), hoy.getMonth())) },
+          mes_pasado:  { t: 'Mes pasado',      d: iso(ini(hoy.getFullYear(), hoy.getMonth() - 1)), h: iso(fin(hoy.getFullYear(), hoy.getMonth() - 1)) },
+        };
+        // Meses con ausencias registradas, para elegir uno concreto
+        const meses = [...new Set(ausencias.map(a => (a.fecha_inicio || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+        const p = periodoInforme;
+        const rango = OPC[p.tipo] ? { desde: OPC[p.tipo].d, hasta: OPC[p.tipo].h }
+          : p.tipo === 'mes_concreto' && p.mes ? { desde: `${p.mes}-01`, hasta: iso(fin(+p.mes.slice(0, 4), +p.mes.slice(5, 7) - 1)) }
+          : p.tipo === 'fechas' ? { desde: p.desde || '', hasta: p.hasta || '' } : { desde: '', hasta: '' };
+        const fmt = f => f ? f.split('-').reverse().join('/') : '…';
+        const valido = rango.desde && rango.hasta && rango.desde <= rango.hasta;
+        const lista = valido ? ausencias.filter(a =>
+          (!a.subtipo || computaComoFalta(a.subtipo))
+          && (!filtroProfesor || a.profesor_nombre?.toLowerCase().includes(filtroProfesor.toLowerCase()))
+          && a.fecha_inicio <= rango.hasta && (a.fecha_fin || a.fecha_inicio) >= rango.desde) : [];
+        const boton = (clave, texto) => (
+          <button key={clave} type="button" onClick={() => setPeriodoInforme({ ...p, tipo: clave })} style={{
+            padding: '8px 10px', borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+            border: `2px solid ${p.tipo === clave ? azul : '#e2e8f0'}`, backgroundColor: p.tipo === clave ? '#e0e7ff' : 'white', color: azul,
+          }}>{texto}</button>
+        );
+        return (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9500, backgroundColor: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div style={{ backgroundColor: 'white', borderRadius: 12, width: 'min(440px, 100%)', maxHeight: '90vh', overflowY: 'auto', padding: 16 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: azul, marginBottom: 4 }}>📄 Informe para la Delegación</div>
+              <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 12 }}>¿De qué periodo?</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+                {Object.entries(OPC).map(([k, o]) => boton(k, o.t))}
+                {boton('mes_concreto', 'Un mes concreto')}
+                {boton('fechas', 'Entre dos fechas')}
+              </div>
+              {p.tipo === 'mes_concreto' && (
+                <select value={p.mes || ''} onChange={e => setPeriodoInforme({ ...p, mes: e.target.value })}
+                  style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 13, marginBottom: 8 }}>
+                  <option value="">Elige el mes…</option>
+                  {meses.map(m => <option key={m} value={m}>{new Date(m + '-01T12:00:00').toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })}</option>)}
+                </select>
+              )}
+              {p.tipo === 'fechas' && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <label style={{ flex: 1, fontSize: 12, color: '#475569' }}>Desde
+                    <input type="date" value={p.desde || ''} onChange={e => setPeriodoInforme({ ...p, desde: e.target.value })} style={{ width: '100%', padding: 7, borderRadius: 7, border: '1px solid #cbd5e1' }} /></label>
+                  <label style={{ flex: 1, fontSize: 12, color: '#475569' }}>Hasta
+                    <input type="date" value={p.hasta || ''} onChange={e => setPeriodoInforme({ ...p, hasta: e.target.value })} style={{ width: '100%', padding: 7, borderRadius: 7, border: '1px solid #cbd5e1' }} /></label>
+                </div>
+              )}
+              <div style={{ fontSize: 13, color: '#334155', backgroundColor: '#f8fafc', borderRadius: 8, padding: '8px 10px', margin: '6px 0 12px' }}>
+                {valido ? <>Del <strong>{fmt(rango.desde)}</strong> al <strong>{fmt(rango.hasta)}</strong> · <strong>{lista.length}</strong> ausencias{filtroProfesor ? ` de «${filtroProfesor}»` : ''} (más los DLD del periodo)</>
+                  : <span style={{ color: '#94a3b8' }}>Elige el periodo</span>}
+              </div>
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setPeriodoInforme(null)} style={{ padding: '8px 14px', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+                <button type="button" disabled={!valido} onClick={() => { setPeriodoInforme(null); generarInformeMensual(lista, rango); }} style={{
+                  padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: azul, color: 'white', fontSize: 13, fontWeight: 700,
+                  cursor: valido ? 'pointer' : 'not-allowed', opacity: valido ? 1 : 0.5,
+                }}>Generar informe</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
       {editandoHoras && (
         <EditarHorasAusencia ausencia={editandoHoras} onCerrar={() => setEditandoHoras(null)}
           onGuardado={horas => {
@@ -1026,7 +1101,7 @@ ${a.observaciones_directivo ? `
 
                   {/* Informe oficial para la Delegación */}
                   <button
-                    onClick={() => generarInformeMensual(ausenciasFiltradas.filter(a => !a.subtipo || computaComoFalta(a.subtipo)))}
+                    onClick={() => setPeriodoInforme({ tipo: 'mes_pasado' })}
                     style={{ width: '100%', marginTop: 6, padding: '10px', borderRadius: 7, border: 'none', backgroundColor: '#1e3a5f', color: 'white', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}
                   >🖨️ Informe para la Delegación (PDF)</button>
                 </div>
