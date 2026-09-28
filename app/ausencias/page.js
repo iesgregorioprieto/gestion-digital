@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { adjuntosDe, enlaceDocumento, MAX_ADJUNTOS } from '@/lib/adjuntos';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
@@ -47,6 +48,43 @@ const ESTADOS = {
   justificada:    { label: 'Justificada',      bg: '#d1fae5', color: '#065f46', emoji: '✅' },
   sin_justificar: { label: 'Sin justificar',   bg: '#fee2e2', color: '#991b1b', emoji: '❌' },
 };
+
+/**
+ * Varios archivos por tarea: los ya guardados (previos: [{url, nombre}])
+ * y los nuevos elegidos ahora (nuevos: File[]). Se pueden quitar antes de
+ * enviar. Máximo MAX_ADJUNTOS.
+ */
+function AdjuntosTarea({ previos = [], nuevos = [], onCambio, fondo = 'white' }) {
+  const total = previos.length + nuevos.length;
+  const anadir = lista => {
+    const juntos = [...nuevos];
+    Array.from(lista || []).forEach(f => { if (!juntos.some(x => x.name === f.name && x.size === f.size)) juntos.push(f); });
+    onCambio({ previos, nuevos: juntos.slice(0, Math.max(0, MAX_ADJUNTOS - previos.length)) });
+  };
+  const fila = (texto, quitar, enlace) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', backgroundColor: '#d1fae5', borderRadius: 7, marginBottom: 4 }}>
+      <span>📎</span>
+      {enlace
+        ? <a href={enlace} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: '#1e6b2e', fontWeight: 600, flex: 1, wordBreak: 'break-all' }}>{texto}</a>
+        : <span style={{ fontSize: 12, color: '#1e6b2e', fontWeight: 600, flex: 1, wordBreak: 'break-all' }}>{texto}</span>}
+      <button type="button" onClick={quitar} title="Quitar" style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>✕</button>
+    </div>
+  );
+  return (
+    <div>
+      {previos.map((a, i) => fila(a.nombre || 'Archivo', () => onCambio({ previos: previos.filter((_, n) => n !== i), nuevos }), enlaceDocumento(a.url)))}
+      {nuevos.map((f, i) => fila(f.name, () => onCambio({ previos, nuevos: nuevos.filter((_, n) => n !== i) })))}
+      {total < MAX_ADJUNTOS && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: fondo, color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <span style={{ fontSize: 18 }}>📎</span>
+          <span>{total ? 'Añadir otro archivo' : 'Adjuntar archivos (examen, ficha, PDF...)'} <span style={{ fontWeight: 400, color: '#a16207' }}>· hasta {MAX_ADJUNTOS}</span></span>
+          <input type="file" multiple accept=".pdf,.doc,.docx,.odt,.jpg,.jpeg,.png,.webp,.heic,.xls,.xlsx,.ods,.txt"
+            onChange={e => { anadir(e.target.files); e.target.value = ''; }} style={{ display: 'none' }} />
+        </label>
+      )}
+    </div>
+  );
+}
 
 export default function Ausencias() {
   const [profesorId, setProfesorId] = useState('');
@@ -324,6 +362,19 @@ export default function Ausencias() {
     }
   }
 
+  // Sube los archivos nuevos de una tarea y devuelve la lista completa
+  // (los que ya estaban guardados + los nuevos).
+  async function subirAdjuntos(t) {
+    const previos = Array.isArray(t?.adjPrevios) ? t.adjPrevios : [];
+    const nuevos = Array.isArray(t?.adjNuevos) ? t.adjNuevos : [];
+    const subidos = await Promise.all(nuevos.map(async f => ({
+      url: await subirArchivo(await encogerSiEsFoto(f), 'tareas'),
+      nombre: f.name,
+    })));
+    return [...previos, ...subidos];
+  }
+  const numAdjuntos = t => (t?.adjPrevios?.length || 0) + (t?.adjNuevos?.length || 0);
+
   // ===== ENVIAR AUSENCIA =====
   async function enviar() {
     if (!fechaInicio) { mostrarMensaje('Indica la fecha de inicio.', 'error'); return; }
@@ -345,7 +396,7 @@ export default function Ausencias() {
       const sinTarea = gruposUnicos.filter(u => {
         const key = `${u.grupo}|${u.materia}`;
         const t = tareasBloque[key];
-        return !t?.instrucciones?.trim() && !t?.archivoNombre;
+        return !t?.instrucciones?.trim() && !numAdjuntos(t);
       });
       if (sinTarea.length > 0) {
         labelsSinTarea = sinTarea.map(u => `${u.grupo}${u.materia ? ` (${u.materia})` : ''}`).join(', ');
@@ -353,7 +404,7 @@ export default function Ausencias() {
     } else {
       const horasIncluidas = Object.entries(horario).filter(([_, v]) => diaCompleto || v.incluida);
       const horasClase = horasIncluidas.filter(([_, v]) => v.tipo === 'clase');
-      const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !v.archivo);
+      const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !numAdjuntos(v));
       if (sinTarea.length > 0) {
         labelsSinTarea = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
       }
@@ -381,16 +432,16 @@ export default function Ausencias() {
         gruposUnicos.map(async u => {
           const key = `${u.grupo}|${u.materia}`;
           const tarea = tareasBloque[key] || {};
-          let archivoUrl = null;
-          if (tarea.archivo) archivoUrl = await subirArchivo(tarea.archivo, 'tareas');
+          const archivos = await subirAdjuntos(tarea);
           return {
             hora: 'Ausencia larga',
             tipo: 'clase',
             grupo: u.grupo,
             materia: u.materia || null,
             instrucciones: tarea.instrucciones?.trim() || null,
-            archivo_url: archivoUrl,
-            archivo_nombre: tarea.archivoNombre || null,
+            archivos,
+            archivo_url: archivos[0]?.url || null,
+            archivo_nombre: archivos[0]?.nombre || null,
           };
         })
       );
@@ -402,16 +453,16 @@ export default function Ausencias() {
         Object.entries(horario)
           .filter(([_, val]) => diaCompleto || val.incluida)
           .map(async ([horaId, val]) => {
-          let archivoUrl = null;
-          if (val.archivo) archivoUrl = await subirArchivo(val.archivo, 'tareas');
+          const archivos = await subirAdjuntos(val);
           return {
             hora: HORAS.find(h => h.id === horaId)?.label || horaId,
             tipo: val.tipo,
             grupo: val.grupo || null,
             materia: val.materia || null,
             instrucciones: val.instrucciones?.trim() || null,
-            archivo_url: archivoUrl,
-            archivo_nombre: val.archivoNombre || null,
+            archivos,
+            archivo_url: archivos[0]?.url || null,
+            archivo_nombre: archivos[0]?.nombre || null,
           };
         })
       );
@@ -497,8 +548,8 @@ export default function Ausencias() {
         }
         tareas[key] = {
           instrucciones: h.instrucciones || '',
-          archivoNombre: h.archivo_url ? 'Archivo ya subido' : '',
-          archivoUrl: h.archivo_url || null,
+          adjPrevios: adjuntosDe(h),
+          adjNuevos: [],
         };
       });
       setGruposUnicos(unicos);
@@ -516,7 +567,8 @@ export default function Ausencias() {
           materia: h.materia || '',
           aula: h.aula || '',
           instrucciones: h.instrucciones || '',
-          archivoUrl: h.archivo_url || null,
+          adjPrevios: adjuntosDe(h),
+          adjNuevos: [],
           precargado: true,
           incluida: true,
         };
@@ -883,24 +935,10 @@ export default function Ausencias() {
                           onChange={e => setTareasBloque(t => ({ ...t, [key]: { ...t[key], instrucciones: e.target.value } }))}
                           placeholder="Ej: Unidad 5, páginas 80-85. Actividades 1, 2 y 3..."
                           rows={3}
-                          style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!tarea.instrucciones?.trim() && !tarea.archivoNombre ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }}
+                          style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!tarea.instrucciones?.trim() && !numAdjuntos(tarea) ? '#fca5a5' : '#ddd'}`, fontSize: 13, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }}
                         />
-                        {!tarea.archivoNombre ? (
-                          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                            <span style={{ fontSize: 18 }}>📎</span>
-                            <span>Adjuntar archivo (examen, ficha, PDF...)</span>
-                            <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => {
-                              const f = e.target.files[0];
-                              if (f) setTareasBloque(t => ({ ...t, [key]: { ...t[key], archivo: f, archivoNombre: f.name } }));
-                            }} style={{ display: 'none' }} />
-                          </label>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
-                            <span>✅</span>
-                            <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {tarea.archivoNombre}</span>
-                            <button onClick={() => setTareasBloque(t => ({ ...t, [key]: { ...t[key], archivo: null, archivoNombre: '' } }))} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
-                          </div>
-                        )}
+                        <AdjuntosTarea previos={tarea.adjPrevios || []} nuevos={tarea.adjNuevos || []}
+                          onCambio={({ previos, nuevos }) => setTareasBloque(t => ({ ...t, [key]: { ...t[key], adjPrevios: previos, adjNuevos: nuevos } }))} />
                       </div>
                     );
                   })}
@@ -1092,18 +1130,9 @@ export default function Ausencias() {
                       {val.tipo === 'clase' && (
                         <div style={{ padding: '10px 14px', borderTop: '1px solid #eee', backgroundColor: '#fffbeb' }}>
                           <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📝 Tarea para {val.grupo}{val.materia ? ` (${val.materia})` : ''} (recomendada)</div>
-                          <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
-                          {!val.archivoNombre ? (
-                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: 'white', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                              <span style={{ fontSize: 18 }}>📎</span><span>Adjuntar archivo (examen, ficha, PDF...)</span>
-                              <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { if (e.target.files[0]) setArchivoHora(hora.id, e.target.files[0]); }} style={{ display: 'none' }} />
-                            </label>
-                          ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
-                              <span>✅</span><span style={{ fontSize: 12, color: '#1e6b2e', fontWeight: 600, flex: 1 }}>📎 {val.archivoNombre}</span>
-                              <button onClick={() => setArchivoHora(hora.id, null)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
-                            </div>
-                          )}
+                          <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !numAdjuntos(val) ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
+                          <AdjuntosTarea previos={val.adjPrevios || []} nuevos={val.adjNuevos || []}
+                            onCambio={({ previos, nuevos }) => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], adjPrevios: previos, adjNuevos: nuevos } }))} />
                         </div>
                       )}
                     </div>
@@ -1178,20 +1207,9 @@ export default function Ausencias() {
                         {val.tipo === 'clase' && (
                           <div>
                             <div style={{ fontSize: 11, fontWeight: 700, color: '#1e40af', marginBottom: 6 }}>📝 Tarea para el alumnado (recomendada)</div>
-                            <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5. Copiar en el cuaderno..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !val.archivo ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
-                            {!val.archivoNombre ? (
-                              <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderRadius: 7, border: '2px dashed #fbbf24', backgroundColor: '#fffbeb', color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                                <span style={{ fontSize: 18 }}>📎</span>
-                                <span>Adjuntar archivo (examen, ficha, PDF...)</span>
-                                <input type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" onChange={e => { if (e.target.files[0]) setArchivoHora(hora.id, e.target.files[0]); }} style={{ display: 'none' }} />
-                              </label>
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', backgroundColor: '#d1fae5', borderRadius: 7 }}>
-                                <span>✅</span>
-                                <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {val.archivoNombre}</span>
-                                <button onClick={() => setArchivoHora(hora.id, null)} style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 14, cursor: 'pointer' }}>✕</button>
-                              </div>
-                            )}
+                            <textarea value={val.instrucciones || ''} onChange={e => setInstrucciones(hora.id, e.target.value)} placeholder="Ej: Página 45, ejercicios 1-5. Copiar en el cuaderno..." rows={2} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: `1.5px solid ${!val.instrucciones?.trim() && !numAdjuntos(val) ? '#fca5a5' : '#ddd'}`, fontSize: 12, boxSizing: 'border-box', resize: 'vertical', marginBottom: 8 }} />
+                            <AdjuntosTarea previos={val.adjPrevios || []} nuevos={val.adjNuevos || []}
+                            onCambio={({ previos, nuevos }) => setHorario(h => ({ ...h, [hora.id]: { ...h[hora.id], adjPrevios: previos, adjNuevos: nuevos } }))} />
                           </div>
                         )}
                       </div>
@@ -1277,14 +1295,12 @@ export default function Ausencias() {
                             {h.hora} · {h.grupo || h.tipo}
                           </div>
                           {/* Mostrar tarea e instrucciones para horas de clase */}
-                          {h.tipo === 'clase' && (h.instrucciones || h.archivo_url) && (
+                          {h.tipo === 'clase' && (h.instrucciones || adjuntosDe(h).length) && (
                             <div style={{ marginTop: 4, marginLeft: 8, padding: '6px 10px', backgroundColor: '#fffbeb', borderRadius: 7, border: '1px solid #fcd34d', fontSize: 12 }}>
                               {h.instrucciones && <div style={{ color: '#92400e', marginBottom: h.archivo_url ? 4 : 0 }}>📝 {h.instrucciones}</div>}
-                              {h.archivo_url && (
-                                <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}>
-                                  📎 Ver archivo adjunto
-                                </a>
-                              )}
+                              {adjuntosDe(h).map((f, k) => (
+                            <a key={k} href={enlaceDocumento(f.url)} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}>📎 {f.nombre || 'Archivo'}</a>
+                          ))}
                             </div>
                           )}
                         </div>

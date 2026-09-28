@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { adjuntosDe, enlaceDocumento } from '@/lib/adjuntos';
 import EditarHorasAusencia from '@/components/EditarHorasAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
@@ -840,7 +841,7 @@ ${horasClase.length > 0 ? `
         <span class="valor"><strong>${h.hora}</strong> · ${h.grupo || '—'}${h.materia ? ' · ' + h.materia : ''}</span>
       </div>
       ${h.instrucciones ? `<div class="tarea"><strong>📝 Tarea:</strong> ${h.instrucciones}</div>` : '<div style="color:#aaa;font-size:11px;font-style:italic;margin-top:4px">Sin tarea asignada</div>'}
-      ${h.archivo_url ? `<div style="margin-top:6px;font-size:11px">📎 <a href="${h.archivo_url}">Archivo adjunto: ${h.archivo_nombre || 'descargar'}</a></div>` : ''}
+      ${adjuntosDe(h).map(f => `<div style="margin-top:6px;font-size:11px">📎 <a href="${location.origin}${enlaceDocumento(f.url)}">Archivo adjunto: ${(f.nombre || 'Archivo').replace(/</g, '&lt;')}</a></div>`).join('')}
     </div>
   `).join('')}
 </div>` : ''}
@@ -1094,15 +1095,15 @@ ${a.observaciones_directivo ? `
                   )}
 
                   {/* Tarea detalle */}
-                  {horas.filter(h => h.instrucciones || h.archivo_url).length > 0 && (
+                  {horas.filter(h => h.instrucciones || adjuntosDe(h).length).length > 0 && (
                     <div style={{ marginTop: 8, backgroundColor: '#fffbeb', borderRadius: 8, padding: '8px 12px' }}>
-                      {horas.filter(h => h.instrucciones || h.archivo_url).map((h, i) => (
+                      {horas.filter(h => h.instrucciones || adjuntosDe(h).length).map((h, i) => (
                         <div key={i} style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>
                           <strong>{h.hora} — {h.grupo}{h.materia ? ` (${h.materia})` : ''}:</strong>
                           {h.instrucciones && <span> {h.instrucciones}</span>}
-                          {h.archivo_url && (
-                            <a href={h.archivo_url} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#1e40af', fontWeight: 600 }}>📎 Ver archivo</a>
-                          )}
+                          {adjuntosDe(h).map((f, k) => (
+                            <a key={k} href={enlaceDocumento(f.url)} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: '#1e40af', fontWeight: 600 }}>📎 {f.nombre || 'Archivo'}</a>
+                          ))}
                         </div>
                       ))}
                     </div>

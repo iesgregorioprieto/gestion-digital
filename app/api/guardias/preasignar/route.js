@@ -539,6 +539,7 @@ export async function POST(request) {
             aula: asig.aula || null,
             materia: asig.materia || null,
             tarea: asig.instrucciones || null,
+            tarea_archivos: asig.archivos?.length ? asig.archivos : null,
             asignado_por: null,          // la propuso el sistema, no una persona
             estado: 'pendiente',
             tipo_apoyo: asig.escalon === 0 ? 'sector' : 'obligatorio',
@@ -594,7 +595,12 @@ export async function POST(request) {
       });
     }
 
-    const { error } = await cliente.from('apoyos_asignados').insert(nuevas);
+    let { error } = await cliente.from('apoyos_asignados').insert(nuevas);
+    // Si aún no se ha ejecutado supabase/tareas_archivos.sql, la columna no
+    // existe: se guarda sin los archivos antes que dejar el reparto sin hacer.
+    if (error && /tarea_archivos/.test(error.message || '')) {
+      ({ error } = await cliente.from('apoyos_asignados').insert(nuevas.map(({ tarea_archivos, ...resto }) => resto)));
+    }
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
     /**

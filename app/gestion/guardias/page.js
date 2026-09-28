@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 // v3.0 - GESTIÓN COMPLETA CON CONTADOR Y APOYOS MANUALES
 
 import { useState, useEffect } from 'react';
+import { enlaceDocumento } from '@/lib/adjuntos';
 import FicharPorJefatura from '@/components/FicharPorJefatura';
 import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
@@ -1015,6 +1016,7 @@ export default function GestionGuardias() {
                           aula: filaReal.aula || null,
                           materia: filaReal.materia || null,
                           instrucciones: filaReal.tarea || null,
+                          archivos: filaReal.tarea_archivos || [],
                         },
                       };
 
@@ -1093,12 +1095,22 @@ export default function GestionGuardias() {
                           </div>
 
                           {/* Tarea */}
-                          {asig.clase.instrucciones && (
+                          {(asig.clase.instrucciones || asig.clase.archivos?.length > 0) && (
                             <div style={{
                               padding:'8px 10px', backgroundColor:'#fffbeb', borderRadius:6,
                               fontSize:12, color:'#78350f', marginBottom:8, border:'1px solid #fde68a',
                             }}>
-                              📝 <strong>Tarea:</strong> {asig.clase.instrucciones}
+                              📝 <strong>Tarea:</strong> {asig.clase.instrucciones || '(ver archivos)'}
+                              {Array.isArray(asig.clase.archivos) && asig.clase.archivos.length > 0 && (
+  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    {asig.clase.archivos.map((f, k) => (
+      <a key={k} href={enlaceDocumento(f.url)} target="_blank" rel="noopener noreferrer"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, backgroundColor: '#1e40af', color: 'white', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+        📎 {f.nombre || 'Archivo'}
+      </a>
+    ))}
+  </div>
+)}
                             </div>
                           )}
 

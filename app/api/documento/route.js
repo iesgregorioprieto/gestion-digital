@@ -85,6 +85,11 @@ export async function GET(request) {
     autorizado = (data || []).some(a => a.profesor_id === sesion.id);
   }
 
+  // Los archivos de las TAREAS (fichas, exámenes para el grupo) los abre
+  // cualquier profesor: sobre todo quien cubre la guardia. No son datos
+  // personales. Los justificantes, en cambio, siguen restringidos arriba.
+  if (!autorizado && bucket === 'ausencias-docs' && ruta.startsWith('tareas/')) autorizado = true;
+
   if (!autorizado && bucket === 'incidencias-docs') {
     // La captura la ve dirección y quien avisó del fallo.
     const { data } = await supa()

@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { enlaceDocumento } from '@/lib/adjuntos';
 import MiContadorGuardias from '@/components/MiContadorGuardias';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta, consultaRpc } from '@/lib/consulta';
@@ -722,10 +723,20 @@ export default function Guardias() {
                       </div>
                     );
                   })()}
-                  {g.tarea && (
+                  {(g.tarea || g.tarea_archivos?.length > 0) && (
                     <div style={{ fontSize:13, color:'#374151', marginTop:6, padding:'8px 10px',
                       backgroundColor:'white', borderRadius:8, border:'1px solid #e5e7eb' }}>
-                      📝 {g.tarea}
+                      📝 {g.tarea || 'Archivos de la tarea:'}
+                      {Array.isArray(g.tarea_archivos) && g.tarea_archivos.length > 0 && (
+  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    {g.tarea_archivos.map((f, k) => (
+      <a key={k} href={enlaceDocumento(f.url)} target="_blank" rel="noopener noreferrer"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, backgroundColor: '#1e40af', color: 'white', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+        📎 {f.nombre || 'Archivo'}
+      </a>
+    ))}
+  </div>
+)}
                     </div>
                   )}
 
@@ -943,13 +954,23 @@ export default function Guardias() {
                               </div>
 
                               {/* La tarea, si la dejó */}
-                              {g.tarea && (
+                              {(g.tarea || g.tarea_archivos?.length > 0) && (
                                 <div style={{
                                   fontSize:12, color:'#78350f', backgroundColor:'#fffbeb',
                                   border:'1px solid #fde68a', borderRadius:6,
                                   padding:'7px 10px', marginBottom:8, lineHeight:1.45,
                                 }}>
-                                  📝 <strong>Tarea:</strong> {g.tarea}
+                                  📝 <strong>Tarea:</strong> {g.tarea || '(ver archivos)'}
+                                  {Array.isArray(g.tarea_archivos) && g.tarea_archivos.length > 0 && (
+  <div style={{ marginTop: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    {g.tarea_archivos.map((f, k) => (
+      <a key={k} href={enlaceDocumento(f.url)} target="_blank" rel="noopener noreferrer"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 7, backgroundColor: '#1e40af', color: 'white', fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>
+        📎 {f.nombre || 'Archivo'}
+      </a>
+    ))}
+  </div>
+)}
                                 </div>
                               )}
 
