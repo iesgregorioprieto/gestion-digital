@@ -72,9 +72,18 @@ export default function CompletarPerfil() {
           anio_cuerpo:       p.anio_cuerpo?.toString() || '',
         }));
       }
+      // ¿Su antigüedad sale de la hoja de servicios? Entonces el año no se
+      // toca desde aquí (el servidor ya lo ignora; esto es para que se vea).
+      try {
+        const rf = await fetch('/api/profesores?mi_ficha=1');
+        const df = await rf.json();
+        setHojaOficial(df.profesor?.servicios_origen === 'hoja');
+      } catch {}
       setCargando(false);
     })();
   }, []);
+
+  const [hojaOficial, setHojaOficial] = useState(false);
 
   async function guardar() {
     setError('');
@@ -212,11 +221,13 @@ export default function CompletarPerfil() {
               </select>
             </Campo>
             <Campo label="Año de ingreso en el cuerpo">
-              <select value={form.anio_cuerpo}
-                onChange={e => set('anio_cuerpo', e.target.value)} style={inputEstilo}>
+              <select value={form.anio_cuerpo} disabled={hojaOficial}
+                onChange={e => set('anio_cuerpo', e.target.value)}
+                style={{ ...inputEstilo, ...(hojaOficial ? { backgroundColor: '#f1f5f9', color: '#475569' } : {}) }}>
                 <option value="">— Elige el año —</option>
                 {anios(1970, new Date().getFullYear()).map(a => <option key={a} value={a}>{a}</option>)}
               </select>
+              {hojaOficial && <div style={{ fontSize: 11.5, color: '#475569', marginTop: 4 }}>🔒 Sale de tu hoja de servicios. Para cambiarlo, sube una nueva en Mis datos.</div>}
             </Campo>
           </div>
 
