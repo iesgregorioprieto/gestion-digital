@@ -121,7 +121,13 @@ export async function GET(request) {
     }
     const grupos = [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'));
 
-    return Response.json({ grupos });
+    // Cuántos alumnos tiene cada grupo (para que el tutor sepa, al elegir su
+    // tutoría, que va a ver a sus alumnos). 'grupos' sigue igual que antes.
+    const cuenta = {};
+    alumnado.forEach(a => { if (a.grupo) { const k = claveGrupo(a.grupo); cuenta[k] = (cuenta[k] || 0) + 1; } });
+    const detalle = grupos.map(g => ({ grupo: g, alumnos: cuenta[claveGrupo(g)] || 0 }));
+
+    return Response.json({ grupos, detalle });
   }
 
   const sesion = await sesionDe(request);

@@ -663,6 +663,7 @@ export default function PanelSecretario() {
             <div style={{ marginTop: 12, padding: 14, backgroundColor: '#fff7ed', borderRadius: 10, border: '1.5px solid #fbbf24' }}>
               <div style={{ fontWeight: 700, fontSize: 13, color: '#92400e', marginBottom: 10 }}>🤝 Grupo de tutoría asignado</div>
               <SelectorGrupoTutoria
+                profesorId={profesorSeleccionado?.id}
                 valor={formEdicion.grupo_tutoria}
                 onChange={g => setFormEdicion(f => ({ ...f, grupo_tutoria: g }))}
                 estilo={inputEstilo}

@@ -80,11 +80,11 @@ const RECORDATORIOS = [
     cuerpo: (
       <p style={{ margin: 0 }}>
         Tu grupo de tutoría no coincide con ninguno de los grupos del alumnado, así que no ves a tus
-        alumnos en autorizaciones ni en el seguro escolar. En tu panel te proponemos tu grupo según tu
-        horario: se vincula con un toque.
+        alumnos en autorizaciones ni en el seguro escolar. En Mis datos, elige tu grupo en la lista:
+        arriba salen los grupos de tu horario, con cuántos alumnos tiene cada uno.
       </p>
     ),
-    accion: { texto: 'Vincular mi tutoría', href: '/profesor#tutoria' },
+    accion: { texto: 'Elegir mi tutoría', href: '/mis-datos#tutoria' },
   },
 ];
 

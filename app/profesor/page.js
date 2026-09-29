@@ -7,7 +7,6 @@ import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
 import AvisoHojaServicios from '@/components/AvisoHojaServicios';
-import AvisoTutoria from '@/components/AvisoTutoria';
 import ValoracionModulo from '@/components/ValoracionModulo';
 
 export default function PanelProfesor() {
@@ -339,9 +338,6 @@ export default function PanelProfesor() {
         <AvisoCuadrante />
 
         {/* Hoja de servicios: solo a quien aún no la ha subido */}
-        {/* Tutoría sin vincular: propuesta y un toque para vincularla */}
-        <AvisoTutoria />
-
         <AvisoHojaServicios />
 
         {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
