@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import BannerHoy from '@/components/BannerHoy';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
@@ -335,6 +336,9 @@ export default function PanelProfesor() {
         {/* ¿ERES TÚ? Identificación en el cuadrante de guardias.
             Solo lo ve quien aparece en el cuadrante con un nombre que no
             casa con su ficha; al resto no le sale nada. */}
+        {/* Lo que te toca hoy: guardias, recreo, reuniones */}
+        <BannerHoy />
+
         <AvisoCuadrante />
 
         {/* Hoja de servicios: solo a quien aún no la ha subido */}
