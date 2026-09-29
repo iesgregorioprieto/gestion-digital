@@ -673,6 +673,9 @@ export default function Guardias() {
               const fichada  = g.estado === 'confirmado' || g.estado === 'realizado';
               const perdida  = !fichada && fichajeCerrado(g.hora, g.fecha, g.created_at);
               const etiqueta = HORAS.find(x => x.id === h);
+              // El recreo es vigilancia de zona: se ficha igual, pero no hay
+              // grupo ni tarea, y no cambia porque falte alguien.
+              const esRecreo = h === 'recreo' || esRecreoSector(g.sector_apoyo);
 
               return (
                 <div key={g.id} style={{
@@ -680,6 +683,17 @@ export default function Guardias() {
                   backgroundColor: fichada ? '#f0fdf4' : perdida ? '#fef2f2' : '#fffbeb',
                   border:`2px solid ${fichada ? verde : perdida ? rojo : '#fbbf24'}`,
                 }}>
+                  {esRecreo ? (
+                    <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
+                      ☕ Tienes guardia de recreo
+                      <span style={{ fontSize:12.5, fontWeight:600, color:'#92400e', marginLeft:8 }}>
+                        {etiqueta ? etiqueta.horario : ''}
+                      </span>
+                      <div style={{ fontSize:15, fontWeight:700, color:'#1f2937', marginTop:6 }}>
+                        Zona: {g.aula || String(g.grupo || '').replace(/^Recreo\s*·?\s*/i, '') || 'sin especificar'}
+                      </div>
+                    </div>
+                  ) : (<>
                   <div style={{ fontSize:16, fontWeight:800, color:'#78350f' }}>
                     🛡️ Tienes guardia a {etiqueta?.label || `${h}ª`}
                     <span style={{ fontSize:12.5, fontWeight:600, color:'#92400e', marginLeft:8 }}>
@@ -703,6 +717,7 @@ export default function Guardias() {
                       </div>
                     );
                   })()}
+                  </>)}
                   {(g.tarea || g.tarea_archivos?.length > 0) && (
                     <div style={{ fontSize:13, color:'#374151', marginTop:6, padding:'8px 10px',
                       backgroundColor:'white', borderRadius:8, border:'1px solid #e5e7eb' }}>
@@ -728,9 +743,9 @@ export default function Guardias() {
                     </div>
                   )}
 
-                  <div style={{ fontSize:11.5, color:'#92400e', marginTop:7 }}>
+                  {!esRecreo && <div style={{ fontSize:11.5, color:'#92400e', marginTop:7 }}>
                     Puede cambiar si falta algún compañero más.
-                  </div>
+                  </div>}
 
                   <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
                     {abierto && (
@@ -760,7 +775,7 @@ export default function Guardias() {
                           color: abierto ? 'white' : '#6b7280',
                           fontSize:15, fontWeight:800, cursor:'pointer',
                         }}>
-                        {abierto ? '✅ Fichar la guardia' : `🔒 Se abre a las ${(etiqueta?.horario || '').split('–')[0]}`}
+                        {abierto ? (esRecreo ? '✅ Fichar el recreo' : '✅ Fichar la guardia') : `🔒 Se abre a las ${(etiqueta?.horario || '').split('–')[0]}`}
                       </button>
                     )}
                   </div>
