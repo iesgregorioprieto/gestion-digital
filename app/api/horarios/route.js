@@ -123,8 +123,11 @@ export async function POST(request) {
     if (accion === 'borrar_de_profesor') {
       if (!profesor_id) return Response.json({ error: 'Falta el profesor' }, { status: 400 });
 
+      // NUNCA las horas prestadas de un titular (titular_original_id): son
+      // SU horario, traspasado mientras está de baja. Borrarlas al liberar
+      // al sustituto dejaba al titular sin horario al incorporarse.
       const { error } = await supa().from('horarios_profesores')
-        .delete().eq('profesor_id', profesor_id);
+        .delete().eq('profesor_id', profesor_id).is('titular_original_id', null);
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
@@ -199,9 +202,11 @@ export async function POST(request) {
         return Response.json({ ok: true, traspasados: 0, motivo: 'el titular no tiene horario' });
       }
 
-      // Restos de traspasos anteriores del sustituto, si los hubiera.
+      // Restos de copias antiguas del sustituto, si los hubiera. Nunca las
+      // horas prestadas de OTRO titular (si sustituye a dos personas).
       await cliente.from('horarios_profesores')
-        .delete().eq('profesor_id', sustituto_id).eq('curso_academico', cursoActivo);
+        .delete().eq('profesor_id', sustituto_id).eq('curso_academico', cursoActivo)
+        .is('titular_original_id', null);
 
       let traspasados = 0;
       for (const h of suyas) {

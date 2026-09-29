@@ -340,9 +340,10 @@ export default function PanelBajas() {
     setTrabajando(true);
     try {
       if (sustituto) {
+        // Devolver al titular sus horas (no borrarlas: son SU horario)
         await fetch('/api/horarios', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustituto.id }),
+          body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
         });
         await fetch('/api/profesores', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -385,17 +386,24 @@ export default function PanelBajas() {
     if (!confirm(
       `¿${titular.nombre} ${titular.apellidos} se incorpora el ${fechaLarga(fechaAlta)}?\n\n` +
       (sustituto
-        ? `${sustituto.nombre} ${sustituto.apellidos} perderá el horario copiado y quedará desactivado.`
+        ? `${sustituto.nombre} ${sustituto.apellidos} dejará de tener su horario (vuelve al titular) y quedará desactivado.`
         : `Sus grupos dejarán de salir en el cuadrante de guardias.`)
     )) return;
 
     setTrabajando(true);
     try {
+      // 1. LO PRIMERO, devolverle su horario. Antes se borraba antes el
+      //    horario del sustituto, y como el del titular se TRASPASA (no se
+      //    copia), se borraban sus propias clases y guardias: al volver no
+      //    tenía horario. Ahora no se borra nada: lo que era suyo vuelve a él.
+      const rd = await fetch('/api/horarios', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+      });
+      const dev = await rd.json().catch(() => ({}));
+      if (!rd.ok) throw new Error(dev.error || 'No se pudo devolver el horario');
+
       if (sustituto) {
-        await fetch('/api/horarios', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'borrar_de_profesor', profesor_id: sustituto.id }),
-        });
         await fetch('/api/profesores', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accion: 'baja', id: sustituto.id,
@@ -422,12 +430,6 @@ export default function PanelBajas() {
           datos: { profesor_id: titular.id, fecha_fin: hoyISO() } }),
       });
 
-      // Recupera su horario: las filas que se le traspasaron al sustituto
-      // vuelven a su nombre, con la abreviatura del cuadrante incluida.
-      await fetch('/api/horarios', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
-      }).catch(() => {});
 
       // Vuelve a su horario: sus ausencias abiertas vuelven a generar
       // horas que cubrir con normalidad.
@@ -436,7 +438,13 @@ export default function PanelBajas() {
         body: JSON.stringify({ accion: 'recalcular_dias', datos: { profesor_id: titular.id } }),
       }).catch(() => {});
 
-      aviso('Titular incorporado.');
+      // Guardias de hoy y del próximo día lectivo con él de vuelta
+      await fetch('/api/guardias/preasignar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fecha: hoyISO() }),
+      }).catch(() => {});
+
+      aviso(`Titular incorporado. Recupera su horario (${dev.devueltos || 0} horas).`);
       cargar();
     } catch (e) {
       aviso('No se ha podido dar de alta: ' + e.message, 'error');
