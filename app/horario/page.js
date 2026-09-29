@@ -1,5 +1,6 @@
 "use client";
 import { consulta } from '@/lib/consulta';
+import { extrasDe, idHora } from '@/lib/horasExtra';
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
@@ -24,7 +25,17 @@ function horaActual() {
   if (t < 705) return 'R';
   if (t < 760) return '4';
   if (t < 815) return '5';
-  return '6';
+  if (t < 870) return '6';
+  if (t < 925) return '7';
+  if (t < 960) return null;          // mediodía
+  if (t < 1015) return 'tarde1';
+  if (t < 1070) return 'tarde2';
+  if (t < 1125) return 'tarde3';
+  if (t < 1140) return null;         // recreo de la tarde
+  if (t < 1195) return 'noche1';
+  if (t < 1250) return 'noche2';
+  if (t < 1305) return 'noche3';
+  return null;
 }
 
 function HorarioContenido() {
@@ -104,11 +115,17 @@ function HorarioContenido() {
   const grid = {};
   for (const h of horario) {
     const dia = (h.dia || '').toLowerCase();
-    const hora = (h.hora_id || '').toString().replace(/[aª]/g, '');
+    // '3a' → '3', '7a' → '7', 'tarde1' igual (antes se quitaban TODAS las «a»
+    // y 'tarde1' quedaba en 'trde1'); el recreo va a la fila 'R'.
+    const idH = idHora(h.hora_id);
+    const hora = idH === 'recreo' ? 'R' : idH;
     const key = `${dia}-${hora}`;
     if (!grid[key]) grid[key] = [];
     grid[key].push(h);
   }
+
+  // 7ª y tarde: solo si tiene algo en esas franjas
+  const horasVista = [...HORAS, ...extrasDe(horario)];
 
   function renderCelda(celdas, esAhora) {
     if (celdas.length === 0) return <span style={{ fontSize: 10, color: '#ccc' }}>—</span>;
@@ -232,7 +249,7 @@ function HorarioContenido() {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {HORAS.map(h => {
+              {horasVista.map(h => {
                 const celdas = grid[`${hoyDia}-${h.id}`] || [];
                 const esAhora = h.id === horaAct;
                 const esRecreo = h.id === 'R';
@@ -291,7 +308,7 @@ function HorarioContenido() {
                 </tr>
               </thead>
               <tbody>
-                {HORAS.map(h => (
+                {horasVista.map(h => (
                   <tr key={h.id}>
                     <td style={{
                       padding: '8px 6px', textAlign: 'center', fontSize: 11, fontWeight: 700,

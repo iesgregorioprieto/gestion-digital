@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { HORAS_EXTRA } from '@/lib/horasExtra';
 import { adjuntosDe, enlaceDocumento, MAX_ADJUNTOS } from '@/lib/adjuntos';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
@@ -30,6 +31,11 @@ const HORAS = [
   { id: '5', label: '5ª hora' },
   { id: '6', label: '6ª hora' },
 ];
+
+// 7ª y tarde (grupos de tarde de TLO, reuniones de 14:30): solo aparecen
+// si el profesor tiene algo a esas horas. Se registran, pero no generan
+// guardia. Su nombre empieza por letra a propósito (ver lib/horasExtra).
+const TODAS_HORAS = [...HORAS, ...HORAS_EXTRA.map(x => ({ id: x.id, label: x.label, extra: true }))];
 
 const ETAPAS = {
   'ESO':    ['ESO-1AM','ESO-1AZ','ESO-1NA','ESO-1VE','ESO-2AM','ESO-2AZ','ESO-2VE','ESO-3AM','ESO-3AZ','ESO-3DIV','ESO-3NA','ESO-3VE','ESO-4AM','ESO-4AZ','ESO-4VE'],
@@ -400,7 +406,7 @@ export default function Ausencias() {
       const horasClase = horasIncluidas.filter(([_, v]) => v.tipo === 'clase');
       const sinTarea = horasClase.filter(([_, v]) => !v.instrucciones?.trim() && !numAdjuntos(v));
       if (sinTarea.length > 0) {
-        labelsSinTarea = sinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+        labelsSinTarea = sinTarea.map(([id]) => TODAS_HORAS.find(h => h.id === id)?.label || id).join(', ');
       }
     }
 
@@ -449,7 +455,7 @@ export default function Ausencias() {
           .map(async ([horaId, val]) => {
           const archivos = await subirAdjuntos(val);
           return {
-            hora: HORAS.find(h => h.id === horaId)?.label || horaId,
+            hora: TODAS_HORAS.find(h => h.id === horaId)?.label || horaId,
             tipo: val.tipo,
             grupo: val.grupo || null,
             materia: val.materia || null,
@@ -553,7 +559,7 @@ export default function Ausencias() {
       // Ausencia corta: reconstruir hora por hora
       const nuevoHorario = {};
       horas.forEach(h => {
-        const horaObj = HORAS.find(hh => hh.label === h.hora || hh.id === h.hora);
+        const horaObj = TODAS_HORAS.find(hh => hh.label === h.hora || hh.id === h.hora);
         if (!horaObj) return;
         nuevoHorario[horaObj.id] = {
           tipo: h.tipo,
@@ -1071,7 +1077,7 @@ export default function Ausencias() {
                 </div>
               )}
 
-              {(modoManual || Object.values(horario).some(h => h.precargado)) && HORAS.map(hora => {
+              {(modoManual || Object.values(horario).some(h => h.precargado)) && [...HORAS, ...TODAS_HORAS.filter(x => x.extra && horario[x.id])].map(hora => {
                 const val = horario[hora.id];
                 const esRecreo = hora.id === 'recreo';
                 const esEditando = horaEditando === hora.id;
@@ -1091,6 +1097,7 @@ export default function Ausencias() {
                   const colorBorder = val.tipo === 'clase' ? '#fbbf24' : val.tipo === 'guardia' ? '#93c5fd' : '#a78bfa';
                   const colorText = val.tipo === 'clase' ? '#92400e' : val.tipo === 'guardia' ? '#1e40af' : '#6d28d9';
                   const labelTipo = val.tipo === 'clase' ? '📚 Clase' : val.tipo === 'guardia' ? '🛡️ Guardia' : '📋 Complementaria';
+                  const avisoTarde = hora.extra ? ' · sin guardia (no hay profesorado de guardia a esta hora)' : '';
 
                   // En "algunas horas", una hora no marcada se enseña
                   // atenuada, sin tarea, y solo con la casilla para
@@ -1118,7 +1125,7 @@ export default function Ausencias() {
                             style={{ width: 16, height: 16 }} />
                         )}
                         <span style={{ fontSize: 13, fontWeight: 700, color: '#1e3a5f', minWidth: 70 }}>{hora.label}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: colorText, backgroundColor: 'white', padding: '3px 10px', borderRadius: 20, border: `1px solid ${colorBorder}` }}>{labelTipo}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: colorText, backgroundColor: 'white', padding: '3px 10px', borderRadius: 20, border: `1px solid ${colorBorder}` }}>{labelTipo}{avisoTarde}</span>
                         {val.grupo && <span style={{ fontSize: 12, backgroundColor: '#e0e7ff', color: '#3730a3', padding: '3px 10px', borderRadius: 20, fontWeight: 700 }}>{val.grupo}{val.materia ? ` · ${val.materia}` : ''}</span>}
                       </div>
                       {val.tipo === 'clase' && (

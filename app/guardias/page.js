@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
+import { fichajeAbierto, fichajeCerrado, MARGEN_FICHAJE_MIN, MARGEN_CREADA_TARDE_MIN } from '@/lib/asignacionGuardias';
 import { enlaceDocumento } from '@/lib/adjuntos';
 import MiContadorGuardias from '@/components/MiContadorGuardias';
 import { hoyLocal } from '@/lib/fechas';
@@ -48,29 +49,8 @@ function horaDe(horaId) {
   const h = HORAS.find(x => x.id === normHora(horaId));
   return h ? h.horario : '';
 }
-function dentroDeFranja(horaId, fechaGuardia, ahora = new Date()) {
-  const h = HORAS.find(x => x.id === normHora(horaId));
-  if (!h || !fechaGuardia) return false;
-  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`;
-  if (hoy !== fechaGuardia) return false;
-  const min = ahora.getHours() * 60 + ahora.getMinutes();
-  const aMin = t => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
-  const [ini, fin] = h.horario.split('–');
-  // Fin exclusivo: a las 9:25 no pueden estar activas 1ª y 2ª a la vez.
-  return min >= aMin(ini) && min < aMin(fin);
-}
-// ¿Ya ha terminado esa hora? Si terminó y nadie fichó, la guardia consta
-// como no realizada y se ve en rojo. No se oculta.
-function franjaTerminada(horaId, fechaGuardia, ahora = new Date()) {
-  const h = HORAS.find(x => x.id === normHora(horaId));
-  if (!h || !fechaGuardia) return false;
-  const hoy = `${ahora.getFullYear()}-${String(ahora.getMonth()+1).padStart(2,'0')}-${String(ahora.getDate()).padStart(2,'0')}`;
-  if (fechaGuardia < hoy) return true;
-  if (fechaGuardia > hoy) return false;
-  const aMin = t => { const [hh, mm] = t.split(':').map(Number); return hh * 60 + mm; };
-  const fin = h.horario.split('–')[1];
-  return (ahora.getHours() * 60 + ahora.getMinutes()) >= aMin(fin);
-}
+// Si se puede fichar y si ya se cerró: la MISMA regla que el servidor
+// (lib/asignacionGuardias: fichajeAbierto / fichajeCerrado).
 function horaCoincide(horaGuardada, horaId) {
   if (!horaGuardada) return false;
   const s = horaGuardada.toString().toLowerCase().trim();
@@ -687,9 +667,9 @@ export default function Guardias() {
           <div style={{ margin:'12px 16px' }}>
             {mias.map(g => {
               const h = normHora(g.hora);
-              const abierto  = dentroDeFranja(g.hora, g.fecha);
+              const abierto  = fichajeAbierto(g.hora, g.fecha, g.created_at);
               const fichada  = g.estado === 'confirmado' || g.estado === 'realizado';
-              const perdida  = !fichada && franjaTerminada(g.hora, g.fecha);
+              const perdida  = !fichada && fichajeCerrado(g.hora, g.fecha, g.created_at);
               const etiqueta = HORAS.find(x => x.id === h);
 
               return (
@@ -771,7 +751,7 @@ export default function Guardias() {
                       <button
                         onClick={() => abierto
                           ? (setFichandoId(g.id), setObservaciones(''))
-                          : alert(`El check se abre de ${etiqueta?.horario || ''}, durante la propia guardia.`)}
+                          : alert(`Se puede fichar de ${etiqueta?.horario || ''} y hasta ${MARGEN_FICHAJE_MIN} minutos después (si la guardia te llegó con la hora empezada, tienes al menos ${MARGEN_CREADA_TARDE_MIN} minutos).`)}
                         style={{
                           padding:'11px 22px', borderRadius:9, border:'none',
                           backgroundColor: abierto ? verde : '#d1d5db',
@@ -926,8 +906,8 @@ export default function Guardias() {
                           const cubreDepto = fichaCubre?.departamento || g.sector_apoyo;
                           const esMia = g.profesor_id && String(g.profesor_id) === String(profesorId);
                           const fichada = g.estado === 'confirmado';
-                          const abierto = dentroDeFranja(g.hora, g.fecha);
-                          const perdida = !fichada && franjaTerminada(g.hora, g.fecha);
+                          const abierto = fichajeAbierto(g.hora, g.fecha, g.created_at);
+                          const perdida = !fichada && fichajeCerrado(g.hora, g.fecha, g.created_at);
 
                           return (
                             <div key={g.id} style={{
@@ -1017,7 +997,7 @@ export default function Guardias() {
                                 )}
                                 {esMia && !fichada && !abierto && !perdida && (
                                   <span style={{ fontSize:10.5, color:'#94a3b8', width:'100%' }}>
-                                    El check se abre de {horaDe(g.hora)}
+                                    Se puede fichar de {horaDe(g.hora)} y hasta {MARGEN_FICHAJE_MIN} min después
                                   </span>
                                 )}
                               </div>

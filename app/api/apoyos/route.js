@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { dentroDeFranja, franjaEmpezada } from '@/lib/asignacionGuardias';
+import { fichajeAbierto, franjaEmpezada } from '@/lib/asignacionGuardias';
 import { departamentoASector } from '@/lib/sectores';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
@@ -73,11 +73,11 @@ export async function POST(request) {
       if (!texto) return Response.json({ error: 'Falta el texto' }, { status: 400 });
 
       const { data: fila } = await supa().from('apoyos_asignados')
-        .select('id, fecha, hora, incidencia').eq('id', id).eq('profesor_id', sesion.id);
+        .select('id, fecha, hora, incidencia, created_at').eq('id', id).eq('profesor_id', sesion.id);
       const guardia = (fila || [])[0];
       if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
 
-      if (!dentroDeFranja(guardia.hora, guardia.fecha)) {
+      if (!fichajeAbierto(guardia.hora, guardia.fecha, guardia.created_at)) {
         return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
       }
 
@@ -99,11 +99,11 @@ export async function POST(request) {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
       const { data: fila } = await supa().from('apoyos_asignados')
-        .select('id, fecha, hora, profesor_id').eq('id', id).eq('profesor_id', sesion.id);
+        .select('id, fecha, hora, profesor_id, created_at').eq('id', id).eq('profesor_id', sesion.id);
       const guardia = (fila || [])[0];
       if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
 
-      if (!dentroDeFranja(guardia.hora, guardia.fecha)) {
+      if (!fichajeAbierto(guardia.hora, guardia.fecha, guardia.created_at)) {
         return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
       }
 
