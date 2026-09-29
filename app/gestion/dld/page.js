@@ -1106,7 +1106,7 @@ export default function PanelDirector() {
                               })}
                             </div>
                           )}
-                          {s.causa_sobrevenida && <div style={{ marginTop: 4, fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠️ Causa sobrevenida</div>}
+                          {s.causa_sobrevenida && <div style={{ marginTop: 4, fontSize: 12, color: '#92400e', fontWeight: 600 }}>⚠️ Causa sobrevenida{s.descripcion_causa ? <span style={{ fontWeight: 400 }}>: {s.descripcion_causa}</span> : null}</div>}
                           {alertas.map((a, i) => <div key={i} style={{ fontSize: 12, color: a.tipo === 'rojo' ? '#b91c1c' : '#92400e', marginTop: 2 }}>{a.texto}</div>)}
                         </div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
@@ -1171,7 +1171,7 @@ export default function PanelDirector() {
                           })}
                         </div>
                       )}
-                      {s.causa_sobrevenida && <div style={{ marginTop: 6, fontSize: 12, backgroundColor: '#fffbeb', color: '#92400e', padding: '3px 10px', borderRadius: 10, display: 'inline-block', fontWeight: 600 }}>⚠️ Causa sobrevenida</div>}
+                      {s.causa_sobrevenida && <div style={{ marginTop: 6, fontSize: 12, backgroundColor: '#fffbeb', color: '#92400e', padding: '3px 10px', borderRadius: 10, display: 'inline-block', fontWeight: 600, maxWidth: '100%', lineHeight: 1.45 }}>⚠️ Causa sobrevenida{s.descripcion_causa ? <span style={{ fontWeight: 400 }}>: {s.descripcion_causa}</span> : null}</div>}
                       {alertas.map((a, i) => <div key={i} style={{ fontSize: 12, color: a.tipo === 'rojo' ? '#b91c1c' : '#92400e', marginTop: 2 }}>{a.texto}</div>)}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
