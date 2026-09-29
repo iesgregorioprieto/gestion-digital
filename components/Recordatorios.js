@@ -136,6 +136,16 @@ export default function Recordatorios() {
   }, []);
 
   const lista = RECORDATORIOS.filter(r => pendientes.includes(r.id));
+
+  // Mientras la pestaña está a la vista, se deja un hueco al final de la
+  // página para que no tape la última tarjeta.
+  const visiblesAhora = !oculto(ruta) && lista.some(r => !ruta.startsWith(r.accion.href.split('#')[0]));
+  useEffect(() => {
+    if (!visiblesAhora) return;
+    const antes = document.body.style.paddingBottom;
+    document.body.style.paddingBottom = '72px';
+    return () => { document.body.style.paddingBottom = antes; };
+  }, [visiblesAhora]);
   if (oculto(ruta) || lista.length === 0) return null;
   // En la pantalla donde se hace la tarea, la pestaña sobra
   const visibles = lista.filter(r => !ruta.startsWith(r.accion.href.split('#')[0]));

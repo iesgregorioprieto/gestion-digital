@@ -56,7 +56,8 @@ export default function AvisoComunicacion() {
         .then(r => r.ok ? r.json() : { comunicaciones: [] })
         .then(d => {
           if (!vivo) return;
-          const cs = (d.comunicaciones || []).filter(c => c.estado !== 'cerrada');
+          // Los de «solo banner» van en el banner «Hoy», no en esta ventana
+          const cs = (d.comunicaciones || []).filter(c => c.estado !== 'cerrada' && c.tipo !== 'banner');
 
           // Primero lo que exige respuesta ahora mismo: un fichaje abierto
           const fichando = cs.find(c => c.fichajeAbierto && !c.miRespuesta?.fichado_at);

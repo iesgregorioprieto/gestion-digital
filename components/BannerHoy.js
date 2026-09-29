@@ -34,7 +34,10 @@ export default function BannerHoy() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 8px', borderRadius: 8, marginBottom: 3,
             backgroundColor: l.ahora ? '#fef3c7' : 'white', border: `1px solid ${l.ahora ? '#fcd34d' : '#dbeafe'}` }}>
             <span style={{ fontSize: 17 }}>{ICONO[l.tipo] || '•'}</span>
-            <span style={{ flex: 1, fontSize: 13.5, color: '#1e293b', fontWeight: l.ahora ? 700 : 500 }}>{l.texto}</span>
+            <span style={{ flex: 1, fontSize: 13.5, color: '#1e293b', fontWeight: l.ahora || l.tipo === 'aviso' ? 700 : 500 }}>
+              {l.texto}
+              {l.detalle && <span style={{ display: 'block', fontWeight: 400, fontSize: 12.5, color: '#475569', marginTop: 2 }}>{l.detalle}</span>}
+            </span>
             {l.ahora && <span style={{ fontSize: 11, fontWeight: 800, color: '#92400e' }}>AHORA</span>}
             {l.enlace && <span style={{ fontSize: 14, color: '#64748b' }}>›</span>}
           </div>

@@ -61,6 +61,10 @@ export default function GestionComunicaciones() {
 
   // Formulario
   const [tipo, setTipo] = useState('aviso');
+  // Aviso: «ventana» (pantalla completa, hay que leerlo) o «banner» (una
+  // línea en el banner «Hoy» hasta una fecha)
+  const [modoAviso, setModoAviso] = useState('ventana');
+  const [hastaBanner, setHastaBanner] = useState('');
   const [titulo, setTitulo] = useState('');
   const [texto, setTexto] = useState('');
   const [ambitos, setAmbitos] = useState(['claustro']);
@@ -379,6 +383,8 @@ export default function GestionComunicaciones() {
     if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
     if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
     if (ambitos.includes('equipo') && equiposElegidos.length === 0) return aviso('Elige al menos un equipo.', 'error');
+    const enBanner = tipo === 'aviso' && modoAviso === 'banner';
+    if (enBanner && !hastaBanner) return aviso('Indica hasta qué día se muestra en el banner.', 'error');
     if (tipo === 'convocatoria' && !fecha) return aviso('Indica el día de la reunión.', 'error');
 
     setGuardando(true);
@@ -388,7 +394,8 @@ export default function GestionComunicaciones() {
       body: JSON.stringify({
         accion: 'crear',
         datos: {
-          tipo, titulo, mensaje: texto, ambito: ambitos,
+          tipo: enBanner ? 'banner' : tipo, titulo, mensaje: texto, ambito: ambitos,
+          caduca_at: enBanner ? new Date(`${hastaBanner}T23:59:59`).toISOString() : null,
           departamento: ambitos.includes('departamento') ? dptos : null,
           destinatarios: ambitos.includes('manual') ? elegidos : null,
           equipos: ambitos.includes('equipo') ? equiposElegidos : null,
@@ -400,10 +407,12 @@ export default function GestionComunicaciones() {
       const e = await r.json().catch(() => ({}));
       aviso(e.error || 'No se ha podido publicar', 'error');
     } else {
-      aviso(tipo === 'convocatoria'
+      aviso(enBanner
+        ? `📌 Publicado en el banner de sus destinatarios hasta el ${hastaBanner.split('-').reverse().join('/')}.`
+        : tipo === 'convocatoria'
         ? '📅 Convocatoria publicada. Ya le ha saltado a los convocados.'
         : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
-      setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar('');
+      setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar(''); setModoAviso('ventana'); setHastaBanner('');
       setElegidos([]); setAmbitos(['claustro']); setDptos([]); setEquiposElegidos([]);
       setVista('lista');
       cargar();
@@ -518,8 +527,36 @@ export default function GestionComunicaciones() {
               </span>
             </div>
 
+            {/* ¿Cómo se muestra el aviso? */}
+            {tipo === 'aviso' && (
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>¿Cómo se muestra?</label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {[['ventana', '🪟 Ventana al abrir', 'A pantalla completa; hay que darse por enterado. Para lo importante.'],
+                    ['banner', '📌 Solo en el banner', 'Una línea arriba del panel hasta el día que elijas. Para recordatorios.']].map(([v, t, d]) => (
+                    <button key={v} type="button" onClick={() => setModoAviso(v)} style={{
+                      textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                      border: `2px solid ${modoAviso === v ? AZUL : '#e2e8f0'}`, backgroundColor: modoAviso === v ? '#eff6ff' : 'white',
+                    }}>
+                      <div style={{ fontWeight: 800, fontSize: 13.5, color: AZUL }}>{t}</div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>{d}</div>
+                    </button>
+                  ))}
+                </div>
+                {modoAviso === 'banner' && (
+                  <div style={{ marginTop: 10 }}>
+                    <label style={{ fontSize: 12.5, fontWeight: 700, color: AZUL }}>Mostrar hasta el día (incluido) *</label>
+                    <input type="date" value={hastaBanner} min={new Date().toLocaleDateString('sv-SE')}
+                      onChange={e => setHastaBanner(e.target.value)} style={{ ...campo, marginTop: 4 }} />
+                  </div>
+                )}
+              </div>
+            )}
+
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 18, lineHeight: 1.6, padding: '10px 13px', borderRadius: 8, backgroundColor: '#f8fafc' }}>
-              {tipo === 'aviso'
+              {tipo === 'aviso' && modoAviso === 'banner'
+                ? 'Sale como una línea en el banner «Hoy» de sus destinatarios, arriba del panel, hasta el día que elijas. No interrumpe ni pide confirmación.'
+                : tipo === 'aviso'
                 ? 'Llega a la aplicación y no les deja seguir hasta que se dan por enterados. Verás quién lo ha leído.'
                 : 'Además del aviso, confirman si van a asistir. El día de la reunión abres el control de asistencia y fichan los que estén.'}
             </div>
@@ -732,6 +769,13 @@ export default function GestionComunicaciones() {
                           {c.estado === 'cerrada' && ' · CERRADA'}
                         </div>
                         <div style={{ fontSize: 16, fontWeight: 800, color: '#222', lineHeight: 1.35 }}>{c.titulo}</div>
+                        {c.tipo === 'banner' && (
+                          <div style={{ marginTop: 4, display: 'inline-block', fontSize: 11.5, fontWeight: 700, padding: '2px 9px', borderRadius: 10,
+                            backgroundColor: c.caduca_at && new Date(c.caduca_at) < new Date() ? '#f1f5f9' : '#eff6ff',
+                            color: c.caduca_at && new Date(c.caduca_at) < new Date() ? '#64748b' : '#1e40af' }}>
+                            📌 {c.caduca_at && new Date(c.caduca_at) < new Date() ? 'Ya no sale en el banner' : `En el banner hasta el ${new Date(c.caduca_at).toLocaleDateString('es-ES')}`}
+                          </div>
+                        )}
                         <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
                           {(Array.isArray(c.ambito) ? c.ambito : [c.ambito]).map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(', ')}
                           {c.departamento ? ` · ${Array.isArray(c.departamento) ? c.departamento.join(', ') : c.departamento}` : ''}

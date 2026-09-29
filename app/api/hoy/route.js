@@ -15,6 +15,7 @@ import { getCursoActual } from '@/lib/curso';
 import { hoyLocal } from '@/lib/fechas';
 import { horarioDe } from '@/lib/horarioDeProfesor';
 import { franja, fichajeCerrado, fichajeAbierto, ventanaFichaje, ahoraEnCentro } from '@/lib/asignacionGuardias';
+import { esDestinatario } from '@/app/api/comunicaciones/route';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,20 @@ export async function GET(request) {
         texto: `${h.materia.replace(/^(\S)(\S*)/, (_, a, b) => a + b.toLowerCase())} a ${id}ª (${f.inicio})`,
         ahora: ahora.minutos >= aMin(f.inicio),
       });
+    }
+
+    // Avisos de jefatura «solo en el banner», para sus destinatarios y
+    // hasta su fecha. Van los primeros.
+    const [{ data: avisos }, { data: fichas }] = await Promise.all([
+      c.from('comunicaciones').select('id, titulo, mensaje, ambito, departamento, destinatarios, caduca_at, estado')
+        .eq('tipo', 'banner').eq('estado', 'activa'),
+      c.from('profesores').select('id, nombre, apellidos, departamento, rol, rol_gestion').eq('id', sesion.id),
+    ]);
+    const ficha = (fichas || [])[0];
+    for (const a of avisos || []) {
+      if (a.caduca_at && new Date(a.caduca_at) < new Date()) continue;
+      if (!esDestinatario(a, ficha)) continue;
+      lineas.push({ tipo: 'aviso', orden: '00:00', texto: a.titulo, detalle: a.mensaje });
     }
 
     lineas.sort((a, b) => a.orden.localeCompare(b.orden));

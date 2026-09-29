@@ -237,8 +237,14 @@ export async function POST(request) {
         destinatarios = [...new Set([...(destinatarios || []), ...deEquipos])];
       }
 
+      // «banner»: una línea en el banner «Hoy» hasta una fecha (sin ventana)
+      const tipo = ['convocatoria', 'banner'].includes(datos.tipo) ? datos.tipo : 'aviso';
+      if (tipo === 'banner' && !datos.caduca_at) {
+        return Response.json({ error: 'Indica hasta qué día se muestra en el banner' }, { status: 400 });
+      }
+
       const fila = {
-        tipo: datos.tipo === 'convocatoria' ? 'convocatoria' : 'aviso',
+        tipo,
         titulo: datos.titulo.trim(),
         mensaje: datos.mensaje.trim(),
         ambito: datos.ambito || 'claustro',
@@ -252,7 +258,10 @@ export async function POST(request) {
       };
 
       const { data, error } = await cliente.from('comunicaciones').insert([fila]).select('id');
-      if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (error) {
+        const falta = tipo === 'banner' && /tipo_check/.test(error.message || '');
+        return Response.json({ error: falta ? 'Falta ejecutar supabase/avisos_banner.sql en Supabase.' : error.message }, { status: 500 });
+      }
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
