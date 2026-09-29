@@ -83,9 +83,11 @@ export default function FicharPorJefatura({ fecha }) {
             {(lista || []).map(g => (
               <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
                 backgroundColor: 'white', border: '1px solid #fed7aa', borderRadius: 8, padding: '8px 10px', fontSize: 12.5 }}>
-                <strong style={{ minWidth: 30 }}>{g.hora}ª</strong>
+                <strong style={{ minWidth: 30 }}>{g.esRecreo ? '☕' : `${g.hora}ª`}</strong>
                 <div style={{ flex: '1 1 240px', minWidth: 0 }}>
-                  <div><span style={{ color: '#64748b' }}>Falta:</span> <strong>{g.ausente}</strong> · {g.grupo || 'sin grupo'} {g.aula && `· ${g.aula}`}</div>
+                  {g.esRecreo
+                    ? <div><strong>Recreo</strong> · zona {g.aula || '—'}</div>
+                    : <div><span style={{ color: '#64748b' }}>Falta:</span> <strong>{g.ausente}</strong> · {g.grupo || 'sin grupo'} {g.aula && `· ${g.aula}`}</div>}
                   <div style={{ fontSize: 11.5, color: g.asignado ? '#475569' : '#b91c1c' }}>
                     {g.asignado ? `Asignada a ${g.asignado}` : 'Sin cubrir (nadie de guardia libre)'}
                   </div>
@@ -105,7 +107,7 @@ export default function FicharPorJefatura({ fecha }) {
           <div style={{ backgroundColor: 'white', borderRadius: 12, width: 'min(460px, 100%)', maxHeight: '90vh', overflowY: 'auto', padding: 16 }}>
             <div style={{ fontSize: 15, fontWeight: 800, color: azul, marginBottom: 4 }}>✔ Fichar guardia</div>
             <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 12 }}>
-              {modal.guardia.hora}ª · falta {modal.guardia.ausente} · {modal.guardia.grupo || 'sin grupo'}
+              {modal.guardia.esRecreo ? `Recreo · zona ${modal.guardia.aula || '—'}` : `${modal.guardia.hora}ª · falta ${modal.guardia.ausente} · ${modal.guardia.grupo || 'sin grupo'}`}
             </div>
 
             <div style={{ fontSize: 12.5, fontWeight: 700, color: '#334155', marginBottom: 4 }}>¿Quién la hizo?</div>

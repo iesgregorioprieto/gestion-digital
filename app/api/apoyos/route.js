@@ -193,12 +193,14 @@ export async function POST(request) {
       ]);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       const nombre = pid => { const p = (profes || []).find(x => x.id === pid); return p ? `${p.apellidos}, ${p.nombre}` : null; };
-      const orden = ['1', '2', '3', '4', '5', '6'];
+      // Los recreos TAMBIÉN: se fichan igual, y muchos no sabían que había
+      // que hacerlo. Van en su sitio, entre 3ª y 4ª.
+      const orden = ['1', '2', '3', 'recreo', '4', '5', '6'];
       const lista = (filas || [])
-        .filter(a => String(a.hora) !== 'recreo' && !/recreo/i.test(a.sector_apoyo || ''))
         .filter(a => franjaEmpezada(a.hora, a.fecha))
         .map(a => ({
           id: a.id, hora: String(a.hora), grupo: a.grupo || '', aula: a.aula || '', estado: a.estado,
+          esRecreo: String(a.hora) === 'recreo' || /recreo/i.test(a.sector_apoyo || ''),
           sector: a.sector_destino || a.sector_apoyo || '',
           ausente: nombre(a.profesor_ausente_id) || '—',
           asignadoId: a.profesor_id || null,
@@ -220,7 +222,7 @@ export async function POST(request) {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
       const { data: fila } = await supa().from('apoyos_asignados')
-        .select('id, fecha, hora, profesor_id, estado').eq('id', id);
+        .select('id, fecha, hora, profesor_id, estado, sector_apoyo').eq('id', id);
       const guardia = (fila || [])[0];
       if (!guardia) return Response.json({ error: 'No existe esa guardia' }, { status: 404 });
       if (['confirmado', 'incidencia'].includes(guardia.estado)) {
@@ -246,7 +248,10 @@ export async function POST(request) {
         if (!(p || [])[0]) return Response.json({ error: 'Ese profesor no existe' }, { status: 400 });
         cambios.profesor_id = quien;
         cambios.profesor_nombre_pdf = null;
-        cambios.sector_apoyo = departamentoASector(p[0].departamento);
+        // Un recreo sigue siendo recreo aunque lo hiciera otra persona (no
+        // cuenta como guardia de sustitución en el contador).
+        const esRecreo = String(guardia.hora) === 'recreo' || /recreo/i.test(guardia.sector_apoyo || '');
+        cambios.sector_apoyo = esRecreo ? 'RECREO' : departamentoASector(p[0].departamento);
         cambios.asignado_original_id = guardia.profesor_id || null;
       }
 

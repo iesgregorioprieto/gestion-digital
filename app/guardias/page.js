@@ -646,7 +646,9 @@ export default function Guardias() {
       {!esFinde && fecha === hoyLocal() && (() => {
         const mias = apoyosAsignados
           .filter(g => g.profesor_id && String(g.profesor_id) === String(profesorId))
-          .sort((a, b) => String(normHora(a.hora)).localeCompare(String(normHora(b.hora))));
+          // En orden de la jornada: el recreo entre 3ª y 4ª (antes salía al final)
+          .sort((a, b) => ['1','2','3','recreo','4','5','6'].indexOf(String(normHora(a.hora)))
+                        - ['1','2','3','recreo','4','5','6'].indexOf(String(normHora(b.hora))));
 
         if (mias.length === 0) {
           return (
