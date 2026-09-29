@@ -544,7 +544,11 @@ export default function GestionDatos() {
   function detectarTipoHora(textoCelda) {
     if (!textoCelda || textoCelda.length === 0) return 'libre';
     const t = textoCelda.toUpperCase();
-    if (t.startsWith('GUARDIA')) return 'guardia';
+    // «GUARDIA COMERCIO», «GUARDIA ACOMPAÑAMIENTO» del horario PERSONAL: se
+    // guardan como texto informativo (complementaria). Las guardias que usa
+    // el reparto salen del CUADRANTE; si estas entraran como guardia, el
+    // motor vería sectores que no existen (ACOMPAÑAMIENTO, BIBLIOTECA).
+    if (t.startsWith('GUARDIA')) return 'complementaria';
     if (t.includes('RECREO') || t.includes('MEDIOD')) return 'libre';
     if (t.startsWith('REUNI')) return 'complementaria';
     // Si tiene formato MATERIA-CODIGO<br>GRUPO<br>(aula) → clase
@@ -695,6 +699,11 @@ export default function GestionDatos() {
         } else if (tipo === 'guardia') {
           // El texto es "GUARDIA TMV/Carrocería" → el cuadrante es lo que va después de "GUARDIA "
           grupo = textoCelda.replace(/^GUARDIA\s*/i, '').trim();
+        } else if (tipo === 'complementaria') {
+          // Lo que pone Peñalara: «REUNIÓN ERASMUS FP», «ATENCIÓN A PADRES»,
+          // «TUTORÍA»... Antes se tiraba y en Mi horario solo salía
+          // «complementaria». Va en materia (grupo es para códigos de grupo).
+          materia = textoCelda.slice(0, 80);
         }
         
         // Añadir a las columnas que ocupa (colspan)
