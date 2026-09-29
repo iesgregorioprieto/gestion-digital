@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { grupoTutoriaValido, MENSAJE_TUTORIA } from '@/lib/gruposDelCurso';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 
@@ -110,6 +111,17 @@ export async function POST(request) {
         delete limpio.antiguedad_cuerpo;
       }
 
+      // La tutoría solo puede ser un grupo que exista (se elige del
+      // desplegable). Si llega tal cual estaba guardada, se respeta.
+      if ('grupo_tutoria' in limpio) {
+        const { data: ya } = await supa().from('profesores').select('grupo_tutoria').eq('id', sesion.id);
+        if ((limpio.grupo_tutoria || '') !== ((ya || [])[0]?.grupo_tutoria || '')) {
+          const v = await grupoTutoriaValido(supa(), limpio.grupo_tutoria);
+          if (!v.ok) return Response.json({ error: MENSAJE_TUTORIA }, { status: 400 });
+          limpio.grupo_tutoria = v.grupo;
+        }
+      }
+
       const { error } = await supa().from('profesores').update(limpio).eq('id', sesion.id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
@@ -128,6 +140,17 @@ export async function POST(request) {
         const a = (actual || [])[0];
         if (a?.servicios_origen === 'hoja' && String(a.anio_cuerpo ?? '') !== String(cambios.anio_cuerpo ?? '')) {
           cambios.servicios_origen = 'manual';
+        }
+      }
+
+      // La tutoría solo puede ser un grupo que exista (se elige del
+      // desplegable). Si llega tal cual estaba guardada, se respeta.
+      if ('grupo_tutoria' in cambios) {
+        const { data: ya } = await supa().from('profesores').select('grupo_tutoria').eq('id', id);
+        if ((cambios.grupo_tutoria || '') !== ((ya || [])[0]?.grupo_tutoria || '')) {
+          const v = await grupoTutoriaValido(supa(), cambios.grupo_tutoria);
+          if (!v.ok) return Response.json({ error: MENSAJE_TUTORIA }, { status: 400 });
+          cambios.grupo_tutoria = v.grupo;
         }
       }
 

@@ -94,6 +94,11 @@ export default function SelectorGrupoTutoria({ valor, onChange, estilo, profesor
         )}
       </select>
 
+      {!valor && !cargando && detalle.length > 0 && (
+        <div style={{ marginTop: 6, fontSize: 12, color: '#b91c1c', fontWeight: 600 }}>
+          👆 Elige tu grupo de tutoría en el desplegable. Arriba salen los grupos de tu horario.
+        </div>
+      )}
       {desconocido && (
         <div style={{ marginTop: 6, fontSize: 12, color: '#92400e', fontWeight: 600 }}>
           «{valor}» no coincide con ningún grupo de este curso: por eso no ves a tus alumnos en

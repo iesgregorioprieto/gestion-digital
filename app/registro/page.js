@@ -72,7 +72,7 @@ export default function Registro() {
           datos_incompletos:    'Faltan datos por rellenar.',
           falta_grupo:          'Indica de qué grupo eres tutor/a.',
         };
-        setError(mensajes[alta.error] || 'No se pudo completar el registro. Inténtalo de nuevo.');
+        setError(mensajes[alta.error] || (typeof alta.error === 'string' && alta.error.includes(' ') ? alta.error : null) || 'No se pudo completar el registro. Inténtalo de nuevo.');
         setEnviando(false);
         return;
       }

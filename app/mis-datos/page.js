@@ -112,7 +112,7 @@ export default function MisDatos() {
     if (!form.apellidos.trim()) return aviso('Los apellidos son obligatorios.', 'error');
     if (!form.departamento)     return aviso('Selecciona tu departamento.', 'error');
     if (form.esTutor && !form.grupoTutoria.trim())
-      return aviso('Indica de qué grupo eres tutor/a.', 'error');
+      return aviso('Elige tu grupo de tutoría en el desplegable.', 'error');
 
     setGuardando(true);
     try {

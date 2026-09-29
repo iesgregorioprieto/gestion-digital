@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { grupoTutoriaValido, MENSAJE_TUTORIA } from '@/lib/gruposDelCurso';
 import { claveServidor } from '@/lib/claveServidor';
 import { cifrarPassword } from '@/lib/password';
 
@@ -76,12 +77,20 @@ export async function POST(request) {
       return Response.json({ estado: 'pendiente_aprobacion' });
     }
 
+    // Tutoría: solo un grupo que exista este curso (se elige del desplegable)
+    let tutoria = null;
+    if (esTutor) {
+      const v = await grupoTutoriaValido(supa(), grupoTutoria);
+      if (!v.ok || !v.grupo) return Response.json({ error: MENSAJE_TUTORIA }, { status: 400 });
+      tutoria = v.grupo;
+    }
+
     const datos = {
       nombre,
       apellidos,
       departamento,
       rol: esTutor ? ['profesor', 'tutor'] : ['profesor'],
-      grupo_tutoria: esTutor ? grupoTutoria : null,
+      grupo_tutoria: tutoria,
       password_hash: await cifrarPassword(password),
       solicitud_acceso: true,
       estado: 'pendiente',

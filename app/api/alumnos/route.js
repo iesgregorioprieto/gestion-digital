@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { gruposDelCurso } from '@/lib/gruposDelCurso';
 import { claveGrupo } from '@/lib/grupos';
 import { mismoGrupo, resolverGrupo } from '@/lib/grupos';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
@@ -102,31 +103,8 @@ export async function GET(request) {
      * matrícula aún no se ha subido no aparecía por ninguna parte: su
      * tutor no podía ni seleccionarlo.
      */
-    const [{ data: oficiales }, alumnado, deHorarios] = await Promise.all([
-      supa().from('grupos').select('codigo'),
-      todasLasFilas('grupo'),
-      gruposDelHorario(),
-    ]);
-
-    // Un mismo grupo puede llegar escrito de varias formas (Delphos
-    // «4ESO-C», Peñalara «ESO-4C»). Se deja uno solo, y se prefiere el
-    // nombre del ALUMNADO, que es con el que están guardados seguros y
-    // autorizaciones; luego el de la lista oficial; el del horario solo
-    // si el grupo no aparece en ninguna de las otras dos.
-    const porClave = new Map();
-    for (const g of [...alumnado.map(a => a.grupo), ...(oficiales || []).map(g => g.codigo), ...deHorarios]) {
-      if (!g) continue;
-      const k = claveGrupo(g);
-      if (!porClave.has(k)) porClave.set(k, g);
-    }
-    const grupos = [...porClave.values()].sort((a, b) => a.localeCompare(b, 'es'));
-
-    // Cuántos alumnos tiene cada grupo (para que el tutor sepa, al elegir su
-    // tutoría, que va a ver a sus alumnos). 'grupos' sigue igual que antes.
-    const cuenta = {};
-    alumnado.forEach(a => { if (a.grupo) { const k = claveGrupo(a.grupo); cuenta[k] = (cuenta[k] || 0) + 1; } });
-    const detalle = grupos.map(g => ({ grupo: g, alumnos: cuenta[claveGrupo(g)] || 0 }));
-
+    // Una sola fuente para lo que se ofrece y lo que se acepta (lib/gruposDelCurso)
+    const { grupos, detalle } = await gruposDelCurso(supa());
     return Response.json({ grupos, detalle });
   }
 
