@@ -703,7 +703,11 @@ export default function GestionDatos() {
           // Lo que pone Peñalara: «REUNIÓN ERASMUS FP», «ATENCIÓN A PADRES»,
           // «TUTORÍA»... Antes se tiraba y en Mi horario solo salía
           // «complementaria». Va en materia (grupo es para códigos de grupo).
-          materia = textoCelda.slice(0, 80);
+          // Con los saltos de línea como espacios: «GUARDIA ACOMPAÑAMIENTO»,
+          // no «GUARDIAACOMPAÑAMIENTO».
+          const tmp = document.createElement('div');
+          tmp.innerHTML = celda.innerHTML.replace(/<br\s*\/?>/gi, ' ');
+          materia = limpiarTexto(tmp.textContent).slice(0, 80);
         }
         
         // Añadir a las columnas que ocupa (colspan)
