@@ -113,7 +113,7 @@ function HorarioContenido() {
   function renderCelda(celdas, esAhora) {
     if (celdas.length === 0) return <span style={{ fontSize: 10, color: '#ccc' }}>—</span>;
     return celdas.map((c, i) => {
-      const esGuardia = (c.tipo || '').toLowerCase().includes('guardia') || (c.actividad || '').toLowerCase().includes('guardia');
+      const esGuardia = (c.tipo || '').toLowerCase().includes('guardia') || /^guardia/i.test(c.actividad || c.materia || '');
       return (
         <div key={i} style={{
           padding: '6px 8px', borderRadius: 8, marginBottom: i < celdas.length - 1 ? 4 : 0,
@@ -121,7 +121,9 @@ function HorarioContenido() {
           border: `1px solid ${esGuardia ? '#fcd34d' : '#bfdbfe'}`,
         }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: esGuardia ? '#92400e' : '#1e40af' }}>
-            {c.actividad || c.materia || c.tipo || '—'}
+            {c.actividad || c.materia
+              || (c.tipo === 'guardia' ? (c.hora_id === 'recreo' ? 'Recreo' : 'Guardia')
+                : c.tipo === 'clase' ? 'Clase' : c.tipo === 'complementaria' ? 'Complementaria' : c.tipo) || '—'}
           </div>
           {c.grupo && <div style={{ fontSize: 11, color: '#555' }}>{c.grupo}</div>}
           {c.aula && <div style={{ fontSize: 10, color: '#888' }}>📍 {c.aula}</div>}
