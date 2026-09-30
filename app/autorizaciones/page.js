@@ -8,11 +8,11 @@ const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
 
 const RESTRICCIONES = [
-  { key: 'auth_imagenes',        emoji: '📸', label: 'Imágenes <14',           detalle: 'NO autorizado a grabación/difusión de imágenes (menor 14 años)' },
-  { key: 'auth_salidas',         emoji: '🚪', label: 'Salidas recreo',          detalle: 'NO autorizado a salir en recreo/última hora (16-17 años)' },
-  { key: 'auth_actividades',     emoji: '🎒', label: 'Actividades extra',        detalle: 'NO autorizado para actividades extracurriculares fuera del centro' },
-  { key: 'auth_informar_progeni',emoji: '📊', label: 'Informar progenitores',    detalle: 'NO autoriza informar a progenitores de datos académicos (mayor de edad)' },
-  { key: 'auth_imagenes_mayor',  emoji: '📸', label: 'Imágenes mayor edad',      detalle: 'NO autoriza grabación/difusión de imágenes (mayor de edad)' },
+  { key: 'auth_imagenes',        emoji: '📸', label: 'Imágenes <14',           detalle: 'Grabación y difusión de imágenes (menor de 14 años)' },
+  { key: 'auth_salidas',         emoji: '🚪', label: 'Salidas recreo',          detalle: 'Salir del centro en recreo y última hora (16-17 años)' },
+  { key: 'auth_actividades',     emoji: '🎒', label: 'Actividades extra',        detalle: 'Actividades extracurriculares fuera del centro' },
+  { key: 'auth_informar_progeni',emoji: '📊', label: 'Informar progenitores',    detalle: 'Informar a los progenitores de datos académicos (mayor de edad)' },
+  { key: 'auth_imagenes_mayor',  emoji: '📸', label: 'Imágenes mayor edad',      detalle: 'Grabación y difusión de imágenes (mayor de edad)' },
 ];
 
 export default function Autorizaciones() {
