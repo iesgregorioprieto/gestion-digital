@@ -51,9 +51,20 @@ export async function GET(req) {
 
   const { data: ausencias, error } = await supa()
     .from('ausencias')
-    .select('id, fecha_inicio, justificacion_urls, profesor:profesores(apellidos, nombre)')
+    .select('id, fecha_inicio, justificacion_urls, profesor_id, profesor_nombre')
     .gte('fecha_inicio', desde).lte('fecha_inicio', hasta);
   if (error) return new Response(error.message, { status: 500 });
+
+  // No hay clave foránea ausencias → profesores, así que el «join» de
+  // Supabase (profesor:profesores(...)) fallaba con «Could not find a
+  // relationship». Se piden los nombres aparte y se cruzan aquí.
+  const ids = [...new Set((ausencias || []).map(a => a.profesor_id).filter(Boolean))];
+  const nombres = {};
+  if (ids.length > 0) {
+    const { data: profes } = await supa()
+      .from('profesores').select('id, apellidos, nombre').in('id', ids);
+    for (const p of profes || []) nombres[p.id] = p;
+  }
 
   const zip = new JSZip();
   let contador = 0;
@@ -61,8 +72,10 @@ export async function GET(req) {
   for (const a of ausencias || []) {
     const urls = Array.isArray(a.justificacion_urls) ? a.justificacion_urls : [];
     if (urls.length === 0) continue;
-    const p = a.profesor || {};
-    const nombreBase = limpiar(`${p.apellidos || 'Sin apellidos'}, ${p.nombre || ''}`);
+    const p = nombres[a.profesor_id];
+    const nombreBase = p
+      ? limpiar(`${p.apellidos || ''}, ${p.nombre || ''}`)
+      : limpiar(a.profesor_nombre || 'Sin nombre');
     const dia = a.fecha_inicio ? a.fecha_inicio.slice(8, 10) : '00';
     const mes = a.fecha_inicio ? a.fecha_inicio.slice(5, 7) : '00';
     for (let i = 0; i < urls.length; i++) {
