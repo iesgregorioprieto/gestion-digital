@@ -14,6 +14,12 @@ import { useState, useEffect } from 'react';
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
 
+// Para no perder el hilo al salir a mirar algo en la app y volver
+const K_ABIERTA = 'incApp_abierta';
+const K_BORRADOR = 'incApp_borrador_';
+function leer(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+function guardar(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch {} }
+
 const ESTADOS = {
   nueva:      { emoji: '🆕', label: 'Recibidas',  color: '#1e40af', bg: '#eff6ff', borde: '#bfdbfe' },
   en_curso:   { emoji: '🔧', label: 'En ello',    color: '#b45309', bg: '#fffbeb', borde: '#fcd34d' },
@@ -30,6 +36,7 @@ export default function GestionIncidencias() {
   const [procesando, setProcesando] = useState(null);
   const [mensaje, setMensaje] = useState(null);
   const [usuario, setUsuario] = useState('');
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -39,17 +46,51 @@ export default function GestionIncidencias() {
       return;
     }
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
-    cargar();
+    cargar(true);
   }, []);
 
-  async function cargar() {
+  async function cargar(restaurar = false) {
     setCargando(true);
+    let lista = [];
     try {
       const r = await fetch('/api/incidencias');
       const d = await r.json();
-      setIncidencias(d.incidencias || []);
+      lista = d.incidencias || [];
+      setIncidencias(lista);
     } catch (e) { /* lista vacía */ }
     setCargando(false);
+
+    // Al volver: dejar abierta la que estabas mirando, con lo que llevabas escrito
+    if (restaurar) {
+      const id = leer(K_ABIERTA);
+      const inc = id && lista.find(x => String(x.id) === id);
+      if (inc) {
+        if (inc.estado === 'resuelta' || inc.estado === 'descartada') setFiltro('cerradas');
+        setAbierta(inc.id);
+        setRespuesta(leer(K_BORRADOR + inc.id) ?? (inc.respuesta || ''));
+        setTimeout(() => {
+          document.getElementById('inc-' + inc.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 150);
+      } else {
+        guardar(K_ABIERTA, null);
+      }
+    }
+  }
+
+  function abrirCerrar(i) {
+    if (abierta === i.id) {
+      setAbierta(null);
+      guardar(K_ABIERTA, null);
+    } else {
+      setAbierta(i.id);
+      guardar(K_ABIERTA, String(i.id));
+      setRespuesta(leer(K_BORRADOR + i.id) ?? (i.respuesta || ''));
+    }
+  }
+
+  function escribir(texto) {
+    setRespuesta(texto);
+    if (abierta) guardar(K_BORRADOR + abierta, texto);
   }
 
   function aviso(texto, tipo) {
@@ -69,6 +110,8 @@ export default function GestionIncidencias() {
       aviso('No se ha podido guardar: ' + (e.error || 'error'), 'error');
     } else {
       aviso('✅ Guardado', 'ok');
+      guardar(K_BORRADOR + id, null);
+      guardar(K_ABIERTA, null);
       setAbierta(null);
       setRespuesta('');
       cargar();
@@ -78,7 +121,20 @@ export default function GestionIncidencias() {
 
   const pendientes = incidencias.filter(i => i.estado === 'nueva' || i.estado === 'en_curso');
   const cerradas   = incidencias.filter(i => i.estado === 'resuelta' || i.estado === 'descartada');
-  const lista = filtro === 'pendientes' ? pendientes : cerradas;
+
+  // Buscador: un número va directo a esa incidencia; texto filtra en todas
+  const q = busca.trim().replace(/^#/, '').toLowerCase();
+  const sinAcentos = t => (t || '').toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  let lista;
+  if (!q) {
+    lista = filtro === 'pendientes' ? pendientes : cerradas;
+  } else if (/^\d+$/.test(q)) {
+    lista = incidencias.filter(i => String(i.numero) === q);
+  } else {
+    const t = sinAcentos(q);
+    lista = incidencias.filter(i =>
+      [i.modulo, i.descripcion, i.profesor_nombre, i.respuesta].some(c => sinAcentos(c).includes(t)));
+  }
 
   const btn = (activo) => ({
     padding: '9px 16px', borderRadius: 10, fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
@@ -131,25 +187,46 @@ export default function GestionIncidencias() {
           </button>
         </div>
 
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <input value={busca} onChange={e => setBusca(e.target.value)} inputMode="search"
+            placeholder="🔍 Nº de incidencia (ej. 161) o palabra: guardias, Rubén..."
+            style={{ width: '100%', padding: '11px 40px 11px 14px', borderRadius: 10, border: `2px solid ${busca ? AZUL : '#ddd'}`, fontSize: 14.5, boxSizing: 'border-box' }} />
+          {busca && (
+            <button onClick={() => setBusca('')} aria-label="Borrar búsqueda"
+              style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: '#888' }}>✕</button>
+          )}
+          {q && (
+            <div style={{ fontSize: 12, color: '#666', marginTop: 6 }}>
+              {lista.length} resultado{lista.length === 1 ? '' : 's'} · buscando en pendientes y cerradas
+            </div>
+          )}
+        </div>
+
         {cargando ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
         ) : lista.length === 0 ? (
           <div style={{ textAlign: 'center', padding: 50, color: '#aaa', backgroundColor: 'white', borderRadius: 12, border: '1px solid #e5e7eb' }}>
             <div style={{ fontSize: 40, marginBottom: 10 }}>🐞</div>
-            {filtro === 'pendientes' ? 'No hay nada por atender' : 'Todavía no hay incidencias cerradas'}
+            {q ? 'Ninguna incidencia coincide con la búsqueda'
+              : filtro === 'pendientes' ? 'No hay nada por atender' : 'Todavía no hay incidencias cerradas'}
           </div>
         ) : (
           lista.map(i => {
             const est = ESTADOS[i.estado] || ESTADOS.nueva;
             const abiertaEsta = abierta === i.id;
             return (
-              <div key={i.id} style={{
+              <div key={i.id} id={'inc-' + i.id} style={{
                 backgroundColor: 'white', borderRadius: 12, marginBottom: 12,
                 border: '1px solid #e5e7eb', borderLeft: `5px solid ${est.borde}`, overflow: 'hidden',
               }}>
-                <div onClick={() => { setAbierta(abiertaEsta ? null : i.id); setRespuesta(i.respuesta || ''); }}
+                <div onClick={() => abrirCerrar(i)}
                   style={{ padding: '13px 16px', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 6 }}>
+                    {i.numero != null && (
+                      <div style={{ fontSize: 20, fontWeight: 900, color: AZUL, minWidth: 52, lineHeight: 1.1 }}>
+                        #{i.numero}
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontWeight: 800, fontSize: 14.5, color: '#222' }}>
                         {i.tipo === 'sugerencia' ? '💡' : '🐞'} {i.modulo || 'Sin especificar'}
@@ -183,7 +260,7 @@ export default function GestionIncidencias() {
                       <label style={{ fontSize: 12.5, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>
                         Respuesta para quien lo avisó (opcional)
                       </label>
-                      <textarea value={respuesta} onChange={e => setRespuesta(e.target.value)} rows={3}
+                      <textarea value={respuesta} onChange={e => escribir(e.target.value)} rows={3}
                         placeholder="Ya está arreglado, sale en la próxima actualización..."
                         style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
                     </div>

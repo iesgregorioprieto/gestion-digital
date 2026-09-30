@@ -249,6 +249,7 @@ export default function Incidencias() {
                   <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 7 }}>
                     <div style={{ flex: 1, minWidth: 180 }}>
                       <div style={{ fontSize: 12, color: '#888' }}>
+                        {i.numero != null && <b style={{ color: '#1e3a5f', fontSize: 13 }}>#{i.numero} · </b>}
                         {i.tipo === 'sugerencia' ? '💡 Sugerencia' : '🐞 Fallo'}
                         {i.modulo ? ` · ${i.modulo}` : ''}
                         {' · '}
