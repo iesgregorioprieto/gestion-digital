@@ -834,7 +834,7 @@ export async function POST(request) {
         cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>
           <p><strong>${e(datos.nombre)}</strong>, de tu departamento, pide autorización para esta formación.</p>${tabla}
           <p style="font-size:14px;color:#78350f;font-weight:bold">Tienes hasta el ${e(datos.limite)} para aprobarla o denegarla. Si no contestas, pasará sola al director.</p>
-          ${boton('Resolver en APrieto', '/formacion', color)}`;
+          ${boton('Resolver en APrieto', '/formacion?vista=jefe', color)}`;
       } else if (tipo === 'fc_director') {
         const dj = datos.decision_jefe;
         color = dj === 'denegada' ? '#991b1b' : '#1e3a5f';
@@ -850,7 +850,7 @@ export async function POST(request) {
           : `<p><strong>${e(datos.nombre)}</strong> pide autorización para esta formación.${datos.nota ? ' ' + e(datos.nota) : ''}</p>`;
         cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>${intro}
           ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
-          ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion', color)}`;
+          ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion?vista=direccion', color)}`;
       } else {
         const ok = datos.resultado === 'autorizada';
         color = ok ? '#166534' : '#991b1b';

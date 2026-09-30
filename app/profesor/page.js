@@ -175,6 +175,16 @@ export default function PanelProfesor() {
       color: '#166534', bg: '#f0fdf4', border: '#86efac',
     },
     {
+      id: 'formacion',
+      emoji: '🎓',
+      titulo: 'Formación',
+      descripcion: 'Pide autorización para cursos y jornadas de formación',
+      href: '/formacion',
+      disponible: true,
+      roles: ['todos'],
+      color: '#5b21b6', bg: '#f5f3ff', border: '#c4b5fd',
+    },
+    {
       id: 'calendario',
       emoji: '📆',
       titulo: 'Calendario escolar',
