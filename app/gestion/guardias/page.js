@@ -1044,8 +1044,15 @@ export default function GestionGuardias() {
                               marginBottom: apoyoUrgenteExistente ? 6 : 0,
                             }}>
                               <span style={{ fontWeight:700, color:verde }}>✅ CUBRE:</span>
-                              <span style={{ fontWeight:800 }}>{cubre.nombre}</span>
-                              <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>guardia {cubre.sectorOriginal}</span>
+                              <span style={{ fontWeight:800 }}>
+                                {cubre.nombre}
+                                {cubre.sectorOriginal && (
+                                  <span style={{ fontWeight:700, fontSize:11, color:'#166534', backgroundColor:'#bbf7d0', borderRadius:5, padding:'1px 6px', marginLeft:6 }}>
+                                    {cubre.sectorOriginal}
+                                  </span>
+                                )}
+                              </span>
+                              <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>guardia</span>
                               {cubre.apoyoId && (
                                 <button
                                   onClick={() => setModalActivar({
@@ -1105,9 +1112,16 @@ export default function GestionGuardias() {
                               <span style={{ fontWeight:800, color:'#78350f' }}>
                                 {cubre.profesorId ? "🚨 GUARDIA ASIGNADA:" : "❓ SIN IDENTIFICAR:"}
                               </span>
-                              <span style={{ fontWeight:800, color: cubre.profesorId ? "#78350f" : rojo }}>{cubre.nombre}</span>
+                              <span style={{ fontWeight:800, color: cubre.profesorId ? "#78350f" : rojo }}>
+                                {cubre.nombre}
+                                {cubre.sectorOriginal && (
+                                  <span style={{ fontWeight:700, fontSize:11, color:'#92400e', backgroundColor:'#fde68a', borderRadius:5, padding:'1px 6px', marginLeft:6 }}>
+                                    {cubre.sectorOriginal}
+                                  </span>
+                                )}
+                              </span>
                               <span style={{ fontSize:11, color:'#666', marginLeft:'auto' }}>
-                                {cubre.sectorOriginal} ({cubre.apoyosPrevios} apoyos)
+                                {cubre.apoyosPrevios} apoyos
                               </span>
                               {cubre.alternativas && cubre.alternativas.length > 0 && (
                                 <button
