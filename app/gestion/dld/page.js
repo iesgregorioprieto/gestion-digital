@@ -629,68 +629,13 @@ export default function PanelDirector() {
           });
         } catch(e) { console.error('Push DLD aprobada:', e); }
 
-        // Comprobar si esta aprobación desplaza a alguien (no lectivos, límite 1/3)
-        const fecha = sol.fecha_solicitada;
-        const aprobadosHoy = todasSolicitudes.filter(s =>
-          s.id !== id && s.fecha_solicitada === fecha && s.estado === 'aprobada'
-        );
-        const maxNoLectivo = Math.floor(totalProfesores / 3);
-        if (sol.tipo_dld === 'no_lectivo' && aprobadosHoy.length >= maxNoLectivo) {
-          // Buscar al desplazable (menor prelación)
-          const ordenados = aprobadosHoy.sort((a, b) => {
-            if ((a.antiguedad_cuerpo || 0) !== (b.antiguedad_cuerpo || 0)) return (a.antiguedad_cuerpo || 0) - (b.antiguedad_cuerpo || 0);
-            return (a.antiguedad_centro || 0) - (b.antiguedad_centro || 0);
-          });
-          const desplazado = ordenados[0];
-          if (desplazado) {
-            // Revocar DLD del desplazado
-            await fetch('/api/dld', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                accion: 'revocar',
-                id: desplazado.id,
-                datos: {
-                  resuelto_por: nombreUsuario,
-                  motivo_rechazo: `Desplazado por ${prof.nombre} ${prof.apellidos} (mayor prelación según normativa).`,
-                },
-              }),
-            });
-
-            // Email al desplazado
-            const dRows = await consulta('profesores').select('nombre,apellidos,email').eq('id', desplazado.profesor_id);
-            const profDesplazado = (dRows.data || [])[0];
-            if (profDesplazado?.email) {
-              await fetch('/api/enviar-email', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  tipo: 'dld_rechazada',
-                  datos: {
-                    nombre: profDesplazado.nombre + ' ' + profDesplazado.apellidos,
-                    email: profDesplazado.email,
-                    fecha_solicitada: fecha,
-                    motivo_rechazo: 'Tu DLD ha sido revocado porque otro compañero/a con mayor prelación ha solicitado el mismo día. Puedes consultar los detalles en el portal.'
-                  }
-                })
-              });
-            }
-            // Push al desplazado
-            try {
-              await fetch('/api/push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  accion: 'enviar',
-                  profesor_id: desplazado.profesor_id,
-                  titulo: '⚠️ DLD revocado',
-                  cuerpo: `Tu DLD del ${fecha} ha sido revocado por prelación. Consulta el portal.`,
-                  url: '/dld',
-                }),
-              });
-            } catch(e) { console.error('Push DLD revocada:', e); }
-          }
-        }
+        // Antes, al aprobar un no lectivo con el tercio de plantilla ya
+        // cubierto, se revocaba de oficio el DLD aprobado de otro profesor.
+        // Quitado (30/09/2026): el punto 9 de la Resolución de 18/07/2024
+        // deja superar el límite a criterio de la dirección, y la prelación
+        // del punto 10 sirve para decidir entre solicitudes, no para
+        // quitar un permiso ya concedido. El límite se sigue mostrando
+        // como alerta al revisar; quien decide es la dirección.
       }
     } catch(e) { console.error('Email DLD aprobada:', e); }
     setSolicitudAbierta(null);
@@ -815,6 +760,45 @@ export default function PanelDirector() {
     setMotivoRevoca('');
     cargarSolicitudes();
     setProcesando(false);
+  }
+
+  // Reabrir una solicitud rechazada: vuelve a pendiente y se abre
+  // el cuadro de revisión para resolverla de nuevo por el camino normal.
+  async function reabrir(s) {
+    if (!confirm(`¿Reabrir la solicitud de ${s.profesor_nombre} para el ${s.fecha_solicitada}?\n\nVolverá a quedar pendiente y podrás aprobarla o rechazarla de nuevo.`)) return;
+    setProcesando(true);
+    const r = await fetch('/api/dld', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'reabrir', id: s.id }),
+    });
+    if (!r.ok) {
+      const e = await r.json().catch(() => ({}));
+      mostrarMensaje(e.error === 'no_rechazada'
+        ? '⚠️ Esta solicitud ya no está rechazada'
+        : '❌ No se pudo reabrir', 'error');
+      setProcesando(false); cargarSolicitudes(); return;
+    }
+
+    // Aviso al profesor: vuelve a estar en estudio
+    try {
+      await fetch('/api/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accion: 'enviar',
+          profesor_id: s.profesor_id,
+          titulo: '↩️ DLD en revisión',
+          cuerpo: `Tu solicitud para el ${s.fecha_solicitada} se ha reabierto y vuelve a estar pendiente.`,
+          url: '/dld',
+        }),
+      });
+    } catch(e) { console.error('Push DLD reabierta:', e); }
+
+    mostrarMensaje('↩️ Solicitud reabierta: vuelve a estar pendiente', 'ok');
+    await cargarSolicitudes();
+    setProcesando(false);
+    abrirSolicitud({ ...s, estado: 'pendiente', motivo_rechazo: null, resuelto_por: null, resuelto_at: null });
   }
 
   async function eliminar(id) {
@@ -1119,6 +1103,9 @@ export default function PanelDirector() {
                           {s.estado === 'aprobada' && (
                             <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar</button>
                           )}
+                          {s.estado === 'rechazada' && (
+                            <button onClick={() => reabrir(s)} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>↩️ Reabrir</button>
+                          )}
                           <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '6px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
                         </div>
                       </div>
@@ -1181,6 +1168,9 @@ export default function PanelDirector() {
                       )}
                       {s.estado === 'aprobada' && (
                         <button onClick={() => { setRevocando(s); setMotivoRevoca(''); }} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fbbf24', backgroundColor: '#fffbeb', color: '#b45309', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>⚠️ Revocar permiso</button>
+                      )}
+                      {s.estado === 'rechazada' && (
+                        <button onClick={() => reabrir(s)} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>↩️ Reabrir</button>
                       )}
                       <button onClick={() => eliminar(s.id)} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fff5f5', color: '#b91c1c', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>🗑️ Eliminar</button>
                       {filtroEstado === 'rechazada' && s.motivo_rechazo && <div style={{ fontSize: 12, color: '#888', maxWidth: 200, textAlign: 'right' }}>{s.motivo_rechazo}</div>}

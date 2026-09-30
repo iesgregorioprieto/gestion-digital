@@ -342,6 +342,31 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Reabrir una solicitud rechazada (o revocada) ───
+    //
+    // Petición de José María (30/09/2026): si se rechazó por error o ha
+    // cambiado la situación, la solicitud vuelve a pendiente y la
+    // dirección la resuelve de nuevo por el camino normal (aprobar o
+    // rechazar), con sus alertas, límites y avisos al profesor.
+    // Solo desde 'rechazada': no toca aprobadas ni canceladas.
+    if (accion === 'reabrir') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const { data, error } = await supa().from('dld').update({
+        estado: 'pendiente',
+        resuelto_at: null,
+        resuelto_por: null,
+        motivo_rechazo: null,
+      }).eq('id', id).eq('estado', 'rechazada').select('id');
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (!data || data.length === 0) {
+        return Response.json({ error: 'no_rechazada' }, { status: 409 });
+      }
+      return Response.json({ ok: true });
+    }
+
     // ─── Borrar ───
     if (accion === 'borrar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
