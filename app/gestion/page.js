@@ -90,6 +90,16 @@ export default function PanelGestion() {
       color: '#1e40af',
     },
     {
+      id: 'formacion',
+      emoji: '🎓',
+      titulo: 'Formación del profesorado',
+      descripcion: 'Autoriza cursos y jornadas, consulta el registro y descarga informes',
+      href: '/gestion/formacion',
+      bg: '#f5f3ff',
+      border: '#c4b5fd',
+      color: '#5b21b6',
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones del Alumnado',
