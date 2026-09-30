@@ -7,7 +7,7 @@ import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
-import AvisoHojaServicios from '@/components/AvisoHojaServicios';
+import TareasPendientes from '@/components/TareasPendientes';
 import ValoracionModulo from '@/components/ValoracionModulo';
 
 export default function PanelProfesor() {
@@ -347,9 +347,6 @@ export default function PanelProfesor() {
 
         <AvisoCuadrante />
 
-        {/* Hoja de servicios: solo a quien aún no la ha subido */}
-        <AvisoHojaServicios />
-
         {/* AVISO PARA ACTIVAR NOTIFICACIONES */}
         {profId && <AvisoNotificaciones profesorId={profId} />}
 
@@ -526,6 +523,10 @@ export default function PanelProfesor() {
             </a>
           </div>
         </div>
+
+        {/* TAREAS PENDIENTES según el perfil (petición de José María).
+            La hoja de servicios va aquí dentro: antes era un aviso aparte. */}
+        <TareasPendientes />
 
         {/* MÓDULOS */}
         <div style={{ fontSize: 13, fontWeight: 700, color: '#888', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1 }}>
