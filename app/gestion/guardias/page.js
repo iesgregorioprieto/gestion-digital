@@ -485,6 +485,34 @@ export default function GestionGuardias() {
     }
   }
 
+  // Deshacer una anulación (se equivocaron): vuelve a hueco por cubrir
+  async function reactivarGuardia(apoyoId) {
+    const r = await fetch('/api/apoyos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'desactivar', id: apoyoId }),
+    });
+    if (!r.ok) { alert('No se pudo deshacer'); return; }
+    // Se borra la anulada y se recalcula, para que vuelva a salir el hueco
+    await fetch('/api/guardias/preasignar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fecha }) }).catch(() => {});
+    const rr = await consulta('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+    setApAsig(rr.data || []);
+  }
+
+  // Anular esta guardia (esta hora): el grupo no está, no hay que cubrirla
+  async function anularGuardia(apoyoId) {
+    if (!apoyoId) { alert('La guardia aún se está registrando. Espera 2 segundos y reinténtalo.'); return; }
+    const motivo = prompt('¿Por qué no hace falta cubrir esta guardia? (opcional)\nEj.: 2º Cocina está en una salida', '');
+    if (motivo === null) return;   // canceló
+    const r = await fetch('/api/apoyos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'anular', id: apoyoId, datos: { motivo } }),
+    });
+    if (!r.ok) { const d = await r.json().catch(() => ({})); alert(d.error || 'No se pudo anular'); return; }
+    const rr = await consulta('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+    setApAsig(rr.data || []);
+    setModalActivar(null);
+  }
+
   // Cambiar profesor de un apoyo ya registrado
   async function cambiarProfesor(apoyoId, nuevoProfesor) {
     // Sin identificador no se puede asignar a nadie: la guardia quedaría
@@ -634,6 +662,25 @@ export default function GestionGuardias() {
             : 'Úsalo si has borrado guardias a mano o si algo no cuadra. Respeta lo que ya esté fichado.'}
         </span>
       </div>
+
+      {/* GUARDIAS ANULADAS HOY: jefatura decidió que no hacía falta cubrirlas */}
+      {(() => {
+        const anuladas = apoyosAsignados.filter(a => a.estado === 'anulada' && a.fecha === fecha);
+        if (!anuladas.length) return null;
+        return (
+          <div style={{ margin:'0 16px 10px', padding:'10px 13px', backgroundColor:'#fafafa', border:'1px solid #e5e7eb', borderRadius:10 }}>
+            <div style={{ fontSize:12, fontWeight:800, color:'#6b7280', marginBottom:6 }}>🚫 Guardias anuladas hoy (no se cubren)</div>
+            {anuladas.sort((a,b)=>String(a.hora).localeCompare(String(b.hora))).map(a => (
+              <div key={a.id} style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', fontSize:12.5, color:'#4b5563', padding:'4px 0' }}>
+                <strong>{a.hora === 'recreo' ? 'Recreo' : `${a.hora}ª`}</strong>
+                <span>{a.grupo || a.sector_destino || a.sector_apoyo || ''}</span>
+                {a.incidencia && <span style={{ color:'#94a3b8' }}>· {a.incidencia}</span>}
+                <button onClick={() => reactivarGuardia(a.id)} style={{ marginLeft:'auto', padding:'4px 10px', borderRadius:7, border:'1px solid #cbd5e1', background:'white', color:'#334155', fontSize:11.5, fontWeight:700, cursor:'pointer' }}>Deshacer</button>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* PREVISIÓN: jefatura sí puede adelantarse; el profesorado no.
           A ellos se les enseña hoy y mañana para que no organicen su
@@ -1271,7 +1318,16 @@ export default function GestionGuardias() {
                 </div>
               ));
             })()}
-            <button onClick={() => setModalActivar(null)} style={{ marginTop:14, padding:'8px 16px', width:'100%', borderRadius:8, border:'1px solid #ddd', backgroundColor:'white', color:'#666', cursor:'pointer', fontSize:13 }}>Cancelar</button>
+            <div style={{ marginTop:14, paddingTop:14, borderTop:'1px dashed #e5e7eb' }}>
+              <div style={{ fontSize:12, color:'#78350f', marginBottom:8, lineHeight:1.5 }}>
+                ¿No hay que cubrir esta hora? (el grupo está en una salida, visita…). Anúlala y el profesor de guardia queda libre.
+              </div>
+              <button onClick={() => anularGuardia(modalActivar.apoyoId)}
+                style={{ padding:'9px 16px', width:'100%', borderRadius:8, border:'2px solid #dc2626', backgroundColor:'#fef2f2', color:'#b91c1c', cursor:'pointer', fontSize:13, fontWeight:700 }}>
+                🚫 No hace falta cubrir esta guardia
+              </button>
+            </div>
+            <button onClick={() => setModalActivar(null)} style={{ marginTop:10, padding:'8px 16px', width:'100%', borderRadius:8, border:'1px solid #ddd', backgroundColor:'white', color:'#666', cursor:'pointer', fontSize:13 }}>Cancelar</button>
           </div>
         </div>
       )}

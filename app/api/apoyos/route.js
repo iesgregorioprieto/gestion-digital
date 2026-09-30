@@ -280,6 +280,27 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    /**
+     * ─── Anular una guardia que no hace falta cubrir ───
+     * El grupo no está en el centro (salida, visita...), así que cubrirlo
+     * sobra: se anula y ese profesor de guardia queda libre. El recálculo la
+     * RESPETA (asignado_por queda puesto), para no volver a crearla.
+     */
+    if (accion === 'anular') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+      const { error } = await supa().from('apoyos_asignados').update({
+        estado: 'anulada',
+        profesor_id: null,
+        asignado_por: sesion.id,
+        confirmado_at: null,
+        sin_cubrir: false,
+        incidencia: (datos?.motivo || '').trim() || 'Anulada por jefatura (grupo no presente)',
+      }).eq('id', id);
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Quitar un apoyo del cuadrante ───
     if (accion === 'desactivar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });

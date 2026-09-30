@@ -369,6 +369,7 @@ export async function POST(request) {
     const esIntocable = a =>
       FICHADAS.includes(a.estado)
       || a.estado === 'incidencia'
+      || a.estado === 'anulada'          // jefatura decidió que no hace falta cubrirla
       || !!a.asignado_por
       || esSectorRecreo(a.sector_apoyo)
       || yaPasada(a.fecha, normHora(a.hora));

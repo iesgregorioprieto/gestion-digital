@@ -645,6 +645,7 @@ export default function Guardias() {
           el cuadrante con calma. */}
       {!esFinde && fecha === hoyLocal() && (() => {
         const mias = apoyosAsignados
+          .filter(a => a.estado !== 'anulada')
           .filter(g => g.profesor_id && String(g.profesor_id) === String(profesorId))
           // En orden de la jornada: el recreo entre 3ª y 4ª (antes salía al final)
           .sort((a, b) => ['1','2','3','recreo','4','5','6'].indexOf(String(normHora(a.hora)))
