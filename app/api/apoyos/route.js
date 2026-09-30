@@ -167,6 +167,16 @@ export async function POST(request) {
       const filas = (Array.isArray(lista) ? lista : [datos]).filter(Boolean);
       if (filas.length === 0) return Response.json({ error: 'Faltan datos' }, { status: 400 });
 
+      // No duplicar: si ya tiene algo asignado esa hora ese día, no se le
+      // pone otra encima sin que quien crea la guardia lo sepa.
+      for (const f of filas) {
+        if (!f.fecha || !f.hora || !f.profesor_id) continue;
+        const { data: ya } = await supa().from('apoyos_asignados')
+          .select('id, estado').eq('fecha', f.fecha).eq('hora', f.hora).eq('profesor_id', f.profesor_id);
+        const activo = (ya || []).find(x => x.estado !== 'anulada');
+        if (activo) return Response.json({ error: 'Esa persona ya tiene algo asignado a esa hora ese día.' }, { status: 409 });
+      }
+
       // Quién asigna lo decide el servidor, no el navegador
       const conAutor = filas.map(f => ({ ...f, asignado_por: sesion.id }));
 

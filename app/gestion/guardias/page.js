@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { enlaceDocumento } from '@/lib/adjuntos';
 import FicharPorJefatura from '@/components/FicharPorJefatura';
+import CrearGuardiaImprevista from '@/components/CrearGuardiaImprevista';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
@@ -606,6 +607,14 @@ export default function GestionGuardias() {
           todos los profesores de todos los sectores. */}
       {/* Fichar desde jefatura las guardias que nadie fichó */}
       <FicharPorJefatura fecha={fecha} />
+
+      {/* Un grupo se encuentra sin profesor: crear la guardia ahora mismo */}
+      <div style={{ padding:'10px 16px', backgroundColor:'#fff', borderBottom:'1px solid #e5e7eb' }}>
+        <CrearGuardiaImprevista fecha={fecha} onCreada={async () => {
+          const r = await consulta('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+          setApAsig(r.data || []);
+        }} />
+      </div>
       <a href="/gestion/guardias/contador" style={{ display:'block', backgroundColor:'#f3f4f6', borderBottom:'1px solid #e5e7eb', padding:'12px 16px', fontSize:12, fontWeight:800, color:azul, textDecoration:'none' }}>
         📊 Contador de guardias del curso: quién lleva cuántas, y si alguien va por encima de lo que le toca →
       </a>
