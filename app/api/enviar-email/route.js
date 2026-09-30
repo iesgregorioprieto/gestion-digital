@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -808,6 +808,69 @@ export async function POST(request) {
           <div style="background:#e8f5e9;padding:15px;text-align:center;font-size:12px;color:#666">
             IES Gregorio Prieto · Valdepeñas · Ciudad Real
           </div>
+        </div>`;
+
+    // ── Módulo de Formación (solicitudes_formacion) ──────────────────
+    } else if (tipo === 'fc_jefe' || tipo === 'fc_director' || tipo === 'fc_resuelta') {
+      const filasFc = [
+        ['Curso o jornada', datos.titulo],
+        ['Organiza', datos.entidad],
+        ['Modalidad', datos.modalidad],
+        ['Lugar', datos.lugar],
+        ['Fecha', `${e(datos.fecha)}${datos.fecha_fin ? ' — ' + e(datos.fecha_fin) : ''}`, true],
+        ['Horario', datos.horario],
+        ['Departamento', datos.departamento],
+      ].filter(([, v]) => v).map(([k, v, crudo], i) =>
+        `<tr style="background:${i % 2 ? '#fff' : '#eef2f7'}"><td style="padding:10px;font-weight:bold;width:38%">${k}</td><td style="padding:10px">${crudo ? v : e(v)}</td></tr>`
+      ).join('');
+      const tabla = `<table style="width:100%;border-collapse:collapse;margin:16px 0">${filasFc}</table>`;
+      const boton = (texto, ruta, color) => `<div style="text-align:center;margin:24px 0"><a href="${BASE_URL}${ruta}" style="background:${color};color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">${texto}</a></div>`;
+      const caja = (titulo, texto, ok) => texto ? `<div style="background:${ok ? '#f0fdf4' : '#fef2f2'};border-left:4px solid ${ok ? '#16a34a' : '#dc2626'};border-radius:8px;padding:14px;margin:16px 0"><div style="font-weight:bold;margin-bottom:6px">${titulo}</div><div>${e(texto)}</div></div>` : '';
+      let color = '#1e3a5f', cuerpo = '';
+
+      if (tipo === 'fc_jefe') {
+        color = '#b45309';
+        subject = `🎓 Formación pendiente de tu aprobación — ${e(datos.nombre)}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>
+          <p><strong>${e(datos.nombre)}</strong>, de tu departamento, pide autorización para esta formación.</p>${tabla}
+          <p style="font-size:14px;color:#78350f;font-weight:bold">Tienes hasta el ${e(datos.limite)} para aprobarla o denegarla. Si no contestas, pasará sola al director.</p>
+          ${boton('Resolver en APrieto', '/formacion', color)}`;
+      } else if (tipo === 'fc_director') {
+        const dj = datos.decision_jefe;
+        color = dj === 'denegada' ? '#991b1b' : '#1e3a5f';
+        subject = dj === 'denegada'
+          ? `🎓 Formación denegada por el jefe de dpto. — ${e(datos.nombre)}`
+          : `🎓 Formación pendiente de tu autorización — ${e(datos.nombre)}`;
+        const intro = dj === 'aprobada'
+          ? `<p><strong>${e(datos.nombre_jefe)}</strong>, jefe de departamento, ha <strong>aprobado</strong> la formación de <strong>${e(datos.nombre)}</strong>. Queda pendiente de tu autorización.</p>`
+          : dj === 'denegada'
+          ? `<p><strong>${e(datos.nombre_jefe)}</strong>, jefe de departamento, ha <strong>denegado</strong> la formación de <strong>${e(datos.nombre)}</strong>. Te llega para que lo sepas; si lo consideras, puedes autorizarla igualmente.</p>`
+          : dj === 'escalada'
+          ? `<p>El jefe de departamento no ha contestado en 3 días laborables. La formación de <strong>${e(datos.nombre)}</strong> queda pendiente de tu autorización.</p>`
+          : `<p><strong>${e(datos.nombre)}</strong> pide autorización para esta formación.${datos.nota ? ' ' + e(datos.nota) : ''}</p>`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>${intro}
+          ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
+          ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion', color)}`;
+      } else {
+        const ok = datos.resultado === 'autorizada';
+        color = ok ? '#166534' : '#991b1b';
+        subject = ok ? '✅ Tu formación está autorizada' : '❌ Tu solicitud de formación ha sido denegada';
+        cuerpo = ok
+          ? `<h2 style="color:${color};margin:0 0 12px">Formación autorizada</h2>
+             <p>La dirección del centro ha autorizado tu formación. <strong>Ahora registra la ausencia</strong> como cualquier otra, para que se cubran tus clases.</p>${tabla}
+             ${caja('Observaciones de la dirección:', datos.motivo, true)}
+             ${boton('Registrar la ausencia', `/ausencias?formacion=${encodeURIComponent(datos.id_solicitud || '')}`, color)}`
+          : `<h2 style="color:${color};margin:0 0 12px">Formación denegada</h2>
+             <p>${e(datos.quien)} ha denegado tu solicitud.</p>${caja('Motivo:', datos.motivo, false)}${tabla}
+             <p style="font-size:13px;color:#666">Si no estás de acuerdo, habla directamente con la dirección del centro.</p>`;
+      }
+
+      html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:${color};padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#e5e7eb;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">${cuerpo}</div>
         </div>`;
 
     } else {

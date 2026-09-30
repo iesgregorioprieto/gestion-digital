@@ -41,6 +41,44 @@ export async function GET(request) {
   const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, claveServidor());
   const hoy = hoyMadrid();
 
+  // ── Módulo de Formación nuevo (tabla solicitudes_formacion) ──
+  // Va primero y aparte: si falla, el bloque antiguo de abajo sigue.
+  let escaladasNuevas = 0;
+  try {
+    const { data: sinJefe } = await sb.from('solicitudes_formacion')
+      .select('*')
+      .eq('estado', 'pendiente_jefe')
+      .lte('jefe_limite', hoy);
+
+    for (const s of (sinJefe || [])) {
+      const { data: act } = await sb.from('solicitudes_formacion').update({
+        estado: 'pendiente_director',
+        jefe_decision: 'escalada',
+        jefe_fecha: new Date().toISOString(),
+        jefe_motivo: 'Sin respuesta en el plazo de 3 días laborables.',
+      }).eq('id', s.id).eq('estado', 'pendiente_jefe').select('id');
+      if (!act?.length) continue;
+
+      const { data: profs } = await sb.from('profesores')
+        .select('nombre, apellidos, departamento').eq('id', s.profesor_id);
+      const prof = (profs || [])[0];
+      await avisarDireccion(sb, 'fc_director', {
+        decision_jefe: 'escalada',
+        nombre: prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : '',
+        departamento: s.departamento || prof?.departamento || '',
+        titulo: s.titulo || '',
+        entidad: s.entidad || '',
+        modalidad: s.modalidad || '',
+        lugar: s.lugar || '',
+        fecha: s.fecha_inicio || '',
+        fecha_fin: s.fecha_fin && s.fecha_fin !== s.fecha_inicio ? s.fecha_fin : '',
+      });
+      escaladasNuevas++;
+    }
+  } catch (e) {
+    console.error('[cron formacion] solicitudes_formacion:', e?.message);
+  }
+
   const { data: pendientes, error } = await sb
     .from('ausencias')
     .select('id, profesor_id, fecha_inicio, fecha_fin, datos_extra, aprobacion_jefe_limite')
@@ -54,7 +92,7 @@ export async function GET(request) {
   }
 
   if (!pendientes || pendientes.length === 0) {
-    return Response.json({ ok: true, escaladas: 0 });
+    return Response.json({ ok: true, escaladas: 0, escaladasNuevas });
   }
 
   let escaladas = 0;
@@ -86,5 +124,5 @@ export async function GET(request) {
     escaladas++;
   }
 
-  return Response.json({ ok: true, escaladas });
+  return Response.json({ ok: true, escaladas, escaladasNuevas });
 }
