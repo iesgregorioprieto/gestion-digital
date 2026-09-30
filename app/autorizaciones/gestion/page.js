@@ -95,25 +95,25 @@ export default function GestionAutorizaciones() {
 
     const esDirectivoLocal = ['jefe_estudios', 'secretario', 'director'].includes(rol);
 
-    if (!tutor && !esDirectivoLocal) {
-      window.location.href = '/profesor';
-      return;
-    }
+    // Quien no es tutor ni directivo se va… salvo que herede la tutoría de
+    // un titular de baja: eso se sabe al preguntar su tutoría (abajo).
 
     cargarGrupos();
 
     // Si es tutor, cargar su grupo automáticamente
-    if (tutor && !esDirectivoLocal) {
+    // (también quien sustituye a un tutor de baja: hereda su tutoría)
+    if (!esDirectivoLocal) {
       // El grupo de la ficha del tutor puede estar escrito de otra forma
       // que en el listado de alumnado ("2º DDC" frente a "2DDC"). Se
       // traduce al nombre real antes de pedir nada, o el tutor se queda
       // mirando una pantalla vacía sin saber por qué.
       Promise.all([
-        consulta('profesores').select('grupo_tutoria').eq('id', id),
+        fetch('/api/profesores?mi_ficha=1').then(r => r.json()),
         fetch('/api/alumnos?grupos=1').then(r => r.json()),
-      ]).then(([{ data }, { grupos: existentes }]) => {
-        const suyo = data?.[0]?.grupo_tutoria;
-        if (!suyo) return;
+      ]).then(([ficha, { grupos: existentes }]) => {
+        const suyo = ficha?.tutoria_efectiva?.grupo;
+        if (!suyo) { if (!tutor) window.location.href = '/profesor'; return; }
+        setEsTutor(true);
         const real = resolverGrupo(suyo, existentes || []) || suyo;
         setGrupoTutor(real);
         setGrupoSeleccionado(real);

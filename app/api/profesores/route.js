@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { tutoriaEfectiva } from '@/lib/tutoriaEfectiva';
 import { grupoTutoriaValido, MENSAJE_TUTORIA } from '@/lib/gruposDelCurso';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
@@ -54,7 +55,10 @@ export async function GET(request) {
       cols => supa().from('profesores').select(cols).eq('id', sesion.id));
 
     if (error) return Response.json({ error: error.message }, { status: 500 });
-    return Response.json({ profesor: (data || [])[0] || null });
+    // La tutoría a efectos de autorizaciones y seguro: la suya o, si
+    // sustituye a un titular de baja, la del titular
+    const tutoria_efectiva = (data || [])[0] ? await tutoriaEfectiva(supa(), sesion.id) : null;
+    return Response.json({ profesor: (data || [])[0] || null, tutoria_efectiva });
   }
 
   // ─── Listado completo: solo equipo directivo ───

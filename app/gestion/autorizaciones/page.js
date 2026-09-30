@@ -64,6 +64,14 @@ const AUTORIZACIONES = [
   },
 ];
 
+/**
+ * El seguro escolar no corresponde en 1º y 2º de ESO: esos alumnos cuentan
+ * SIEMPRE como exentos, los haya marcado el tutor o no. Antes solo contaban
+ * si se marcaban uno a uno, y 129 alumnos salían como «pendientes».
+ */
+const exentoPorCurso = g => /^ESO[-\s]?[12]/i.test(String(g || '').trim());
+const esExento = a => !!a.seguro_exento || exentoPorCurso(a.grupo);
+
 export default function GestionAutorizaciones() {
   const [profesorNombre, setProfesorNombre] = useState('');
   const [rolGestion, setRolGestion] = useState('');
@@ -95,13 +103,13 @@ export default function GestionAutorizaciones() {
           `/api/alumnos?grupo=${encodeURIComponent(g)}`).then(r => r.json());
         (delGrupo || []).forEach(a => filas.push({ grupo: g, ...a }));
       }
-      const pagados = filas.filter(a => a.seguro_pagado);
+      const pagados = filas.filter(a => a.seguro_pagado && !esExento(a));
       const transf  = pagados.filter(a => a.seguro_forma_pago === 'transferencia').length;
       const metal   = pagados.filter(a => a.seguro_forma_pago === 'metalico').length;
       const sinForma = pagados.filter(a => !a.seguro_forma_pago || !a.seguro_forma_pago.trim());
-      const exentos = filas.filter(a => a.seguro_exento).length;
-      const esEsoBaja = a => (a.grupo || '').startsWith('ESO-1') || (a.grupo || '').startsWith('ESO-2');
-      const eso12PorMarcar = filas.filter(a => esEsoBaja(a) && !a.seguro_exento && !a.seguro_pagado).length;
+      const exentos = filas.filter(esExento).length;
+      // Ya no hace falta marcarlos: 1º y 2º de ESO cuentan solos como exentos
+      const eso12PorMarcar = 0;
       setPanel({
         total: filas.length,
         pagados: pagados.length,
@@ -145,25 +153,25 @@ export default function GestionAutorizaciones() {
 
     const esDirectivoLocal = ['jefe_estudios', 'secretario', 'director'].includes(rol);
 
-    if (!tutor && !esDirectivoLocal) {
-      window.location.href = '/gestion';
-      return;
-    }
+    // Quien no es tutor ni directivo se va… salvo que herede la tutoría de
+    // un titular de baja: eso se sabe al preguntar su tutoría (abajo).
 
     cargarGrupos();
 
     // Si es tutor, cargar su grupo automáticamente
-    if (tutor && !esDirectivoLocal) {
+    // (también quien sustituye a un tutor de baja: hereda su tutoría)
+    if (!esDirectivoLocal) {
       // El grupo de la ficha del tutor puede estar escrito de otra forma
       // que en el listado de alumnado ("2º DDC" frente a "2DDC"). Se
       // traduce al nombre real antes de pedir nada, o el tutor se queda
       // mirando una pantalla vacía sin saber por qué.
       Promise.all([
-        consulta('profesores').select('grupo_tutoria').eq('id', id),
+        fetch('/api/profesores?mi_ficha=1').then(r => r.json()),
         fetch('/api/alumnos?grupos=1').then(r => r.json()),
-      ]).then(([{ data }, { grupos: existentes }]) => {
-        const suyo = data?.[0]?.grupo_tutoria;
-        if (!suyo) return;
+      ]).then(([ficha, { grupos: existentes }]) => {
+        const suyo = ficha?.tutoria_efectiva?.grupo;
+        if (!suyo) { if (!tutor) window.location.href = '/gestion'; return; }
+        setEsTutor(true);
         const real = resolverGrupo(suyo, existentes || []) || suyo;
         setGrupoTutor(real);
         setGrupoSeleccionado(real);
@@ -427,11 +435,11 @@ export default function GestionAutorizaciones() {
       // RESUMEN arriba del detalle: lo que se recoge en metálico, cuántos
       // pagaron por transferencia y cuántos están exentos.
       const eur = n => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
-      const pagadosF = filas.filter(x => x.seguro_pagado && !x.seguro_exento);
+      const pagadosF = filas.filter(x => x.seguro_pagado && !esExento(x));
       const nMetal = pagadosF.filter(x => x.seguro_forma_pago === 'metalico').length;
       const nTransf = pagadosF.filter(x => x.seguro_forma_pago === 'transferencia').length;
       const nSinForma = pagadosF.length - nMetal - nTransf;
-      const nExentos = filas.filter(x => x.seguro_exento).length;
+      const nExentos = filas.filter(esExento).length;
       const nPend = filas.length - pagadosF.length - nExentos;
       const precio = Number(precioSeguro) || 0;
       const resumen = [
@@ -460,7 +468,7 @@ export default function GestionAutorizaciones() {
             || (a.apellidos || '').localeCompare(b.apellidos || '', 'es'))
           .map(a => [
             a.grupo, a.apellidos, a.nombre, a.dni || '',
-            a.seguro_exento ? 'EXENTO' : (a.seguro_pagado ? 'PAGADO' : 'PENDIENTE'),
+            a.seguro_exento ? 'EXENTO' : exentoPorCurso(a.grupo) ? 'EXENTO (1º-2º ESO)' : (a.seguro_pagado ? 'PAGADO' : 'PENDIENTE'),
             formaTexto(a.seguro_forma_pago),
             a.seguro_fecha || '',
           ].map(esc).join(';')),

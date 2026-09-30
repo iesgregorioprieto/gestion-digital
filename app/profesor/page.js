@@ -14,6 +14,12 @@ export default function PanelProfesor() {
   const [nombre, setNombre] = useState('');
   const [roles, setRoles] = useState(['profesor']);
   const [rolGestion, setRolGestion] = useState('');
+  // Tutoría heredada: si sustituye a un tutor de baja, gestiona su grupo
+  const [tutoriaHeredada, setTutoriaHeredada] = useState(false);
+  useEffect(() => {
+    fetch('/api/profesores?mi_ficha=1').then(r => r.ok ? r.json() : null)
+      .then(d => setTutoriaHeredada(!!d?.tutoria_efectiva?.heredadaDe)).catch(() => {});
+  }, []);
   const [apoyosPendientes, setApoyosPendientes] = useState([]);
   const [profId, setProfId] = useState('');
 
@@ -262,7 +268,7 @@ export default function PanelProfesor() {
   const panelDirectivo = PANELES_DIRECTIVOS.find(p => p.rol === rolGestion);
 
   // Tutores también tienen acceso a gestión de autorizaciones
-  const esTutor = roles.includes('tutor');
+  const esTutor = roles.includes('tutor') || tutoriaHeredada;
   const panelTutor = esTutor && !panelDirectivo
     ? { emoji: '📋', titulo: 'Mis Autorizaciones', href: '/autorizaciones' }
     : null;

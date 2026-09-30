@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { tutoriaEfectiva } from '@/lib/tutoriaEfectiva';
 import { gruposDelCurso } from '@/lib/gruposDelCurso';
 import { claveGrupo } from '@/lib/grupos';
 import { mismoGrupo, resolverGrupo } from '@/lib/grupos';
@@ -215,17 +216,14 @@ export async function POST(request) {
         .some(k => k in limpio);
 
       if (tocaSeguro) {
-        const [{ data: alumnos }, { data: profes }] = await Promise.all([
+        const [{ data: alumnos }, tut] = await Promise.all([
           supa().from('alumnos').select('grupo').eq('id', id),
-          supa().from('profesores').select('grupo_tutoria, rol').eq('id', sesion.id),
+          tutoriaEfectiva(supa(), sesion.id),   // la suya, o la del titular al que sustituye
         ]);
         const grupoAlumno = (alumnos || [])[0]?.grupo;
-        const profe = (profes || [])[0];
-        const esTutor = Array.isArray(profe?.rol) && profe.rol.includes('tutor');
-        const suGrupo = profe?.grupo_tutoria;
+        const suGrupo = tut?.grupo;
 
-        if (!esTutor || !suGrupo || !grupoAlumno
-            || !mismoGrupo(grupoAlumno, suGrupo)) {
+        if (!suGrupo || !grupoAlumno || !mismoGrupo(grupoAlumno, suGrupo)) {
           return Response.json(
             { error: 'Esto solo lo puede marcar el tutor del grupo' },
             { status: 403 });
@@ -233,17 +231,15 @@ export async function POST(request) {
       }
 
       if (!esDirectivo(sesion)) {
-        const [{ data: alumnos }, { data: profes }] = await Promise.all([
+        const [{ data: alumnos }, tut] = await Promise.all([
           supa().from('alumnos').select('grupo').eq('id', id),
-          supa().from('profesores').select('grupo_tutoria, rol').eq('id', sesion.id),
+          tutoriaEfectiva(supa(), sesion.id),
         ]);
 
         const grupoAlumno = (alumnos || [])[0]?.grupo;
-        const profe = (profes || [])[0];
-        const esTutor = Array.isArray(profe?.rol) && profe.rol.includes('tutor');
-        const suGrupo = profe?.grupo_tutoria;
+        const suGrupo = tut?.grupo;
 
-        if (!esTutor || !suGrupo) {
+        if (!suGrupo) {
           return Response.json({ error: 'Sin permisos' }, { status: 403 });
         }
         if (!mismoGrupo(grupoAlumno, suGrupo)) {
