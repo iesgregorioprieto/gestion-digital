@@ -89,6 +89,28 @@ export async function GET(request) {
       lineas.push({ tipo: 'aviso', orden: '00:00', texto: a.titulo, detalle: a.mensaje });
     }
 
+    // Formación pendiente de aprobar: al director las que le han llegado,
+    // al jefe de departamento las de su departamento. Van arriba.
+    try {
+      const esDirector = sesion.rol === 'director';
+      const esJefe = Array.isArray(ficha?.rol) && ficha.rol.includes('jefe_departamento');
+      if (esDirector) {
+        const { data: fd } = await c.from('solicitudes_formacion').select('id').eq('estado', 'pendiente_director');
+        const n = (fd || []).length;
+        if (n) lineas.push({ tipo: 'formacion', orden: '00:01', enlace: '/formacion?vista=direccion',
+          texto: `${n} solicitud${n !== 1 ? 'es' : ''} de formación pendiente${n !== 1 ? 's' : ''} de aprobar` });
+      }
+      if (esJefe && ficha?.departamento) {
+        const { data: fj } = await c.from('solicitudes_formacion').select('id')
+          .eq('estado', 'pendiente_jefe').eq('departamento', ficha.departamento).neq('profesor_id', sesion.id);
+        const n = (fj || []).length;
+        if (n) lineas.push({ tipo: 'formacion', orden: '00:02', enlace: '/formacion?vista=jefe',
+          texto: `${n} solicitud${n !== 1 ? 'es' : ''} de formación de tu departamento pendiente${n !== 1 ? 's' : ''} de aprobar` });
+      }
+    } catch (e) {
+      console.error('[hoy] formacion:', e?.message);
+    }
+
     lineas.sort((a, b) => a.orden.localeCompare(b.orden));
     return Response.json({ lineas });
   } catch (e) {

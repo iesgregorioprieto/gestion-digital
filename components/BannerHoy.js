@@ -8,7 +8,7 @@
  */
 import { useState, useEffect } from 'react';
 
-const ICONO = { guardia: '🛡️', recreo: '☕', reunion: '👥', aviso: '📢' };
+const ICONO = { guardia: '🛡️', recreo: '☕', reunion: '👥', aviso: '📢', formacion: '🎓' };
 const azul = '#1e3a5f';
 
 export default function BannerHoy() {

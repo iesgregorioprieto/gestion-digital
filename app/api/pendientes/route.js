@@ -96,6 +96,60 @@ export async function GET(request) {
       }
     }),
 
+    // ── TODOS: formación autorizada sin ausencia registrada ─────────
+    bloque('formacion_mia', async () => {
+      const { data } = await c.from('solicitudes_formacion')
+        .select('id, titulo, fecha_inicio')
+        .eq('profesor_id', sesion.id).eq('estado', 'autorizada')
+        .is('ausencia_id', null)
+        .order('fecha_inicio', { ascending: true });
+      for (const s of (data || [])) {
+        const quedan = diasEntre(hoy, s.fecha_inicio);
+        tareas.push({
+          id: `form-${s.id}`, icono: '🎓',
+          texto: `Registrar la ausencia de tu formación del ${fechaCorta(s.fecha_inicio)}`,
+          detalle: `${s.titulo} · Está autorizada: registra la ausencia para que se cubran tus clases`,
+          enlace: `/ausencias?formacion=${s.id}&fecha=${s.fecha_inicio}`, urgente: quedan <= 2,
+        });
+      }
+    }),
+
+    // ── JEFE DE DEPARTAMENTO: formación por aprobar ─────────────────
+    bloque('formacion_jefe', async () => {
+      const { data: fichas } = await c.from('profesores').select('departamento, rol').eq('id', sesion.id);
+      const yo = (fichas || [])[0];
+      if (!yo?.departamento || !Array.isArray(yo.rol) || !yo.rol.includes('jefe_departamento')) return;
+      const { data } = await c.from('solicitudes_formacion')
+        .select('id, fecha_inicio, jefe_limite')
+        .eq('estado', 'pendiente_jefe').eq('departamento', yo.departamento).neq('profesor_id', sesion.id)
+        .order('jefe_limite', { ascending: true });
+      const lista = data || [];
+      if (!lista.length) return;
+      const limite = lista[0].jefe_limite;
+      tareas.push({
+        id: 'formacion_jefe', icono: '🎓',
+        texto: `${lista.length} solicitud${lista.length !== 1 ? 'es' : ''} de formación de tu departamento por aprobar`,
+        detalle: limite ? `Plazo hasta el ${fechaCorta(limite)}; si no contestas, pasa sola al director` : '',
+        enlace: '/formacion?vista=jefe', urgente: !!limite && diasEntre(hoy, limite) <= 1,
+      });
+    }),
+
+    // ── DIRECTOR: formación por autorizar ───────────────────────────
+    esDirector && bloque('formacion_dir', async () => {
+      const { data } = await c.from('solicitudes_formacion')
+        .select('id, fecha_inicio').eq('estado', 'pendiente_director')
+        .order('fecha_inicio', { ascending: true });
+      const lista = data || [];
+      if (!lista.length) return;
+      const cerca = lista.filter(s => diasEntre(hoy, s.fecha_inicio) <= 3).length;
+      tareas.push({
+        id: 'formacion_dir', icono: '🎓',
+        texto: `${lista.length} solicitud${lista.length !== 1 ? 'es' : ''} de formación por autorizar`,
+        detalle: cerca ? `${cerca} empieza${cerca !== 1 ? 'n' : ''} en los próximos 3 días` : `La más próxima, ${fechaCorta(lista[0].fecha_inicio)}`,
+        enlace: '/formacion?vista=direccion', urgente: cerca > 0,
+      });
+    }),
+
     // ── DIRECTOR: DLD sin resolver ──────────────────────────────────
     esDirector && bloque('dld', async () => {
       const { data } = await c.from('dld')
