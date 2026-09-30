@@ -160,10 +160,11 @@ export async function GET(request) {
       // que no han respondido en el informe.
       const { data: profes } = await cliente
         .from('profesores')
-        .select('id, nombre, apellidos, departamento, rol, rol_gestion')
+        .select('id, nombre, apellidos, departamento, rol, rol_gestion, tipo_contrato')
         .eq('estado', 'activo')
         .order('apellidos');
-      const destinatarios = (profes || []).filter(p => esDestinatario(c, p));
+      // Las plazas vacantes no son destinatarios (no hay nadie que lo lea)
+      const destinatarios = (profes || []).filter(p => p.tipo_contrato !== 'Plaza vacante' && esDestinatario(c, p));
       fila.totalDestinatarios = destinatarios.length;
       fila.listaDestinatarios = destinatarios.map(p => ({
         id: p.id,

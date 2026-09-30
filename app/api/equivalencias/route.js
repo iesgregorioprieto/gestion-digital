@@ -236,8 +236,41 @@ export async function POST(request) {
   if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
   try {
-    const { accion, nombre_horario, profesor_id } = await request.json();
+    const { accion, nombre_horario, profesor_id, departamento } = await request.json();
     const cliente = supa();
+
+    /**
+     * PLAZA VACANTE («Int1 Hos»): un puesto del horario sin profesor porque
+     * la Delegación aún no ha nombrado a nadie. Se le crea una ficha para
+     * poder registrarle una baja y que consten sus horas sin profesor.
+     * No es una persona: sin contraseña ni acceso (email .invalid, que no
+     * existe), y no cuenta en el censo de votaciones ni en los avisos.
+     * Cuando llegue el interino: «Asignar sustituto» en su baja.
+     */
+    if (accion === 'crear_vacante') {
+      if (!nombre_horario) return Response.json({ error: 'Falta el nombre' }, { status: 400 });
+      const { data: ya } = await cliente.from('equivalencias_horario').select('profesor_id').eq('nombre_horario', nombre_horario);
+      if ((ya || []).length) return Response.json({ error: 'Ese nombre ya está emparejado con una ficha' }, { status: 409 });
+      const slug = nombre_horario.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const { data: nueva, error: e1 } = await cliente.from('profesores').insert([{
+        nombre: nombre_horario,
+        apellidos: 'Plaza vacante',
+        email: `vacante-${slug}@plazas.invalid`,
+        departamento: departamento || '',
+        tipo_contrato: 'Plaza vacante',
+        estado: 'activo',
+        autorizado: false,
+        rol: ['profesor'],
+        creado_por: 'plaza_vacante',
+      }]).select('id');
+      if (e1) return Response.json({ error: /email_key/.test(e1.message) ? 'Esa plaza vacante ya tiene ficha' : e1.message }, { status: 500 });
+      const id = (nueva || [])[0]?.id;
+      const { error: e2 } = await cliente.from('equivalencias_horario').upsert({
+        nombre_horario, profesor_id: id, confirmado_por: sesion.nombre || 'Dirección',
+      }, { onConflict: 'nombre_horario' });
+      if (e2) return Response.json({ error: e2.message }, { status: 500 });
+      return Response.json({ ok: true, id });
+    }
 
     if (accion === 'confirmar') {
       if (!nombre_horario || !profesor_id) {

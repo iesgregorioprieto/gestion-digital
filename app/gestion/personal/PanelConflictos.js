@@ -28,6 +28,26 @@ export default function PanelConflictos() {
   const [trabajando, setTrabajando] = useState(null);
   const [verResueltos, setVerResueltos] = useState(false);
   const [eleccion, setEleccion] = useState({});
+  // Plaza vacante: nombre del horario → departamento elegido
+  const [vacante, setVacante] = useState({});
+
+  async function crearVacante(nombreHorario) {
+    const departamento = vacante[nombreHorario];
+    if (!departamento) return aviso('Elige el departamento de la plaza', 'error');
+    setTrabajando(nombreHorario);
+    try {
+      const r = await fetch('/api/equivalencias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'crear_vacante', nombre_horario: nombreHorario, departamento }),
+      });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se ha podido crear');
+      aviso(`«${nombreHorario}» creada como plaza vacante de ${departamento}. Ya puedes registrarle la baja en Ausencias → Bajas.`);
+      setVacante(v => { const x = { ...v }; delete x[nombreHorario]; return x; });
+      await cargar();
+    } catch (e) { aviso(e.message, 'error'); }
+    setTrabajando(null);
+  }
 
   useEffect(() => { cargar(); }, []);
 
@@ -246,6 +266,36 @@ export default function PanelConflictos() {
                     fontWeight: 700, fontSize: 12.5, cursor: eleccion[x.nombre] ? 'pointer' : 'default' }}>
                   Confirmar
                 </button>
+              </div>
+
+              {/* No es una persona: plaza de interino aún sin nombrar («Int1 Hos») */}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e2e8f0' }}>
+                {vacante[x.nombre] === undefined ? (
+                  <button onClick={() => setVacante(v => ({ ...v, [x.nombre]: '' }))}
+                    style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px solid #94a3b8', backgroundColor: 'white',
+                      color: '#475569', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    🏷️ Es una plaza vacante (sin profesor nombrado)
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: '#475569' }}>Plaza vacante del departamento:</span>
+                    <select value={vacante[x.nombre]} onChange={e => setVacante(v => ({ ...v, [x.nombre]: e.target.value }))}
+                      style={{ padding: '7px 9px', borderRadius: 7, border: '1.5px solid #cbd5e1', fontSize: 12.5 }}>
+                      <option value="">— elige —</option>
+                      {[...new Set((datos?.profesores || []).map(p => p.departamento).filter(Boolean))].sort().map(dp => <option key={dp} value={dp}>{dp}</option>)}
+                    </select>
+                    <button onClick={() => crearVacante(x.nombre)} disabled={!vacante[x.nombre] || trabajando === x.nombre}
+                      style={{ padding: '7px 13px', borderRadius: 8, border: 'none', backgroundColor: vacante[x.nombre] ? AZUL : '#e2e8f0',
+                        color: vacante[x.nombre] ? 'white' : '#94a3b8', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+                      Crear plaza vacante
+                    </button>
+                    <button onClick={() => setVacante(v => { const y = { ...v }; delete y[x.nombre]; return y; })}
+                      style={{ border: 'none', background: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 12 }}>cancelar</button>
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 5 }}>
+                  Crea una ficha sin acceso para poder registrarle la baja y que consten sus horas sin profesor.
+                </div>
               </div>
             </div>
           ))}

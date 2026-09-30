@@ -100,11 +100,13 @@ export async function GET(request) {
     }
 
     let consulta = cliente.from('profesores')
-      .select('id, nombre, apellidos')
+      .select('id, nombre, apellidos, tipo_contrato')
       .eq('estado', 'activo')
       .order('apellidos', { ascending: true });
     if (ids) consulta = consulta.in('id', ids.length ? ids : ['-']);
-    const { data: censo } = await consulta;
+    const { data: censoTodo } = await consulta;
+    // Las plazas vacantes (fichas sin persona) no votan ni cuentan para el quórum
+    const censo = (censoTodo || []).filter(p => p.tipo_contrato !== 'Plaza vacante');
 
     const { data: votantes } = await cliente
       .from('votantes').select('profesor_id').eq('votacion_id', v.id);
