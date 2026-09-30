@@ -114,6 +114,10 @@ export default function Ausencias() {
   const [, setTipo] = useState('');
   const [subtipo, setSubtipo] = useState('');
   const [datosExtra, setDatosExtra] = useState({});
+  // Formación: solo con solicitud autorizada en el módulo de Formación
+  const [formacionesAut, setFormacionesAut] = useState([]);
+  const [formacionId, setFormacionId] = useState('');
+  const [horarioPendiente, setHorarioPendiente] = useState(null); // {inicio, fin}
   // Configuración del curso, para saber si el día elegido tiene clases
   const [configCurso, setConfigCurso] = useState(null);
   const [horario, setHorario] = useState({});
@@ -156,6 +160,64 @@ export default function Ausencias() {
       }
     } catch (e) { /* si no se puede leer, se empieza en blanco */ }
   }, []);
+
+  // Formaciones autorizadas de este profesor. Si se llega con
+  // ?formacion=<id> (desde el correo o las tareas pendientes), se deja
+  // el formulario ya rellenado con esa formación.
+  useEffect(() => {
+    let vivo = true;
+    fetch('/api/formacion?vista=mias').then(r => r.ok ? r.json() : { solicitudes: [] }).then(d => {
+      if (!vivo) return;
+      const aut = (d.solicitudes || []).filter(x => x.estado === 'autorizada')
+        .sort((x, y) => x.fecha_inicio.localeCompare(y.fecha_inicio));
+      setFormacionesAut(aut);
+      const pedida = new URLSearchParams(window.location.search).get('formacion');
+      const f = pedida && aut.find(x => x.id === pedida);
+      if (f) {
+        setSubtipo('permiso_formacion');
+        setTipo(tipoDeMotivo('permiso_formacion'));
+        elegirFormacion(f);
+        setVista('formulario');
+      }
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  // El horario se carga cuando ya se sabe quién es (profesorId)
+  useEffect(() => {
+    if (!horarioPendiente || !profesorId) return;
+    cargarHorarioDelDia(horarioPendiente.inicio, horarioPendiente.inicio, horarioPendiente.fin);
+    setHorarioPendiente(null);
+  }, [horarioPendiente, profesorId]);
+
+  function elegirFormacion(f) {
+    setFormacionId(f.id);
+    const fin = f.fecha_fin || f.fecha_inicio;
+    setFechaInicio(f.fecha_inicio);
+    setFechaFin(fin);
+    setModoManual(false);
+    setHorario({});
+    setGruposUnicos([]);
+    const hi = f.hora_inicio ? String(f.hora_inicio).slice(0, 5) : '';
+    const hf = f.hora_fin ? String(f.hora_fin).slice(0, 5) : '';
+    let horas = '';
+    if (hi && hf) {
+      const min = (Number(hf.slice(0, 2)) * 60 + Number(hf.slice(3))) - (Number(hi.slice(0, 2)) * 60 + Number(hi.slice(3)));
+      const nDias = Math.round((new Date(fin + 'T12:00:00') - new Date(f.fecha_inicio + 'T12:00:00')) / 86400000) + 1;
+      if (min > 0) horas = String(Math.round(min / 60 * nDias * 10) / 10);
+    }
+    setDatosExtra({
+      curso: f.titulo || '',
+      lugar: f.lugar || (f.modalidad === 'online' ? 'Online' : ''),
+      entidad: f.entidad || '',
+      horario: hi ? `de ${hi}${hf ? ' a ' + hf : ''}` : '',
+      horas,
+    });
+    setHorarioPendiente({ inicio: f.fecha_inicio, fin });
+  }
+
+  const esMotivoFormacion = ['permiso_formacion', 'act_formacion'].includes(subtipo);
+  const formacionBloqueada = esMotivoFormacion && !esDirectivo && !editandoId;
 
   // ¿Hay clases el día elegido? Fuera del periodo lectivo o en vacaciones
   // no las hay, pero la ausencia se registra igual: el profesorado tiene
@@ -381,6 +443,10 @@ export default function Ausencias() {
     if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
+    if (formacionBloqueada && !formacionId) {
+      mostrarMensaje('Para una ausencia por formación, elige la formación autorizada. Si aún no la tienes, pídela en el módulo de Formación.', 'error');
+      return;
+    }
     const bloqueExtra = camposExtraDe(subtipo);
     if (bloqueExtra) {
       const falta = bloqueExtra.campos.find(c => c.requerido && !(datosExtra[c.id] || '').trim());
@@ -496,7 +562,7 @@ export default function Ausencias() {
       const r = await fetch('/api/ausencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'crear', datos: datosAusencia }),
+        body: JSON.stringify({ accion: 'crear', datos: formacionId && esMotivoFormacion ? { ...datosAusencia, formacion_id: formacionId } : datosAusencia }),
       });
       error = r.ok ? null : await r.json();
     }
@@ -512,6 +578,7 @@ export default function Ausencias() {
     );
     setEditandoId(null);
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false); setDiaCompleto(true);
+    setFormacionId('');
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -582,7 +649,7 @@ export default function Ausencias() {
 
   function cancelarEdicion() {
     setEditandoId(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({});
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setFormacionId('');
     setHorario({}); setModoManual(false); setGruposUnicos([]); setTareasBloque({});
     setVista('historial');
   }
@@ -804,7 +871,7 @@ export default function Ausencias() {
             {/* MOTIVO (lista unica Delphos) */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📋 Motivo de la ausencia *</label>
-              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); }}
+              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); setFormacionId(''); }}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? verdeClaro : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
                 <option value="">-- Selecciona el motivo --</option>
                 {MOTIVOS_AUSENCIA.map(m => (
@@ -823,6 +890,43 @@ export default function Ausencias() {
                 </div>
               )}
             </div>
+
+            {/* FORMACIÓN: hay que elegir una autorizada */}
+            {formacionBloqueada && (
+              formacionesAut.length === 0 ? (
+                <div style={{ marginBottom: 16, padding: '14px 16px', borderRadius: 10, backgroundColor: '#fef2f2', border: '2px solid #fca5a5', color: '#991b1b', fontSize: 13.5, lineHeight: 1.55 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>🔒 No tienes ninguna formación autorizada</div>
+                  Antes de registrar la ausencia hay que pedir la formación: la aprueba tu jefe de departamento y la autoriza el director.
+                  <a href="/formacion?vista=nueva" style={{ display: 'inline-block', marginTop: 10, padding: '9px 16px', borderRadius: 8, backgroundColor: '#5b21b6', color: 'white', fontWeight: 700, textDecoration: 'none' }}>
+                    🎓 Pedir la formación →
+                  </a>
+                </div>
+              ) : (
+                <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, backgroundColor: '#f5f3ff', border: '1.5px solid #c4b5fd' }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#5b21b6', marginBottom: 8 }}>🎓 ¿Qué formación autorizada? *</div>
+                  {formacionesAut.map(f => {
+                    const activa = formacionId === f.id;
+                    const rango = f.fecha_fin && f.fecha_fin !== f.fecha_inicio
+                      ? `${new Date(f.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} – ${new Date(f.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`
+                      : new Date(f.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' });
+                    return (
+                      <button key={f.id} type="button" onClick={() => elegirFormacion(f)} style={{
+                        display: 'block', width: '100%', textAlign: 'left', marginBottom: 6, padding: '9px 12px', borderRadius: 8, cursor: 'pointer',
+                        border: `1.5px solid ${activa ? '#5b21b6' : '#ddd6fe'}`, backgroundColor: activa ? '#ede9fe' : 'white', fontFamily: 'inherit',
+                      }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#3b0764' }}>{activa ? '✓ ' : ''}{f.titulo}</div>
+                        <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>
+                          {rango}{f.entidad ? ` · ${f.entidad}` : ''}{f.ausencia_id ? ' · ya tiene una ausencia registrada' : ''}
+                        </div>
+                      </button>
+                    );
+                  })}
+                  <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 4 }}>
+                    Las fechas de la ausencia tienen que estar dentro de las autorizadas. Si solo faltas unas horas, cambia las fechas a ese día.
+                  </div>
+                </div>
+              )
+            )}
 
             {/* CAMPOS PROPIOS DEL MOTIVO */}
             {camposExtraDe(subtipo) && (

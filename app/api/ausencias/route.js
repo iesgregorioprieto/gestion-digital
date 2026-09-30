@@ -8,47 +8,6 @@ import { getCursoActual } from '@/lib/curso';
 import { diasDeLaAusencia } from '@/lib/diasAusencia';
 
 /**
- * Departamentos de FP con cuadrante de guardias propio.
- *
- * Para estos departamentos, el permiso de formación pasa primero por el
- * jefe de departamento antes de llegar al director. El resto va directo.
- * Normalizado: minúsculas, sin acentos, sin espacios extra.
- */
-const DPTOS_FP = [
-  'tmv',
-  'ee',
-  'hosteleria', 'hostelería',
-  'informatica', 'informática',
-  'comercio',
-  'administracion', 'administración',
-  'industrias alimentarias',
-  'fol',
-];
-
-/**
- * Fecha límite: X días laborables desde hoy.
- * Salta sábados y domingos.
- */
-function limitePlazo(diasLaborables) {
-  const d = new Date();
-  let restantes = diasLaborables;
-  while (restantes > 0) {
-    d.setDate(d.getDate() + 1);
-    if (d.getDay() !== 0 && d.getDay() !== 6) restantes--;
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-function esDptoFP(dpto) {
-  if (!dpto) return false;
-  const norm = dpto.trim().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  return DPTOS_FP.some(d =>
-    d.normalize('NFD').replace(/[\u0300-\u036f]/g, '') === norm
-  );
-}
-
-/**
  * LECTURA DE AUSENCIAS
  *
  * El texto de la justificación suele contener información médica.
@@ -333,6 +292,31 @@ export async function POST(request) {
       const dueño = (esDirectivo(sesion) && datos.profesor_id) ? datos.profesor_id : sesion.id;
 
       const fila = { ...datos, profesor_id: dueño };
+
+      /**
+       * FORMACIÓN: solo con autorización previa (sugerencia #93).
+       *
+       * Primero se pide en el módulo de Formación; lo aprueba el jefe de
+       * departamento y lo autoriza el director. Sin una solicitud
+       * autorizada que cubra esas fechas, el profesorado no puede
+       * registrar una ausencia por formación. El equipo directivo sí
+       * (formación de todo el claustro, cursos convocados por el centro).
+       */
+      const formacionId = fila.formacion_id || null;
+      delete fila.formacion_id;   // no es columna de ausencias
+      let solicitudFormacion = null;
+      if (['permiso_formacion', 'act_formacion'].includes(fila.subtipo) && !esDirectivo(sesion)) {
+        const { data: autorizadas } = await supa().from('solicitudes_formacion')
+          .select('id, fecha_inicio, fecha_fin, ausencia_id')
+          .eq('profesor_id', dueño).eq('estado', 'autorizada');
+        const cubre = s => s.fecha_inicio <= fila.fecha_inicio && s.fecha_fin >= (fila.fecha_fin || fila.fecha_inicio);
+        const lista = (autorizadas || []).filter(cubre);
+        solicitudFormacion = lista.find(s => s.id === formacionId) || lista[0] || null;
+        if (!solicitudFormacion) {
+          const texto = 'Para registrar una ausencia por formación, primero tiene que estar autorizada en el módulo de Formación y las fechas deben estar dentro de las autorizadas.';
+          return Response.json({ error: texto, message: texto }, { status: 403 });
+        }
+      }
       // El profesorado no decide el estado de su propia ausencia; el
       // equipo directivo sí (por ejemplo, una baja ya aprobada).
       if (!esDirectivo(sesion)) {
@@ -373,6 +357,13 @@ export async function POST(request) {
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
+      // Dejar enlazada la solicitud de formación con su (primera) ausencia
+      if (solicitudFormacion && !solicitudFormacion.ausencia_id && (data || [])[0]?.id) {
+        await supa().from('solicitudes_formacion')
+          .update({ ausencia_id: data[0].id }).eq('id', solicitudFormacion.id)
+          .then(() => {}, err => console.error('vincular formacion:', err?.message));
+      }
+
       // Preasignación automática de guardias: en cuanto se registra una
       // ausencia, el sistema asigna a quien corresponda según el cuadrante
       // y la rotación. No espera a que nadie abra la app ni pulse nada.
@@ -407,31 +398,9 @@ export async function POST(request) {
         }
       }
 
-      // Permiso de formación: flujo de aprobación.
-      //
-      // Si el profesor es de un departamento de FP, el permiso pasa
-      // primero por su jefe de departamento. Si es de otro, va directo
-      // al director como hasta ahora.
-      if (fila.subtipo === 'permiso_formacion') {
-        const { data: profData } = await supa()
-          .from('profesores')
-          .select('departamento')
-          .eq('id', fila.profesor_id);
-        const dpto = (profData || [])[0]?.departamento || '';
-
-        if (esDptoFP(dpto)) {
-          // Marcar como pendiente de aprobación del jefe
-          await supa().from('ausencias')
-            .update({ aprobacion_jefe: 'pendiente', aprobacion_jefe_limite: limitePlazo(3) })
-            .eq('id', (data || [])[0]?.id);
-
-          avisarJefeFormacion(fila, dpto).catch(err =>
-            console.error('aviso jefe formacion:', err?.message));
-        } else {
-          avisarFormacion(fila).catch(err =>
-            console.error('aviso formacion:', err?.message));
-        }
-      }
+      // Permiso de formación: la aprobación (jefe de departamento y
+      // director) se hace ANTES, en el módulo de Formación. Aquí ya no se
+      // avisa a nadie: la ausencia solo sirve para el cuadrante y las tareas.
 
       // Licencia por enfermedad: aviso a dirección y jefatura de estudios
       // con lo administrativo, para que valoren la sustitución y lo
@@ -681,69 +650,6 @@ async function avisarBaja(fila) {
     duracion: ex.duracion_probable ? `${ex.duracion_probable} días` : '',
     sustitucion: ex.sustitucion || '',
     observaciones: fila.observaciones || '',
-  });
-}
-
-/**
- * Aviso al jefe de departamento de que un profesor de su departamento
- * ha pedido un permiso de formación. El jefe tiene 3 días laborables
- * para aprobar o denegar. Si no contesta, pasa al director.
- */
-async function avisarJefeFormacion(fila, dpto) {
-  const cliente = supa();
-
-  // Buscar al jefe del departamento
-  const { data: jefes } = await cliente
-    .from('profesores')
-    .select('id, nombre, apellidos, email, departamento')
-    .eq('departamento', dpto)
-    .contains('rol', ['jefe_departamento']);
-
-  if (!jefes || jefes.length === 0) {
-    // Sin jefe → directo al director
-    console.error(`[formacion] Sin jefe en ${dpto}, va directo al director`);
-    return avisarFormacion(fila);
-  }
-
-  const jefe = jefes[0];
-  if (!jefe.email) return avisarFormacion(fila);
-
-  // Datos del profesor que pide
-  const { data: profs } = await cliente
-    .from('profesores').select('nombre, apellidos').eq('id', fila.profesor_id);
-  const prof = (profs || [])[0];
-  const nombre = prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : 'Un profesor/a';
-  const ex = fila.datos_extra || {};
-
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
-
-  await fetch(`${baseUrl}/api/enviar-email`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-clave-interna': process.env.SESSION_SECRET || '',
-    },
-    body: JSON.stringify({
-      tipo: 'formacion_jefe_pendiente',
-      datos: {
-        email: jefe.email,
-        nombre,
-        jefe_nombre: `${jefe.nombre || ''} ${jefe.apellidos || ''}`.trim(),
-        departamento: dpto,
-        fecha: fila.fecha_inicio || '',
-        fecha_fin: fila.fecha_fin || '',
-        dias: (() => {
-          if (!fila.fecha_inicio || !fila.fecha_fin) return '';
-          const d = Math.round((new Date(fila.fecha_fin + 'T12:00:00') - new Date(fila.fecha_inicio + 'T12:00:00')) / 86400000) + 1;
-          return d > 1 ? `${d} días` : '1 día';
-        })(),
-        curso: ex.curso || '',
-        entidad: ex.entidad || '',
-        lugar: ex.lugar || '',
-        horario: ex.horario || '',
-        horas: ex.horas ? `${ex.horas} h` : '',
-      },
-    }),
   });
 }
 
