@@ -424,6 +424,29 @@ export default function GestionAutorizaciones() {
       const formaTexto = f =>
         f === 'transferencia' ? 'Transferencia' : f === 'metalico' ? 'Metálico' : '';
 
+      // RESUMEN arriba del detalle: lo que se recoge en metálico, cuántos
+      // pagaron por transferencia y cuántos están exentos.
+      const eur = n => n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      const pagadosF = filas.filter(x => x.seguro_pagado && !x.seguro_exento);
+      const nMetal = pagadosF.filter(x => x.seguro_forma_pago === 'metalico').length;
+      const nTransf = pagadosF.filter(x => x.seguro_forma_pago === 'transferencia').length;
+      const nSinForma = pagadosF.length - nMetal - nTransf;
+      const nExentos = filas.filter(x => x.seguro_exento).length;
+      const nPend = filas.length - pagadosF.length - nExentos;
+      const precio = Number(precioSeguro) || 0;
+      const resumen = [
+        ['RESUMEN DEL SEGURO ESCOLAR', `Precio por alumno: ${eur(precio)}`],
+        ['', 'Alumnos', 'Importe'],
+        ['Pagado en metálico (efectivo)', nMetal, eur(nMetal * precio)],
+        ['Pagado por transferencia', nTransf, eur(nTransf * precio)],
+        ...(nSinForma ? [['Pagado sin forma de pago anotada', nSinForma, eur(nSinForma * precio)]] : []),
+        ['Total pagado', pagadosF.length, eur(pagadosF.length * precio)],
+        ['Exentos', nExentos, ''],
+        ['Pendientes', nPend, ''],
+        ['Total alumnos', filas.length, ''],
+        [],
+      ].map(f => f.map(esc).join(';'));
+
       const lineas = [
         // "Situación" en vez de "Pagado": un exento no es alguien que no
         // ha pagado, es alguien a quien no le corresponde. Mezclarlos en
@@ -444,7 +467,7 @@ export default function GestionAutorizaciones() {
       ];
 
       // BOM para que Excel abra bien las tildes
-      const blob = new Blob(['\ufeff' + lineas.join('\n')],
+      const blob = new Blob(['\ufeff' + [...resumen, ...lineas].join('\n')],
         { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -453,11 +476,8 @@ export default function GestionAutorizaciones() {
       a.click();
       URL.revokeObjectURL(url);
 
-      const pagados = filas.filter(x => x.seguro_pagado).length;
-      const exentos = filas.filter(x => x.seguro_exento).length;
-      const pendientes = filas.length - pagados - exentos;
       mostrarMensaje(
-        `✅ Informe descargado · ${pagados} pagados · ${exentos} exentos · ${pendientes} pendientes`,
+        `✅ Informe descargado · metálico: ${nMetal} (${eur(nMetal * precio)}) · transferencia: ${nTransf} · exentos: ${nExentos} · pendientes: ${nPend}`,
         'ok');
     } catch (e) {
       mostrarMensaje('No se ha podido generar el informe', 'error');
