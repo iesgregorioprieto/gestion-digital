@@ -2,17 +2,19 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * COMUNICACIONES Y CONVOCATORIAS
+ * AVISOS AL CLAUSTRO
  *
- * Donde dirección avisa al claustro o convoca una reunión, ve quién se
- * ha dado por enterado, quién confirma asistencia, abre el control de
- * asistencia el día de la reunión y ficha a mano a quien no tenga la
- * aplicación.
+ * Donde dirección avisa al claustro, a un departamento o a quien elija.
+ * Dos formas: a pantalla completa (hay que darse por enterado) o solo
+ * en el banner «Hoy» hasta una fecha.
+ *
+ * Las convocatorias oficiales de reunión (orden del día, fichaje,
+ * votaciones en el momento) tienen su propio módulo aparte, en
+ * /gestion/convocatorias. Este de aquí es solo para avisos.
  */
 
 import { useState, useEffect } from 'react';
-import { getSupabase } from '@/lib/supabase';
-import { consulta, consultaRpc } from '@/lib/consulta';
+import { consulta } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 import PanelEquipos from './PanelEquipos';
 
@@ -35,21 +37,10 @@ const AMBITOS = [
   { valor: 'manual',          label: '✋ Elegir personas a dedo' },
 ];
 
-function fechaLarga(f) {
-  if (!f) return '';
-  return new Date(f + 'T12:00:00').toLocaleDateString('es-ES',
-    { weekday: 'long', day: 'numeric', month: 'long' });
-}
-
 export default function GestionComunicaciones() {
-  // Pestaña del módulo: avisos o convocatorias. Son dos cosas distintas
-  // (un aviso se lee y punto; una convocatoria tiene día, hora, lugar,
-  // asistencia y fichaje), así que se gestionan por separado en vez de
-  // mezcladas en una sola lista.
-  const [seccion, setSeccion] = useState(() => {
-    if (typeof window === 'undefined') return 'avisos';
-    return 'avisos';
-  });
+  // Pestaña del módulo: avisos o equipos (quién compone cada equipo de
+  // trabajo, reutilizable como destinatario).
+  const [seccion, setSeccion] = useState('avisos');
   const [vista, setVista] = useState('lista');
   const [lista, setLista] = useState([]);
   const [cargando, setCargando] = useState(true);
@@ -57,12 +48,10 @@ export default function GestionComunicaciones() {
   const [mensaje, setMensaje] = useState(null);
   const [abierta, setAbierta] = useState(null);
   const [profesores, setProfesores] = useState([]);
-  const [ahora, setAhora] = useState(Date.now());
 
   // Formulario
-  const [tipo, setTipo] = useState('aviso');
-  // Aviso: «ventana» (pantalla completa, hay que leerlo) o «banner» (una
-  // línea en el banner «Hoy» hasta una fecha)
+  // «ventana» (pantalla completa, hay que leerlo) o «banner» (una línea
+  // en el banner «Hoy» hasta una fecha)
   const [modoAviso, setModoAviso] = useState('ventana');
   const [hastaBanner, setHastaBanner] = useState('');
   const [titulo, setTitulo] = useState('');
@@ -72,17 +61,7 @@ export default function GestionComunicaciones() {
   const [equiposElegidos, setEquiposElegidos] = useState([]);
   const [dptos, setDptos] = useState([]);
   const [elegidos, setElegidos] = useState([]);
-  const [fecha, setFecha] = useState('');
-  const [hora, setHora] = useState('');
-  const [lugar, setLugar] = useState('');
   const [guardando, setGuardando] = useState(false);
-  const [minutosFichaje, setMinutosFichaje] = useState('10');
-  // Votaciones de la reunión
-  const [votaciones, setVotaciones] = useState([]);
-  const [nuevaVot, setNuevaVot] = useState(null);   // id de la convocatoria en la que se está creando
-  const [vPregunta, setVPregunta] = useState('');
-  const [vOpciones, setVOpciones] = useState(['A favor', 'En contra', 'Abstención']);
-  const [vMinutos, setVMinutos] = useState('3');
 
   useEffect(() => {
     fetch('/api/equipos')
@@ -93,14 +72,8 @@ export default function GestionComunicaciones() {
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('seccion');
-    if (['avisos', 'convocatorias', 'equipos'].includes(q)) setSeccion(q);
+    if (['avisos', 'equipos'].includes(q)) setSeccion(q);
   }, []);
-
-  // El tipo de lo que se publica lo decide la pestaña.
-  useEffect(() => {
-    if (seccion === 'equipos') return;
-    setTipo(seccion === 'convocatorias' ? 'convocatoria' : 'aviso');
-  }, [seccion]);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -111,22 +84,14 @@ export default function GestionComunicaciones() {
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
     cargar();
     cargarProfesores();
-    cargarVotaciones();
     const t = setInterval(cargar, 15000);
-    const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { clearInterval(t); clearInterval(reloj); };
+    return () => clearInterval(t);
   }, []);
-
-  function hoyISO() {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  }
 
   async function borrarViejas(viejas) {
     const ok = confirm(
-      `Se van a eliminar ${viejas.length} comunicaciones ya cerradas o de reuniones pasadas.\n\n` +
-      `Se borran también las respuestas y los fichajes, y no se puede deshacer.\n\n` +
-      `Descarga antes las actas que necesites conservar.\n\n¿Continuar?`
+      `Se van a eliminar ${viejas.length} avisos ya cerrados.\n\n` +
+      `Se borran también las respuestas, y no se puede deshacer.\n\n¿Continuar?`
     );
     if (!ok) return;
     for (const c of viejas) {
@@ -136,7 +101,7 @@ export default function GestionComunicaciones() {
         body: JSON.stringify({ accion: 'eliminar', id: c.id }),
       });
     }
-    aviso(`🗑️ ${viejas.length} eliminadas`, 'ok');
+    aviso(`🗑️ ${viejas.length} eliminados`, 'ok');
     cargar();
   }
 
@@ -144,7 +109,9 @@ export default function GestionComunicaciones() {
     try {
       const r = await fetch('/api/comunicaciones?todas=1');
       const d = await r.json();
-      setLista(d.comunicaciones || []);
+      // Lo de tipo «convocatoria» es historial del módulo antiguo; las
+      // convocatorias de verdad viven ahora en /gestion/convocatorias.
+      setLista((d.comunicaciones || []).filter(c => c.tipo !== 'convocatoria'));
     } catch (e) { /* mantiene lo anterior */ }
     setCargando(false);
   }
@@ -159,34 +126,20 @@ export default function GestionComunicaciones() {
         nombre: d.nombre,
         departamento: d.departamento,
         leida: r?.leida_at ? 'Sí' : 'No',
-        asistira: r?.asistira === true ? 'Sí' : r?.asistira === false ? 'No' : '—',
-        fichado: r?.fichado_at ? 'Sí' : 'No',
-        horaFichaje: r?.fichado_at
-          ? new Date(r.fichado_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })
-          : '',
-        aMano: r?.a_mano_por || '',
       };
     });
   }
 
   function informeCSV(c) {
     const filas = filasInforme(c);
-    const esConv = c.tipo === 'convocatoria';
-    const cab = esConv
-      ? ['Profesor/a', 'Departamento', 'Leída', 'Asistirá', 'Presente', 'Hora', 'Fichado a mano por']
-      : ['Profesor/a', 'Departamento', 'Leída'];
+    const cab = ['Profesor/a', 'Departamento', 'Leída'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
     const lineas = [cab.map(esc).join(';')];
-    filas.forEach(f => {
-      const fila = esConv
-        ? [f.nombre, f.departamento, f.leida, f.asistira, f.fichado, f.horaFichaje, f.aMano]
-        : [f.nombre, f.departamento, f.leida];
-      lineas.push(fila.map(esc).join(';'));
-    });
+    filas.forEach(f => lineas.push([f.nombre, f.departamento, f.leida].map(esc).join(';')));
     const blob = new Blob(['\uFEFF' + lineas.join('\n')], { type: 'text/csv;charset=utf-8;' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${esConv ? 'convocatoria' : 'aviso'}_${(c.fecha_reunion || c.created_at || '').slice(0, 10)}.csv`;
+    a.download = `aviso_${(c.created_at || '').slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }
@@ -194,37 +147,17 @@ export default function GestionComunicaciones() {
   function informePDF(c) {
     const e = t => String(t ?? '').replace(/[&<>]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[x]));
     const filas = filasInforme(c);
-    const esConv = c.tipo === 'convocatoria';
-    const suyas = votaciones.filter(v => v.comunicacion_id === c.id);
-
-    const presentes = filas.filter(f => f.fichado === 'Sí');
-    const ausentes  = filas.filter(f => f.fichado !== 'Sí');
 
     const _ambs = Array.isArray(c.ambito) ? c.ambito : [c.ambito];
     const ambitoLabel = _ambs.map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(', ')
       + (c.departamento ? ' \u2014 ' + (Array.isArray(c.departamento) ? c.departamento.join(', ') : c.departamento) : '');
 
-    const filasHtml = filas.map(f => esConv
-      ? `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td><td class="c">${f.asistira}</td><td class="c">${f.fichado}</td><td class="c">${e(f.horaFichaje)}</td></tr>`
-      : `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td></tr>`
+    const filasHtml = filas.map(f =>
+      `<tr><td>${e(f.nombre)}</td><td>${e(f.departamento)}</td><td class="c">${f.leida}</td></tr>`
     ).join('');
 
-    const votHtml = suyas.map(v => {
-      const total = v.totalVotos || 0;
-      const ops = (v.opciones || []).map(o => {
-        const n = v.recuento?.[o] || 0;
-        const pct = total > 0 ? ((n / total) * 100).toFixed(1) : '0,0';
-        return `<tr><td>${e(o)}</td><td class="c">${n}</td><td class="c">${pct}%</td></tr>`;
-      }).join('');
-      return `<div class="votacion">
-        <div class="vpreg">${e(v.pregunta)}</div>
-        <table><tr><th>Opción</th><th class="c">Votos</th><th class="c">%</th></tr>${ops}</table>
-        <div class="vpie">${total} ${total === 1 ? 'voto' : 'votos'} · ${v.participantes} participantes</div>
-      </div>`;
-    }).join('');
-
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-<title>${esConv ? 'Acta de reunión' : 'Registro de aviso'}</title>
+<title>Registro de aviso</title>
 <style>
   body { font-family: Arial, sans-serif; font-size: 11.5px; color: #222; margin: 32px; }
   h1 { font-size: 17px; color: #1e3a5f; margin: 0 0 4px; }
@@ -237,13 +170,9 @@ export default function GestionComunicaciones() {
   td { padding: 6px 7px; border-bottom: 1px solid #e5e7eb; }
   tr:nth-child(even) td { background: #f8fafc; }
   .c { text-align: center; }
-  .votacion { margin-bottom: 18px; padding: 12px 14px; background: #faf5ff; border-radius: 6px; }
-  .vpreg { font-weight: bold; font-size: 13px; margin-bottom: 6px; }
-  .vpie { font-size: 10.5px; color: #666; }
-  .nota { margin-top: 22px; padding: 12px 15px; background: #eff6ff; border-left: 4px solid #1e40af; font-size: 10.5px; color: #1e3a5f; line-height: 1.65; }
   .pie { margin-top: 28px; padding-top: 9px; border-top: 1px solid #ccc; color: #888; font-size: 10px; }
 </style></head><body>
-  <h1>${esConv ? 'Acta de reunión' : 'Registro de comunicación'}</h1>
+  <h1>Registro de comunicación</h1>
   <div class="sub">IES Gregorio Prieto · Valdepeñas (Ciudad Real)</div>
 
   <h2>${e(c.titulo)}</h2>
@@ -251,27 +180,14 @@ export default function GestionComunicaciones() {
 
   <div class="datos">
     <strong>Convocados:</strong> ${e(ambitoLabel)}<br>
-    ${c.fecha_reunion ? `<strong>Fecha:</strong> ${e(fechaLarga(c.fecha_reunion))}${c.hora_reunion ? ` · ${e(c.hora_reunion)}` : ''}<br>` : ''}
-    ${c.lugar ? `<strong>Lugar:</strong> ${e(c.lugar)}<br>` : ''}
     <strong>Destinatarios:</strong> ${filas.length}
-    ${esConv ? `<br><strong>Asistentes:</strong> ${presentes.length} · <strong>Ausentes:</strong> ${ausentes.length}` : ''}
   </div>
 
-  <h2>${esConv ? 'Control de asistencia' : 'Lectura'}</h2>
+  <h2>Lectura</h2>
   <table>
-    <tr><th>Profesor/a</th><th>Departamento</th><th class="c">Leída</th>${esConv ? '<th class="c">Asistirá</th><th class="c">Presente</th><th class="c">Hora</th>' : ''}</tr>
+    <tr><th>Profesor/a</th><th>Departamento</th><th class="c">Leída</th></tr>
     ${filasHtml}
   </table>
-
-  ${suyas.length > 0 ? `<h2>Votaciones</h2>${votHtml}
-  <div class="nota">
-    <strong>Sobre el secreto del voto.</strong>
-    La aplicación registra por separado, en dos almacenamientos que no pueden cruzarse,
-    la opción votada y la identidad de quien participa. Ninguno conserva la hora de
-    emisión, lo que impide emparejarlos por orden de llegada. No es posible determinar
-    el sentido del voto de ninguna persona. Solo pudieron votar quienes constan como
-    presentes en el control de asistencia.
-  </div>` : ''}
 
   <div class="pie">
     Generado el ${e(new Date().toLocaleString('es-ES'))} por ${e(usuario)} ·
@@ -284,61 +200,6 @@ export default function GestionComunicaciones() {
     w.document.write(html);
     w.document.close();
     setTimeout(() => w.print(), 400);
-  }
-
-  async function cargarVotaciones() {
-    try {
-      const r = await fetch('/api/votaciones');
-      const d = await r.json();
-      setVotaciones(d.votaciones || []);
-    } catch (e) { /* se queda con lo anterior */ }
-  }
-
-  async function accionVotacion(nombre, id) {
-    const r = await fetch('/api/votaciones', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: nombre, id }),
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      aviso(e.error || 'No se ha podido completar', 'error');
-    } else { cargarVotaciones(); }
-  }
-
-  async function lanzarVotacion(comunicacionId) {
-    const ops = vOpciones.map(o => o.trim()).filter(Boolean);
-    if (!vPregunta.trim()) return aviso('Escribe la cuestión.', 'error');
-    if (ops.length < 2)    return aviso('Pon al menos dos opciones.', 'error');
-
-    const r = await fetch('/api/votaciones', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        accion: 'crear',
-        datos: {
-          pregunta: vPregunta, opciones: ops,
-          duracion_minutos: vMinutos || null,
-          comunicacion_id: comunicacionId,
-        },
-      }),
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      return aviso(e.error || 'No se ha podido crear', 'error');
-    }
-    const creada = await r.json().catch(() => ({}));
-    if (creada.id) {
-      await fetch('/api/votaciones', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'abrir', id: creada.id }),
-      });
-    }
-    aviso('🗳️ Votación lanzada a quienes han pasado lista.', 'ok');
-    setNuevaVot(null); setVPregunta(''); setVMinutos('3');
-    setVOpciones(['A favor', 'En contra', 'Abstención']);
-    cargarVotaciones();
   }
 
   async function cargarProfesores() {
@@ -377,15 +238,13 @@ export default function GestionComunicaciones() {
     // Mandar algo a 155 personas sin querer es muy caro de deshacer: se
     // pide confirmación expresa.
     if (ambitos.includes('claustro')) {
-      const que = tipo === 'convocatoria' ? 'esta convocatoria' : 'este aviso';
-      if (!confirm(`Vas a enviar ${que} a TODO EL CLAUSTRO.\n\n¿Seguro?`)) return;
+      if (!confirm('Vas a enviar este aviso a TODO EL CLAUSTRO.\n\n¿Seguro?')) return;
     }
     if (ambitos.includes('departamento') && dptos.length === 0) return aviso('Elige al menos un departamento.', 'error');
     if (ambitos.includes('manual') && elegidos.length === 0) return aviso('Elige al menos una persona.', 'error');
     if (ambitos.includes('equipo') && equiposElegidos.length === 0) return aviso('Elige al menos un equipo.', 'error');
-    const enBanner = tipo === 'aviso' && modoAviso === 'banner';
+    const enBanner = modoAviso === 'banner';
     if (enBanner && !hastaBanner) return aviso('Indica hasta qué día se muestra en el banner.', 'error');
-    if (tipo === 'convocatoria' && !fecha) return aviso('Indica el día de la reunión.', 'error');
 
     setGuardando(true);
     const r = await fetch('/api/comunicaciones', {
@@ -394,12 +253,11 @@ export default function GestionComunicaciones() {
       body: JSON.stringify({
         accion: 'crear',
         datos: {
-          tipo: enBanner ? 'banner' : tipo, titulo, mensaje: texto, ambito: ambitos,
+          tipo: enBanner ? 'banner' : 'aviso', titulo, mensaje: texto, ambito: ambitos,
           caduca_at: enBanner ? new Date(`${hastaBanner}T23:59:59`).toISOString() : null,
           departamento: ambitos.includes('departamento') ? dptos : null,
           destinatarios: ambitos.includes('manual') ? elegidos : null,
           equipos: ambitos.includes('equipo') ? equiposElegidos : null,
-          fecha_reunion: fecha || null, hora_reunion: hora || null, lugar: lugar || null,
         },
       }),
     });
@@ -409,10 +267,8 @@ export default function GestionComunicaciones() {
     } else {
       aviso(enBanner
         ? `📌 Publicado en el banner de sus destinatarios hasta el ${hastaBanner.split('-').reverse().join('/')}.`
-        : tipo === 'convocatoria'
-        ? '📅 Convocatoria publicada. Ya le ha saltado a los convocados.'
         : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
-      setTitulo(''); setTexto(''); setFecha(''); setHora(''); setLugar(''); setModoAviso('ventana'); setHastaBanner('');
+      setTitulo(''); setTexto(''); setModoAviso('ventana'); setHastaBanner('');
       setElegidos([]); setAmbitos(['claustro']); setDptos([]); setEquiposElegidos([]);
       setVista('lista');
       cargar();
@@ -426,8 +282,8 @@ export default function GestionComunicaciones() {
     backgroundColor: activo ? AZUL : 'white', color: activo ? 'white' : '#555',
   });
 
-  // Pestañas del módulo. La activa se une a la página; la otra queda
-  // apagada y lleva a la otra mitad sin pasar por el panel.
+  // Pestañas del módulo. La activa se une a la página; las otras llevan
+  // fuera sin pasar por el panel.
   const pestana = (activo) => ({
     padding: '9px 15px', borderRadius: '10px 10px 0 0', fontSize: 13.5, fontWeight: 700,
     textDecoration: 'none', display: 'inline-block',
@@ -444,22 +300,18 @@ export default function GestionComunicaciones() {
 
       <div style={{ backgroundColor: VERDE, color: 'white', padding: '16px 22px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         <div>
-          <div style={{ fontSize: 19, fontWeight: 800 }}>🏛️ Claustro</div>
+          <div style={{ fontSize: 19, fontWeight: 800 }}>📢 Avisos</div>
           <div style={{ fontSize: 12.5, opacity: 0.85 }}>IES Gregorio Prieto · {usuario}</div>
         </div>
         <a href="/gestion" style={{ color: 'white', padding: '6px 13px', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 7, fontSize: 13.5, textDecoration: 'none' }}>← Inicio</a>
       </div>
 
-      {/* Barra del módulo: las dos caras del claustro */}
       <div style={{ backgroundColor: 'white', borderBottom: '1px solid #e2e8f0', padding: '9px 16px 0', display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
         <button onClick={() => { setSeccion('avisos'); setVista('lista'); }}
           style={{ ...pestana(seccion === 'avisos'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
           📢 Avisos
         </button>
-        <button onClick={() => { setSeccion('convocatorias'); setVista('lista'); }}
-          style={{ ...pestana(seccion === 'convocatorias'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
-          📅 Convocatorias
-        </button>
+        <a href="/gestion/convocatorias" style={pestana(false)}>📅 Convocatorias oficiales</a>
         <a href="/gestion/votaciones" style={pestana(false)}>🗳️ Votaciones sueltas</a>
         <button onClick={() => { setSeccion('equipos'); setVista('lista'); }}
           style={{ ...pestana(seccion === 'equipos'), border: 'none', cursor: 'pointer', font: 'inherit' }}>
@@ -480,27 +332,18 @@ export default function GestionComunicaciones() {
 
         {seccion === 'equipos' && <PanelEquipos />}
 
-        {seccion !== 'equipos' && (
+        {seccion === 'avisos' && (
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-          <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>
-            {seccion === 'convocatorias' ? '📋 Convocadas' : '📋 Publicados'}
-          </button>
-          <button onClick={() => setVista('nueva')} style={btn(vista === 'nueva')}>
-            {seccion === 'convocatorias' ? '➕ Convocar reunión' : '➕ Nuevo aviso'}
-          </button>
+          <button onClick={() => setVista('lista')} style={btn(vista === 'lista')}>📋 Publicados</button>
+          <button onClick={() => setVista('nueva')} style={btn(vista === 'nueva')}>➕ Nuevo aviso</button>
           {(() => {
-            // Las de reuniones ya pasadas o cerradas se acumulan; se
-            // pueden borrar de golpe, pero descargando el acta antes.
-            const viejas = lista.filter(c =>
-              c.estado === 'cerrada' ||
-              (c.fecha_reunion && c.fecha_reunion < hoyISO())
-            );
+            const viejas = lista.filter(c => c.estado === 'cerrada');
             if (viejas.length === 0) return null;
             return (
               <button onClick={() => borrarViejas(viejas)}
                 style={{ padding: '9px 16px', borderRadius: 10, fontSize: 13, fontWeight: 700, cursor: 'pointer',
                   border: `1.5px solid ${ROJO}`, backgroundColor: 'white', color: ROJO, marginLeft: 'auto' }}>
-                🗑️ Limpiar {viejas.length} obsoleta{viejas.length !== 1 ? 's' : ''}
+                🗑️ Limpiar {viejas.length} obsoleto{viejas.length !== 1 ? 's' : ''}
               </button>
             );
           })()}
@@ -508,70 +351,49 @@ export default function GestionComunicaciones() {
         )}
 
         {/* ─── NUEVA ─── */}
-        {seccion !== 'equipos' && vista === 'nueva' && (
+        {seccion === 'avisos' && vista === 'nueva' && (
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb' }}>
 
-            {/* El tipo ya no se elige aquí: lo marca la pestaña en la que
-                estás. Antes había que acordarse de pulsarlo, y publicar un
-                aviso cuando se quería convocar una reunión (o al revés) era
-                fácil y difícil de ver luego. */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 10, marginBottom: 18,
-              padding: '12px 15px', borderRadius: 10,
-              backgroundColor: tipo === 'convocatoria' ? '#eff6ff' : '#fffbeb',
-              border: `2px solid ${tipo === 'convocatoria' ? AZUL : AMBAR}`,
-            }}>
-              <span style={{ fontSize: 20 }}>{tipo === 'convocatoria' ? '📅' : '📢'}</span>
-              <span style={{ fontWeight: 800, fontSize: 14.5, color: tipo === 'convocatoria' ? AZUL : AMBAR }}>
-                {tipo === 'convocatoria' ? 'Nueva convocatoria de reunión' : 'Nuevo aviso al profesorado'}
-              </span>
+            <div style={{ marginBottom: 14 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>¿Cómo se muestra?</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                {[['ventana', '🪟 Ventana al abrir', 'A pantalla completa; hay que darse por enterado. Para lo importante.'],
+                  ['banner', '📌 Solo en el banner', 'Una línea arriba del panel hasta el día que elijas. Para recordatorios.']].map(([v, t, d]) => (
+                  <button key={v} type="button" onClick={() => setModoAviso(v)} style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
+                    border: `2px solid ${modoAviso === v ? AZUL : '#e2e8f0'}`, backgroundColor: modoAviso === v ? '#eff6ff' : 'white',
+                  }}>
+                    <div style={{ fontWeight: 800, fontSize: 13.5, color: AZUL }}>{t}</div>
+                    <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>{d}</div>
+                  </button>
+                ))}
+              </div>
+              {modoAviso === 'banner' && (
+                <div style={{ marginTop: 10 }}>
+                  <label style={{ fontSize: 12.5, fontWeight: 700, color: AZUL }}>Mostrar hasta el día (incluido) *</label>
+                  <input type="date" value={hastaBanner} min={new Date().toLocaleDateString('sv-SE')}
+                    onChange={e => setHastaBanner(e.target.value)} style={{ ...campo, marginTop: 4 }} />
+                </div>
+              )}
             </div>
 
-            {/* ¿Cómo se muestra el aviso? */}
-            {tipo === 'aviso' && (
-              <div style={{ marginBottom: 14 }}>
-                <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>¿Cómo se muestra?</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                  {[['ventana', '🪟 Ventana al abrir', 'A pantalla completa; hay que darse por enterado. Para lo importante.'],
-                    ['banner', '📌 Solo en el banner', 'Una línea arriba del panel hasta el día que elijas. Para recordatorios.']].map(([v, t, d]) => (
-                    <button key={v} type="button" onClick={() => setModoAviso(v)} style={{
-                      textAlign: 'left', padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                      border: `2px solid ${modoAviso === v ? AZUL : '#e2e8f0'}`, backgroundColor: modoAviso === v ? '#eff6ff' : 'white',
-                    }}>
-                      <div style={{ fontWeight: 800, fontSize: 13.5, color: AZUL }}>{t}</div>
-                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 3, lineHeight: 1.4 }}>{d}</div>
-                    </button>
-                  ))}
-                </div>
-                {modoAviso === 'banner' && (
-                  <div style={{ marginTop: 10 }}>
-                    <label style={{ fontSize: 12.5, fontWeight: 700, color: AZUL }}>Mostrar hasta el día (incluido) *</label>
-                    <input type="date" value={hastaBanner} min={new Date().toLocaleDateString('sv-SE')}
-                      onChange={e => setHastaBanner(e.target.value)} style={{ ...campo, marginTop: 4 }} />
-                  </div>
-                )}
-              </div>
-            )}
-
             <div style={{ fontSize: 12.5, color: '#64748b', marginBottom: 18, lineHeight: 1.6, padding: '10px 13px', borderRadius: 8, backgroundColor: '#f8fafc' }}>
-              {tipo === 'aviso' && modoAviso === 'banner'
+              {modoAviso === 'banner'
                 ? 'Sale como una línea en el banner «Hoy» de sus destinatarios, arriba del panel, hasta el día que elijas. No interrumpe ni pide confirmación.'
-                : tipo === 'aviso'
-                ? 'Llega a la aplicación y no les deja seguir hasta que se dan por enterados. Verás quién lo ha leído.'
-                : 'Además del aviso, confirman si van a asistir. El día de la reunión abres el control de asistencia y fichan los que estén.'}
+                : 'Llega a la aplicación y no les deja seguir hasta que se dan por enterados. Verás quién lo ha leído.'}
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>Título *</label>
               <input value={titulo} onChange={e => setTitulo(e.target.value)} style={campo}
-                placeholder={tipo === 'aviso' ? 'Ej: Revisad vuestra antigüedad en Mis datos' : 'Ej: Claustro ordinario'} />
+                placeholder="Ej: Revisad vuestra antigüedad en Mis datos" />
             </div>
 
             <div style={{ marginBottom: 14 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 6 }}>Mensaje *</label>
               <textarea value={texto} onChange={e => setTexto(e.target.value)} rows={5}
                 style={{ ...campo, resize: 'vertical', lineHeight: 1.5 }}
-                placeholder={tipo === 'convocatoria' ? 'Orden del día, documentación a revisar...' : 'Lo que quieres comunicar.'} />
+                placeholder="Lo que quieres comunicar." />
             </div>
 
             <div style={{ marginBottom: 14 }}>
@@ -689,31 +511,10 @@ export default function GestionComunicaciones() {
               </div>
             )}
 
-            {tipo === 'convocatoria' && (
-              <div style={{ padding: 15, borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #bfdbfe', marginBottom: 16 }}>
-                <div style={{ fontWeight: 800, fontSize: 13, color: AZUL, marginBottom: 11 }}>Datos de la reunión</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10 }}>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 4 }}>Día *</label>
-                    <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={campo} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 4 }}>Hora</label>
-                    <input type="time" value={hora} onChange={e => setHora(e.target.value)} style={campo} />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 12, fontWeight: 700, color: AZUL, display: 'block', marginBottom: 4 }}>Lugar</label>
-                    <input value={lugar} onChange={e => setLugar(e.target.value)} style={campo} placeholder="Salón de actos" />
-                  </div>
-                </div>
-              </div>
-            )}
-
             <button onClick={publicar} disabled={guardando}
               style={{ padding: '14px 28px', borderRadius: 10, border: 'none',
-                backgroundColor: tipo === 'convocatoria' ? AZUL : AMBAR,
-                color: 'white', fontWeight: 800, fontSize: 15.5, cursor: 'pointer' }}>
-              {guardando ? 'Publicando...' : tipo === 'convocatoria' ? '📅 Publicar convocatoria' : '📢 Publicar aviso'}
+                backgroundColor: AMBAR, color: 'white', fontWeight: 800, fontSize: 15.5, cursor: 'pointer' }}>
+              {guardando ? 'Publicando...' : '📢 Publicar aviso'}
             </button>
             <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10 }}>
               Les saltará en la aplicación en menos de medio minuto.
@@ -722,51 +523,32 @@ export default function GestionComunicaciones() {
         )}
 
         {/* ─── LISTA ─── */}
-        {seccion !== 'equipos' && vista === 'lista' && (() => {
-          // Cada pestaña enseña lo suyo y nada más.
-          const visibles = lista.filter(c =>
-            seccion === 'convocatorias' ? c.tipo === 'convocatoria' : c.tipo !== 'convocatoria');
-
-          return cargando ? (
+        {seccion === 'avisos' && vista === 'lista' && (
+          cargando ? (
             <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
-          ) : visibles.length === 0 ? (
+          ) : lista.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 50, color: '#aaa', backgroundColor: 'white', borderRadius: 12, border: '1px solid #e5e7eb' }}>
-              <div style={{ fontSize: 40, marginBottom: 10 }}>{seccion === 'convocatorias' ? '📅' : '📢'}</div>
-              {seccion === 'convocatorias'
-                ? 'Todavía no has convocado ninguna reunión'
-                : 'Todavía no has publicado ningún aviso'}
+              <div style={{ fontSize: 40, marginBottom: 10 }}>📢</div>
+              Todavía no has publicado ningún aviso
             </div>
           ) : (
-            visibles.map(c => {
-              const esConv = c.tipo === 'convocatoria';
+            lista.map(c => {
               const resp = c.respuestas || [];
               const leidas = resp.filter(r => r.leida_at).length;
-              const siran  = resp.filter(r => r.asistira === true).length;
-              const noiran = resp.filter(r => r.asistira === false).length;
-              const fichados = resp.filter(r => r.fichado_at).length;
               const total = c.totalDestinatarios || 0;
               const abiertaEsta = abierta === c.id;
-
-              let restante = null;
-              if (c.fichajeAbierto && c.fichajeCierre) {
-                const falta = new Date(c.fichajeCierre).getTime() - ahora;
-                const m = Math.max(0, Math.floor(falta / 60000));
-                const s = Math.max(0, Math.floor((falta % 60000) / 1000));
-                restante = `${m}:${String(s).padStart(2, '0')}`;
-              }
 
               return (
                 <div key={c.id} style={{
                   backgroundColor: 'white', borderRadius: 12, marginBottom: 13,
-                  border: `2px solid ${c.fichajeAbierto ? '#bbf7d0' : esConv ? '#bfdbfe' : '#fde68a'}`,
+                  border: `2px solid ${AMBAR}55`,
                   overflow: 'hidden',
                 }}>
                   <div onClick={() => setAbierta(abiertaEsta ? null : c.id)} style={{ padding: '15px 17px', cursor: 'pointer' }}>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                       <div style={{ flex: 1, minWidth: 190 }}>
-                        <div style={{ fontSize: 11, fontWeight: 800, color: esConv ? AZUL : AMBAR, marginBottom: 4 }}>
-                          {esConv ? '📅 CONVOCATORIA' : '📢 AVISO'}
-                          {c.estado === 'cerrada' && ' · CERRADA'}
+                        <div style={{ fontSize: 11, fontWeight: 800, color: AMBAR, marginBottom: 4 }}>
+                          📢 AVISO{c.estado === 'cerrada' && ' · CERRADO'}
                         </div>
                         <div style={{ fontSize: 16, fontWeight: 800, color: '#222', lineHeight: 1.35 }}>{c.titulo}</div>
                         {c.tipo === 'banner' && (
@@ -779,25 +561,12 @@ export default function GestionComunicaciones() {
                         <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 4 }}>
                           {(Array.isArray(c.ambito) ? c.ambito : [c.ambito]).map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^[^\s]+\s/, '') || a).join(', ')}
                           {c.departamento ? ` · ${Array.isArray(c.departamento) ? c.departamento.join(', ') : c.departamento}` : ''}
-                          {c.fecha_reunion ? ` · ${fechaLarga(c.fecha_reunion)}` : ''}
                         </div>
                       </div>
-                      {c.fichajeAbierto && (
-                        <div style={{ padding: '7px 14px', borderRadius: 10, textAlign: 'center', backgroundColor: '#f0fdf4', border: '1.5px solid #bbf7d0' }}>
-                          <div style={{ fontSize: 17, fontWeight: 800, color: VERDE, fontVariantNumeric: 'tabular-nums' }}>{restante || '—'}</div>
-                          <div style={{ fontSize: 10, color: '#666' }}>fichaje</div>
-                        </div>
-                      )}
                     </div>
 
-                    {/* Recuento */}
                     <div style={{ display: 'flex', gap: 14, marginTop: 12, flexWrap: 'wrap', fontSize: 12.5 }}>
                       <span><strong style={{ color: AZUL }}>{leidas}</strong>/{total} leído</span>
-                      {esConv && <>
-                        <span style={{ color: VERDE }}><strong>{siran}</strong> asistirán</span>
-                        <span style={{ color: ROJO }}><strong>{noiran}</strong> no podrán</span>
-                        {fichados > 0 && <span style={{ color: VERDE }}>✋ <strong>{fichados}</strong> fichados</span>}
-                      </>}
                     </div>
                   </div>
 
@@ -807,157 +576,6 @@ export default function GestionComunicaciones() {
                         {c.mensaje}
                       </div>
 
-                      {/* Control de asistencia */}
-                      {esConv && (
-                        <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', marginBottom: 14 }}>
-                          <div style={{ fontWeight: 800, fontSize: 13, color: AZUL, marginBottom: 10 }}>✋ Control de asistencia</div>
-                          {c.fichajeAbierto ? (
-                            <button onClick={() => accion('cerrar_fichaje', c.id, {}, '¿Cerrar el control de asistencia ahora?')}
-                              style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: AMBAR, color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
-                              🔒 Cerrar el fichaje
-                            </button>
-                          ) : (
-                            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                              <input type="number" min="1" max="120" value={minutosFichaje}
-                                onChange={e => setMinutosFichaje(e.target.value)}
-                                style={{ width: 80, padding: '9px 11px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box' }} />
-                              <span style={{ fontSize: 13, color: '#555' }}>minutos</span>
-                              <button onClick={() => accion('abrir_fichaje', c.id, { minutos: minutosFichaje })}
-                                style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
-                                ✋ Abrir el fichaje
-                              </button>
-                            </div>
-                          )}
-                          <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                            Al abrirlo, a los convocados les salta un botón para fichar. Ábrelo
-                            cuando empiece la reunión, con la gente ya sentada.
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Votaciones de la reunión */}
-                      {esConv && (() => {
-                        const suyas = votaciones.filter(v => v.comunicacion_id === c.id);
-                        return (
-                          <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#faf5ff', border: '1px solid #d8b4fe', marginBottom: 14 }}>
-                            <div style={{ fontWeight: 800, fontSize: 13, color: '#7e22ce', marginBottom: 10 }}>
-                              🗳️ Votaciones de esta reunión
-                            </div>
-
-                            {suyas.map(v => {
-                              const total = v.totalVotos || 0;
-                              return (
-                                <div key={v.id} style={{ backgroundColor: 'white', borderRadius: 9, padding: '11px 13px', marginBottom: 8, border: '1px solid #e9d5ff' }}>
-                                  <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 6 }}>
-                                    <div style={{ flex: 1, minWidth: 160, fontWeight: 700, fontSize: 13.5, color: '#333' }}>
-                                      {v.pregunta}
-                                    </div>
-                                    <span style={{ fontSize: 11, fontWeight: 800, color: v.abierta ? VERDE : '#64748b' }}>
-                                      {v.abierta ? '🟢 ABIERTA' : '🔒 CERRADA'}
-                                    </span>
-                                  </div>
-                                  {v.abierta ? (
-                                    <>
-                                      {/* Las opciones, SIN recuento. Mientras la
-                                          votación está abierta no se enseñan
-                                          resultados parciales, pero quien convoca
-                                          sí tiene que poder comprobar que la
-                                          pregunta y las opciones se guardaron
-                                          bien: antes no se veían por ningún lado
-                                          hasta cerrarla. */}
-                                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
-                                        {(v.opciones || []).map(o => (
-                                          <span key={o} style={{
-                                            padding: '3px 11px', borderRadius: 20, fontSize: 12,
-                                            backgroundColor: '#faf5ff', color: '#7e22ce',
-                                            border: '1px solid #e9d5ff', fontWeight: 600,
-                                          }}>{o}</span>
-                                        ))}
-                                      </div>
-                                      <div style={{ fontSize: 12.5, color: '#475569' }}>
-                                        {v.participantes} {v.participantes === 1 ? 'voto emitido' : 'votos emitidos'}
-                                      </div>
-                                      <button onClick={() => accionVotacion('cerrar', v.id)}
-                                        style={{ marginTop: 8, padding: '7px 14px', borderRadius: 8, border: 'none', backgroundColor: AMBAR, color: 'white', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
-                                        🔒 Cerrar ahora
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <>
-                                      {(v.opciones || []).map(o => {
-                                        const n = v.recuento?.[o] || 0;
-                                        const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-                                        return (
-                                          <div key={o} style={{ marginBottom: 5 }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                                              <span>{o}</span><span><strong>{n}</strong> · {pct}%</span>
-                                            </div>
-                                            <div style={{ height: 7, borderRadius: 4, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
-                                              <div style={{ height: '100%', width: `${pct}%`, backgroundColor: '#7e22ce', borderRadius: 4 }} />
-                                            </div>
-                                          </div>
-                                        );
-                                      })}
-                                      <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>
-                                        {total} {total === 1 ? 'voto' : 'votos'} · {v.participantes} participantes
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              );
-                            })}
-
-                            {nuevaVot === c.id ? (
-                              <div style={{ backgroundColor: 'white', borderRadius: 9, padding: 13, border: '1.5px solid #d8b4fe' }}>
-                                <input value={vPregunta} onChange={e => setVPregunta(e.target.value)}
-                                  placeholder="¿Qué se somete a votación?"
-                                  style={{ ...campo, marginBottom: 9 }} />
-                                {vOpciones.map((o, i) => (
-                                  <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                                    <input value={o} onChange={e => setVOpciones(ops => ops.map((x, j) => j === i ? e.target.value : x))}
-                                      style={{ ...campo, padding: '9px 11px', fontSize: 13 }} />
-                                    {vOpciones.length > 2 && (
-                                      <button type="button" onClick={() => setVOpciones(ops => ops.filter((_, j) => j !== i))}
-                                        style={{ padding: '0 12px', borderRadius: 8, border: '1.5px solid #fecaca', backgroundColor: 'white', color: ROJO, cursor: 'pointer' }}>✕</button>
-                                    )}
-                                  </div>
-                                ))}
-                                <button type="button" onClick={() => setVOpciones(ops => [...ops, ''])}
-                                  style={{ padding: '6px 12px', borderRadius: 8, border: '1.5px dashed #cbd5e1', backgroundColor: 'white', color: '#64748b', cursor: 'pointer', fontSize: 12, fontWeight: 700, marginBottom: 10 }}>
-                                  + Otra opción
-                                </button>
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 11 }}>
-                                  <input type="number" min="1" max="60" value={vMinutos} onChange={e => setVMinutos(e.target.value)}
-                                    style={{ width: 72, padding: '9px 11px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
-                                  <span style={{ fontSize: 12.5, color: '#555' }}>minutos</span>
-                                </div>
-                                <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-                                  <button onClick={() => lanzarVotacion(c.id)}
-                                    style={{ padding: '11px 20px', borderRadius: 9, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
-                                    🚀 Lanzar votación
-                                  </button>
-                                  <button onClick={() => setNuevaVot(null)}
-                                    style={{ padding: '11px 16px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                                    Cancelar
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                <button onClick={() => setNuevaVot(c.id)}
-                                  style={{ padding: '10px 18px', borderRadius: 9, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
-                                  ➕ Nueva votación
-                                </button>
-                                <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 8, lineHeight: 1.5 }}>
-                                  Solo podrán votar quienes hayan pasado lista en esta reunión.
-                                  El voto es secreto.
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })()}
-
                       {/* Quién ha respondido */}
                       {resp.length > 0 && (
                         <div style={{ marginBottom: 14 }}>
@@ -965,47 +583,23 @@ export default function GestionComunicaciones() {
                           {resp.map((r, i) => (
                             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0', borderTop: i > 0 ? '1px solid #f1f5f9' : 'none', fontSize: 13 }}>
                               <span style={{ flex: 1, minWidth: 0 }}>{r.profesor_nombre}</span>
-                              {r.fichado_at && <span title="Fichó" style={{ color: VERDE, fontWeight: 700, fontSize: 12 }}>✋ presente</span>}
-                              {esConv && r.asistira === true  && !r.fichado_at && <span style={{ color: VERDE, fontSize: 12 }}>asistirá</span>}
-                              {esConv && r.asistira === false && <span style={{ color: ROJO, fontSize: 12 }}>no podrá</span>}
-                              {!esConv && r.leida_at && <span style={{ color: '#94a3b8', fontSize: 12 }}>leído</span>}
-                              {r.a_mano_por && <span style={{ color: AMBAR, fontSize: 11 }}>a mano</span>}
+                              {r.leida_at && <span style={{ color: '#94a3b8', fontSize: 12 }}>leído</span>}
                             </div>
                           ))}
-                        </div>
-                      )}
-
-                      {/* Fichar a mano */}
-                      {esConv && (
-                        <div style={{ marginBottom: 14 }}>
-                          <div style={{ fontSize: 12.5, fontWeight: 700, color: AZUL, marginBottom: 6 }}>
-                            Fichar a mano a quien no use la aplicación
-                          </div>
-                          <select defaultValue="" style={{ ...campo, maxWidth: 340 }}
-                            onChange={e => {
-                              if (!e.target.value) return;
-                              accion('fichar_a_mano', c.id, { profesor_id: e.target.value });
-                              e.target.value = '';
-                            }}>
-                            <option value="">— Elige a quien esté presente —</option>
-                            {profesores
-                              .filter(p => !resp.some(r => r.profesor_id === p.id && r.fichado_at))
-                              .map(p => <option key={p.id} value={p.id}>{p.apellidos}, {p.nombre}</option>)}
-                          </select>
                         </div>
                       )}
 
                       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                         <button onClick={() => informePDF(c)}
                           style={{ padding: '9px 16px', borderRadius: 9, border: 'none', backgroundColor: AZUL, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                          📄 {esConv ? 'Acta en PDF' : 'Informe en PDF'}
+                          📄 Informe en PDF
                         </button>
                         <button onClick={() => informeCSV(c)}
                           style={{ padding: '9px 16px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                           📊 CSV
                         </button>
                         {c.estado !== 'cerrada' && (
-                          <button onClick={() => accion('cerrar', c.id, {}, '¿Cerrarla? Dejará de saltarle a nadie.')}
+                          <button onClick={() => accion('cerrar', c.id, {}, '¿Cerrarlo? Dejará de saltarle a nadie.')}
                             style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                             🔒 Cerrar
                           </button>
@@ -1020,8 +614,8 @@ export default function GestionComunicaciones() {
                 </div>
               );
             })
-          );
-        })()}
+          )
+        )}
       </div>
     </div>
   );

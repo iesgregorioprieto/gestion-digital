@@ -56,8 +56,11 @@ export default function AvisoComunicacion() {
         .then(r => r.ok ? r.json() : { comunicaciones: [] })
         .then(d => {
           if (!vivo) return;
-          // Los de «solo banner» van en el banner «Hoy», no en esta ventana
-          const cs = (d.comunicaciones || []).filter(c => c.estado !== 'cerrada' && c.tipo !== 'banner');
+          // Los de «solo banner» van en el banner «Hoy», no en esta ventana.
+          // Lo de tipo «convocatoria» es historial del módulo antiguo: las
+          // convocatorias de verdad las gestiona ahora /gestion/convocatorias,
+          // así que cualquier resto suelto no debe saltarle a nadie.
+          const cs = (d.comunicaciones || []).filter(c => c.estado !== 'cerrada' && c.tipo !== 'banner' && c.tipo !== 'convocatoria');
 
           // Primero lo que exige respuesta ahora mismo: un fichaje abierto
           const fichando = cs.find(c => c.fichajeAbierto && !c.miRespuesta?.fichado_at);
