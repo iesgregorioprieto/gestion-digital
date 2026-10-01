@@ -68,9 +68,13 @@ export default function TableroVotacion() {
   const [error, setError] = useState('');
   const [id, setId] = useState(null);
 
+  const [tipo, setTipo] = useState('suelta'); // suelta | convocatoria
+
   useEffect(() => {
-    const p = new URL(window.location.href).searchParams.get('id');
+    const q = new URL(window.location.href).searchParams;
+    const p = q.get('id') || q.get('votacion');
     if (!p) { setError('Falta la votación'); return; }
+    setTipo(q.get('votacion') ? 'convocatoria' : 'suelta');
     setId(p);
   }, []);
 
@@ -80,7 +84,10 @@ export default function TableroVotacion() {
 
     async function cargar() {
       try {
-        const r = await fetch(`/api/votaciones?modo=tablero&id=${encodeURIComponent(id)}`);
+        const url = tipo === 'convocatoria'
+          ? `/api/convocatorias?modo=tablero&votacion=${encodeURIComponent(id)}`
+          : `/api/votaciones?modo=tablero&id=${encodeURIComponent(id)}`;
+        const r = await fetch(url);
         const d = await r.json();
         if (!vivo) return;
         if (d.error) { setError(d.error); return; }
@@ -114,7 +121,8 @@ export default function TableroVotacion() {
     );
   }
 
-  const { personas, votados, total, pregunta, abierta, recuento, opciones } = datos;
+  const { personas, votados, total, pregunta, recuento, opciones } = datos;
+  const abierta = tipo === 'convocatoria' ? datos.estado === 'abierta' : datos.abierta;
 
   // Al cerrarse, los resultados. El total del gráfico son los votos
   // emitidos, que puede no coincidir con el censo si alguien no votó.

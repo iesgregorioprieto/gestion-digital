@@ -236,6 +236,16 @@ export default function PanelProfesor() {
       color: '#475569', bg: '#f8fafc', border: '#cbd5e1',
     },
     {
+      id: 'convocatorias',
+      emoji: '📅',
+      titulo: 'Convocatorias',
+      descripcion: 'Reuniones del claustro: asistencia y votaciones',
+      href: '/convocatorias',
+      disponible: true,
+      roles: ['todos'],
+      color: '#1e3a5f', bg: '#eff6ff', border: '#bfdbfe',
+    },
+    {
       id: 'votaciones',
       emoji: '🗳️',
       titulo: 'Votaciones',
