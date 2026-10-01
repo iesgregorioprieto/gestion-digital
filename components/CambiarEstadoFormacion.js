@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { departamentoASector, esSectorFP } from '@/lib/sectores';
 
 /**
  * Botón «Cambiar estado» de una solicitud de formación (solo director).
@@ -22,7 +23,9 @@ export default function CambiarEstadoFormacion({ solicitud, onHecho }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError]     = useState('');
 
-  const opciones = OPCIONES.filter(o => o.valor !== solicitud.estado);
+  // «Devolver al jefe» solo tiene sentido en FP: ESO y Bachillerato no pasan por él
+  const deFP = esSectorFP(departamentoASector(solicitud.departamento));
+  const opciones = OPCIONES.filter(o => o.valor !== solicitud.estado && (o.valor !== 'pendiente_jefe' || deFP));
 
   async function guardar() {
     setError('');
