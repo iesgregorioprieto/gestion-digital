@@ -2,12 +2,12 @@
  * DESCARGAR TODOS LOS JUSTIFICANTES EN UN ZIP.
  *
  * Pedido de José María: un botón que baje de golpe todos los
- * justificantes del mes, renombrados por «Apellidos, Nombre - Día y mes»
- * para no tener que abrir uno a uno cada ausencia.
+ * justificantes del periodo, renombrados por «Apellidos, Nombre - Día y
+ * mes» para no tener que abrir uno a uno cada ausencia.
  *
- * Solo dirección y secretaría, y solo del rango de fechas indicado.
- * El zip se arma en el servidor y se sirve al navegador; el nombre del
- * archivo va con las fechas para que se vea de un vistazo qué contiene.
+ * Director, secretario y jefatura de estudios (Elena tramita con esto).
+ * El zip se arma en el servidor y se sirve al navegador, con una
+ * carpeta por mes para que el periodo completo se vea organizado.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -39,9 +39,12 @@ function limpiar(t) {
     .replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
+const MESES = ['01-enero', '02-febrero', '03-marzo', '04-abril', '05-mayo', '06-junio',
+  '07-julio', '08-agosto', '09-septiembre', '10-octubre', '11-noviembre', '12-diciembre'];
+
 export async function GET(req) {
   const sesion = await sesionDe(req);
-  if (!sesion || !['director', 'secretario'].includes(sesion.rol)) {
+  if (!sesion || !['director', 'secretario', 'jefe_estudios'].includes(sesion.rol)) {
     return new Response('sin permisos', { status: 403 });
   }
   const { searchParams } = new URL(req.url);
@@ -51,7 +54,7 @@ export async function GET(req) {
 
   const { data: ausencias, error } = await supa()
     .from('ausencias')
-    .select('id, fecha_inicio, justificacion_urls, profesor_id, profesor_nombre')
+    .select('id, fecha_inicio, justificacion_urls, justificacion_url, profesor_id, profesor_nombre')
     .gte('fecha_inicio', desde).lte('fecha_inicio', hasta);
   if (error) return new Response(error.message, { status: 500 });
 
@@ -70,14 +73,20 @@ export async function GET(req) {
   let contador = 0;
 
   for (const a of ausencias || []) {
-    const urls = Array.isArray(a.justificacion_urls) ? a.justificacion_urls : [];
+    // Las ausencias del formulario antiguo guardan un solo justificante
+    // en 'justificacion_url'; las nuevas, varios en 'justificacion_urls'.
+    // Hay que mirar las dos o el zip se deja los de principio de curso.
+    const varios = Array.isArray(a.justificacion_urls) ? a.justificacion_urls.filter(Boolean) : [];
+    const urls = varios.length > 0 ? varios : (a.justificacion_url ? [a.justificacion_url] : []);
     if (urls.length === 0) continue;
     const p = nombres[a.profesor_id];
     const nombreBase = p
       ? limpiar(`${p.apellidos || ''}, ${p.nombre || ''}`)
       : limpiar(a.profesor_nombre || 'Sin nombre');
     const dia = a.fecha_inicio ? a.fecha_inicio.slice(8, 10) : '00';
+    const mesNum = a.fecha_inicio ? parseInt(a.fecha_inicio.slice(5, 7), 10) : 0;
     const mes = a.fecha_inicio ? a.fecha_inicio.slice(5, 7) : '00';
+    const carpetaMes = MESES[mesNum - 1] || 'sin-fecha';
     for (let i = 0; i < urls.length; i++) {
       try {
         // El almacén es PRIVADO: pedir el archivo por su dirección pública
@@ -91,7 +100,7 @@ export async function GET(req) {
         // se conserva la extensión del original
         const ext = (urls[i].split('.').pop() || 'bin').split(/[?#]/)[0].slice(0, 5);
         const sufijo = urls.length > 1 ? ` (${i + 1})` : '';
-        const nombre = `${nombreBase} - ${dia}-${mes}${sufijo}.${ext}`;
+        const nombre = `${carpetaMes}/${nombreBase} - ${dia}-${mes}${sufijo}.${ext}`;
         zip.file(nombre, bytes);
         contador++;
       } catch { /* se salta ese archivo y sigue */ }
@@ -110,3 +119,4 @@ export async function GET(req) {
     },
   });
 }
+
