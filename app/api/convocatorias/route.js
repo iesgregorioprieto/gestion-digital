@@ -1,0 +1,683 @@
+/**
+ * CONVOCATORIAS OFICIALES — reuniones con fichaje y votaciones en la sala
+ *
+ * Módulo nuevo, aparte de /api/comunicaciones y /api/votaciones (que no
+ * se tocan). Ciclo de una convocatoria:
+ *
+ *   borrador  → se prepara: datos, orden del día, convocados y las
+ *               votaciones de cada punto. Solo la ve el equipo directivo.
+ *   convocada → les llega a los convocados, que dicen si asistirán.
+ *   en_curso  → la reunión: se abre el fichaje y se lanzan las
+ *               votaciones preparadas, una a una.
+ *   cerrada   → queda el borrador del acta.
+ *
+ * Los convocados se guardan nombre a nombre. Nada de «ámbitos» que se
+ * resuelven después: lo que se convocó es lo que consta en el acta.
+ *
+ * Las reglas del voto (solo quien ha fichado, una vez, dentro de plazo,
+ * secreto) las hace cumplir la base de datos con conv_votar,
+ * conv_lanzar_votacion y conv_cerrar_votacion. Aquí solo se llama.
+ */
+
+import { createClient } from '@supabase/supabase-js';
+import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { claveServidor } from '@/lib/claveServidor';
+import { hoyLocal } from '@/lib/fechas';
+import { enviarPushA } from '@/lib/pushServidor';
+
+export const dynamic = 'force-dynamic';
+
+let _cliente = null;
+function supa() {
+  if (!_cliente) {
+    _cliente = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      claveServidor(),
+      { auth: { persistSession: false, autoRefreshToken: false } }
+    );
+  }
+  return _cliente;
+}
+
+async function sesionDe(request) {
+  const secreto = process.env.SESSION_SECRET;
+  if (!secreto) return null;
+  const cookies = request.headers.get('cookie') || '';
+  const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
+  if (!m) return null;
+  return verificarSesion(m[1], secreto);
+}
+
+const json = (d, status = 200) => Response.json(d, { status });
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const ORGANOS = ['claustro', 'ccp', 'departamento', 'equipo_directivo', 'equipo', 'otro'];
+
+const MENSAJES = {
+  no_existe: 'Esa votación no existe',
+  cerrada: 'La votación está cerrada',
+  no_presente: 'Solo pueden votar quienes han pasado lista en la reunión',
+  opcion_no_valida: 'Esa opción no es válida',
+  ya_votado: 'Ya has votado en esta votación',
+  ya_lanzada: 'Esa votación ya se lanzó',
+  reunion_no_iniciada: 'Primero hay que iniciar la reunión',
+  otra_abierta: 'Hay otra votación abierta. Ciérrala antes de lanzar esta',
+  faltan_opciones: 'La votación necesita al menos dos opciones',
+  no_lanzada: 'Esa votación todavía no se ha lanzado',
+};
+
+// ─── Utilidades ──────────────────────────────────────────────────────
+
+const txt = (v, max = 500) => String(v ?? '').trim().slice(0, max);
+const idNum = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n > 0 ? n : null; };
+
+function fichajeAbierto(c) {
+  if (!c.fichaje_inicio || !c.fichaje_fin) return false;
+  const t = Date.now();
+  return t >= new Date(c.fichaje_inicio).getTime() && t < new Date(c.fichaje_fin).getTime();
+}
+
+function fechaCorta(f) {
+  if (!f) return '';
+  const [a, m, d] = String(f).slice(0, 10).split('-');
+  return `${d}/${m}/${a}`;
+}
+
+/** «Luis Javier Cárdenas Calcerrada» → «Luis J. Cárdenas» (para el tablero) */
+function nombreCorto(nombre, apellidos) {
+  const n = (nombre || '').trim().split(/\s+/).filter(Boolean);
+  const a = (apellidos || '').trim().split(/\s+/).filter(Boolean);
+  if (!n.length) return a[0] || '';
+  return `${n[0]}${n[1] ? ` ${n[1][0]}.` : ''} ${a[0] || ''}`.trim();
+}
+
+function limpiarOrdenDia(lista) {
+  if (!Array.isArray(lista)) return [];
+  return lista.slice(0, 40)
+    .map(p => ({ texto: txt(p?.texto, 500), desarrollo: txt(p?.desarrollo, 20000) }))
+    .filter(p => p.texto);
+}
+
+function limpiarOpciones(lista) {
+  const vistas = new Set();
+  const out = [];
+  for (const o of Array.isArray(lista) ? lista : []) {
+    const t = txt(o, 80);
+    if (t && !vistas.has(t.toLowerCase())) { vistas.add(t.toLowerCase()); out.push(t); }
+  }
+  return out.slice(0, 8);
+}
+
+async function convocatoria(cliente, id) {
+  const { data } = await cliente.from('convocatorias').select('*').eq('id', id);
+  return (data || [])[0] || null;
+}
+
+/** Cierra y sella las votaciones a las que se les acabó el tiempo */
+async function cerrarVencidas(cliente, convIds) {
+  if (!convIds.length) return;
+  const { data } = await cliente.from('convocatoria_votaciones')
+    .select('id').in('convocatoria_id', convIds)
+    .eq('estado', 'abierta').lte('cierre_at', new Date().toISOString());
+  for (const v of data || []) {
+    await cliente.rpc('conv_cerrar_votacion', { p_votacion: v.id });
+  }
+}
+
+/** Votaciones de unas convocatorias, con participación y (si están cerradas) recuento */
+async function votacionesDe(cliente, convIds) {
+  if (!convIds.length) return [];
+  const { data: vs } = await cliente.from('convocatoria_votaciones')
+    .select('*').in('convocatoria_id', convIds)
+    .order('punto', { ascending: true, nullsFirst: false })
+    .order('orden', { ascending: true });
+  const lista = vs || [];
+  const ids = lista.filter(v => v.estado !== 'preparada').map(v => v.id);
+  if (!ids.length) return lista.map(v => ({ ...v, participantes: 0 }));
+
+  const { data: vot } = await cliente.from('convocatoria_votantes')
+    .select('votacion_id').in('votacion_id', ids);
+  const part = {};
+  for (const x of vot || []) part[x.votacion_id] = (part[x.votacion_id] || 0) + 1;
+
+  // El recuento solo sale de la base de datos para las cerradas. De una
+  // abierta no viaja ni al servidor siquiera.
+  const cerradas = lista.filter(v => v.estado === 'cerrada').map(v => v.id);
+  const rec = {};
+  if (cerradas.length) {
+    const { data: r } = await cliente.from('convocatoria_recuento')
+      .select('votacion_id, opcion, n').in('votacion_id', cerradas);
+    for (const x of r || []) (rec[x.votacion_id] ||= {})[x.opcion] = x.n;
+  }
+
+  return lista.map(v => {
+    const fila = { ...v, participantes: part[v.id] || 0 };
+    if (v.estado === 'cerrada') {
+      fila.recuento = {};
+      for (const o of v.opciones || []) fila.recuento[o] = rec[v.id]?.[o] || 0;
+      fila.totalVotos = Object.values(fila.recuento).reduce((a, b) => a + b, 0);
+    }
+    return fila;
+  });
+}
+
+async function censoActivo(cliente) {
+  const { data } = await cliente.from('profesores')
+    .select('id, nombre, apellidos, departamento, rol, rol_gestion, tipo_contrato')
+    .eq('estado', 'activo').order('apellidos');
+  return (data || []).filter(p => p.tipo_contrato !== 'Plaza vacante');
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  GET
+// ═════════════════════════════════════════════════════════════════════
+
+export async function GET(request) {
+  const sesion = await sesionDe(request);
+  if (!sesion?.id) return json({ error: 'sin_sesion' }, 401);
+
+  const cliente = supa();
+  const url = new URL(request.url);
+  const modo = url.searchParams.get('modo') || 'mias';
+
+  try {
+    // ── Las mías (profesorado) ──
+    // Lo que se consulta en bucle el día de la reunión: tiene que ser ligero.
+    if (modo === 'mias') {
+      const { data } = await cliente.from('convocatorias')
+        .select('id, titulo, organo, fecha, hora, lugar, orden_dia, estado, fichaje_inicio, fichaje_fin')
+        .contains('convocados', [sesion.id])
+        .in('estado', ['convocada', 'en_curso'])
+        .order('fecha', { ascending: true });
+      const hoy = hoyLocal();
+      const lista = (data || []).filter(c => c.estado === 'en_curso' || !c.fecha || c.fecha >= hoy);
+      const ids = lista.map(c => c.id);
+
+      let mias = [];
+      if (ids.length) {
+        const { data: a } = await cliente.from('convocatoria_asistencia')
+          .select('convocatoria_id, asistira, fichado_at')
+          .in('convocatoria_id', ids).eq('profesor_id', sesion.id);
+        mias = a || [];
+      }
+
+      const enCurso = lista.filter(c => c.estado === 'en_curso').map(c => c.id);
+      await cerrarVencidas(cliente, enCurso);
+      const vots = await votacionesDe(cliente, enCurso);
+
+      let yaVotadas = new Set();
+      const lanzadas = vots.filter(v => v.estado !== 'preparada').map(v => v.id);
+      if (lanzadas.length) {
+        const { data: yo } = await cliente.from('convocatoria_votantes')
+          .select('votacion_id').in('votacion_id', lanzadas).eq('profesor_id', sesion.id);
+        yaVotadas = new Set((yo || []).map(x => x.votacion_id));
+      }
+
+      const salida = lista.map(c => {
+        const yo = mias.find(m => m.convocatoria_id === c.id) || null;
+        const fichado = !!yo?.fichado_at;
+        const suyas = vots.filter(v => v.convocatoria_id === c.id);
+        const abierta = suyas.find(v => v.estado === 'abierta');
+        return {
+          ...c,
+          fichajeAbierto: fichajeAbierto(c),
+          asistira: yo?.asistira ?? null,
+          fichado,
+          // La votación abierta, solo a quien ha fichado
+          votacion: abierta && fichado ? {
+            id: abierta.id, pregunta: abierta.pregunta, opciones: abierta.opciones,
+            punto: abierta.punto, cierre_at: abierta.cierre_at, yaVote: yaVotadas.has(abierta.id),
+          } : null,
+          // Resultados de lo ya votado, para los presentes
+          resultados: fichado
+            ? suyas.filter(v => v.estado === 'cerrada').map(v => ({
+                id: v.id, pregunta: v.pregunta, punto: v.punto,
+                recuento: v.recuento, totalVotos: v.totalVotos,
+              }))
+            : [],
+        };
+      });
+      return json({ ahora: new Date().toISOString(), convocatorias: salida });
+    }
+
+    // ── A partir de aquí, equipo directivo ──
+    if (!esDirectivo(sesion)) return json({ error: 'sin_permisos' }, 403);
+
+    if (modo === 'lista') {
+      const { data } = await cliente.from('convocatorias')
+        .select('id, titulo, organo, convocados_texto, convocados, fecha, hora, lugar, estado, fichaje_inicio, fichaje_fin, creada_por_nombre, created_at')
+        .order('fecha', { ascending: false, nullsFirst: true })
+        .order('created_at', { ascending: false });
+      const lista = data || [];
+      const ids = lista.map(c => c.id);
+      let asis = [], vots = [];
+      if (ids.length) {
+        const r1 = await cliente.from('convocatoria_asistencia')
+          .select('convocatoria_id, asistira, fichado_at').in('convocatoria_id', ids);
+        asis = r1.data || [];
+        const r2 = await cliente.from('convocatoria_votaciones')
+          .select('convocatoria_id, estado').in('convocatoria_id', ids);
+        vots = r2.data || [];
+      }
+      return json({
+        convocatorias: lista.map(c => {
+          const a = asis.filter(x => x.convocatoria_id === c.id);
+          const v = vots.filter(x => x.convocatoria_id === c.id);
+          const { convocados, ...resto } = c;
+          return {
+            ...resto,
+            totalConvocados: (convocados || []).length,
+            siAsistiran: a.filter(x => x.asistira === true).length,
+            noAsistiran: a.filter(x => x.asistira === false).length,
+            presentes: a.filter(x => x.fichado_at).length,
+            votaciones: v.length,
+            votacionesHechas: v.filter(x => x.estado === 'cerrada').length,
+            fichajeAbierto: fichajeAbierto(c),
+          };
+        }),
+      });
+    }
+
+    if (modo === 'detalle') {
+      const id = idNum(url.searchParams.get('id'));
+      if (!id) return json({ error: 'falta_id' }, 400);
+      const c = await convocatoria(cliente, id);
+      if (!c) return json({ error: 'no_encontrada' }, 404);
+
+      await cerrarVencidas(cliente, [id]);
+      const votaciones = await votacionesDe(cliente, [id]);
+
+      const { data: a } = await cliente.from('convocatoria_asistencia')
+        .select('*').eq('convocatoria_id', id);
+      const asis = a || [];
+
+      let personas = [];
+      if ((c.convocados || []).length) {
+        const { data: ps } = await cliente.from('profesores')
+          .select('id, nombre, apellidos, departamento').in('id', c.convocados);
+        personas = (ps || []).map(p => {
+          const r = asis.find(x => x.profesor_id === p.id) || {};
+          return {
+            id: p.id,
+            nombre: `${p.apellidos}, ${p.nombre}`,
+            departamento: p.departamento || '',
+            asistira: r.asistira ?? null,
+            respondida_at: r.respondida_at || null,
+            fichado_at: r.fichado_at || null,
+            fichado_a_mano_por: r.fichado_a_mano_por || null,
+          };
+        }).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
+      }
+
+      return json({
+        ahora: new Date().toISOString(),
+        convocatoria: { ...c, fichajeAbierto: fichajeAbierto(c) },
+        personas,
+        votaciones,
+      });
+    }
+
+    // Para el formulario: quién hay en el centro y en qué grupos encaja
+    if (modo === 'censo') {
+      const profes = await censoActivo(cliente);
+      const { data: eqs } = await cliente.from('equipos').select('id, nombre, miembros').order('nombre');
+      return json({
+        profesores: profes.map(p => {
+          const roles = Array.isArray(p.rol) ? p.rol : [];
+          const cargo = (p.rol_gestion || '').toString().trim().toLowerCase();
+          return {
+            id: p.id,
+            nombre: `${p.apellidos}, ${p.nombre}`,
+            departamento: p.departamento || '',
+            jefeDpto: roles.includes('jefe_departamento'),
+            tutor: roles.includes('tutor'),
+            directivo: /^(director|secretari|jef[ea])/.test(cargo),
+          };
+        }),
+        equipos: (eqs || []).map(e => ({ id: e.id, nombre: e.nombre, miembros: e.miembros || [] })),
+      });
+    }
+
+    // Tablero para proyectar: quién ha votado, NUNCA qué. Recuento solo al cerrar.
+    if (modo === 'tablero') {
+      const vid = idNum(url.searchParams.get('votacion'));
+      if (!vid) return json({ error: 'falta_votacion' }, 400);
+      const { data: vs } = await cliente.from('convocatoria_votaciones').select('*').eq('id', vid);
+      let v = (vs || [])[0];
+      if (!v) return json({ error: 'no_encontrada' }, 404);
+      if (v.estado === 'abierta' && new Date(v.cierre_at) <= new Date()) {
+        await cliente.rpc('conv_cerrar_votacion', { p_votacion: vid });
+        v = { ...v, estado: 'cerrada' };
+      }
+      const c = await convocatoria(cliente, v.convocatoria_id);
+
+      const { data: f } = await cliente.from('convocatoria_asistencia')
+        .select('profesor_id').eq('convocatoria_id', v.convocatoria_id).not('fichado_at', 'is', null);
+      const presentes = (f || []).map(x => x.profesor_id);
+      let gente = [];
+      if (presentes.length) {
+        const { data: ps } = await cliente.from('profesores')
+          .select('id, nombre, apellidos').in('id', presentes).order('apellidos');
+        gente = ps || [];
+      }
+      const { data: vot } = await cliente.from('convocatoria_votantes')
+        .select('profesor_id').eq('votacion_id', vid);
+      const ya = new Set((vot || []).map(x => x.profesor_id));
+
+      let recuento = null;
+      if (v.estado === 'cerrada') {
+        const { data: r } = await cliente.from('convocatoria_recuento')
+          .select('opcion, n').eq('votacion_id', vid);
+        recuento = {};
+        for (const o of v.opciones || []) recuento[o] = (r || []).find(x => x.opcion === o)?.n || 0;
+      }
+
+      const personas = gente.map(p => ({ nombre: nombreCorto(p.nombre, p.apellidos), votado: ya.has(p.id) }));
+      return json({
+        ahora: new Date().toISOString(),
+        reunion: c?.titulo || '',
+        pregunta: v.pregunta,
+        punto: v.punto,
+        estado: v.estado,
+        cierre_at: v.cierre_at,
+        opciones: v.opciones || [],
+        recuento,
+        personas,
+        votados: personas.filter(p => p.votado).length,
+        total: personas.length,
+      });
+    }
+
+    return json({ error: 'modo_desconocido' }, 400);
+  } catch (e) {
+    console.error('GET /api/convocatorias:', e?.message);
+    return json({ error: 'Error al leer las convocatorias' }, 500);
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════
+//  POST
+// ═════════════════════════════════════════════════════════════════════
+
+export async function POST(request) {
+  const sesion = await sesionDe(request);
+  if (!sesion?.id) return json({ error: 'sin_sesion' }, 401);
+
+  let cuerpo;
+  try { cuerpo = await request.json(); } catch { return json({ error: 'Petición no válida' }, 400); }
+  const { accion, datos = {} } = cuerpo || {};
+  const cliente = supa();
+  const ahora = () => new Date().toISOString();
+
+  try {
+    // ─────────── PROFESORADO ───────────
+
+    if (accion === 'responder' || accion === 'fichar') {
+      const c = await convocatoria(cliente, idNum(datos.id));
+      if (!c || !(c.convocados || []).includes(sesion.id)) {
+        return json({ error: 'Esta convocatoria no va dirigida a ti' }, 403);
+      }
+
+      if (accion === 'responder') {
+        if (!['convocada', 'en_curso'].includes(c.estado)) return json({ error: 'La convocatoria ya está cerrada' }, 400);
+        if (typeof datos.asistira !== 'boolean') return json({ error: 'Indica si asistirás' }, 400);
+        const { error } = await cliente.from('convocatoria_asistencia').upsert([{
+          convocatoria_id: c.id, profesor_id: sesion.id,
+          asistira: datos.asistira, respondida_at: ahora(),
+        }], { onConflict: 'convocatoria_id,profesor_id' });
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      // fichar
+      if (c.estado !== 'en_curso' || !fichajeAbierto(c)) return json({ error: 'El control de asistencia está cerrado' }, 400);
+      const { data: ya } = await cliente.from('convocatoria_asistencia')
+        .select('fichado_at').eq('convocatoria_id', c.id).eq('profesor_id', sesion.id);
+      if ((ya || [])[0]?.fichado_at) return json({ ok: true });   // ya estaba
+      const { error } = await cliente.from('convocatoria_asistencia').upsert([{
+        convocatoria_id: c.id, profesor_id: sesion.id, fichado_at: ahora(),
+      }], { onConflict: 'convocatoria_id,profesor_id' });
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
+    if (accion === 'votar') {
+      const vid = idNum(datos.votacion_id);
+      if (!vid) return json({ error: 'Falta la votación' }, 400);
+      const { data: r, error } = await cliente.rpc('conv_votar', {
+        p_votacion: vid, p_profesor: sesion.id, p_opcion: txt(datos.opcion, 80),
+      });
+      if (error) return json({ error: 'No se ha podido registrar el voto' }, 500);
+      if (r !== 'ok') return json({ error: MENSAJES[r] || r }, 400);
+      return json({ ok: true });
+    }
+
+    // ─────────── EQUIPO DIRECTIVO ───────────
+    if (!esDirectivo(sesion)) return json({ error: 'sin_permisos' }, 403);
+
+    // Crear o modificar. Qué se puede cambiar depende del momento:
+    // antes de la reunión, todo; durante y después, solo lo del acta.
+    if (accion === 'guardar') {
+      const id = idNum(datos.id);
+      const previa = id ? await convocatoria(cliente, id) : null;
+      if (id && !previa) return json({ error: 'Esa convocatoria no existe' }, 404);
+      const antes = !previa || ['borrador', 'convocada'].includes(previa.estado);
+
+      const fila = {
+        orden_dia: limpiarOrdenDia(datos.orden_dia),
+        preside: txt(datos.preside, 200) || null,
+        secretaria: txt(datos.secretaria, 200) || null,
+      };
+      if (antes) {
+        const titulo = txt(datos.titulo, 200);
+        if (!titulo) return json({ error: 'Ponle un título' }, 400);
+        Object.assign(fila, {
+          titulo,
+          organo: ORGANOS.includes(datos.organo) ? datos.organo : 'otro',
+          convocados_texto: txt(datos.convocados_texto, 200) || null,
+          convocados: [...new Set((Array.isArray(datos.convocados) ? datos.convocados : []).filter(x => UUID.test(String(x))))],
+          fecha: /^\d{4}-\d{2}-\d{2}$/.test(datos.fecha || '') ? datos.fecha : null,
+          hora: txt(datos.hora, 20) || null,
+          lugar: txt(datos.lugar, 200) || null,
+        });
+        if (previa?.estado === 'convocada') {
+          if (!fila.fecha) return json({ error: 'Una convocatoria ya enviada necesita fecha' }, 400);
+          if (!fila.convocados.length) return json({ error: 'Una convocatoria ya enviada necesita convocados' }, 400);
+        }
+      }
+
+      if (!previa) {
+        const { data, error } = await cliente.from('convocatorias').insert([{
+          ...fila, estado: 'borrador',
+          creada_por: sesion.id, creada_por_nombre: sesion.nombre || 'Dirección',
+        }]).select('id');
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true, id: (data || [])[0]?.id });
+      }
+
+      const { error } = await cliente.from('convocatorias').update(fila).eq('id', previa.id);
+      if (error) return json({ error: error.message }, 500);
+
+      // Si ya estaba enviada y se añade a alguien, se le avisa a él
+      if (previa.estado === 'convocada') {
+        const nuevos = fila.convocados.filter(x => !(previa.convocados || []).includes(x));
+        if (nuevos.length) {
+          await enviarPushA(cliente, nuevos, {
+            titulo: `📅 Convocatoria: ${fila.titulo}`,
+            cuerpo: [fechaCorta(fila.fecha), fila.hora, fila.lugar].filter(Boolean).join(' · '),
+            url: '/convocatorias',
+          });
+        }
+      }
+      return json({ ok: true, id: previa.id });
+    }
+
+    // El resto de acciones trabajan sobre una convocatoria existente
+    const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'fichar_a_mano',
+                      'finalizar', 'reanudar', 'eliminar', 'guardar_votacion'];
+    if (acciones.includes(accion)) {
+      const c = await convocatoria(cliente, idNum(datos.id ?? datos.convocatoria_id));
+      if (!c) return json({ error: 'Esa convocatoria no existe' }, 404);
+
+      if (accion === 'convocar') {
+        if (c.estado !== 'borrador') return json({ error: 'Ya estaba convocada' }, 400);
+        if (!c.fecha) return json({ error: 'Falta la fecha de la reunión' }, 400);
+        if (!(c.convocados || []).length) return json({ error: 'No hay nadie convocado' }, 400);
+        const { error } = await cliente.from('convocatorias')
+          .update({ estado: 'convocada', convocada_at: ahora() }).eq('id', c.id).eq('estado', 'borrador');
+        if (error) return json({ error: error.message }, 500);
+        const r = await enviarPushA(cliente, c.convocados, {
+          titulo: `📅 Convocatoria: ${c.titulo}`,
+          cuerpo: [fechaCorta(c.fecha), c.hora, c.lugar].filter(Boolean).join(' · '),
+          url: '/convocatorias',
+        });
+        return json({ ok: true, avisados: r.enviados });
+      }
+
+      if (accion === 'iniciar') {
+        if (c.estado !== 'convocada') return json({ error: 'Solo se puede iniciar una convocatoria enviada' }, 400);
+        const { error } = await cliente.from('convocatorias')
+          .update({ estado: 'en_curso', inicio_real: ahora() }).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      if (accion === 'abrir_fichaje') {
+        if (!['convocada', 'en_curso'].includes(c.estado)) return json({ error: 'La reunión no está en marcha' }, 400);
+        const min = Math.min(Math.max(parseInt(datos.minutos, 10) || 10, 1), 180);
+        const cambios = {
+          fichaje_inicio: ahora(),
+          fichaje_fin: new Date(Date.now() + min * 60000).toISOString(),
+        };
+        // Abrir el fichaje inicia la reunión si no se había iniciado
+        if (c.estado === 'convocada') Object.assign(cambios, { estado: 'en_curso', inicio_real: ahora() });
+        const { error } = await cliente.from('convocatorias').update(cambios).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+
+        const { data: f } = await cliente.from('convocatoria_asistencia')
+          .select('profesor_id').eq('convocatoria_id', c.id).not('fichado_at', 'is', null);
+        const yaFichados = new Set((f || []).map(x => x.profesor_id));
+        const r = await enviarPushA(cliente, (c.convocados || []).filter(x => !yaFichados.has(x)), {
+          titulo: '✋ Ficha tu asistencia',
+          cuerpo: `${c.titulo} — tienes ${min} minutos`,
+          url: '/convocatorias',
+        });
+        return json({ ok: true, avisados: r.enviados });
+      }
+
+      if (accion === 'cerrar_fichaje') {
+        const { error } = await cliente.from('convocatorias').update({ fichaje_fin: ahora() }).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      // Fichar (o quitar el fichaje) a mano, para quien no tenga la app
+      if (accion === 'fichar_a_mano') {
+        const pid = String(datos.profesor_id || '');
+        if (!(c.convocados || []).includes(pid)) return json({ error: 'Esa persona no está convocada' }, 400);
+        if (c.estado === 'borrador') return json({ error: 'La convocatoria todavía no se ha enviado' }, 400);
+        const quitar = datos.quitar === true;
+        const { error } = await cliente.from('convocatoria_asistencia').upsert([{
+          convocatoria_id: c.id, profesor_id: pid,
+          fichado_at: quitar ? null : ahora(),
+          fichado_a_mano_por: quitar ? null : (sesion.nombre || 'Dirección'),
+        }], { onConflict: 'convocatoria_id,profesor_id' });
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      if (accion === 'finalizar') {
+        if (c.estado !== 'en_curso') return json({ error: 'La reunión no está en curso' }, 400);
+        const { data: abiertas } = await cliente.from('convocatoria_votaciones')
+          .select('id').eq('convocatoria_id', c.id).eq('estado', 'abierta');
+        for (const v of abiertas || []) await cliente.rpc('conv_cerrar_votacion', { p_votacion: v.id });
+        const cambios = { estado: 'cerrada', fin_real: ahora() };
+        if (fichajeAbierto(c)) cambios.fichaje_fin = ahora();
+        const { error } = await cliente.from('convocatorias').update(cambios).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      // Por si se finalizó sin querer
+      if (accion === 'reanudar') {
+        if (c.estado !== 'cerrada') return json({ error: 'No está cerrada' }, 400);
+        const { error } = await cliente.from('convocatorias')
+          .update({ estado: 'en_curso', fin_real: null }).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      if (accion === 'eliminar') {
+        const { error } = await cliente.from('convocatorias').delete().eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      // Crear o modificar una votación preparada
+      if (accion === 'guardar_votacion') {
+        if (c.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
+        const pregunta = txt(datos.pregunta, 500);
+        const opciones = limpiarOpciones(datos.opciones);
+        if (!pregunta) return json({ error: 'Escribe la cuestión que se vota' }, 400);
+        if (opciones.length < 2) return json({ error: 'Pon al menos dos opciones' }, 400);
+        const fila = {
+          pregunta, opciones,
+          punto: idNum(datos.punto),
+          duracion_seg: Math.min(Math.max(parseInt(datos.duracion_seg, 10) || 180, 30), 3600),
+        };
+
+        const vid = idNum(datos.votacion_id);
+        if (vid) {
+          const { data, error } = await cliente.from('convocatoria_votaciones')
+            .update(fila).eq('id', vid).eq('convocatoria_id', c.id).eq('estado', 'preparada').select('id');
+          if (error) return json({ error: error.message }, 500);
+          if (!(data || []).length) return json({ error: 'Solo se pueden cambiar las votaciones que no se han lanzado' }, 400);
+          return json({ ok: true, id: vid });
+        }
+
+        const { data: ult } = await cliente.from('convocatoria_votaciones')
+          .select('orden').eq('convocatoria_id', c.id).order('orden', { ascending: false }).limit(1);
+        const { data, error } = await cliente.from('convocatoria_votaciones')
+          .insert([{ ...fila, convocatoria_id: c.id, orden: ((ult || [])[0]?.orden || 0) + 1 }]).select('id');
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true, id: (data || [])[0]?.id });
+      }
+    }
+
+    // ── Acciones sobre una votación ──
+    if (['lanzar_votacion', 'cerrar_votacion', 'borrar_votacion'].includes(accion)) {
+      const vid = idNum(datos.votacion_id);
+      const { data: vs } = await cliente.from('convocatoria_votaciones').select('*').eq('id', vid);
+      const v = (vs || [])[0];
+      if (!v) return json({ error: 'Esa votación no existe' }, 404);
+
+      if (accion === 'borrar_votacion') {
+        if (v.estado !== 'preparada') return json({ error: 'Una votación ya lanzada no se puede borrar' }, 400);
+        const { error } = await cliente.from('convocatoria_votaciones').delete().eq('id', v.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true });
+      }
+
+      const fn = accion === 'lanzar_votacion' ? 'conv_lanzar_votacion' : 'conv_cerrar_votacion';
+      const { data: r, error } = await cliente.rpc(fn, { p_votacion: v.id });
+      if (error) return json({ error: 'No se ha podido completar' }, 500);
+      if (r !== 'ok') return json({ error: MENSAJES[r] || r }, 400);
+
+      if (accion === 'lanzar_votacion') {
+        const { data: f } = await cliente.from('convocatoria_asistencia')
+          .select('profesor_id').eq('convocatoria_id', v.convocatoria_id).not('fichado_at', 'is', null);
+        const r2 = await enviarPushA(cliente, (f || []).map(x => x.profesor_id), {
+          titulo: '🗳️ Votación abierta',
+          cuerpo: v.pregunta,
+          url: '/convocatorias',
+        });
+        return json({ ok: true, avisados: r2.enviados });
+      }
+      return json({ ok: true });
+    }
+
+    return json({ error: 'Acción no reconocida' }, 400);
+  } catch (e) {
+    console.error('POST /api/convocatorias:', e?.message);
+    return json({ error: 'Error al procesar la petición' }, 500);
+  }
+}
