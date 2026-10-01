@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta', 'fc_cambio'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -811,7 +811,7 @@ export async function POST(request) {
         </div>`;
 
     // ── Módulo de Formación (solicitudes_formacion) ──────────────────
-    } else if (tipo === 'fc_jefe' || tipo === 'fc_director' || tipo === 'fc_resuelta') {
+    } else if (tipo === 'fc_jefe' || tipo === 'fc_director' || tipo === 'fc_resuelta' || tipo === 'fc_cambio') {
       const filasFc = [
         ['Curso o jornada', datos.titulo],
         ['Organiza', datos.entidad],
@@ -851,6 +851,15 @@ export async function POST(request) {
         cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>${intro}
           ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
           ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion?vista=direccion', color)}`;
+      } else if (tipo === 'fc_cambio') {
+        const NOMBRE_EST = { pendiente_jefe: 'pendiente del jefe de departamento', pendiente_director: 'pendiente de dirección', autorizada: 'concedida', denegada_jefe: 'denegada por el jefe de departamento', denegada_director: 'denegada por dirección', retirada: 'anulada' };
+        color = '#5b21b6';
+        subject = `🎓 Cambio en tu solicitud de formación: ${NOMBRE_EST[datos.estado_ahora] || datos.estado_ahora}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Cambio en tu solicitud de formación</h2>
+          <p>La dirección del centro ha cambiado el estado de tu solicitud de <strong>${e(NOMBRE_EST[datos.estado_antes] || datos.estado_antes)}</strong> a <strong>${e(NOMBRE_EST[datos.estado_ahora] || datos.estado_ahora)}</strong>.</p>
+          ${caja('Motivo:', datos.motivo, false)}${tabla}
+          ${datos.estado_antes === 'autorizada' ? '<p style="font-size:14px;color:#991b1b;font-weight:bold">Si ya habías registrado la ausencia o pedido el permiso en Delphos, habla con la dirección.</p>' : ''}
+          ${boton('Ver en APrieto', '/formacion', color)}`;
       } else {
         const ok = datos.resultado === 'autorizada';
         color = ok ? '#166534' : '#991b1b';

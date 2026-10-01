@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
+import CambiarEstadoFormacion from '@/components/CambiarEstadoFormacion';
 
 /**
  * FORMACIÓN — solicitudes de cursos y jornadas (sugerencia #93)
@@ -360,7 +361,8 @@ export default function Formacion() {
 
         {/* ── DIRECCIÓN ── */}
         {vista === 'direccion' && perfil.soyDirectivo && (
-          <PanelDireccion todas={todas} puedeResolver={perfil.soyDirector} resolver={resolver} />
+          <PanelDireccion todas={todas} puedeResolver={perfil.soyDirector} resolver={resolver}
+            alCambiar={async msg => { await cargar(); avisar(msg, 'ok'); }} />
         )}
       </div>
     </div>
@@ -369,7 +371,7 @@ export default function Formacion() {
 
 // ── Panel de dirección ──
 
-function PanelDireccion({ todas, puedeResolver, resolver }) {
+function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
   const [filtro, setFiltro] = useState('todas');
 
   const pendDir = todas.filter(s => s.estado === 'pendiente_director');
@@ -397,6 +399,7 @@ function PanelDireccion({ todas, puedeResolver, resolver }) {
         : pendDir.map(s => (
           <Tarjeta key={s.id} s={s} verNombre>
             {puedeResolver && <Resolver opciones={opcionesDir} onResolver={(dec, mot) => resolver('resolver_director', s, dec, mot)} />}
+            {puedeResolver && <CambiarEstadoFormacion solicitud={s} onHecho={alCambiar} />}
           </Tarjeta>
         ))}
 
@@ -409,6 +412,7 @@ function PanelDireccion({ todas, puedeResolver, resolver }) {
                 <Resolver textoAbrir="Revisar decisión" opciones={[opcionesDir[0]]}
                   onResolver={(dec, mot) => resolver('resolver_director', s, dec, mot)} />
               )}
+              {puedeResolver && <CambiarEstadoFormacion solicitud={s} onHecho={alCambiar} />}
             </Tarjeta>
           ))}
         </>
@@ -426,6 +430,7 @@ function PanelDireccion({ todas, puedeResolver, resolver }) {
                 <Resolver textoAbrir="Resolver sin esperar al jefe" opciones={opcionesDir}
                   onResolver={(dec, mot) => resolver('resolver_director', s, dec, mot)} />
               )}
+              {puedeResolver && <CambiarEstadoFormacion solicitud={s} onHecho={alCambiar} />}
             </Tarjeta>
           ))}
         </>
@@ -444,6 +449,7 @@ function PanelDireccion({ todas, puedeResolver, resolver }) {
               {s.ausencia_id ? '✓ Ausencia registrada' : '⚠️ Aún no ha registrado la ausencia'}
             </div>
           )}
+          {puedeResolver && <CambiarEstadoFormacion solicitud={s} onHecho={alCambiar} />}
         </Tarjeta>
       ))}
     </div>
@@ -520,6 +526,9 @@ function Recorrido({ s }) {
       motivo: s.director_motivo,
     });
   }
+  (Array.isArray(s.historial) ? s.historial : []).forEach(h => {
+    pasos.push({ neutro: true, texto: `Cambio de estado por ${h.por || 'dirección'} · ${fmtMomento(h.fecha)}: ${(ESTADOS[h.de] || {}).label || h.de} → ${(ESTADOS[h.a] || {}).label || h.a}`, motivo: h.motivo });
+  });
   if (!pasos.length) return null;
 
   return (

@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect, useMemo } from 'react';
 import { hoyLocal } from '@/lib/fechas';
+import CambiarEstadoFormacion from '@/components/CambiarEstadoFormacion';
 
 /**
  * GESTIÓN · FORMACIÓN — registro e informes
@@ -69,6 +70,8 @@ export default function GestionFormacion() {
   const [error, setError]       = useState('');
   const [todas, setTodas]       = useState([]);
   const [usuario, setUsuario]   = useState('');
+  const [soyDirector, setSoyDirector] = useState(false);
+  const [aviso, setAviso] = useState('');
 
   const [desde, setDesde]       = useState(inicioCurso());
   const [hasta, setHasta]       = useState(finCurso());
@@ -76,21 +79,30 @@ export default function GestionFormacion() {
   const [dpto, setDpto]         = useState('');
   const [estado, setEstado]     = useState('');
 
+  async function cargar() {
+    try {
+      const r = await fetch('/api/formacion?vista=direccion');
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'No se ha podido cargar');
+      setTodas(d.solicitudes || []);
+      setSoyDirector(!!d.soyDirector);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setCargando(false);
+    }
+  }
+
   useEffect(() => {
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
-    (async () => {
-      try {
-        const r = await fetch('/api/formacion?vista=direccion');
-        const d = await r.json();
-        if (!r.ok) throw new Error(d.error || 'No se ha podido cargar');
-        setTodas(d.solicitudes || []);
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setCargando(false);
-      }
-    })();
+    cargar();
   }, []);
+
+  async function trasCambio(msg) {
+    await cargar();
+    setAviso(msg);
+    setTimeout(() => setAviso(''), 7000);
+  }
 
   const profesores = useMemo(() => {
     const m = new Map();
@@ -327,6 +339,7 @@ export default function GestionFormacion() {
           </div>
         </div>
 
+        {aviso && <div style={{ padding: 13, borderRadius: 9, backgroundColor: '#dcfce7', border: '1.5px solid #86efac', color: '#166534', fontSize: 13.5, fontWeight: 600, marginBottom: 14 }}>{aviso}</div>}
         {error && <div style={{ padding: 13, borderRadius: 9, backgroundColor: '#fef2f2', border: '1.5px solid #fecaca', color: '#991b1b', fontSize: 13.5, marginBottom: 14 }}>{error}</div>}
         {cargando && <div style={{ textAlign: 'center', padding: 30, color: '#888' }}>⏳ Cargando...</div>}
 
@@ -414,6 +427,12 @@ export default function GestionFormacion() {
                                 {s.ausencia_id ? '✓ Ausencia registrada' : 'Sin ausencia'}
                               </div>
                             )}
+                            {Array.isArray(s.historial) && s.historial.length > 0 && (
+                              <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                                {s.historial.length} cambio{s.historial.length !== 1 ? 's' : ''} de estado · último: {s.historial[s.historial.length - 1].motivo}
+                              </div>
+                            )}
+                            {soyDirector && <CambiarEstadoFormacion solicitud={s} onHecho={trasCambio} />}
                           </td>
                         </tr>
                       );

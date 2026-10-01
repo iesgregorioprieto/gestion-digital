@@ -345,6 +345,77 @@ export async function POST(request) {
       return Response.json({ ok: true, solicitud: act[0] });
     }
 
+    // ─── El director cambia el estado (corregir, revocar, reabrir) ───
+    if (accion === 'cambiar_estado') {
+      if (!esDirector(sesion)) return Response.json({ error: 'Solo el director puede cambiar el estado' }, { status: 403 });
+      const nuevo = datos?.estado;
+      const motivo = (datos?.motivo || '').trim();
+      const PERMITIDOS = ['pendiente_jefe', 'pendiente_director', 'autorizada', 'denegada_director', 'retirada'];
+      if (!PERMITIDOS.includes(nuevo)) return Response.json({ error: 'Estado no válido' }, { status: 400 });
+      if (nuevo === s.estado) return Response.json({ error: 'Ya está en ese estado' }, { status: 400 });
+      if (!motivo) return Response.json({ error: 'Escribe el motivo del cambio' }, { status: 400 });
+
+      const prof = await fichaDe(sb, s.profesor_id);
+      const cambios = { estado: nuevo };
+      let jefes = [];
+
+      if (nuevo === 'autorizada' || nuevo === 'denegada_director') {
+        Object.assign(cambios, { director_id: sesion.id, director_fecha: ahora, director_motivo: motivo });
+      } else if (nuevo === 'pendiente_director') {
+        Object.assign(cambios, { director_id: null, director_fecha: null, director_motivo: null });
+      } else if (nuevo === 'pendiente_jefe') {
+        jefes = (await jefesDe(sb, s.departamento, s.profesor_id)).filter(j => j.email);
+        if (!jefes.length) return Response.json({ error: 'Su departamento no tiene jefe con correo: no se le puede devolver' }, { status: 400 });
+        Object.assign(cambios, {
+          jefe_id: null, jefe_decision: null, jefe_fecha: null, jefe_motivo: null, jefe_limite: limitePlazo(3),
+          director_id: null, director_fecha: null, director_motivo: null,
+        });
+      }
+
+      const { data: act, error } = await sb.from('solicitudes_formacion')
+        .update(cambios).eq('id', id).eq('estado', s.estado).select('*');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (!act?.length) return Response.json({ error: 'La solicitud ha cambiado mientras la mirabas. Recarga.' }, { status: 409 });
+
+      // Rastro del cambio. Si la columna historial aún no existe, no se pierde el cambio.
+      try {
+        const yo = await fichaDe(sb, sesion.id);
+        const previo = Array.isArray(s.historial) ? s.historial : [];
+        await sb.from('solicitudes_formacion').update({
+          historial: [...previo, { fecha: ahora, por: nombreDe(yo), de: s.estado, a: nuevo, motivo }],
+        }).eq('id', id);
+      } catch (e) {
+        console.error('[formacion] historial:', e?.message);
+      }
+
+      // Avisos
+      try {
+        if (nuevo === 'pendiente_jefe') {
+          await enviarAviso('fc_jefe', jefes.map(j => j.email), { ...datosCorreo(act[0], prof), limite: act[0].jefe_limite });
+        }
+        if (prof?.email) {
+          if (nuevo === 'autorizada' || nuevo === 'denegada_director') {
+            await enviarAviso('fc_resuelta', [prof.email], {
+              ...datosCorreo(act[0], prof),
+              resultado: nuevo === 'autorizada' ? 'autorizada' : 'denegada',
+              quien: 'la dirección del centro', motivo, id_solicitud: act[0].id,
+            });
+          } else {
+            await enviarAviso('fc_cambio', [prof.email], {
+              ...datosCorreo(act[0], prof), estado_antes: s.estado, estado_ahora: nuevo, motivo,
+            });
+          }
+        }
+      } catch (e) {
+        console.error('[formacion] aviso cambio de estado:', e?.message);
+      }
+
+      const aviso = s.estado === 'autorizada' && s.ausencia_id && nuevo !== 'autorizada'
+        ? 'Ojo: ya tenía una ausencia registrada por esta formación. Revísala en Gestión de ausencias.'
+        : null;
+      return Response.json({ ok: true, solicitud: act[0], aviso });
+    }
+
     // ─── Enlazar la ausencia registrada con su solicitud ───
     // Lo llamará Ausencias al guardar una ausencia de formación.
     if (accion === 'vincular_ausencia') {
