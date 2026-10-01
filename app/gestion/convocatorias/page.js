@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { DEPARTAMENTOS } from '@/lib/sectores';
+import GraficoCircularVotacion from '@/components/GraficoCircularVotacion';
 
 const AZUL   = '#1e3a5f';
 const VERDE  = '#1e6b2e';
@@ -79,6 +80,7 @@ export default function GestionConvocatorias() {
   const [minutosFichaje, setMinutosFichaje] = useState('10');
   const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
   const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
+  const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -658,20 +660,30 @@ export default function GestionConvocatorias() {
                           <span key={o} style={{ padding: '3px 11px', borderRadius: 20, fontSize: 12, backgroundColor: '#faf5ff', color: MORADO, border: '1px solid #e9d5ff', fontWeight: 600 }}>{o}</span>
                         ))}
                       </div>
-                      {v.estado === 'cerrada' && v.recuento && (() => {
-                        const total = v.totalVotos || 0;
-                        return (v.opciones || []).map(o => {
-                          const n = v.recuento[o] || 0; const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-                          return (
-                            <div key={o} style={{ marginTop: 5 }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span>{o}</span><span><strong>{n}</strong> · {pct}%</span></div>
-                              <div style={{ height: 6, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${pct}%`, backgroundColor: MORADO, borderRadius: 3 }} />
-                              </div>
-                            </div>
-                          );
-                        });
-                      })()}
+                      {v.estado === 'cerrada' && v.recuento && (
+                        <div style={{ marginTop: 6 }}>
+                          <button onClick={() => setVistaCircular(s => ({ ...s, [v.id]: !s[v.id] }))}
+                            style={{ border: 'none', background: 'none', color: MORADO, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: 7 }}>
+                            {vistaCircular[v.id] ? '📊 Ver como barras' : '🥧 Ver como gráfico circular'}
+                          </button>
+                          {vistaCircular[v.id] ? (
+                            <GraficoCircularVotacion opciones={v.opciones} recuento={v.recuento} size={130} />
+                          ) : (
+                            (v.opciones || []).map(o => {
+                              const total = v.totalVotos || 0;
+                              const n = v.recuento[o] || 0; const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                              return (
+                                <div key={o} style={{ marginTop: 5 }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span>{o}</span><span><strong>{n}</strong> · {pct}%</span></div>
+                                  <div style={{ height: 6, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+                                    <div style={{ height: '100%', width: `${pct}%`, backgroundColor: MORADO, borderRadius: 3 }} />
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
                       {editable && (
                         <div style={{ display: 'flex', gap: 8 }}>
                           <button onClick={() => setNuevaVot({ convId: form.id, origen: 'form', votacion_id: v.id, punto: v.punto || '', pregunta: v.pregunta, opciones: v.opciones, duracion_seg: String(v.duracion_seg) })}
@@ -821,20 +833,30 @@ export default function GestionConvocatorias() {
                       </>
                     )}
 
-                    {v.estado === 'cerrada' && v.recuento && (() => {
-                      const total = v.totalVotos || 0;
-                      return (v.opciones || []).map(o => {
-                        const n = v.recuento[o] || 0; const pct = total > 0 ? Math.round((n / total) * 100) : 0;
-                        return (
-                          <div key={o} style={{ marginBottom: 5 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span>{o}</span><span><strong>{n}</strong> · {pct}%</span></div>
-                            <div style={{ height: 7, borderRadius: 4, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
-                              <div style={{ height: '100%', width: `${pct}%`, backgroundColor: MORADO, borderRadius: 4 }} />
-                            </div>
-                          </div>
-                        );
-                      });
-                    })()}
+                    {v.estado === 'cerrada' && v.recuento && (
+                      <div>
+                        <button onClick={() => setVistaCircular(s => ({ ...s, [v.id]: !s[v.id] }))}
+                          style={{ border: 'none', background: 'none', color: MORADO, fontSize: 11.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginBottom: 7 }}>
+                          {vistaCircular[v.id] ? '📊 Ver como barras' : '🥧 Ver como gráfico circular'}
+                        </button>
+                        {vistaCircular[v.id] ? (
+                          <GraficoCircularVotacion opciones={v.opciones} recuento={v.recuento} size={130} />
+                        ) : (
+                          (v.opciones || []).map(o => {
+                            const total = v.totalVotos || 0;
+                            const n = v.recuento[o] || 0; const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                            return (
+                              <div key={o} style={{ marginBottom: 5 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span>{o}</span><span><strong>{n}</strong> · {pct}%</span></div>
+                                <div style={{ height: 7, borderRadius: 4, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${pct}%`, backgroundColor: MORADO, borderRadius: 4 }} />
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
