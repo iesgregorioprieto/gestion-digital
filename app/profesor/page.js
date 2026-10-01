@@ -132,7 +132,7 @@ export default function PanelProfesor() {
       href: '/guardias',
       disponible: true,
       roles: ['todos'],
-      color: '#7c2d12', bg: '#fff7ed', border: '#fdba74',
+      color: '#0f766e', bg: '#f0fdfa', border: '#5eead4',
     },
     {
       id: 'ausencias',
@@ -152,7 +152,7 @@ export default function PanelProfesor() {
       href: '/dld',
       disponible: true,
       roles: ['todos'],
-      color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd',
+      color: '#4338ca', bg: '#eef2ff', border: '#a5b4fc',
     },
     {
       id: 'autorizaciones',
@@ -162,7 +162,7 @@ export default function PanelProfesor() {
       href: '/autorizaciones',
       disponible: true,
       roles: ['todos'],
-      color: '#7c3aed', bg: '#f5f3ff', border: '#c4b5fd',
+      color: '#b45309', bg: '#fffbeb', border: '#fcd34d',
     },
     {
       id: 'actividades',
@@ -172,7 +172,7 @@ export default function PanelProfesor() {
       href: '/actividades',
       disponible: true,
       roles: ['todos'],
-      color: '#166534', bg: '#f0fdf4', border: '#86efac',
+      color: '#15803d', bg: '#f0fdf4', border: '#86efac',
     },
     {
       id: 'formacion',
@@ -182,7 +182,7 @@ export default function PanelProfesor() {
       href: '/formacion',
       disponible: true,
       roles: ['todos'],
-      color: '#5b21b6', bg: '#f5f3ff', border: '#c4b5fd',
+      color: '#a21caf', bg: '#fdf4ff', border: '#f0abfc',
     },
     {
       id: 'calendario',
@@ -192,7 +192,7 @@ export default function PanelProfesor() {
       href: '/calendario',
       disponible: true,
       roles: ['todos'],
-      color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd',
+      color: '#0369a1', bg: '#f0f9ff', border: '#7dd3fc',
     },
     {
       id: 'eventos',
@@ -202,7 +202,7 @@ export default function PanelProfesor() {
       href: '/eventos',
       disponible: true,
       roles: ['todos'],
-      color: '#9a3412', bg: '#fff7ed', border: '#fdba74',
+      color: '#c2410c', bg: '#fff7ed', border: '#fdba74',
     },
     {
       id: 'mantenimiento',
@@ -212,7 +212,7 @@ export default function PanelProfesor() {
       href: '/mantenimiento',
       disponible: true,
       roles: ['todos'],
-      color: '#b45309', bg: '#fffbeb', border: '#fcd34d',
+      color: '#4d7c0f', bg: '#f7fee7', border: '#bef264',
     },
     {
       id: 'limpieza',
@@ -222,7 +222,7 @@ export default function PanelProfesor() {
       href: '/limpieza',
       disponible: true,
       roles: ['todos'],
-      color: '#0891b2', bg: '#ecfeff', border: '#67e8f9',
+      color: '#be185d', bg: '#fdf2f8', border: '#f9a8d4',
     },
     {
       id: 'compras',
@@ -233,7 +233,7 @@ export default function PanelProfesor() {
       disponible: true,
       roles: ['todos'],
       soloJefeDepartamento: true,
-      color: '#0f766e', bg: '#f0fdfa', border: '#5eead4',
+      color: '#57534e', bg: '#fafaf9', border: '#d6d3d1',
     },
     {
       id: 'tutorias',
@@ -253,7 +253,7 @@ export default function PanelProfesor() {
       href: '/convocatorias',
       disponible: true,
       roles: ['todos'],
-      color: '#1e3a5f', bg: '#eff6ff', border: '#bfdbfe',
+      color: '#1e3a5f', bg: '#eff6ff', border: '#93c5fd',
     },
     {
       id: 'votaciones',
@@ -275,7 +275,7 @@ export default function PanelProfesor() {
       href: '/horario',
       disponible: true,
       roles: ['todos'],
-      color: '#0f766e', bg: '#f0fdfa', border: '#99f6e4',
+      color: '#a16207', bg: '#fefce8', border: '#fde047',
     },
     {
       id: 'incidencias',
@@ -285,7 +285,7 @@ export default function PanelProfesor() {
       href: '/incidencias',
       disponible: true,
       roles: ['todos'],
-      color: '#9f1239', bg: '#fff1f2', border: '#fda4af',
+      color: '#be123c', bg: '#fff1f2', border: '#fda4af',
     },
   ];
 
