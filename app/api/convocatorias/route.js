@@ -512,7 +512,7 @@ export async function POST(request) {
     }
 
     // El resto de acciones trabajan sobre una convocatoria existente
-    const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'fichar_a_mano',
+    const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'reenviar_fichaje', 'ampliar_fichaje', 'fichar_a_mano',
                       'finalizar', 'reanudar', 'eliminar', 'guardar_votacion'];
     if (acciones.includes(accion)) {
       const c = await convocatoria(cliente, idNum(datos.id ?? datos.convocatoria_id));
@@ -568,6 +568,34 @@ export async function POST(request) {
         const { error } = await cliente.from('convocatorias').update({ fichaje_fin: ahora() }).eq('id', c.id);
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });
+      }
+
+      // Volver a avisar, por si a alguien no le llegó el push la primera
+      // vez (sin cuenta de Chrome, notificaciones apagadas, el móvil en
+      // el bolsillo...). No cambia nada del fichaje, solo insiste.
+      if (accion === 'reenviar_fichaje') {
+        if (!fichajeAbierto(c)) return json({ error: 'El fichaje no está abierto' }, 400);
+        const { data: f } = await cliente.from('convocatoria_asistencia')
+          .select('profesor_id').eq('convocatoria_id', c.id).not('fichado_at', 'is', null);
+        const yaFichados = new Set((f || []).map(x => x.profesor_id));
+        const faltan = (c.convocados || []).filter(x => !yaFichados.has(x));
+        if (!faltan.length) return json({ error: 'Ya ha fichado todo el mundo' }, 400);
+        const r = await enviarPushA(cliente, faltan, {
+          titulo: '✋ Todavía puedes fichar',
+          cuerpo: c.titulo, url: '/convocatorias',
+        });
+        return json({ ok: true, avisados: r.enviados, faltaban: faltan.length });
+      }
+
+      // Alargar el fichaje ya abierto, sin tener que cerrarlo y volver a
+      // abrirlo (eso reiniciaría la cuenta, no la ampliaría).
+      if (accion === 'ampliar_fichaje') {
+        if (!fichajeAbierto(c)) return json({ error: 'El fichaje no está abierto' }, 400);
+        const min = Math.min(Math.max(parseInt(datos.minutos, 10) || 5, 1), 180);
+        const nuevoFin = new Date(new Date(c.fichaje_fin).getTime() + min * 60000).toISOString();
+        const { error } = await cliente.from('convocatorias').update({ fichaje_fin: nuevoFin }).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true, fichaje_fin: nuevoFin });
       }
 
       // Fichar (o quitar el fichaje) a mano, para quien no tenga la app
@@ -673,6 +701,43 @@ export async function POST(request) {
         return json({ ok: true, avisados: r2.enviados });
       }
       return json({ ok: true });
+    }
+
+    // Volver a avisar de una votación abierta, solo a quien ya ha
+    // fichado pero todavía no ha votado.
+    if (accion === 'reenviar_votacion') {
+      const vid = idNum(datos.votacion_id);
+      const { data: vs } = await cliente.from('convocatoria_votaciones').select('*').eq('id', vid);
+      const v = (vs || [])[0];
+      if (!v) return json({ error: 'Esa votación no existe' }, 404);
+      if (v.estado !== 'abierta' || new Date(v.cierre_at) <= new Date()) return json({ error: 'Esta votación no está abierta' }, 400);
+
+      const { data: f } = await cliente.from('convocatoria_asistencia')
+        .select('profesor_id').eq('convocatoria_id', v.convocatoria_id).not('fichado_at', 'is', null);
+      const { data: vot } = await cliente.from('convocatoria_votantes').select('profesor_id').eq('votacion_id', v.id);
+      const yaVotaron = new Set((vot || []).map(x => x.profesor_id));
+      const faltan = (f || []).map(x => x.profesor_id).filter(x => !yaVotaron.has(x));
+      if (!faltan.length) return json({ error: 'Ya han votado todos los presentes' }, 400);
+      const r = await enviarPushA(cliente, faltan, {
+        titulo: '🗳️ Todavía puedes votar',
+        cuerpo: v.pregunta, url: '/convocatorias',
+      });
+      return json({ ok: true, avisados: r.enviados, faltaban: faltan.length });
+    }
+
+    // Alargar una votación abierta, sin tener que cerrarla y preparar
+    // otra: la cuenta atrás ya en marcha se amplía desde donde esté.
+    if (accion === 'ampliar_votacion') {
+      const vid = idNum(datos.votacion_id);
+      const { data: vs } = await cliente.from('convocatoria_votaciones').select('*').eq('id', vid);
+      const v = (vs || [])[0];
+      if (!v) return json({ error: 'Esa votación no existe' }, 404);
+      if (v.estado !== 'abierta' || new Date(v.cierre_at) <= new Date()) return json({ error: 'Esta votación no está abierta' }, 400);
+      const min = Math.min(Math.max(parseInt(datos.minutos, 10) || 2, 1), 60);
+      const nuevoCierre = new Date(new Date(v.cierre_at).getTime() + min * 60000).toISOString();
+      const { error } = await cliente.from('convocatoria_votaciones').update({ cierre_at: nuevoCierre }).eq('id', v.id);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, cierre_at: nuevoCierre });
     }
 
     return json({ error: 'Acción no reconocida' }, 400);

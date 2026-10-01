@@ -751,11 +751,24 @@ export default function GestionConvocatorias() {
                 <div style={{ marginTop: 14, padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <div style={{ fontWeight: 800, fontSize: 13, color: AZUL, marginBottom: 10 }}>✋ Control de asistencia</div>
                   {c.fichajeAbierto ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontSize: 20, fontWeight: 800, color: VERDE, fontVariantNumeric: 'tabular-nums' }}>{restanteFichaje}</span>
-                      <button onClick={() => accionSesion('cerrar_fichaje', { id: c.id }, '¿Cerrar el control de asistencia ahora?')}
-                        style={btnPrimario(AMBAR)}>🔒 Cerrar el fichaje</button>
-                    </div>
+                    <>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 20, fontWeight: 800, color: VERDE, fontVariantNumeric: 'tabular-nums' }}>{restanteFichaje}</span>
+                        <button onClick={() => accionSesion('cerrar_fichaje', { id: c.id }, '¿Cerrar el control de asistencia ahora?')}
+                          style={btnPrimario(AMBAR)}>🔒 Cerrar el fichaje</button>
+                      </div>
+                      {presentes.length < personas.length && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e2e8f0' }}>
+                          <button onClick={() => accionSesion('reenviar_fichaje', { id: c.id })} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 12.5 }}>
+                            🔔 Avisar de nuevo a quien falta
+                          </button>
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>·</span>
+                          <button onClick={() => accionSesion('ampliar_fichaje', { id: c.id, minutos: 5 })} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 12.5 }}>
+                            ⏱️ +5 minutos
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <input type="number" min="1" max="120" value={minutosFichaje} onChange={e => setMinutosFichaje(e.target.value)}
@@ -825,9 +838,15 @@ export default function GestionConvocatorias() {
                     {v.estado === 'abierta' && (
                       <>
                         <div style={{ fontSize: 12.5, color: '#475569', marginBottom: 8 }}>{v.participantes} {v.participantes === 1 ? 'voto emitido' : 'votos emitidos'}</div>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           <a href={`/gestion/votaciones/tablero?votacion=${v.id}`} target="_blank" rel="noreferrer"
                             style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5, textDecoration: 'none', display: 'inline-block' }}>📺 Tablero</a>
+                          <button onClick={() => accionSesion('reenviar_votacion', { votacion_id: v.id })} style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5 }}>
+                            🔔 Avisar de nuevo
+                          </button>
+                          <button onClick={() => accionSesion('ampliar_votacion', { votacion_id: v.id, minutos: 2 })} style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5 }}>
+                            ⏱️ +2 minutos
+                          </button>
                           <button onClick={() => accionSesion('cerrar_votacion', { votacion_id: v.id })} style={{ ...btnPrimario(AMBAR), padding: '7px 14px', fontSize: 12.5 }}>🔒 Cerrar ahora</button>
                         </div>
                       </>
