@@ -854,12 +854,17 @@ export async function POST(request) {
       } else {
         const ok = datos.resultado === 'autorizada';
         color = ok ? '#166534' : '#991b1b';
-        subject = ok ? '✅ Tu formación está autorizada' : '❌ Tu solicitud de formación ha sido denegada';
+        subject = ok ? '✅ Formación concedida: registra la ausencia y solicítala en Delphos' : '❌ Tu solicitud de formación ha sido denegada';
         cuerpo = ok
-          ? `<h2 style="color:${color};margin:0 0 12px">Formación autorizada</h2>
-             <p>La dirección del centro ha autorizado tu formación. <strong>Ahora registra la ausencia</strong> como cualquier otra, para que se cubran tus clases.</p>${tabla}
+          ? `<h2 style="color:${color};margin:0 0 12px">Formación concedida</h2>
+             <p>La dirección del centro ha <strong>concedido</strong> tu formación.</p>${tabla}
              ${caja('Observaciones de la dirección:', datos.motivo, true)}
-             ${boton('Registrar la ausencia', `/ausencias?formacion=${encodeURIComponent(datos.id_solicitud || '')}`, color)}`
+             <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:16px;margin:18px 0">
+               <div style="font-weight:bold;font-size:15px;color:#78350f;margin-bottom:10px">Ahora tienes que hacer dos cosas:</div>
+               <div style="margin-bottom:8px"><strong>1. Registrar la ausencia en APrieto</strong>, como cualquier otra, para que se cubran tus clases y dejes las tareas a tus grupos. Con el botón de abajo el formulario sale ya rellenado.</div>
+               <div><strong>2. Solicitar el permiso en Delphos.</strong> La autorización del centro no sustituye la solicitud oficial: tienes que pedirlo también por Delphos.</div>
+             </div>
+             ${boton('1. Registrar la ausencia', `/ausencias?formacion=${encodeURIComponent(datos.id_solicitud || '')}`, color)}`
           : `<h2 style="color:${color};margin:0 0 12px">Formación denegada</h2>
              <p>${e(datos.quien)} ha denegado tu solicitud.</p>${caja('Motivo:', datos.motivo, false)}${tabla}
              <p style="font-size:13px;color:#666">Si no estás de acuerdo, habla directamente con la dirección del centro.</p>`;

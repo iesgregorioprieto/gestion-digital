@@ -241,6 +241,11 @@ export default function Formacion() {
                 {['pendiente_jefe', 'pendiente_director'].includes(s.estado) && (
                   <button onClick={() => retirar(s)} style={{ ...botonSec, marginTop: 10 }}>↩️ Retirar solicitud</button>
                 )}
+                {s.estado === 'autorizada' && (
+                  <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 12.5, color: '#78350f', lineHeight: 1.5 }}>
+                    <strong>Concedida.</strong> Registra la ausencia aquí y <strong>solicita también el permiso en Delphos</strong>: la autorización del centro no sustituye la solicitud oficial.
+                  </div>
+                )}
                 {s.estado === 'autorizada' && !s.ausencia_id && (
                   <a href={`/ausencias?formacion=${s.id}&fecha=${s.fecha_inicio}`} style={{
                     display: 'inline-block', marginTop: 10, padding: '9px 16px', borderRadius: 8,

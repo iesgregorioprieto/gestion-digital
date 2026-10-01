@@ -150,7 +150,7 @@ export async function GET(request) {
         tareas.push({
           id: `form-${s.id}`, icono: '🎓',
           texto: `Registrar la ausencia de tu formación del ${fechaCorta(s.fecha_inicio)}`,
-          detalle: `${s.titulo} · Está autorizada: registra la ausencia para que se cubran tus clases`,
+          detalle: `${s.titulo} · Concedida: registra la ausencia y solicita el permiso en Delphos`,
           enlace: `/ausencias?formacion=${s.id}&fecha=${s.fecha_inicio}`, urgente: quedan <= 2,
         });
       }
