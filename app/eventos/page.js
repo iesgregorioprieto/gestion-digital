@@ -375,7 +375,7 @@ export default function CalendarioEventos() {
         {/* ═════════ CALENDARIO ═════════ */}
         {vista === 'calendario' && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 14, backgroundColor: 'white', borderRadius: 12, padding: 5, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-            {[['eventos', '🗓️ Eventos'], ['oficial', '📆 Calendario oficial']].map(([v, t]) => (
+            {[['eventos', '🗓️ Eventos'], ['oficial', '📆 Calendario escolar']].map(([v, t]) => (
               <button key={v} onClick={() => v === 'oficial' ? abrirOficial() : setPestana('eventos')}
                 style={{ flex: 1, padding: '10px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
                   fontSize: 14, fontWeight: 800, backgroundColor: pestana === v ? AZUL : 'transparent', color: pestana === v ? 'white' : '#475569' }}>
