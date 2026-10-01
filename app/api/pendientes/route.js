@@ -19,6 +19,7 @@ import { verificarSesion, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { hoyLocal } from '@/lib/fechas';
 import { computaComoFalta, etiquetaMotivo } from '@/lib/motivosAusencia';
+import { ahoraEnCentro } from '@/lib/asignacionGuardias';
 
 export const dynamic = 'force-dynamic';
 
@@ -82,25 +83,42 @@ export async function GET(request) {
     }),
 
     // ── TODOS: confirmar asistencia a una convocatoria ──────────────
+    // Se queda en pendientes hasta que empieza la reunión (fecha + hora,
+    // en hora de Madrid), haya respondido o no: es sobre todo un
+    // recordatorio de que hay una convocatoria, no solo una petición de
+    // respuesta. Si no se puso hora, se queda durante todo ese día.
     bloque('convocatorias', async () => {
       const { data } = await c.from('convocatorias')
-        .select('id, titulo, fecha')
+        .select('id, titulo, fecha, hora')
         .contains('convocados', [sesion.id])
         .eq('estado', 'convocada')
         .order('fecha', { ascending: true });
       let lista = data || [];
       if (!lista.length) return;
+      const centro = ahoraEnCentro();
+      const minutosDe = (hhmm) => { const [h, m] = (hhmm || '').split(':').map(Number); return h * 60 + (m || 0); };
+      lista = lista.filter(cv => {
+        if (!cv.fecha) return true;
+        if (cv.fecha > centro.fecha) return true;
+        if (cv.fecha < centro.fecha) return false;
+        return !cv.hora || centro.minutos < minutosDe(cv.hora);
+      });
+      if (!lista.length) return;
+
       const { data: a } = await c.from('convocatoria_asistencia')
-        .select('convocatoria_id').in('convocatoria_id', lista.map(x => x.id)).eq('profesor_id', sesion.id);
-      const yaResp = new Set((a || []).map(x => x.convocatoria_id));
-      lista = lista.filter(x => !yaResp.has(x.id));
+        .select('convocatoria_id, asistira').in('convocatoria_id', lista.map(x => x.id)).eq('profesor_id', sesion.id);
+      const miRespuesta = new Map((a || []).map(x => [x.convocatoria_id, x.asistira]));
+
       for (const cv of lista) {
         const quedan = cv.fecha ? diasEntre(hoy, cv.fecha) : null;
+        const resp = miRespuesta.get(cv.id);
         tareas.push({
           id: `conv-${cv.id}`, icono: '📅',
-          texto: `Confirma si asistirás: ${cv.titulo}`,
-          detalle: cv.fecha ? fechaCorta(cv.fecha) : '',
-          enlace: '/convocatorias', urgente: quedan !== null && quedan <= 1,
+          texto: resp === undefined
+            ? `Confirma si asistirás: ${cv.titulo}`
+            : `${resp ? 'Vas a asistir' : 'Has dicho que no podrás'}: ${cv.titulo}`,
+          detalle: `${cv.fecha ? fechaCorta(cv.fecha) : ''}${cv.hora ? ` · ${cv.hora}` : ''}`,
+          enlace: '/convocatorias', urgente: resp === undefined && quedan !== null && quedan <= 1,
         });
       }
     }),
