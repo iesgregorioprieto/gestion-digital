@@ -124,6 +124,10 @@ export default function Ausencias() {
   const [horaEditando, setHoraEditando] = useState(null);
   const [etapaSeleccionada, setEtapaSeleccionada] = useState('');
   const [ausenciaJustificando, setAusenciaJustificando] = useState(null);
+  // Modificar una ausencia que YA está justificada: los documentos que
+  // ya tenía (puede quitarlos) más los nuevos que añada.
+  const [modoEdicionJust, setModoEdicionJust] = useState(false);
+  const [justDocsExistentes, setJustDocsExistentes] = useState([]);
   const [gruposUnicos, setGruposUnicos] = useState([]); // para ausencias largas (3+ días)
   const [tareasBloque, setTareasBloque] = useState({}); // {grupo_materia: {instrucciones, archivo, archivoNombre}}
   const [justTexto, setJustTexto] = useState('');
@@ -673,6 +677,30 @@ export default function Ausencias() {
     setJustArchivos(prev => prev.filter((_, n) => n !== i));
   }
 
+  function quitarDocExistente(i) {
+    setJustDocsExistentes(prev => prev.filter((_, n) => n !== i));
+  }
+
+  /**
+   * Los justificantes de una ausencia ya enviada. Las registradas con el
+   * formulario antiguo traen uno solo en 'justificacion_url'; desde que se
+   * puede adjuntar varios va en 'justificacion_urls'. Se miran las dos
+   * para no perder ningún documento al editar.
+   */
+  function justificantesDe(a) {
+    const varios = Array.isArray(a?.justificacion_urls) ? a.justificacion_urls.filter(Boolean) : [];
+    if (varios.length > 0) return varios;
+    return a?.justificacion_url ? [a.justificacion_url] : [];
+  }
+
+  function abrirModificarJustificante(a) {
+    setAusenciaJustificando(a);
+    setJustTexto(a.justificacion_texto || '');
+    setJustDocsExistentes(justificantesDe(a));
+    setJustArchivos([]); setJustError(''); setJustProgreso('');
+    setModoEdicionJust(true);
+  }
+
   /**
    * Una ausencia solo queda justificada si TODO ha llegado.
    *
@@ -683,7 +711,8 @@ export default function Ausencias() {
    */
   async function justificar() {
     setJustError('');
-    if (!justTexto.trim() && justArchivos.length === 0) {
+    const quedanDocs = modoEdicionJust ? justDocsExistentes.length : 0;
+    if (!justTexto.trim() && justArchivos.length === 0 && quedanDocs === 0) {
       setJustError('Adjunta el justificante o explica por escrito por qué no lo tienes.');
       return;
     }
@@ -704,28 +733,34 @@ export default function Ausencias() {
     }
 
     setJustProgreso('Guardando…');
+
+    // Al modificar una ausencia ya justificada se conservan los
+    // documentos que no se hayan quitado, más los nuevos. No se toca ni
+    // el estado ni la fecha/plazo original: eso solo se fija la primera
+    // vez que se justifica.
+    const urlsFinal = modoEdicionJust ? [...justDocsExistentes, ...urls] : urls;
     const fueraDePlazo = ausenciaJustificando.estado === 'sin_justificar'
       || diasParaJustificar(ausenciaJustificando.fecha_inicio) <= 0;
+
+    const datos = {
+      justificacion_texto: justTexto.trim() || null,
+      // Se sigue guardando el primero en la columna de siempre, para
+      // que nada de lo ya registrado deje de verse.
+      justificacion_url: urlsFinal[0] || null,
+      justificacion_urls: urlsFinal,
+    };
+    if (!modoEdicionJust) {
+      datos.estado = 'justificada';
+      datos.justificada_at = new Date().toISOString();
+      datos.justificada_fuera_plazo = fueraDePlazo;
+    }
 
     let r;
     try {
       r = await fetch('/api/ausencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          accion: 'editar',
-          id: ausenciaJustificando.id,
-          datos: {
-            estado: 'justificada',
-            justificacion_texto: justTexto.trim() || null,
-            // Se sigue guardando el primero en la columna de siempre, para
-            // que nada de lo ya registrado deje de verse.
-            justificacion_url: urls[0] || null,
-            justificacion_urls: urls,
-            justificada_at: new Date().toISOString(),
-            justificada_fuera_plazo: fueraDePlazo,
-          },
-        }),
+        body: JSON.stringify({ accion: 'editar', id: ausenciaJustificando.id, datos }),
       });
     } catch {
       setJustProgreso(''); setEnviandoJust(false);
@@ -742,11 +777,13 @@ export default function Ausencias() {
     }
 
     setAusenciaJustificando(null);
-    setJustTexto(''); setJustArchivos([]);
+    setJustTexto(''); setJustArchivos([]); setJustDocsExistentes([]); setModoEdicionJust(false);
     mostrarMensaje(
-      fueraDePlazo
-        ? '✅ Justificación enviada. Se ha registrado que se entregó fuera de plazo.'
-        : '✅ Ausencia justificada correctamente.',
+      modoEdicionJust
+        ? '✅ Justificante actualizado correctamente.'
+        : fueraDePlazo
+          ? '✅ Justificación enviada. Se ha registrado que se entregó fuera de plazo.'
+          : '✅ Ausencia justificada correctamente.',
       'ok'
     );
     cargarHistorial(profesorId);
@@ -1453,17 +1490,24 @@ export default function Ausencias() {
                           ⏰ Plazo vencido — puedes justificarla igualmente
                         </div>
                       )}
-                      <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivos([]); setJustError(''); setJustProgreso(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                      <button onClick={() => { setAusenciaJustificando(a); setJustTexto(''); setJustArchivos([]); setJustDocsExistentes([]); setModoEdicionJust(false); setJustError(''); setJustProgreso(''); }} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                         📄 Justificar ausencia
                       </button>
                     </div>
                   )}
 
                   {/* Ya justificada */}
-                  {a.estado === 'justificada' && (a.justificacion_texto || a.justificacion_url) && (
+                  {a.estado === 'justificada' && (a.justificacion_texto || justificantesDe(a).length > 0) && (
                     <div style={{ marginTop: 10, padding: '8px 12px', backgroundColor: verdeClaro, borderRadius: 8, fontSize: 13 }}>
                       <strong>Justificación:</strong> {a.justificacion_texto}
-                      {a.justificacion_url && <a href={`/api/documento?url=${encodeURIComponent(a.justificacion_url)}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: verde, fontWeight: 600 }}>📎 Ver documento</a>}
+                      {justificantesDe(a).map((u, i) => (
+                        <a key={i} href={`/api/documento?url=${encodeURIComponent(u)}`} target="_blank" rel="noopener noreferrer" style={{ marginLeft: 8, color: verde, fontWeight: 600 }}>📎 Ver documento{justificantesDe(a).length > 1 ? ` ${i + 1}` : ''}</a>
+                      ))}
+                      <div style={{ marginTop: 8 }}>
+                        <button onClick={() => abrirModificarJustificante(a)} style={{ padding: '6px 12px', borderRadius: 7, border: '1.5px solid #1e40af', backgroundColor: '#eff6ff', color: '#1e40af', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                          ✏️ Modificar justificante
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1478,7 +1522,7 @@ export default function Ausencias() {
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }} onClick={e => e.target === e.currentTarget && setAusenciaJustificando(null)}>
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 500, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>📄 Justificar ausencia</div>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul }}>{modoEdicionJust ? '✏️ Modificar justificante' : '📄 Justificar ausencia'}</div>
               <button onClick={() => setAusenciaJustificando(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>✕</button>
             </div>
             <div style={{ fontSize: 13, color: '#888', marginBottom: 16 }}>
@@ -1489,6 +1533,21 @@ export default function Ausencias() {
               <textarea value={justTexto} onChange={e => setJustTexto(e.target.value)} placeholder="Explica el motivo justificado de tu ausencia..." rows={4} style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box', resize: 'vertical' }} />
             </div>
             <div style={{ marginBottom: 14 }}>
+              {justDocsExistentes.length > 0 && (
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: 12, color: '#888', marginBottom: 5 }}>Ya subidos:</div>
+                  {justDocsExistentes.map((u, i) => (
+                    <div key={u + i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: verdeClaro, border: '1px solid #bbf7d0', borderRadius: 8, marginTop: 6 }}>
+                      <a href={`/api/documento?url=${encodeURIComponent(u)}`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12.5, color: verde, fontWeight: 600, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        📎 Ver documento {justDocsExistentes.length > 1 ? i + 1 : ''}
+                      </a>
+                      <button onClick={() => quitarDocExistente(i)} disabled={enviandoJust}
+                        title="Quitar este documento"
+                        style={{ background: 'none', border: 'none', color: '#aaa', fontSize: 15, cursor: 'pointer' }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, border: '2px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
                 <span style={{ fontSize: 20 }}>📎</span>
                 <span>{justArchivos.length === 0 ? 'Adjuntar justificante' : 'Añadir otro'}</span>
@@ -1523,7 +1582,7 @@ export default function Ausencias() {
             )}
 
             <button onClick={justificar} disabled={enviandoJust} style={{ width: '100%', padding: 13, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviandoJust ? 'not-allowed' : 'pointer', opacity: enviandoJust ? 0.7 : 1 }}>
-              {enviandoJust ? `⏳ ${justProgreso || 'Enviando…'}` : '✅ Enviar justificación'}
+              {enviandoJust ? `⏳ ${justProgreso || 'Enviando…'}` : modoEdicionJust ? '✅ Guardar cambios' : '✅ Enviar justificación'}
             </button>
           </div>
         </div>
