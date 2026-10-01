@@ -59,11 +59,10 @@ export default function Convocatorias() {
     setTimeout(() => setMensaje(null), 4000);
   }
 
-  // Para que la pestaña de «Pendientes» se actualice en el acto, sin
-  // esperar a la próxima vez que se abra la aplicación.
+  // Para que «Tareas pendientes» (arriba del panel) se actualice en el
+  // acto, sin esperar a la próxima vez que se abra la aplicación.
   function avisarResuelto() {
-    try { sessionStorage.removeItem('recordatorios_pendientes'); } catch {}
-    window.dispatchEvent(new Event('recordatorios:actualizar'));
+    window.dispatchEvent(new Event('pendientes:actualizar'));
   }
 
   async function responder(c, asistira) {

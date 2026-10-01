@@ -32,30 +32,6 @@ const CACHE = 'recordatorios_pendientes';
 
 const RECORDATORIOS = [
   {
-    id: 'convocatoria_pendiente',
-    titulo: 'Convocatoria pendiente',
-    // Falta responder si asistirá, fichar su presencia estando la reunión
-    // en curso, o votar en una votación abierta. El aviso a pantalla
-    // completa (AvisoConvocatoria) ya cubre el momento en que pasa; esta
-    // pestaña es para que no se quede sin responder si lo cerró sin mirar.
-    pendiente: async () => {
-      const r = await fetch('/api/convocatorias?modo=mias');
-      if (!r.ok) return false;
-      const lista = (await r.json()).convocatorias || [];
-      return lista.some(c =>
-        (c.votacion && !c.votacion.yaVote) ||
-        (c.fichajeAbierto && !c.fichado) ||
-        (c.estado === 'convocada' && c.asistira === null));
-    },
-    cuerpo: (
-      <p style={{ margin: 0 }}>
-        Tienes una convocatoria del claustro con algo pendiente: confirmar si
-        asistirás, fichar tu presencia o votar en una votación abierta.
-      </p>
-    ),
-    accion: { texto: 'Ir a Convocatorias', href: '/convocatorias' },
-  },
-  {
     id: 'hoja_servicios',
     titulo: 'Sube tu hoja de servicios',
     pendiente: async () => {

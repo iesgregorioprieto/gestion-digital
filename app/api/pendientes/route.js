@@ -81,6 +81,30 @@ export async function GET(request) {
       }
     }),
 
+    // ── TODOS: confirmar asistencia a una convocatoria ──────────────
+    bloque('convocatorias', async () => {
+      const { data } = await c.from('convocatorias')
+        .select('id, titulo, fecha')
+        .contains('convocados', [sesion.id])
+        .eq('estado', 'convocada')
+        .order('fecha', { ascending: true });
+      let lista = data || [];
+      if (!lista.length) return;
+      const { data: a } = await c.from('convocatoria_asistencia')
+        .select('convocatoria_id').in('convocatoria_id', lista.map(x => x.id)).eq('profesor_id', sesion.id);
+      const yaResp = new Set((a || []).map(x => x.convocatoria_id));
+      lista = lista.filter(x => !yaResp.has(x.id));
+      for (const cv of lista) {
+        const quedan = cv.fecha ? diasEntre(hoy, cv.fecha) : null;
+        tareas.push({
+          id: `conv-${cv.id}`, icono: '📅',
+          texto: `Confirma si asistirás: ${cv.titulo}`,
+          detalle: cv.fecha ? fechaCorta(cv.fecha) : '',
+          enlace: '/convocatorias', urgente: quedan !== null && quedan <= 1,
+        });
+      }
+    }),
+
     // ── TODOS: hoja de servicios ────────────────────────────────────
     bloque('hoja', async () => {
       const { data } = await c.from('profesores').select('*').eq('id', sesion.id);

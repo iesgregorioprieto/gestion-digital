@@ -24,7 +24,13 @@ export default function TareasPendientes() {
     const t = setInterval(cargar, 5 * 60 * 1000);
     const alVolver = () => { if (document.visibilityState === 'visible') cargar(); };
     document.addEventListener('visibilitychange', alVolver);
-    return () => { vivo = false; clearInterval(t); document.removeEventListener('visibilitychange', alVolver); };
+    const alActualizar = () => cargar();
+    window.addEventListener('pendientes:actualizar', alActualizar);
+    return () => {
+      vivo = false; clearInterval(t);
+      document.removeEventListener('visibilitychange', alVolver);
+      window.removeEventListener('pendientes:actualizar', alActualizar);
+    };
   }, []);
 
   if (!tareas.length) return null;
