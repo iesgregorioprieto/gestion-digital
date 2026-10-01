@@ -16,6 +16,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { horarioDe } from '@/lib/horarioDeProfesor';
 import { franja, fichajeCerrado, fichajeAbierto, ventanaFichaje, ahoraEnCentro } from '@/lib/asignacionGuardias';
 import { esDestinatario } from '@/app/api/comunicaciones/route';
+import { lineaBannerEvento } from '@/lib/eventos';
 
 export const dynamic = 'force-dynamic';
 
@@ -87,6 +88,28 @@ export async function GET(request) {
       if (a.caduca_at && new Date(a.caduca_at) < new Date()) continue;
       if (!esDestinatario(a, ficha)) continue;
       lineas.push({ tipo: 'aviso', orden: '00:00', texto: a.titulo, detalle: a.mensaje });
+    }
+
+    // Eventos del calendario: desde su antelación de aviso hasta que
+    // terminan, solo para sus destinatarios.
+    try {
+      const sumar = (f, n) => {
+        const [a, mm, d] = f.split('-').map(Number);
+        return new Date(Date.UTC(a, mm - 1, d + n)).toISOString().slice(0, 10);
+      };
+      // El aviso más largo es de una semana; los de varios días pueden
+      // haber empezado antes y seguir en curso.
+      const { data: evs } = await c.from('eventos').select('*')
+        .lte('fecha', sumar(ahora.fecha, 8))
+        .or(`fecha.gte.${sumar(ahora.fecha, -1)},fecha_fin.gte.${ahora.fecha}`)
+        .not('aviso_minutos', 'is', null);
+      for (const ev of evs || []) {
+        if (!esDestinatario(ev, ficha)) continue;
+        const l = lineaBannerEvento(ev, ahora);
+        if (l) lineas.push(l);
+      }
+    } catch (e) {
+      console.error('[hoy] eventos:', e?.message);
     }
 
     // Formación pendiente de aprobar: al director las que le han llegado,

@@ -195,6 +195,16 @@ export default function PanelProfesor() {
       color: '#0369a1', bg: '#f0f9ff', border: '#bae6fd',
     },
     {
+      id: 'eventos',
+      emoji: '🗓️',
+      titulo: 'Calendario de eventos',
+      descripcion: 'Evaluaciones, reuniones, charlas y plazos del centro',
+      href: '/eventos',
+      disponible: true,
+      roles: ['todos'],
+      color: '#9a3412', bg: '#fff7ed', border: '#fdba74',
+    },
+    {
       id: 'mantenimiento',
       emoji: '🔧',
       titulo: 'Incidencias de mantenimiento',
