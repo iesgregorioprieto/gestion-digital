@@ -59,12 +59,20 @@ export default function Convocatorias() {
     setTimeout(() => setMensaje(null), 4000);
   }
 
+  // Para que la pestaña de «Pendientes» se actualice en el acto, sin
+  // esperar a la próxima vez que se abra la aplicación.
+  function avisarResuelto() {
+    try { sessionStorage.removeItem('recordatorios_pendientes'); } catch {}
+    window.dispatchEvent(new Event('recordatorios:actualizar'));
+  }
+
   async function responder(c, asistira) {
     const r = await fetch('/api/convocatorias', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accion: 'responder', datos: { id: c.id, asistira } }),
     });
     if (!r.ok) { const e = await r.json().catch(() => ({})); aviso(e.error || 'No se ha podido guardar', 'error'); return; }
+    avisarResuelto();
     cargar();
   }
 
@@ -75,7 +83,7 @@ export default function Convocatorias() {
       body: JSON.stringify({ accion: 'fichar', datos: { id: c.id } }),
     });
     if (!r.ok) { const e = await r.json().catch(() => ({})); aviso(e.error || 'No se ha podido fichar', 'error'); }
-    else aviso('✋ Asistencia registrada', 'ok');
+    else { aviso('✋ Asistencia registrada', 'ok'); avisarResuelto(); }
     cargar();
     setEnviando(false);
   }
@@ -94,6 +102,7 @@ export default function Convocatorias() {
     } else {
       aviso('🗳️ Voto registrado', 'ok');
       setVotando(null);
+      avisarResuelto();
     }
     cargar();
     setEnviando(false);
