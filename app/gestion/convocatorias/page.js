@@ -77,7 +77,8 @@ export default function GestionConvocatorias() {
 
   const [sesionDetalle, setSesionDetalle] = useState(null); // detalle completo de la convocatoria abierta
   const [minutosFichaje, setMinutosFichaje] = useState('10');
-  const [nuevaVot, setNuevaVot] = useState(null); // { punto, pregunta, opciones, duracion_seg, votacion_id? }
+  const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
+  const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -103,6 +104,16 @@ export default function GestionConvocatorias() {
   function aviso(texto, tipo = 'ok') {
     setMensaje({ texto, tipo });
     setTimeout(() => setMensaje(null), tipo === 'error' ? 6000 : 3500);
+  }
+
+  async function apiPost(accion, datos) {
+    const r = await fetch('/api/convocatorias', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion, datos }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) { aviso(d.error || 'No se ha podido completar', 'error'); return null; }
+    return d;
   }
 
   async function cargarLista() {
@@ -132,10 +143,24 @@ export default function GestionConvocatorias() {
     } catch (e) { /* mantiene lo último visto */ }
   }
 
+  // Las votaciones ya preparadas de una convocatoria que todavía no ha
+  // empezado (borrador o convocada): se preparan desde el propio
+  // formulario, antes de llegar a la reunión en directo.
+  async function cargarVotacionesForm(id) {
+    try {
+      const r = await fetch(`/api/convocatorias?modo=detalle&id=${id}`);
+      const d = await r.json();
+      if (d.error) return;
+      setVotacionesForm(d.votaciones || []);
+    } catch (e) { /* se queda con lo último visto */ }
+  }
+
   // ─── Formulario: crear / editar ──────────────────────────────────
 
   function nueva() {
     setForm(vacia());
+    setVotacionesForm([]);
+    setNuevaVot(null);
     setVista('form');
   }
 
@@ -151,6 +176,8 @@ export default function GestionConvocatorias() {
       preside: d.convocatoria.preside || '', secretaria: d.convocatoria.secretaria || '',
       estado: d.convocatoria.estado,
     });
+    setVotacionesForm(d.votaciones || []);
+    setNuevaVot(null);
     setVista('form');
   }
 
@@ -179,7 +206,7 @@ export default function GestionConvocatorias() {
     if (!r.ok) { aviso(d.error || 'No se ha podido guardar', 'error'); setGuardando(false); return; }
     aviso('💾 Guardado', 'ok');
     setGuardando(false);
-    if (!seguirEditando) { setVista('lista'); cargarLista(); }
+    if (!seguirEditando) { setNuevaVot(null); setVista('lista'); cargarLista(); }
     else if (!form.id) setForm(f => ({ ...f, id: d.id }));
     return d.id || form.id;
   }
@@ -200,7 +227,7 @@ export default function GestionConvocatorias() {
     setGuardando(false);
     if (!r.ok) return aviso(d.error || 'No se ha podido convocar', 'error');
     aviso(`📅 Convocada. Avisados ${d.avisados ?? 0} por notificación.`, 'ok');
-    setVista('lista'); cargarLista();
+    setNuevaVot(null); setVista('lista'); cargarLista();
   }
 
   async function eliminar(c) {
@@ -217,31 +244,87 @@ export default function GestionConvocatorias() {
   // ─── La reunión en directo ─────────────────────────────────────────
 
   async function abrirSesion(c) {
+    setNuevaVot(null);
     await cargarDetalle(c.id);
     setVista('sesion');
   }
 
   async function accionSesion(accion, datos, confirmar) {
     if (confirmar && !confirm(confirmar)) return;
-    const r = await fetch('/api/convocatorias', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion, datos }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) { aviso(d.error || 'No se ha podido completar', 'error'); return null; }
+    const d = await apiPost(accion, datos);
+    if (!d) return null;
     cargarDetalle(sesionDetalle.convocatoria.id);
     return d;
+  }
+
+  // Preparar una votación: vale tanto desde el formulario (antes de la
+  // reunión) como desde la reunión en directo. Si se prepara desde un
+  // borrador que aún no se ha guardado, se guarda primero para tener
+  // dónde colgarla.
+  async function prepararVotacionForm() {
+    let id = form.id;
+    if (!id) {
+      id = await guardarBorrador(true);
+      if (!id) return;
+    }
+    setNuevaVot({ convId: id, origen: 'form', punto: '', pregunta: '', opciones: ['A favor', 'En contra', 'Abstención'], duracion_seg: '180' });
   }
 
   async function guardarVotacion() {
     if (!nuevaVot.pregunta.trim()) return aviso('Escribe la pregunta', 'error');
     const opciones = nuevaVot.opciones.map(o => o.trim()).filter(Boolean);
     if (opciones.length < 2) return aviso('Pon al menos dos opciones', 'error');
-    const r = await accionSesion('guardar_votacion', {
-      convocatoria_id: sesionDetalle.convocatoria.id, votacion_id: nuevaVot.votacion_id || null,
+    const d = await apiPost('guardar_votacion', {
+      convocatoria_id: nuevaVot.convId, votacion_id: nuevaVot.votacion_id || null,
       punto: nuevaVot.punto || null, pregunta: nuevaVot.pregunta, opciones, duracion_seg: parseInt(nuevaVot.duracion_seg, 10) || 180,
     });
-    if (r) { setNuevaVot(null); aviso('🗳️ Votación preparada', 'ok'); }
+    if (!d) return;
+    aviso('🗳️ Votación preparada', 'ok');
+    if (nuevaVot.origen === 'sesion') cargarDetalle(nuevaVot.convId);
+    else cargarVotacionesForm(nuevaVot.convId);
+    setNuevaVot(null);
+  }
+
+  async function borrarVotacionForm(v) {
+    const d = await apiPost('borrar_votacion', { votacion_id: v.id });
+    if (d) cargarVotacionesForm(form.id);
+  }
+
+  // El formulario de pregunta+opciones de una votación, igual sirva para
+  // prepararla desde el propio formulario (antes de la reunión) que
+  // desde la reunión en directo. «ordenDia» es la lista de puntos de la
+  // convocatoria que corresponda en cada caso, para el desplegable.
+  function editorVotacion(ordenDia) {
+    return (
+      <div style={{ padding: 13, borderRadius: 10, backgroundColor: '#faf5ff', border: '1px solid #e9d5ff', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <select value={nuevaVot.punto} onChange={e => setNuevaVot(v => ({ ...v, punto: e.target.value }))} style={{ ...campo, width: 180, fontSize: 13 }}>
+            <option value="">Sin punto asociado</option>
+            {(ordenDia || []).map((p, i) => <option key={i} value={i + 1}>Punto {i + 1}: {(p.texto || '').slice(0, 30)}</option>)}
+          </select>
+          <input type="number" min="30" max="3600" value={nuevaVot.duracion_seg} onChange={e => setNuevaVot(v => ({ ...v, duracion_seg: e.target.value }))}
+            style={{ ...campo, width: 110, fontSize: 13 }} placeholder="segundos" />
+          <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>segundos</span>
+        </div>
+        <input value={nuevaVot.pregunta} onChange={e => setNuevaVot(v => ({ ...v, pregunta: e.target.value }))}
+          placeholder="¿Qué se vota?" style={{ ...campo, marginBottom: 8, fontSize: 13.5 }} />
+        {nuevaVot.opciones.map((o, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <input value={o} onChange={e => setNuevaVot(v => { const op = [...v.opciones]; op[i] = e.target.value; return { ...v, opciones: op }; })}
+              style={{ ...campo, fontSize: 13 }} />
+            {nuevaVot.opciones.length > 2 && (
+              <button onClick={() => setNuevaVot(v => ({ ...v, opciones: v.opciones.filter((_, k) => k !== i) }))}
+                style={{ border: 'none', background: 'none', color: ROJO, cursor: 'pointer' }}>✕</button>
+            )}
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setNuevaVot(v => ({ ...v, opciones: [...v.opciones, ''] }))} style={{ ...btnSecundario, padding: '6px 12px', fontSize: 12 }}>+ Opción</button>
+          <button onClick={guardarVotacion} style={{ ...btnPrimario(MORADO), padding: '6px 14px', fontSize: 12.5 }}>Guardar</button>
+          <button onClick={() => setNuevaVot(null)} style={{ ...btnSecundario, padding: '6px 12px', fontSize: 12 }}>Cancelar</button>
+        </div>
+      </div>
+    );
   }
 
   // ─── Acta en PDF ────────────────────────────────────────────────
@@ -371,7 +454,7 @@ export default function GestionConvocatorias() {
           <div style={{ fontSize: 19, fontWeight: 800 }}>📅 Convocatorias oficiales</div>
           <div style={{ fontSize: 12.5, opacity: 0.85 }}>IES Gregorio Prieto · {usuario}</div>
         </div>
-        <a href={vista === 'lista' ? '/gestion' : '#'} onClick={e => { if (vista !== 'lista') { e.preventDefault(); setVista('lista'); cargarLista(); } }}
+        <a href={vista === 'lista' ? '/gestion' : '#'} onClick={e => { if (vista !== 'lista') { e.preventDefault(); setNuevaVot(null); setVista('lista'); cargarLista(); } }}
           style={{ color: 'white', padding: '6px 13px', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 7, fontSize: 13.5, textDecoration: 'none' }}>
           ← {vista === 'lista' ? 'Inicio' : 'Volver a la lista'}
         </a>
@@ -540,6 +623,72 @@ export default function GestionConvocatorias() {
                 )}
               </div>
 
+              {/* Votaciones preparadas para esta convocatoria. Se pueden ir
+                  dejando listas desde aquí, antes de que llegue el día de la
+                  reunión; se lanzan ya en la reunión en directo. */}
+              {(editable || (soloActa && votacionesForm.length > 0)) && (
+                <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#faf5ff', border: '1px solid #e9d5ff', marginBottom: 14 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: MORADO }}>🗳️ Votaciones preparadas</div>
+                    {editable && !nuevaVot && (
+                      <button onClick={prepararVotacionForm} style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>+ Preparar votación</button>
+                    )}
+                  </div>
+
+                  {nuevaVot && nuevaVot.origen === 'form' && editorVotacion(form.orden_dia)}
+
+                  {votacionesForm.length === 0 && !nuevaVot && (
+                    <div style={{ textAlign: 'center', padding: 14, color: '#aaa', fontSize: 13 }}>
+                      {editable ? 'Todavía no hay ninguna votación preparada' : 'No se preparó ninguna votación'}
+                    </div>
+                  )}
+
+                  {votacionesForm.map(v => (
+                    <div key={v.id} style={{ backgroundColor: 'white', borderRadius: 9, padding: '11px 13px', marginBottom: 8, border: '1px solid #e9d5ff' }}>
+                      <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 6 }}>
+                        <div style={{ flex: 1, minWidth: 160, fontWeight: 700, fontSize: 13.5, color: '#333' }}>
+                          {v.punto ? `P${v.punto} · ` : ''}{v.pregunta}
+                        </div>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: v.estado === 'cerrada' ? '#64748b' : '#94a3b8' }}>
+                          {v.estado === 'cerrada' ? '🔒 CERRADA' : '⏸️ PREPARADA'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: editable ? 8 : 0 }}>
+                        {(v.opciones || []).map(o => (
+                          <span key={o} style={{ padding: '3px 11px', borderRadius: 20, fontSize: 12, backgroundColor: '#faf5ff', color: MORADO, border: '1px solid #e9d5ff', fontWeight: 600 }}>{o}</span>
+                        ))}
+                      </div>
+                      {v.estado === 'cerrada' && v.recuento && (() => {
+                        const total = v.totalVotos || 0;
+                        return (v.opciones || []).map(o => {
+                          const n = v.recuento[o] || 0; const pct = total > 0 ? Math.round((n / total) * 100) : 0;
+                          return (
+                            <div key={o} style={{ marginTop: 5 }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}><span>{o}</span><span><strong>{n}</strong> · {pct}%</span></div>
+                              <div style={{ height: 6, borderRadius: 3, backgroundColor: '#f1f5f9', overflow: 'hidden' }}>
+                                <div style={{ height: '100%', width: `${pct}%`, backgroundColor: MORADO, borderRadius: 3 }} />
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                      {editable && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => setNuevaVot({ convId: form.id, origen: 'form', votacion_id: v.id, punto: v.punto || '', pregunta: v.pregunta, opciones: v.opciones, duracion_seg: String(v.duracion_seg) })}
+                            style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5 }}>✏️ Editar</button>
+                          <button onClick={() => borrarVotacionForm(v)} style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5, color: ROJO }}>🗑️</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {editable && (
+                    <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 4 }}>
+                      Quedan guardadas, sin lanzar a nadie. Se lanzan una a una desde la reunión en directo, cuando toque.
+                    </div>
+                  )}
+                </div>
+              )}
+
               {soloActa && (
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
                   <div style={{ flex: 1 }}>
@@ -560,7 +709,7 @@ export default function GestionConvocatorias() {
                 {form.estado === 'borrador' && (
                   <button onClick={convocar} disabled={guardando} style={btnPrimario(VERDE)}>📅 Convocar</button>
                 )}
-                <button onClick={() => { setVista('lista'); cargarLista(); }} style={btnSecundario}>Cancelar</button>
+                <button onClick={() => { setNuevaVot(null); setVista('lista'); cargarLista(); }} style={btnSecundario}>Cancelar</button>
               </div>
             </div>
           );
@@ -628,40 +777,11 @@ export default function GestionConvocatorias() {
               <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 18, border: '1px solid #e9d5ff' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                   <div style={{ fontWeight: 800, fontSize: 14, color: MORADO }}>🗳️ Votaciones</div>
-                  {!nuevaVot && <button onClick={() => setNuevaVot({ punto: '', pregunta: '', opciones: ['A favor', 'En contra', 'Abstención'], duracion_seg: '180' })}
+                  {!nuevaVot && <button onClick={() => setNuevaVot({ convId: c.id, origen: 'sesion', punto: '', pregunta: '', opciones: ['A favor', 'En contra', 'Abstención'], duracion_seg: '180' })}
                     style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>+ Preparar votación</button>}
                 </div>
 
-                {nuevaVot && (
-                  <div style={{ padding: 13, borderRadius: 10, backgroundColor: '#faf5ff', border: '1px solid #e9d5ff', marginBottom: 14 }}>
-                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <select value={nuevaVot.punto} onChange={e => setNuevaVot(v => ({ ...v, punto: e.target.value }))} style={{ ...campo, width: 180, fontSize: 13 }}>
-                        <option value="">Sin punto asociado</option>
-                        {c.orden_dia.map((p, i) => <option key={i} value={i + 1}>Punto {i + 1}: {p.texto.slice(0, 30)}</option>)}
-                      </select>
-                      <input type="number" min="30" max="3600" value={nuevaVot.duracion_seg} onChange={e => setNuevaVot(v => ({ ...v, duracion_seg: e.target.value }))}
-                        style={{ ...campo, width: 110, fontSize: 13 }} placeholder="segundos" />
-                      <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>segundos</span>
-                    </div>
-                    <input value={nuevaVot.pregunta} onChange={e => setNuevaVot(v => ({ ...v, pregunta: e.target.value }))}
-                      placeholder="¿Qué se vota?" style={{ ...campo, marginBottom: 8, fontSize: 13.5 }} />
-                    {nuevaVot.opciones.map((o, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-                        <input value={o} onChange={e => setNuevaVot(v => { const op = [...v.opciones]; op[i] = e.target.value; return { ...v, opciones: op }; })}
-                          style={{ ...campo, fontSize: 13 }} />
-                        {nuevaVot.opciones.length > 2 && (
-                          <button onClick={() => setNuevaVot(v => ({ ...v, opciones: v.opciones.filter((_, k) => k !== i) }))}
-                            style={{ border: 'none', background: 'none', color: ROJO, cursor: 'pointer' }}>✕</button>
-                        )}
-                      </div>
-                    ))}
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => setNuevaVot(v => ({ ...v, opciones: [...v.opciones, ''] }))} style={{ ...btnSecundario, padding: '6px 12px', fontSize: 12 }}>+ Opción</button>
-                      <button onClick={guardarVotacion} style={{ ...btnPrimario(MORADO), padding: '6px 14px', fontSize: 12.5 }}>Guardar</button>
-                      <button onClick={() => setNuevaVot(null)} style={{ ...btnSecundario, padding: '6px 12px', fontSize: 12 }}>Cancelar</button>
-                    </div>
-                  </div>
-                )}
+                {nuevaVot && nuevaVot.origen === 'sesion' && editorVotacion(c.orden_dia)}
 
                 {votaciones.length === 0 && !nuevaVot && (
                   <div style={{ textAlign: 'center', padding: 20, color: '#aaa', fontSize: 13 }}>Todavía no hay ninguna votación preparada</div>
@@ -684,7 +804,7 @@ export default function GestionConvocatorias() {
                           style={{ ...btnPrimario(VERDE), padding: '7px 14px', fontSize: 12.5, opacity: abierta ? 0.5 : 1 }}>
                           🗳️ Lanzar
                         </button>
-                        <button onClick={() => setNuevaVot({ votacion_id: v.id, punto: v.punto || '', pregunta: v.pregunta, opciones: v.opciones, duracion_seg: String(v.duracion_seg) })}
+                        <button onClick={() => setNuevaVot({ convId: c.id, origen: 'sesion', votacion_id: v.id, punto: v.punto || '', pregunta: v.pregunta, opciones: v.opciones, duracion_seg: String(v.duracion_seg) })}
                           style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5 }}>✏️ Editar</button>
                         <button onClick={() => accionSesion('borrar_votacion', { votacion_id: v.id })} style={{ ...btnSecundario, padding: '7px 14px', fontSize: 12.5, color: ROJO }}>🗑️</button>
                       </div>
@@ -720,7 +840,7 @@ export default function GestionConvocatorias() {
               </div>
 
               <button onClick={() => accionSesion('finalizar', { id: c.id }, '¿Finalizar la reunión? Cierra el fichaje y las votaciones abiertas, y se pasa a redactar el acta.')
-                .then(r => { if (r) { setVista('lista'); cargarLista(); } })}
+                .then(r => { if (r) { setNuevaVot(null); setVista('lista'); cargarLista(); } })}
                 style={{ ...btnPrimario(ROJO), width: '100%', marginTop: 16, padding: 14, fontSize: 15 }}>
                 🏁 Finalizar reunión
               </button>
