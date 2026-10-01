@@ -146,6 +146,12 @@ function normAbrev(str) {
   return (str || '').toLowerCase().replace(/\s/g, '');
 }
 
+// Una guardia ANULADA por jefatura (el grupo no está: ciclo que se va a
+// 6ª, salida, visita...) no es una clase a cubrir. Se quita nada más
+// leerla, para que no salga en el cuadrante, ni en los contadores de cada
+// hora, ni como "sin cubrir". Jefatura las sigue viendo en su pantalla.
+const sinAnuladas = filas => (filas || []).filter(a => a.estado !== 'anulada');
+
 export default function Guardias() {
   const [cargando, setCargando]         = useState(true);
   const [fecha, setFecha]               = useState(hoyLocal());
@@ -316,7 +322,7 @@ export default function Guardias() {
         .select('*')
         .eq('fecha', f)
         .eq('curso_academico', await getCursoActual());
-      setApAsig(r.data || []);
+      setApAsig(sinAnuladas(r.data));
     } catch(e) { console.warn('Error apoyos:', e); }
 
     // Enriquecer cada ausencia con info del profesor + sector
@@ -433,7 +439,7 @@ export default function Guardias() {
       .select('*')
       .eq('fecha', fecha)
       .eq('curso_academico', await getCursoActual());
-    setApAsig(r.data || []);
+    setApAsig(sinAnuladas(r.data));
     setModalCambiar(null);
   }
 

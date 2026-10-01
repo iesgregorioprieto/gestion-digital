@@ -78,8 +78,10 @@ export async function GET(request) {
   const dptoDe = (id, sector) => fichaDe(id)?.departamento || sector || '';
 
   // A 6ª hora los sectores de FP no tienen guardias: esas filas no van al informe
+  // Las anuladas por jefatura no son guardias: el grupo no estaba.
   const validos = (apoyos || []).filter(a =>
-    !(String(a.hora) === '6' && esSectorFP(a.sector_apoyo))
+    a.estado !== 'anulada'
+    && !(String(a.hora) === '6' && esSectorFP(a.sector_apoyo))
   );
 
   const filas = validos.map(a => ({

@@ -75,7 +75,8 @@ export async function GET(request) {
       fecha: hoy,
       ausencias: aus.data || [],
       dlds: dlds.data || [],
-      apoyos: apoyos.data || [],
+      // Las anuladas por jefatura no se cubren: no se enseñan en la sala.
+      apoyos: (apoyos.data || []).filter(a => a.estado !== 'anulada'),
       avisos: avisos.data || [],
       actividades: (actividades.data || []).filter(a => a.estado !== 'rechazada'),
       semana: { desde: lunesStr, hasta: domingoStr },
