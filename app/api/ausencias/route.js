@@ -482,6 +482,25 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Marcar/desmarcar «Tramitado en Delphos» en el informe para la
+    // Delegación. Antes se guardaba en el navegador de quien lo marcara;
+    // ahora queda en la base de datos, con quién y cuándo, para que todo
+    // el equipo directivo vea lo mismo lo marque quien lo marque. ───
+    if (accion === 'tramitar') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const marcar = !!datos?.tramitado;
+      const { error } = await supa().from('ausencias').update({
+        tramitado: marcar,
+        tramitado_por: marcar ? sesion.id : null,
+        tramitado_at: marcar ? new Date().toISOString() : null,
+      }).eq('id', id);
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Borrar ───
     if (accion === 'borrar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });

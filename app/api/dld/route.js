@@ -377,6 +377,23 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Marcar/desmarcar «Tramitado en Delphos» en el informe para la
+    // Delegación (mismo mecanismo que en Ausencias). ───
+    if (accion === 'tramitar') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
+
+      const marcar = !!datos?.tramitado;
+      const { error } = await supa().from('dld').update({
+        tramitado: marcar,
+        tramitado_por: marcar ? sesion.id : null,
+        tramitado_at: marcar ? new Date().toISOString() : null,
+      }).eq('id', id);
+
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true });
+    }
+
     // ─── El profesor retira su propia solicitud ───
     if (accion === 'retirar') {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });

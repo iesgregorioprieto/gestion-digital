@@ -293,6 +293,7 @@ export default function GestionAusencias() {
         horas: [], // los DLD se cuentan como día completo
         justificacion_urls: [], subtipo: null,
         esDLD: true,
+        tramitado: !!d.tramitado,
       }));
     // Las ausencias normales solo traen profesor_id y profesor_nombre —
     // los apellidos hay que sacarlos de su ficha para poder agrupar y
@@ -328,12 +329,6 @@ export default function GestionAusencias() {
     });
     const meses = Object.keys(porMes).sort();
 
-    // Al abrir el informe se recuerdan las tramitaciones marcadas.
-    let tramitados = {};
-    try {
-      tramitados = JSON.parse(localStorage.getItem('tramitados_delphos') || '{}');
-    } catch { tramitados = {}; }
-
     // Las ausencias registradas con el formulario antiguo guardan el
     // justificante en 'justificacion_url' (uno solo), no en el array
     // 'justificacion_urls'. Si no se mira esa columna también, el
@@ -353,7 +348,7 @@ export default function GestionAusencias() {
       const enlaces = urls.length
         ? urls.map((u, i) => `<a href="${location.origin}/api/documento?url=${encodeURIComponent(u)}" target="_blank" rel="noopener">📎${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ')
         : '—';
-      const yaTram = tramitados[a.id] ? 'checked' : '';
+      const yaTram = a.tramitado ? 'checked' : '';
       const idAt = String(a.id).replace(/"/g, '&quot;');
       return `
       <tr>
@@ -444,12 +439,32 @@ export default function GestionAusencias() {
 ${bloquesMes || '<p>No hay ausencias en el periodo.</p>'}
 
 <script>
+// Se guarda en la base de datos (quien lo marca y cuándo), no en el
+// navegador: así lo ve igual todo el equipo directivo, lo marque quien
+// lo marque y desde donde lo marque. Los DLD van a /api/dld (su id
+// lleva el prefijo "dld-" para distinguirlos en esta misma tabla);
+// las ausencias, a /api/ausencias.
 function marcarTramitado(chk) {
-  var mapa = {};
-  try { mapa = JSON.parse(localStorage.getItem('tramitados_delphos') || '{}'); } catch(e){}
-  if (chk.checked) mapa[chk.dataset.id] = new Date().toISOString();
-  else delete mapa[chk.dataset.id];
-  localStorage.setItem('tramitados_delphos', JSON.stringify(mapa));
+  chk.disabled = true;
+  var id = chk.dataset.id;
+  var esDld = id.indexOf('dld-') === 0;
+  var idReal = esDld ? id.slice(4) : id;
+  fetch(esDld ? '/api/dld' : '/api/ausencias', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accion: 'tramitar',
+      id: idReal,
+      datos: { tramitado: chk.checked },
+    }),
+  }).then(function (r) {
+    chk.disabled = false;
+    if (!r.ok) { chk.checked = !chk.checked; alert('No se ha podido guardar. Inténtalo de nuevo.'); }
+  }).catch(function () {
+    chk.disabled = false;
+    chk.checked = !chk.checked;
+    alert('No se ha podido guardar. Inténtalo de nuevo.');
+  });
 }
 </script>
 </body></html>`;
