@@ -135,7 +135,9 @@ export async function GET(request) {
   const sb = supa();
   const vista = new URL(request.url).searchParams.get('vista') || 'mias';
   const yo = await fichaDe(sb, sesion.id);
-  const soyJefe = rolesDe(yo).includes('jefe_departamento');
+  // Solo los jefes de departamento de FP tienen la parte de aprobar:
+  // ESO y Bachillerato van directas al director.
+  const soyJefe = rolesDe(yo).includes('jefe_departamento') && esSectorFP(departamentoASector(yo?.departamento));
   const perfil = { soyJefe, soyDirector: esDirector(sesion), soyDirectivo: esDirectivo(sesion), departamento: yo?.departamento || '' };
 
   let q = sb.from('solicitudes_formacion').select('*')
@@ -273,7 +275,8 @@ export async function POST(request) {
       if (s.estado !== 'pendiente_jefe') return Response.json({ error: 'Esta solicitud ya no está pendiente del jefe' }, { status: 400 });
 
       const yo = await fichaDe(sb, sesion.id);
-      const esSuJefe = rolesDe(yo).includes('jefe_departamento') && yo?.departamento === s.departamento;
+      const esSuJefe = rolesDe(yo).includes('jefe_departamento') && yo?.departamento === s.departamento
+        && esSectorFP(departamentoASector(s.departamento));
       if (!esSuJefe) return Response.json({ error: 'No eres el jefe de este departamento' }, { status: 403 });
       if (s.profesor_id === sesion.id) return Response.json({ error: 'No puedes resolver tu propia solicitud' }, { status: 403 });
 
