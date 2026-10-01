@@ -214,6 +214,8 @@ export async function POST(request) {
         .update({ profesor_id: sesion.id })
         .is('profesor_id', null)
         .eq('profesor_nombre_pdf', nombre_horario)
+        // Una anulada no tiene a nadie a propósito: no se la queda nadie.
+        .or('estado.is.null,estado.neq.anulada')
         .gte('fecha', hoy)
         .select('id');
 

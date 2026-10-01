@@ -328,6 +328,24 @@ export default function GestionGuardias() {
   // su nombre y apellidos a partir de una fila de apoyos_asignados.
   const fichaPorId = id => (profesoresList || []).find(p => String(p.id) === String(id));
 
+  /**
+   * GUARDIAS QUE HAY QUE CUBRIR = todas menos las ANULADAS.
+   *
+   * Una guardia anulada (el grupo no está: ciclo que se va a 6ª, salida,
+   * visita...) solo debe salir en el recuadro de "Guardias anuladas hoy",
+   * donde se puede deshacer. En el cuadrante de la hora, en los contadores
+   * y en "TODAS CUBIERTAS" no pinta nada: antes seguía saliendo con su
+   * profesor de guardia como si hubiera que ir, y llevaba a dudas.
+   * apoyosAsignados se sigue usando para el recuadro de anuladas y para
+   * buscar una fila por su id.
+   */
+  const apoyosVivos = apoyosAsignados.filter(a => a.estado !== 'anulada');
+  const anuladaA = (profesorId, horaId) =>
+    apoyosAsignados.some(a => a.estado === 'anulada' && horaCoincide(a.hora, horaId)
+      && String(a.profesor_ausente_id) === String(profesorId))
+    && !apoyosVivos.some(a => horaCoincide(a.hora, horaId)
+      && String(a.profesor_ausente_id) === String(profesorId));
+
   useEffect(() => {
     if (!fecha || !horaActiva) return;
     let vivo = true;
@@ -737,7 +755,9 @@ export default function GestionGuardias() {
           <div style={{ display:'flex', gap:6, overflowX:'auto', paddingBottom:8 }}>
             {HORAS.map(h => {
               const activa = h.id === horaActiva;
-              const ausentesH = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id)));
+              // Las que jefatura ha anulado a esta hora no cuentan en el número rojo.
+              const ausentesH = ausenciasDia.filter(a => a.horas.some(hh => horaCoincide(hh.hora, h.id))
+                && !anuladaA(a.profesorId, h.id));
               const cnt = ausentesH.length;
               return (
                 <button key={h.id} onClick={() => setHoraActiva(h.id)} style={{
@@ -776,7 +796,7 @@ export default function GestionGuardias() {
           <div style={{ backgroundColor:'white', borderRadius:12, padding:30, textAlign:'center', color:'#666' }}>
             🏖️ Fin de semana
           </div>
-        ) : apoyosAsignados.filter(ap => horaCoincide(ap.hora, horaActiva)).length === 0 ? (
+        ) : apoyosVivos.filter(ap => horaCoincide(ap.hora, horaActiva)).length === 0 ? (
           errorCarga ? (
             <div style={{
               backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:12,
@@ -808,7 +828,7 @@ export default function GestionGuardias() {
                 pantalla del profesor: dos fuentes para la misma pregunta,
                 otra vez. */}
             {(() => {
-              const filasHoraReales = apoyosAsignados.filter(ap =>
+              const filasHoraReales = apoyosVivos.filter(ap =>
                 ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'));
               const ausentesReales = new Set(filasHoraReales.map(ap => ap.profesor_ausente_id || ap.id)).size;
               const cubiertasPorApoyo = filasHoraReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
@@ -836,7 +856,7 @@ export default function GestionGuardias() {
 
             {(() => {
               const gruposReales = {};
-              apoyosAsignados
+              apoyosVivos
                 .filter(ap => ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'))
                 .forEach(ap => {
                   const s = (ap.sector_destino || 'SIN SECTOR').toUpperCase();
@@ -975,7 +995,7 @@ export default function GestionGuardias() {
 
                       // Buscar apoyo registrado si es obligatorio
                       const apoyoReg = cubre?.tipo === 'apoyo_obligatorio'
-                        ? apoyosAsignados.find(ap =>
+                        ? apoyosVivos.find(ap =>
                             ap.hora === horaActiva &&
                             ap.grupo === (asig.clase.grupo || null) &&
                             ap.sector_destino === asig.ausencia.sector.toUpperCase()
@@ -989,7 +1009,7 @@ export default function GestionGuardias() {
                         : [];
 
                       // Ya hay un apoyo urgente activado para esta clase específica?
-                      const apoyoUrgenteExistente = apoyosAsignados.find(ap =>
+                      const apoyoUrgenteExistente = apoyosVivos.find(ap =>
                         ap.hora === horaActiva &&
                         ap.grupo === (asig.clase.grupo || null) &&
                         ap.sector_destino === asig.ausencia.sector.toUpperCase() &&
@@ -1129,7 +1149,7 @@ export default function GestionGuardias() {
                                     // Buscar el apoyo registrado o el más reciente que coincida
                                     let apoyoParaCambiar = apoyoReg;
                                     if (!apoyoParaCambiar) {
-                                      apoyoParaCambiar = apoyosAsignados.find(ap =>
+                                      apoyoParaCambiar = apoyosVivos.find(ap =>
                                         ap.hora === horaActiva &&
                                         ap.grupo === (asig.clase.grupo || null) &&
                                         ap.sector_destino === asig.ausencia.sector.toUpperCase()
