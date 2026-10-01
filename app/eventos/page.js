@@ -97,6 +97,10 @@ export default function CalendarioEventos() {
   const [mensaje, setMensaje] = useState(null);
 
   const [vista, setVista] = useState('calendario');
+  // Pestaña: los eventos del centro o el cartel oficial de la Consejería
+  const [pestana, setPestana] = useState('eventos');
+  const [oficial, setOficial] = useState(undefined); // undefined = sin cargar, null = no hay
+  const [cargandoOficial, setCargandoOficial] = useState(false);
   const [form, setForm] = useState(FORM_VACIO);
   const [guardando, setGuardando] = useState(false);
   const [profesores, setProfesores] = useState([]);
@@ -112,6 +116,7 @@ export default function CalendarioEventos() {
       setAnio(Number(d.slice(0, 4))); setMes(Number(d.slice(5, 7)) - 1); setDiaSel(d);
     }
     if (q.get('e')) setAbierto(q.get('e'));
+    if (q.get('vista') === 'oficial') abrirOficial();
     cargarProximos();
   }, []);
 
@@ -131,6 +136,21 @@ export default function CalendarioEventos() {
       setError(e.message);
     } finally {
       setCargando(false);
+    }
+  }
+
+  async function abrirOficial() {
+    setPestana('oficial');
+    if (oficial !== undefined) return;
+    setCargandoOficial(true);
+    try {
+      const r = await fetch('/api/calendario');
+      const d = await r.json();
+      setOficial(d.calendario || null);
+    } catch (e) {
+      setOficial(null);
+    } finally {
+      setCargandoOficial(false);
     }
   }
 
@@ -329,12 +349,12 @@ export default function CalendarioEventos() {
         <button onClick={() => vista === 'form' ? setVista('calendario') : (window.location.href = '/profesor')}
           style={{ background: 'none', border: 'none', color: 'white', fontSize: 24, cursor: 'pointer', padding: 0 }}>←</button>
         <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: 19, fontWeight: 800 }}>🗓️ Calendario de eventos</h1>
+          <h1 style={{ margin: 0, fontSize: 19, fontWeight: 800 }}>🗓️ Calendario</h1>
           <p style={{ margin: '3px 0 0', fontSize: 13, opacity: 0.85 }}>
             {vista === 'form' ? (form.id ? 'Editar evento' : 'Nuevo evento') : 'Evaluaciones, reuniones, charlas y plazos del centro'}
           </p>
         </div>
-        {puedeEditar && vista === 'calendario' && (
+        {puedeEditar && vista === 'calendario' && pestana === 'eventos' && (
           <button onClick={() => abrirFormulario()}
             style={{ padding: '9px 14px', borderRadius: 9, border: 'none', backgroundColor: 'white', color: AZUL, fontWeight: 800, cursor: 'pointer', fontSize: 14 }}>
             + Nuevo
@@ -352,6 +372,60 @@ export default function CalendarioEventos() {
 
         {/* ═════════ CALENDARIO ═════════ */}
         {vista === 'calendario' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, backgroundColor: 'white', borderRadius: 12, padding: 5, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
+            {[['eventos', '🗓️ Eventos'], ['oficial', '📆 Calendario oficial']].map(([v, t]) => (
+              <button key={v} onClick={() => v === 'oficial' ? abrirOficial() : setPestana('eventos')}
+                style={{ flex: 1, padding: '10px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                  fontSize: 14, fontWeight: 800, backgroundColor: pestana === v ? AZUL : 'transparent', color: pestana === v ? 'white' : '#475569' }}>
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ═════════ CALENDARIO OFICIAL (el cartel de la Consejería) ═════════ */}
+        {vista === 'calendario' && pestana === 'oficial' && (
+          <>
+            {cargandoOficial && <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>⏳ Cargando...</div>}
+            {!cargandoOficial && oficial === null && (
+              <div style={{ ...tarjeta, textAlign: 'center', padding: 30 }}>
+                <div style={{ fontSize: 44, marginBottom: 10 }}>📆</div>
+                <div style={{ fontWeight: 700, color: '#555', marginBottom: 6 }}>Todavía no hay calendario publicado</div>
+                <div style={{ fontSize: 13.5, color: '#888', lineHeight: 1.6 }}>Cuando el equipo directivo suba el calendario del curso, aparecerá aquí.</div>
+              </div>
+            )}
+            {!cargandoOficial && oficial && (
+              <>
+                <div style={{ fontWeight: 800, fontSize: 15, color: AZUL, margin: '0 0 10px 4px' }}>Curso {oficial.curso}</div>
+                {oficial.tipo?.startsWith('image/') ? (
+                  <div style={{ ...tarjeta, padding: 10 }}>
+                    <img src={oficial.archivo_url} alt={`Calendario escolar del curso ${oficial.curso}`}
+                      style={{ width: '100%', borderRadius: 10, display: 'block' }} />
+                  </div>
+                ) : (
+                  <div style={{ ...tarjeta, textAlign: 'center', padding: 24 }}>
+                    <div style={{ fontSize: 44, marginBottom: 12 }}>📄</div>
+                    <div style={{ fontWeight: 700, marginBottom: 6, color: '#333' }}>Calendario del curso {oficial.curso}</div>
+                    <div style={{ fontSize: 13, color: '#888', marginBottom: 18 }}>{oficial.nombre}</div>
+                    <a href={oficial.archivo_url} target="_blank" rel="noreferrer"
+                      style={{ display: 'inline-block', padding: '12px 26px', borderRadius: 10, backgroundColor: AZUL, color: 'white', textDecoration: 'none', fontWeight: 700, fontSize: 15 }}>
+                      📖 Abrir el calendario
+                    </a>
+                  </div>
+                )}
+                <div style={{ textAlign: 'center', marginTop: 4 }}>
+                  <a href={oficial.archivo_url} download target="_blank" rel="noreferrer"
+                    style={{ fontSize: 13, color: AZUL, textDecoration: 'none', fontWeight: 600 }}>⬇️ Descargar</a>
+                </div>
+                <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11.5, color: '#aaa' }}>
+                  Calendario oficial publicado por la Consejería de Educación de Castilla-La Mancha
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {vista === 'calendario' && pestana === 'eventos' && (
           <>
             {error && (
               <div style={{ ...tarjeta, color: ROJO, fontWeight: 600 }}>No se pudo cargar el calendario: {error}</div>
