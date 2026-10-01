@@ -294,7 +294,16 @@ export default function GestionAusencias() {
         justificacion_urls: [], subtipo: null,
         esDLD: true,
       }));
-    const todo = [...lista, ...dld];
+    // Las ausencias normales solo traen profesor_id y profesor_nombre —
+    // los apellidos hay que sacarlos de su ficha para poder agrupar y
+    // ordenar por apellidos (lo que pide Elena). Los DLD ya vienen con
+    // apellidos puestos arriba.
+    const ausEnriquecidas = lista.map(a => ({
+      ...a,
+      apellidos: a.apellidos || fichaDe(a.profesor_id).apellidos || '',
+      nombre: a.nombre || fichaDe(a.profesor_id).nombre || '',
+    }));
+    const todo = [...ausEnriquecidas, ...dld];
 
     // ── Qué horas de clase se perdieron, en texto ──
     // Si el profesor tiene 6 horas y marcó las 6, sale «día completo»;
@@ -325,9 +334,19 @@ export default function GestionAusencias() {
       tramitados = JSON.parse(localStorage.getItem('tramitados_delphos') || '{}');
     } catch { tramitados = {}; }
 
+    // Las ausencias registradas con el formulario antiguo guardan el
+    // justificante en 'justificacion_url' (uno solo), no en el array
+    // 'justificacion_urls'. Si no se mira esa columna también, el
+    // documento existe pero el informe lo da por no subido.
+    const urlsDe = a => {
+      const varios = Array.isArray(a.justificacion_urls) ? a.justificacion_urls.filter(Boolean) : [];
+      if (varios.length > 0) return varios;
+      return a.justificacion_url ? [a.justificacion_url] : [];
+    };
+
     const filaDetalle = a => {
       const nombre = (a.apellidos || '') + ', ' + (a.nombre || a.profesor_nombre || '');
-      const urls = Array.isArray(a.justificacion_urls) ? a.justificacion_urls : [];
+      const urls = urlsDe(a);
       const just = a.estado === 'justificada' ? '<span class="ok">Sí</span>'
                  : a.estado === 'sin_justificar' ? '<span class="rojo">No</span>'
                  : '<span class="pend">Pendiente</span>';
@@ -351,8 +370,12 @@ export default function GestionAusencias() {
     };
 
     const bloquesMes = meses.map(clave => {
+      // Orden pedido por Elena: alfabético por apellidos y nombre, y
+      // dentro de cada profesor, todas sus ausencias seguidas por fecha
+      // — nunca por fecha primero, que es lo que las mezclaba.
       const delMes = porMes[clave].slice().sort((a, b) =>
         (a.apellidos || '').localeCompare(b.apellidos || '', 'es')
+        || (a.nombre || '').localeCompare(b.nombre || '', 'es')
         || (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''));
       return `
       <h2>${mesLargo(clave)} <span class="mes-total">· ${delMes.length} ausencias</span></h2>
