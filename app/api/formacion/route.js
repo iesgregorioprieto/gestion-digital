@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { enviarAviso, correosDe } from '@/lib/notificaciones';
 import { cursoPorFecha } from '@/lib/curso';
+import { departamentoASector, esSectorFP } from '@/lib/sectores';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,9 +19,10 @@ export const dynamic = 'force-dynamic';
  *      (o la deniega con motivo                 → estado 'denegada_director')
  *   4. Con 'autorizada' se desbloquea el motivo «formación» en Ausencias.
  *
- * Vale para TODOS los departamentos. Si quien la pide es jefe de
- * departamento, o su departamento no tiene jefe con correo, se salta el
- * paso 2 y va directa al director (jefe_decision = 'no_aplica').
+ * El paso 2 (jefe de departamento) es SOLO para los departamentos de FP.
+ * ESO y Bachillerato van directas al director. También van directas si
+ * quien la pide es jefe de departamento o si su departamento de FP no
+ * tiene jefe con correo (jefe_decision = 'no_aplica').
  * Si el jefe no contesta en 3 días laborables, el cron formacion-jefe
  * la pasa al director (jefe_decision = 'escalada').
  *
@@ -199,7 +201,8 @@ export async function POST(request) {
 
       // ¿Pasa por el jefe? No si es jefe él mismo o si su departamento no tiene jefe con correo
       const soyJefe = rolesDe(yo).includes('jefe_departamento');
-      const jefes = soyJefe ? [] : (await jefesDe(sb, yo.departamento, yo.id)).filter(j => j.email);
+      const esFP = esSectorFP(departamentoASector(yo.departamento));
+      const jefes = (soyJefe || !esFP) ? [] : (await jefesDe(sb, yo.departamento, yo.id)).filter(j => j.email);
       const pasaPorJefe = jefes.length > 0;
 
       const fila = {
@@ -233,8 +236,9 @@ export async function POST(request) {
           });
         } else {
           await avisarDirector(sb, nueva, yo, {
-            nota: soyJefe ? 'La pide un jefe de departamento: no pasa por jefatura de departamento.'
-                          : 'Su departamento no tiene jefe asignado en el portal.',
+            nota: !esFP ? ''
+              : soyJefe ? 'La pide un jefe de departamento: no pasa por jefatura de departamento.'
+              : 'Su departamento no tiene jefe asignado en el portal.',
           });
         }
       } catch (e) {
@@ -364,6 +368,9 @@ export async function POST(request) {
       } else if (nuevo === 'pendiente_director') {
         Object.assign(cambios, { director_id: null, director_fecha: null, director_motivo: null });
       } else if (nuevo === 'pendiente_jefe') {
+        if (!esSectorFP(departamentoASector(s.departamento))) {
+          return Response.json({ error: 'El paso por el jefe de departamento es solo para FP' }, { status: 400 });
+        }
         jefes = (await jefesDe(sb, s.departamento, s.profesor_id)).filter(j => j.email);
         if (!jefes.length) return Response.json({ error: 'Su departamento no tiene jefe con correo: no se le puede devolver' }, { status: 400 });
         Object.assign(cambios, {

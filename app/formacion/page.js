@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
+import { departamentoASector, esSectorFP } from '@/lib/sectores';
 import CambiarEstadoFormacion from '@/components/CambiarEstadoFormacion';
 
 /**
@@ -227,8 +228,8 @@ export default function Formacion() {
         {vista === 'mias' && (
           <div>
             <div style={nota('#f5f3ff', '#c4b5fd', '#4c1d95')}>
-              Primero se pide aquí la formación. La aprueba tu jefe de departamento y la autoriza
-              el director. <strong>Cuando esté autorizada</strong>, registra la ausencia como cualquier otra.
+              Primero se pide aquí la formación y la autoriza el director{esSectorFP(departamentoASector(perfil.departamento)) ? ', después de aprobarla tu jefe de departamento' : ''}.
+              {' '}<strong>Cuando esté autorizada</strong>, registra la ausencia y solicita el permiso en Delphos.
             </div>
 
             {mias.length === 0 ? (
@@ -321,7 +322,9 @@ export default function Formacion() {
             </Campo>
 
             <div style={nota('#fffbeb', '#fcd34d', '#78350f')}>
-              {perfil.soyJefe
+              {!esSectorFP(departamentoASector(perfil.departamento))
+                ? 'Tu solicitud va directamente al director.'
+                : perfil.soyJefe
                 ? 'Como eres jefe de departamento, tu solicitud va directamente al director.'
                 : 'Tu solicitud llegará primero a tu jefe de departamento y, si la aprueba, al director.'}
               {' '}No registres la ausencia hasta que esté autorizada.

@@ -933,7 +933,7 @@ export default function Ausencias() {
               formacionesAut.length === 0 ? (
                 <div style={{ marginBottom: 16, padding: '14px 16px', borderRadius: 10, backgroundColor: '#fef2f2', border: '2px solid #fca5a5', color: '#991b1b', fontSize: 13.5, lineHeight: 1.55 }}>
                   <div style={{ fontWeight: 800, marginBottom: 4 }}>🔒 No tienes ninguna formación autorizada</div>
-                  Antes de registrar la ausencia hay que pedir la formación: la aprueba tu jefe de departamento y la autoriza el director.
+                  Antes de registrar la ausencia hay que pedir la formación en el módulo de Formación y que la autorice el director.
                   <a href="/formacion?vista=nueva" style={{ display: 'inline-block', marginTop: 10, padding: '9px 16px', borderRadius: 8, backgroundColor: '#5b21b6', color: 'white', fontWeight: 700, textDecoration: 'none' }}>
                     🎓 Pedir la formación →
                   </a>
