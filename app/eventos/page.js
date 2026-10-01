@@ -156,7 +156,9 @@ export default function CalendarioEventos() {
 
   async function cargarProximos() {
     try {
-      const r = await fetch(`/api/eventos?desde=${hoy}&hasta=${sumar(hoy, 60)}`);
+      // Desde mañana: los de hoy ya se ven en el detalle del día de arriba,
+      // y repetirlos aquí debajo parecía un evento duplicado.
+      const r = await fetch(`/api/eventos?desde=${sumar(hoy, 1)}&hasta=${sumar(hoy, 61)}`);
       const d = await r.json();
       if (r.ok) setProximos(d.eventos || []);
     } catch (e) { /* la lista de próximos es secundaria */ }
