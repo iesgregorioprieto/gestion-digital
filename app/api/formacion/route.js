@@ -257,12 +257,46 @@ export async function POST(request) {
     if (!s) return Response.json({ error: 'No existe esa solicitud' }, { status: 404 });
 
     // ─── El profesor retira su solicitud ───
+    // También puede anular una ya concedida (no va, se suspende, era una prueba).
+    // Si estaba concedida o en manos del director, se avisa a dirección.
     if (accion === 'retirar') {
       if (s.profesor_id !== sesion.id) return Response.json({ error: 'No es tuya' }, { status: 403 });
-      if (!['pendiente_jefe', 'pendiente_director'].includes(s.estado)) {
-        return Response.json({ error: 'Ya está resuelta: no se puede retirar' }, { status: 400 });
+      if (!['pendiente_jefe', 'pendiente_director', 'autorizada'].includes(s.estado)) {
+        return Response.json({ error: 'Esta solicitud ya está cerrada' }, { status: 400 });
       }
-      await sb.from('solicitudes_formacion').update({ estado: 'retirada' }).eq('id', id);
+      const motivo = (datos?.motivo || '').trim().slice(0, 1000);
+      const { data: act } = await sb.from('solicitudes_formacion')
+        .update({ estado: 'retirada' }).eq('id', id).eq('estado', s.estado).select('*');
+      if (!act?.length) return Response.json({ error: 'La solicitud ha cambiado. Recarga.' }, { status: 409 });
+
+      try {
+        const yo = await fichaDe(sb, sesion.id);
+        const previo = Array.isArray(s.historial) ? s.historial : [];
+        await sb.from('solicitudes_formacion').update({
+          historial: [...previo, { fecha: ahora, por: nombreDe(yo), de: s.estado, a: 'retirada', motivo: motivo || 'Retirada por el profesor' }],
+        }).eq('id', id);
+        if (['pendiente_director', 'autorizada'].includes(s.estado)) {
+          const destinos = await correosDe(sb, 'director');
+          if (destinos.length) {
+            await enviarAviso('fc_anulada', destinos, { ...datosCorreo(s, yo), estado_antes: s.estado, motivo });
+          }
+        }
+      } catch (e) {
+        console.error('[formacion] retirar:', e?.message);
+      }
+
+      const aviso = s.ausencia_id
+        ? 'Ya tenías registrada la ausencia de esta formación: bórrala en Ausencias si no vas a faltar.'
+        : null;
+      return Response.json({ ok: true, aviso });
+    }
+
+    // ─── El director elimina del todo una solicitud anulada (pruebas, errores) ───
+    if (accion === 'eliminar') {
+      if (!esDirector(sesion)) return Response.json({ error: 'Solo el director' }, { status: 403 });
+      if (s.estado !== 'retirada') return Response.json({ error: 'Solo se pueden eliminar las anuladas' }, { status: 400 });
+      const { error } = await sb.from('solicitudes_formacion').delete().eq('id', id).eq('estado', 'retirada');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
     }
 

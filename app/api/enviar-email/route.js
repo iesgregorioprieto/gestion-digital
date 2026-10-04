@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta', 'fc_cambio'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta', 'fc_cambio', 'fc_anulada'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -811,7 +811,7 @@ export async function POST(request) {
         </div>`;
 
     // ── Módulo de Formación (solicitudes_formacion) ──────────────────
-    } else if (tipo === 'fc_jefe' || tipo === 'fc_director' || tipo === 'fc_resuelta' || tipo === 'fc_cambio') {
+    } else if (tipo === 'fc_jefe' || tipo === 'fc_director' || tipo === 'fc_resuelta' || tipo === 'fc_cambio' || tipo === 'fc_anulada') {
       const filasFc = [
         ['Curso o jornada', datos.titulo],
         ['Organiza', datos.entidad],
@@ -851,6 +851,12 @@ export async function POST(request) {
         cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>${intro}
           ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
           ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion?vista=direccion', color)}`;
+      } else if (tipo === 'fc_anulada') {
+        color = '#4b5563';
+        subject = `🎓 Formación anulada por el profesor — ${e(datos.nombre)}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Formación anulada</h2>
+          <p><strong>${e(datos.nombre)}</strong> ha anulado su solicitud de formación${datos.estado_antes === 'autorizada' ? ', que ya estaba <strong>concedida</strong>' : ', que estaba pendiente de tu autorización'}. No tienes que hacer nada.</p>
+          ${caja('Motivo:', datos.motivo, false)}${tabla}`;
       } else if (tipo === 'fc_cambio') {
         const NOMBRE_EST = { pendiente_jefe: 'pendiente del jefe de departamento', pendiente_director: 'pendiente de dirección', autorizada: 'concedida', denegada_jefe: 'denegada por el jefe de departamento', denegada_director: 'denegada por dirección', retirada: 'anulada' };
         color = '#5b21b6';

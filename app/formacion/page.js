@@ -149,8 +149,19 @@ export default function Formacion() {
   }
 
   async function retirar(s) {
-    if (!confirm(`¿Retirar la solicitud «${s.titulo}»?`)) return;
-    try { await post('retirar', s.id); await cargar(); avisar('Solicitud retirada.', 'ok'); }
+    const concedida = s.estado === 'autorizada';
+    const pregunta = concedida
+      ? `¿Anular la formación «${s.titulo}»? Ya estaba concedida: se avisará a la dirección.`
+        + (s.ausencia_id ? '\n\nOjo: ya registraste la ausencia. Tendrás que borrarla en Ausencias.' : '')
+      : `¿Retirar la solicitud «${s.titulo}»?`;
+    if (!confirm(pregunta)) return;
+    const motivo = concedida ? (prompt('Motivo (opcional): por qué la anulas', '') ?? null) : '';
+    if (motivo === null) return;   // canceló el cuadro del motivo
+    try {
+      const d = await post('retirar', s.id, { motivo });
+      await cargar();
+      avisar(d.aviso ? `✅ Anulada. ${d.aviso}` : (concedida ? '✅ Formación anulada. Se ha avisado a la dirección.' : '✅ Solicitud retirada.'), 'ok');
+    }
     catch (e) { avisar(e.message); }
   }
 
@@ -242,6 +253,9 @@ export default function Formacion() {
               <Tarjeta key={s.id} s={s}>
                 {['pendiente_jefe', 'pendiente_director'].includes(s.estado) && (
                   <button onClick={() => retirar(s)} style={{ ...botonSec, marginTop: 10 }}>↩️ Retirar solicitud</button>
+                )}
+                {s.estado === 'autorizada' && (
+                  <button onClick={() => retirar(s)} style={{ ...botonSec, marginTop: 10, marginRight: 8 }}>🚫 Anular (ya no voy)</button>
                 )}
                 {s.estado === 'autorizada' && (
                   <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 12.5, color: '#78350f', lineHeight: 1.5 }}>

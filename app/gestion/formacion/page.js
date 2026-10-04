@@ -98,6 +98,21 @@ export default function GestionFormacion() {
     cargar();
   }, []);
 
+  async function eliminar(s) {
+    if (!confirm(`¿Eliminar definitivamente «${s.titulo}» de ${s.profesor_nombre}?\n\nDesaparece del registro y de los informes. No se puede deshacer.`)) return;
+    try {
+      const r = await fetch('/api/formacion', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'eliminar', id: s.id }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || 'No se ha podido eliminar');
+      await trasCambio('✅ Solicitud eliminada del registro.');
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
   async function trasCambio(msg) {
     await cargar();
     setAviso(msg);
@@ -432,7 +447,13 @@ export default function GestionFormacion() {
                                 {s.historial.length} cambio{s.historial.length !== 1 ? 's' : ''} de estado · último: {s.historial[s.historial.length - 1].motivo}
                               </div>
                             )}
-                            {soyDirector && <CambiarEstadoFormacion solicitud={s} onHecho={trasCambio} />}
+                            {soyDirector && s.estado !== 'retirada' && <CambiarEstadoFormacion solicitud={s} onHecho={trasCambio} />}
+                            {soyDirector && s.estado === 'retirada' && (
+                              <button onClick={() => eliminar(s)} style={{
+                                marginTop: 8, padding: '6px 12px', borderRadius: 7, border: '1.5px solid #fca5a5',
+                                backgroundColor: 'white', color: '#991b1b', fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+                              }}>🗑️ Eliminar del registro</button>
+                            )}
                           </td>
                         </tr>
                       );
