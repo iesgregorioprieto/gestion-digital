@@ -261,6 +261,10 @@ export async function POST(request) {
     const apoyosFueraPorSector = {};
     (delCurso || []).forEach(a => {
       if (!FICHADAS.includes(a.estado)) return;
+      // El recreo no entra en la rotación: lo hacen siempre los mismos, los
+      // del cuadrante de recreo, y nadie sustituye a nadie. Si contara, a
+      // quien vigila el patio el reparto lo iría dejando atrás sin motivo.
+      if (esSectorRecreo(a.sector_apoyo)) return;
       if (a.profesor_id) {
         apoyosPorProfesor[a.profesor_id] = (apoyosPorProfesor[a.profesor_id] || 0) + 1;
       }
