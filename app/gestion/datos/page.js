@@ -751,7 +751,9 @@ export default function GestionDatos() {
       await fetch('/api/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo }),
+        // Solo clases y complementarias: el cuadrante de guardias (y el de
+        // recreo) se sube aparte y no se toca al cargar los horarios.
+        body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, excepto_guardias: true }),
       });
       
       // 2. Insertar los nuevos en lotes de 500
@@ -794,8 +796,9 @@ export default function GestionDatos() {
       setUltimaHorarios(tsHor);
       try { localStorage.setItem('ultima_importacion_horarios', tsHor); } catch {}
       const sust = await reaplicarSustituciones();
+      const ausAb = await recalcularAusenciasAbiertas();
       const reca = await recalcularProximos();
-      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}${reca}` });
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}${ausAb}${reca}` });
       setModalHorarios(false);
       setPreviewHorarios(null);
       cargarStats();
@@ -1056,6 +1059,20 @@ export default function GestionDatos() {
       const lista = (d.detalle || []).filter(x => x.horas).map(x => `${x.sustituto} (${x.horas} h de ${x.titular})`);
       return lista.length ? ` 🔄 Pasado a sus sustitutos: ${lista.join(' · ')}.` : ' 🔄 Sustitutos al día.';
     } catch { return ' ⚠️ No se pudieron pasar los horarios a los sustitutos: hazlo desde cada baja.'; }
+  }
+
+  // Las ausencias que aún no han terminado guardan sus horas día a día
+  // calculadas con el horario que había al registrarlas. Con horarios
+  // nuevos hay que rehacerlas, o el reparto cubriría horas que ya no son.
+  async function recalcularAusenciasAbiertas() {
+    try {
+      const r = await fetch('/api/ausencias', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'recalcular_dias', datos: { todas: true } }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) return ` ⚠️ No se pudieron actualizar las ausencias abiertas (${d.error || 'error'}).`;
+      const mal = (d.fallidas || []).length;
+      return ` 📅 Ausencias abiertas actualizadas al horario nuevo: ${d.rehechas} de ${d.total}${mal ? ` (⚠️ ${mal} con error)` : ''}.`;
+    } catch { return ' ⚠️ No se pudieron actualizar las ausencias abiertas.'; }
   }
 
   // Tras subir horarios o cuadrante, rehacer ya el reparto de guardias de
@@ -1573,6 +1590,17 @@ export default function GestionDatos() {
                         setProcesando(false);
                       }} style={{ marginTop: 8, padding: '6px 12px', borderRadius: 7, border: '1px solid #cbd5e1', background: 'white', color: azul, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                         🔄 Pasar a los sustitutos el horario de sus titulares
+                      </button>
+                    )}
+                    {stats.horarios > 0 && (
+                      <button type="button" disabled={procesando} onClick={async () => {
+                        setProcesando(true);
+                        const a = await recalcularAusenciasAbiertas();
+                        const g = await recalcularProximos();
+                        setMensaje({ tipo: a.includes('⚠️') || g.includes('⚠️') ? 'error' : 'ok', texto: (a + g).trim() });
+                        setProcesando(false);
+                      }} style={{ marginTop: 8, marginLeft: 8, padding: '6px 12px', borderRadius: 7, border: '1px solid #cbd5e1', background: 'white', color: azul, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                        📅 Recalcular ausencias abiertas
                       </button>
                     )}
                   </div>

@@ -67,6 +67,9 @@ export async function POST(request) {
 
       let consulta = supa().from('horarios_profesores').delete().eq('curso_academico', curso);
       if (tipo) consulta = consulta.eq('tipo', tipo);   // solo guardias, por ejemplo
+      // Carga de horarios: el cuadrante de guardias no viene en ella y no
+      // se borra (antes se borraba y había que volver a subirlo).
+      if (cuerpo.excepto_guardias) consulta = consulta.neq('tipo', 'guardia');
 
       /**
        * Carga del cuadrante de guardias: se sustituye TODO lo de guardia

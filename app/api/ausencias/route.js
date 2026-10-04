@@ -193,6 +193,51 @@ async function limpiarGuardias(profesorId, desde = null) {
  * Expande una ausencia en sus días con sus horas, leyendo el horario del
  * profesor que ya está cargado en la aplicación.
  */
+/**
+ * Profesores, equivalencias y horario entero del curso: lo que necesita
+ * calcularDias. Se separa para poder cargarlo UNA vez al recalcular
+ * muchas ausencias seguidas (si no, se leería el horario entero por
+ * cada una).
+ */
+async function cargarContextoDias() {
+  const cliente = supa();
+  const curso = await getCursoActual();
+  const [{ data: profesores }, { data: equivalencias }] = await Promise.all([
+    cliente.from('profesores').select('id, nombre, apellidos, departamento, en_baja, sustituto_id'),
+    cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
+  ]);
+  let horarios = [];
+  for (let desde = 0; ; desde += 1000) {
+    const { data } = await cliente
+      .from('horarios_profesores')
+      .select('profesor_nombre_pdf, hora_id, dia, tipo, grupo, materia, aula')
+      .eq('curso_academico', curso)
+      .range(desde, desde + 999);
+    if (!data || data.length === 0) break;
+    horarios = horarios.concat(data);
+    if (data.length < 1000) break;
+  }
+  return { profesores: profesores || [], equivalencias: equivalencias || [], horarios };
+}
+
+function calcularDiasCon(fila, ctx) {
+  if (!fila?.profesor_id || !fila?.fecha_inicio) return null;
+  const profesor = ctx.profesores.find(p => p.id === fila.profesor_id);
+  if (!profesor) return null;
+  const sustituto = profesor.sustituto_id
+    ? ctx.profesores.find(p => p.id === profesor.sustituto_id) || null
+    : null;
+  if (ctx.horarios.length === 0) return null;
+  return diasDeLaAusencia({
+    ausencia: fila,
+    profesor,
+    horarios: ctx.horarios,
+    profesores: ctx.profesores,
+    equivalencias: ctx.equivalencias,
+    sustituto,
+  });
+}
+
 async function calcularDias(fila) {
   if (!fila?.profesor_id || !fila?.fecha_inicio) return null;
 
@@ -258,12 +303,43 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) {
         return Response.json({ error: 'Solo el equipo directivo' }, { status: 403 });
       }
-      const profesorId = datos?.profesor_id;
-      if (!profesorId) return Response.json({ error: 'Falta el profesor' }, { status: 400 });
-
       const hoy = new Intl.DateTimeFormat('sv-SE', {
         timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(new Date());
+
+      /**
+       * TODAS las ausencias abiertas (tras subir horarios nuevos): las que
+       * se registraron con el horario anterior se quedarían con sus horas
+       * viejas y el reparto cubriría lo que ya no es. El horario se lee
+       * una sola vez para todas.
+       */
+      if (datos?.todas) {
+        const { data: abiertas, error } = await supa().from('ausencias')
+          .select('id, profesor_id, fecha_inicio, fecha_fin, horas')
+          .or(`fecha_fin.gte.${hoy},fecha_fin.is.null`);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        const ctx = await cargarContextoDias();
+        if (ctx.horarios.length === 0) {
+          return Response.json({ error: 'No hay horarios cargados para este curso' }, { status: 400 });
+        }
+        let rehechas = 0;
+        const fallidas = [];
+        for (const a of (abiertas || [])) {
+          try {
+            const dias = calcularDiasCon(a, ctx);
+            const { error: e2 } = await supa().from('ausencias').update({ dias }).eq('id', a.id);
+            if (e2) throw e2;
+            rehechas++;
+          } catch (e) {
+            console.error('recalcular_dias (todas):', e?.message);
+            fallidas.push(a.id);
+          }
+        }
+        return Response.json({ ok: true, rehechas, total: (abiertas || []).length, fallidas });
+      }
+
+      const profesorId = datos?.profesor_id;
+      if (!profesorId) return Response.json({ error: 'Falta el profesor' }, { status: 400 });
 
       const { data: suyas } = await supa().from('ausencias')
         .select('id, profesor_id, fecha_inicio, fecha_fin, horas')
