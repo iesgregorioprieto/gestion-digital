@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { MODULOS_VALORACION, nombreModulo } from '@/lib/modulosValoracion';
+import { MODULOS_VALORACION, nombreModulo, textoModulo } from '@/lib/modulosValoracion';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import RondaAntigua from './RondaAntigua';
 
@@ -95,6 +95,94 @@ export default function PanelValoraciones() {
       body: JSON.stringify({ accion: 'cerrar', id }),
     });
     await cargarLista(false); elegir(id);
+  }
+
+  // ── Informe en PDF para el claustro ──
+  // Sin nombres: aunque alguien pidiera contacto, el informe se reparte
+  // o se proyecta, y eso es solo para el equipo directivo.
+  async function descargarPDF() {
+    if (!actual || !datos) return;
+    const { jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    const ancho = doc.internal.pageSize.getWidth();
+    const coma = n => n == null ? '-' : n.toFixed(1).replace('.', ',');
+
+    doc.setFillColor(30, 58, 95); doc.rect(0, 0, ancho, 26, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(15);
+    doc.text('IES Gregorio Prieto - Valoración de APrieto', 14, 12);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11);
+    doc.text(actual.titulo, 14, 20);
+
+    doc.setTextColor(40, 40, 40); doc.setFontSize(10.5);
+    const pct = activos ? ` (${Math.round((actual.contestados / activos) * 100)} %)` : '';
+    doc.text(`Periodo: del ${fechaCorta(actual.abre)} al ${fechaCorta(actual.cierra)}`, 14, 34);
+    doc.text(`Participación: ${actual.contestados}${activos ? ` de ${activos}` : ''} profesores${pct}`, 14, 40);
+    doc.text('Escala de 1 a 5 estrellas. Encuesta anónima.', 14, 46);
+
+    const hayAnterior = !!datos.anterior;
+    const cabecera = ['Módulo', 'Media', '5', '4', '3', '2', '1', 'No lo usan'];
+    if (hayAnterior) cabecera.push('Cambio');
+    const filas = actual.modulos.map(mod => {
+      const r = datos.resumen?.[mod] || { usan: 0, no_usa: 0, media: null, reparto: [0, 0, 0, 0, 0] };
+      const fila = [textoModulo(mod), coma(r.media), ...[5, 4, 3, 2, 1].map(n => r.reparto[n - 1]), r.no_usa];
+      if (hayAnterior) {
+        const ant = datos.anterior.resumen?.[mod]?.media;
+        const dif = r.media != null && ant != null ? Math.round((r.media - ant) * 10) / 10 : null;
+        fila.push(dif == null ? '-' : `${dif > 0 ? '+' : ''}${coma(dif)}`);
+      }
+      return fila;
+    });
+
+    autoTable(doc, {
+      startY: 52, head: [cabecera], body: filas,
+      styles: { fontSize: 9.5, cellPadding: 2.2 },
+      headStyles: { fillColor: [126, 34, 206] },
+      columnStyles: { 0: { cellWidth: 62 }, 1: { fontStyle: 'bold', halign: 'center' } },
+      didParseCell: d => {
+        if (d.section === 'body' && d.column.index >= 2) d.cell.styles.halign = 'center';
+        if (d.section === 'body' && d.column.index === 1) {
+          const v = parseFloat(String(d.cell.raw).replace(',', '.'));
+          if (!isNaN(v)) d.cell.styles.textColor = v >= 4 ? [22, 128, 61] : v >= 3 ? [180, 110, 0] : [185, 28, 28];
+        }
+      },
+    });
+    if (hayAnterior) {
+      doc.setFontSize(8.5); doc.setTextColor(120, 120, 120);
+      doc.text(`Cambio: diferencia de media respecto a «${datos.anterior.titulo}».`, 14, doc.lastAutoTable.finalY + 5);
+    }
+
+    const coms = datos.comentarios || [];
+    if (coms.length) {
+      const cuerpo = [];
+      for (const mod of actual.modulos) {
+        for (const c of coms.filter(x => x.modulo === mod)) {
+          cuerpo.push([textoModulo(mod), c.no_usa ? 'No lo usa' : `${c.estrellas}`, c.sugerencia]);
+        }
+      }
+      doc.addPage();
+      doc.setTextColor(30, 58, 95); doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+      doc.text('Comentarios del profesorado', 14, 18);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+      doc.text('Transcritos tal cual y sin nombres.', 14, 24);
+      autoTable(doc, {
+        startY: 29, head: [['Módulo', 'Estrellas', 'Comentario']], body: cuerpo,
+        styles: { fontSize: 9, cellPadding: 2.2, valign: 'top' },
+        headStyles: { fillColor: [30, 58, 95] },
+        columnStyles: { 0: { cellWidth: 45 }, 1: { cellWidth: 20, halign: 'center' } },
+      });
+    }
+
+    const paginas = doc.getNumberOfPages();
+    for (let i = 1; i <= paginas; i++) {
+      doc.setPage(i); doc.setFontSize(8); doc.setTextColor(150, 150, 150);
+      doc.text(`APrieto · generado el ${new Date().toLocaleDateString('es-ES')} · página ${i} de ${paginas}`,
+        ancho / 2, doc.internal.pageSize.getHeight() - 8, { align: 'center' });
+    }
+
+    const nombre = actual.titulo.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '-').toLowerCase();
+    doc.save(`${nombre}.pdf`);
   }
 
   const abierta = rondas.find(r => r.abre <= hoy && r.cierra >= hoy);
@@ -199,6 +287,10 @@ export default function PanelValoraciones() {
                 </div>
               </div>
             </div>
+            <button onClick={descargarPDF} disabled={!datos}
+              style={{ marginTop: 12, marginRight: 8, padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: datos ? AZUL : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13, cursor: datos ? 'pointer' : 'default' }}>
+              📄 Descargar informe en PDF
+            </button>
             {actual.abre <= hoy && actual.cierra >= hoy && (
               <button onClick={() => cerrarYa(actual.id)}
                 style={{ marginTop: 12, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: 'white', color: '#991b1b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>

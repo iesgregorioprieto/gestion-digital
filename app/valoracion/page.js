@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
-import { MODULOS_VALORACION } from '@/lib/modulosValoracion';
+import { MODULOS_VALORACION, tieneModulo } from '@/lib/modulosValoracion';
 
 /**
  * ENCUESTA DE VALORACIÓN — la contesta cada profesor una vez por ronda.
@@ -26,9 +26,13 @@ export default function Valoracion() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState('');
   const [hecho, setHecho] = useState(false);
+  const [roles, setRoles] = useState([]);
+  const [rolGestion, setRolGestion] = useState('');
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
+    try { setRoles(JSON.parse(sessionStorage.getItem('profesor_roles') || '[]')); } catch (e) { setRoles([]); }
+    setRolGestion(sessionStorage.getItem('profesor_rol_gestion') || '');
     fetch('/api/valoraciones/rondas?vista=mia')
       .then(r => r.json())
       .then(d => { setRonda(d.ronda || null); setContestada(!!d.contestada); })
@@ -36,7 +40,10 @@ export default function Valoracion() {
       .finally(() => setCargando(false));
   }, []);
 
-  const modulos = ronda ? MODULOS_VALORACION.filter(m => ronda.modulos.includes(m.id)) : [];
+  // Solo los módulos que esta persona tiene en su panel
+  const modulos = ronda
+    ? MODULOS_VALORACION.filter(m => ronda.modulos.includes(m.id) && tieneModulo(m.id, roles, rolGestion))
+    : [];
   const valorados = modulos.filter(m => resp[m.id]?.estrellas || resp[m.id]?.no_usa).length;
   const completa = modulos.length > 0 && valorados === modulos.length;
 

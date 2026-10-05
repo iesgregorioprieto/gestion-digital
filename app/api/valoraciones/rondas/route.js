@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
-import { IDS_MODULOS } from '@/lib/modulosValoracion';
+import { IDS_MODULOS, tieneModulo } from '@/lib/modulosValoracion';
 
 /**
  * RONDAS DE VALORACIÓN (oct. 2026)
@@ -154,9 +154,14 @@ export async function POST(request) {
       const respuestas = Array.isArray(body.respuestas) ? body.respuestas : [];
       const porModulo = new Map(respuestas.map(r => [r.modulo, r]));
 
+      // Roles reales de la ficha: Tutorías y Compras solo se exigen a quien las ve
+      const { data: fichas } = await c.from('profesores').select('rol').eq('id', sesion.id);
+      const roles = Array.isArray(fichas?.[0]?.rol) ? fichas[0].rol : [];
+
       const filas = [];
       for (const mod of ronda.modulos) {
         const r = porModulo.get(mod);
+        if (!r && !tieneModulo(mod, roles, sesion.rol)) continue;
         const noUsa = !!r?.no_usa;
         const est = Number(r?.estrellas);
         if (!r || (!noUsa && !(est >= 1 && est <= 5))) {
