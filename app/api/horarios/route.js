@@ -184,7 +184,12 @@ export async function POST(request) {
         return Response.json({ error: 'Profesor no encontrado' }, { status: 404 });
       }
 
-      const indice = indiceProfesores(profesores || []);
+      // Con las equivalencias confirmadas a mano: sin ellas, un nombre de
+      // Peñalara que no casa con la ficha («Interino1 Hosteleria» frente a
+      // «Plaza vacante, Int1 Hos») no se traspasaba nunca.
+      const { data: equivalencias } = await cliente
+        .from('equivalencias_horario').select('nombre_horario, profesor_id');
+      const indice = indiceProfesores(profesores || [], equivalencias || []);
 
       let horarios = [];
       for (let offset = 0; ; offset += 1000) {
@@ -249,14 +254,26 @@ export async function POST(request) {
       const cursoActivo = curso || await getCursoActual();
 
       const { data: profesores } = await cliente
-        .from('profesores').select('id,nombre,apellidos,en_baja,titular_id,estado');
+        .from('profesores').select('id,nombre,apellidos,en_baja,titular_id,sustituto_id,estado');
       const porId = new Map((profesores || []).map(p => [p.id, p]));
-      const pares = (profesores || [])
-        .filter(s => s.titular_id && s.estado !== 'inactivo' && porId.get(s.titular_id)?.en_baja)
-        .map(s => ({ sustituto: s, titular: porId.get(s.titular_id) }));
+      // El par puede estar apuntado por cualquiera de los dos lados: el
+      // sustituto con su titular_id, o el titular de baja con su
+      // sustituto_id (el reparto ya los miraba los dos; esto solo uno).
+      const paresPorTitular = new Map();
+      (profesores || []).forEach(s => {
+        const t = s.titular_id && porId.get(s.titular_id);
+        if (t?.en_baja && s.estado !== 'inactivo') paresPorTitular.set(t.id, { sustituto: s, titular: t });
+      });
+      (profesores || []).forEach(t => {
+        const s = t.en_baja && t.sustituto_id && porId.get(t.sustituto_id);
+        if (s && s.estado !== 'inactivo' && !paresPorTitular.has(t.id)) paresPorTitular.set(t.id, { sustituto: s, titular: t });
+      });
+      const pares = [...paresPorTitular.values()];
       if (pares.length === 0) return Response.json({ ok: true, sustituciones: 0, traspasados: 0, detalle: [] });
 
-      const indice = indiceProfesores(profesores || []);
+      const { data: equivalencias } = await cliente
+        .from('equivalencias_horario').select('nombre_horario, profesor_id');
+      const indice = indiceProfesores(profesores || [], equivalencias || []);
       let horarios = [];
       for (let offset = 0; ; offset += 1000) {
         const { data } = await cliente.from('horarios_profesores')
