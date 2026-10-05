@@ -469,7 +469,11 @@ export async function POST(request) {
 
       const huecos = huecosBrutos
         .map(h => ({ ...h, horas: (h.horas || []).filter(x => !grupoSeHaIdo(x.grupo)) }))
-        .filter(h => (h.horas || []).length > 0 || h.diaCompleto);
+        // Quien solo falta a horas de guardia o complementarias no deja nada
+        // que cubrir, pero el motor tiene que saber que no está: si no, se le
+        // pone a cubrir a esa misma hora (Beatriz Pavón, 05/10/2026, 4ª).
+        .filter(h => (h.horas || []).length > 0 || h.diaCompleto
+          || (h.horasAusente || []).length > 0);
 
       // Solo lo intocable condiciona el reparto. Lo demás se rehace.
       const yaCubiertos = (yaEnRango || [])
