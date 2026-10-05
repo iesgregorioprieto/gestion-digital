@@ -163,7 +163,7 @@ export default function PanelGestion() {
       id: 'valoraciones',
       emoji: '📊',
       titulo: 'Valoración de módulos',
-      descripcion: 'Qué opina el claustro de los módulos en periodo de prueba',
+      descripcion: 'Lanzar encuestas al claustro y ver los resultados por rondas',
       href: '/gestion/valoraciones',
       bg: '#fdf4ff',
       border: '#e9d5ff',

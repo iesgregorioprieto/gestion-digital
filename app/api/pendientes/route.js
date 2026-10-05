@@ -123,6 +123,25 @@ export async function GET(request) {
       }
     }),
 
+    // ── TODOS: encuesta de valoración abierta y sin contestar ──────
+    bloque('valoracion', async () => {
+      const { data: rondas } = await c.from('valoracion_rondas')
+        .select('id, titulo, cierra').lte('abre', hoy).gte('cierra', hoy)
+        .order('created_at', { ascending: false }).limit(1);
+      const r = (rondas || [])[0];
+      if (!r) return;
+      const { data: ya } = await c.from('valoracion_contestados')
+        .select('ronda_id').eq('ronda_id', r.id).eq('profesor_id', sesion.id).limit(1);
+      if ((ya || []).length) return;
+      const quedan = diasEntre(hoy, r.cierra);
+      tareas.push({
+        id: `valoracion-${r.id}`, icono: '⭐',
+        texto: 'Valorar los módulos de APrieto',
+        detalle: `${r.titulo} · Anónima, un par de minutos · ${quedan === 0 ? 'Cierra hoy' : `Cierra el ${fechaCorta(r.cierra)}`}`,
+        enlace: '/valoracion', urgente: quedan <= 1,
+      });
+    }),
+
     // ── TODOS: hoja de servicios ────────────────────────────────────
     bloque('hoja', async () => {
       const { data } = await c.from('profesores').select('*').eq('id', sesion.id);
