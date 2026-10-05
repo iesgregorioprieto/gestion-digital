@@ -189,6 +189,9 @@ export default function GestionConvocatorias() {
   function anadirGrupo(ids) {
     setForm(f => ({ ...f, convocados: [...new Set([...f.convocados, ...ids])] }));
   }
+  function quitarGrupo(ids) {
+    setForm(f => ({ ...f, convocados: f.convocados.filter(x => !ids.includes(x)) }));
+  }
   function quitarTodos() { setForm(f => ({ ...f, convocados: [] })); }
 
   function cambiarPunto(i, campo, valor) {
@@ -561,30 +564,50 @@ export default function GestionConvocatorias() {
                   <div style={{ fontWeight: 800, fontSize: 13, color: AZUL, marginBottom: 10 }}>
                     👥 Convocados — {form.convocados.length}
                   </div>
-                  <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
-                    <button onClick={() => anadirGrupo(censo.map(p => p.id))} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5 }}>+ Todo el claustro</button>
-                    <button onClick={() => anadirGrupo(censo.filter(p => p.jefeDpto || p.directivo).map(p => p.id))} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5 }}>+ CCP</button>
-                    <button onClick={() => anadirGrupo(censo.filter(p => p.tutor).map(p => p.id))} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5 }}>+ Tutores</button>
-                    <button onClick={() => anadirGrupo(censo.filter(p => p.directivo).map(p => p.id))} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5 }}>+ Equipo directivo</button>
-                    <button onClick={quitarTodos} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5, color: ROJO }}>Vaciar</button>
-                  </div>
-                  <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
-                    <select value={dptoElegido} onChange={e => setDptoElegido(e.target.value)} style={{ ...campo, flex: 1, padding: '7px 10px', fontSize: 12.5 }}>
-                      {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <button onClick={() => anadirGrupo(censo.filter(p => p.departamento === dptoElegido).map(p => p.id))}
-                      style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5, whiteSpace: 'nowrap' }}>+ Añadir</button>
-                  </div>
-                  {equipos.length > 0 && (
-                    <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
-                      <select value={equipoElegido} onChange={e => setEquipoElegido(e.target.value)} style={{ ...campo, flex: 1, padding: '7px 10px', fontSize: 12.5 }}>
-                        <option value="">— elige un equipo —</option>
-                        {equipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
-                      </select>
-                      <button onClick={() => { const eq = equipos.find(x => String(x.id) === equipoElegido); if (eq) anadirGrupo(eq.miembros); }}
-                        style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5, whiteSpace: 'nowrap' }}>+ Añadir</button>
-                    </div>
-                  )}
+                  {(() => {
+                    // Botón doble: + añade ese grupo, − lo quita, sin tocar
+                    // al resto de lo ya marcado. Así se puede, por ejemplo,
+                    // marcar un departamento y luego cambiarlo por otro sin
+                    // tener que desmarcar persona a persona.
+                    const parChip = (ids, etiqueta) => (
+                      <div style={{ display: 'inline-flex', border: '1.5px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
+                        <button onClick={() => anadirGrupo(ids)}
+                          style={{ padding: '7px 12px', fontSize: 12.5, border: 'none', background: 'white', cursor: 'pointer', color: '#333' }}>
+                          + {etiqueta}
+                        </button>
+                        <button onClick={() => quitarGrupo(ids)} title={`Quitar ${etiqueta}`}
+                          style={{ padding: '7px 10px', fontSize: 12.5, border: 'none', borderLeft: '1.5px solid #ddd', background: '#fef2f2', color: ROJO, cursor: 'pointer', fontWeight: 700 }}>
+                          −
+                        </button>
+                      </div>
+                    );
+                    return (
+                      <>
+                        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
+                          {parChip(censo.map(p => p.id), 'Todo el claustro')}
+                          {parChip(censo.filter(p => p.jefeDpto || p.directivo).map(p => p.id), 'CCP')}
+                          {parChip(censo.filter(p => p.tutor).map(p => p.id), 'Tutores')}
+                          {parChip(censo.filter(p => p.directivo).map(p => p.id), 'Equipo directivo')}
+                          <button onClick={quitarTodos} style={{ ...btnSecundario, padding: '7px 12px', fontSize: 12.5, color: ROJO }}>Vaciar todo</button>
+                        </div>
+                        <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
+                          <select value={dptoElegido} onChange={e => setDptoElegido(e.target.value)} style={{ ...campo, flex: 1, padding: '7px 10px', fontSize: 12.5 }}>
+                            {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
+                          </select>
+                          {parChip(censo.filter(p => p.departamento === dptoElegido).map(p => p.id), dptoElegido)}
+                        </div>
+                        {equipos.length > 0 && (
+                          <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
+                            <select value={equipoElegido} onChange={e => setEquipoElegido(e.target.value)} style={{ ...campo, flex: 1, padding: '7px 10px', fontSize: 12.5 }}>
+                              <option value="">— elige un equipo —</option>
+                              {equipos.map(eq => <option key={eq.id} value={eq.id}>{eq.nombre}</option>)}
+                            </select>
+                            {parChip(equipos.find(x => String(x.id) === equipoElegido)?.miembros || [], equipos.find(x => String(x.id) === equipoElegido)?.nombre || 'equipo')}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                   <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre…" style={{ ...campo, marginBottom: 8, fontSize: 13 }} />
                   <div style={{ maxHeight: 220, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8, backgroundColor: 'white' }}>
                     {censoFiltrado.map(p => (
