@@ -234,8 +234,23 @@ export default function Convocatorias() {
                 </div>
               )}
 
+              {/* Fichaje en la entrada (QR o NFC): aquí no hay botón */}
+              {c.modo_fichaje === 'fisico' && c.fichajeAbierto && !c.fichado && (
+                <div style={{ padding: 18, backgroundColor: '#f0fdf4', textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: VERDE, letterSpacing: 0.5, marginBottom: 8 }}>✋ CONTROL DE ASISTENCIA ABIERTO</div>
+                  <div style={{ fontSize: 14, color: '#333', lineHeight: 1.5 }}>
+                    Ficha al entrar: escanea el <strong>QR</strong> de la puerta o acerca el móvil a la <strong>etiqueta NFC</strong>.
+                  </div>
+                </div>
+              )}
+              {c.modo_fichaje === 'fisico' && !enCurso && c.fichado && (
+                <div style={{ padding: '10px 18px', backgroundColor: '#f0fdf4', fontSize: 13, color: VERDE, fontWeight: 700 }}>
+                  ✅ Asistencia registrada
+                </div>
+              )}
+
               {/* Fichar asistencia */}
-              {enCurso && c.fichajeAbierto && !c.fichado && (
+              {enCurso && c.fichajeAbierto && !c.fichado && c.modo_fichaje !== 'fisico' && (
                 <div style={{ padding: 18, backgroundColor: '#f0fdf4' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: VERDE, letterSpacing: 0.5 }}>✋ CONTROL DE ASISTENCIA</div>

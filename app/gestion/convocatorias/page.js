@@ -57,7 +57,11 @@ const vacia = () => ({
   id: null, titulo: '', organo: 'claustro', convocados_texto: '', convocados: [],
   fecha: '', hora: '', lugar: '', orden_dia: [{ texto: '', desarrollo: '' }],
   preside: '', secretaria: '', estado: 'borrador',
+  modalidad: 'presencial', modo_fichaje: 'notificacion',
 });
+
+const METODO_LABEL = { nfc: '📶 NFC', qr: '📷 QR', notificacion: '🔔 Aviso', mano: '✍️ A mano' };
+const horaMadrid = iso => iso ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }) : '';
 
 export default function GestionConvocatorias() {
   const [vista, setVista] = useState('lista');     // lista | form | sesion
@@ -81,6 +85,9 @@ export default function GestionConvocatorias() {
   const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
   const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
   const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
+  const [verNfc, setVerNfc] = useState(false);
+  const [etiquetas, setEtiquetas] = useState([]);
+  const [nombreNfc, setNombreNfc] = useState('');
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -177,6 +184,7 @@ export default function GestionConvocatorias() {
       orden_dia: d.convocatoria.orden_dia?.length ? d.convocatoria.orden_dia : [{ texto: '', desarrollo: '' }],
       preside: d.convocatoria.preside || '', secretaria: d.convocatoria.secretaria || '',
       estado: d.convocatoria.estado,
+      modalidad: d.convocatoria.modalidad || 'presencial', modo_fichaje: d.convocatoria.modo_fichaje || 'notificacion',
     });
     setVotacionesForm(d.votaciones || []);
     setNuevaVot(null);
@@ -219,6 +227,7 @@ export default function GestionConvocatorias() {
   async function convocar() {
     if (!form.fecha) return aviso('Indica el día de la reunión', 'error');
     if (form.convocados.length === 0) return aviso('Elige al menos un convocado', 'error');
+    if (form.modalidad === 'presencial' && form.modo_fichaje === 'fisico' && !form.hora) return aviso('El fichaje en la entrada necesita la hora de la reunión', 'error');
     const esClaustro = form.convocados.length > 100;
     if (esClaustro && !confirm(`Vas a convocar a ${form.convocados.length} personas.\n\n¿Seguro?`)) return;
     setGuardando(true);
@@ -332,6 +341,115 @@ export default function GestionConvocatorias() {
     );
   }
 
+  // ─── Fichaje en la entrada: cartel QR, hoja de firmas, etiquetas ──
+
+  const esc = t => String(t ?? '').replace(/[&<>"]/g, x => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[x]));
+
+  // La ventana se abre ANTES de pedir los datos: si se abre después de
+  // esperar, el navegador la toma por un anuncio y la bloquea.
+  function ventanaImpresion() {
+    const w = window.open('', '_blank');
+    if (!w) aviso('El navegador ha bloqueado la ventana. Permite las ventanas emergentes.', 'error');
+    else w.document.write('<p style="font-family:system-ui;padding:30px;color:#888">Preparando…</p>');
+    return w;
+  }
+
+  async function imprimirCartel(conv) {
+    const w = ventanaImpresion();
+    if (!w) return;
+    const r = await fetch(`/api/convocatorias?modo=detalle&id=${conv.id}`);
+    const d = await r.json();
+    const c = d.convocatoria;
+    if (d.error || !c?.token_qr) { w.close(); return aviso('Esta convocatoria todavía no tiene código: convócala con fichaje en la entrada', 'error'); }
+    const url = `${window.location.origin}/fichar?c=${c.id}&t=${encodeURIComponent(c.token_qr)}`;
+    const QR = (await import('qrcode')).default;
+    const img = await QR.toDataURL(url, { width: 900, margin: 1, errorCorrectionLevel: 'M' });
+    w.document.open();
+    w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Cartel QR — ${esc(c.titulo)}</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font-family: Arial, sans-serif; color: #1e293b; text-align: center; margin: 0; }
+  .marco { border: 3px solid #1e3a5f; border-radius: 18px; padding: 26px 22px; }
+  .t1 { font-size: 15px; font-weight: bold; color: #64748b; letter-spacing: 2px; }
+  h1 { font-size: 34px; color: #1e3a5f; margin: 10px 0 4px; }
+  .sub { font-size: 17px; color: #475569; }
+  img { width: 105mm; height: 105mm; margin: 22px auto 10px; display: block; }
+  .paso { font-size: 19px; margin: 6px 0; }
+  .nfc { margin-top: 18px; padding: 12px; background: #f0fdf4; border-radius: 12px; font-size: 16px; color: #166534; }
+  .pie { margin-top: 16px; font-size: 12px; color: #94a3b8; }
+</style></head><body><div class="marco">
+  <div class="t1">CONTROL DE ASISTENCIA</div>
+  <h1>${esc(c.titulo)}</h1>
+  <div class="sub">${esc(fechaLarga(c.fecha))}${c.hora ? ` · ${esc(c.hora)}` : ''}${c.lugar ? ` · ${esc(c.lugar)}` : ''}</div>
+  <img src="${img}" alt="QR" />
+  <div class="paso"><strong>1.</strong> Abre la cámara del móvil y apunta al código</div>
+  <div class="paso"><strong>2.</strong> Toca el enlace. Si te pide entrar, usa tu cuenta de APrieto</div>
+  <div class="nfc">📶 También puedes acercar el móvil a la etiqueta NFC de la entrada</div>
+  <div class="pie">Válido solo para esta reunión · Se abre 30 minutos antes · IES Gregorio Prieto</div>
+</div></body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  }
+
+  async function imprimirFirmas(conv) {
+    const w = ventanaImpresion();
+    if (!w) return;
+    const r = await fetch(`/api/convocatorias?modo=detalle&id=${conv.id}`);
+    const d = await r.json();
+    if (d.error) { w.close(); return aviso(d.error, 'error'); }
+    const c = d.convocatoria;
+    const filas = (d.personas || []).map((p, i) =>
+      `<tr><td class="n">${i + 1}</td><td>${esc(p.nombre)}</td><td class="dp">${esc(p.departamento)}</td><td class="f"></td></tr>`).join('');
+    w.document.open();
+    w.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>Hoja de firmas — ${esc(c.titulo)}</title>
+<style>
+  @page { size: A4; margin: 12mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #222; margin: 0; }
+  h1 { font-size: 16px; color: #1e3a5f; margin: 0 0 3px; }
+  .sub { color: #555; margin-bottom: 10px; font-size: 11.5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1e3a5f; color: white; padding: 5px 6px; text-align: left; font-size: 10.5px; }
+  td { border: 1px solid #cbd5e1; padding: 0 6px; height: 27px; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  .n { width: 26px; text-align: center; color: #888; }
+  .dp { width: 110px; color: #555; font-size: 10px; }
+  .f { width: 190px; }
+  .pie { margin-top: 10px; font-size: 9.5px; color: #888; }
+</style></head><body>
+  <h1>Hoja de firmas — ${esc(c.titulo)}</h1>
+  <div class="sub">IES Gregorio Prieto · ${esc(fechaLarga(c.fecha))}${c.hora ? ` · ${esc(c.hora)}` : ''}${c.lugar ? ` · ${esc(c.lugar)}` : ''} · ${(d.personas || []).length} convocados</div>
+  <table><thead><tr><th class="n">Nº</th><th>Apellidos y nombre</th><th class="dp">Departamento</th><th class="f">Firma</th></tr></thead>
+  <tbody>${filas}</tbody></table>
+  <div class="pie">Generada el ${esc(new Date().toLocaleString('es-ES'))} · APrieto</div>
+</body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 500);
+  }
+
+  async function cargarEtiquetas() {
+    try {
+      const r = await fetch('/api/convocatorias?modo=nfc');
+      const d = await r.json();
+      setEtiquetas(d.etiquetas || []);
+    } catch (e) { /* se queda con lo anterior */ }
+  }
+  async function crearEtiqueta() {
+    const d = await apiPost('nfc_crear', { nombre: nombreNfc });
+    if (!d) return;
+    setNombreNfc('');
+    aviso('📶 Etiqueta creada. Copia su enlace y grábalo en la etiqueta.', 'ok');
+    cargarEtiquetas();
+  }
+  async function activarEtiqueta(e) {
+    if (e.activa && !confirm(`¿Desactivar «${e.nombre}»? Dejará de servir para fichar.`)) return;
+    const d = await apiPost('nfc_activar', { codigo: e.codigo, activa: !e.activa });
+    if (d) cargarEtiquetas();
+  }
+  function copiar(texto) {
+    navigator.clipboard?.writeText(texto).then(() => aviso('📋 Enlace copiado', 'ok'), () => aviso('No se ha podido copiar: selecciónalo a mano', 'error'));
+  }
+
   // ─── Acta en PDF ────────────────────────────────────────────────
 
   function abrirActa(c) {
@@ -400,7 +518,7 @@ export default function GestionConvocatorias() {
     ${c.lugar ? `<strong>Lugar:</strong> ${e(c.lugar)}<br>` : ''}
     ${c.preside ? `<strong>Preside:</strong> ${e(c.preside)}<br>` : ''}
     ${c.secretaria ? `<strong>Secretaría:</strong> ${e(c.secretaria)}<br>` : ''}
-    <strong>Convocados:</strong> ${personas.length} · <strong>Asistieron:</strong> ${presentes.length} · <strong>No asistieron:</strong> ${ausentes.length}
+    <strong>Convocados:</strong> ${personas.length} · <strong>Asistieron:</strong> ${presentes.length}${presentes.some(p => p.tarde) ? ` (${presentes.filter(p => p.tarde).length} incorporados tarde)` : ''} · <strong>No asistieron:</strong> ${ausentes.length}
     ${siAsistiran ? ` · <strong>Habían confirmado asistencia:</strong> ${siAsistiran}` : ''}
   </div>
 
@@ -419,11 +537,12 @@ export default function GestionConvocatorias() {
 
   <h2>Control de asistencia</h2>
   <table>
-    <tr><th>Profesor/a</th><th>Departamento</th><th class="c">Confirmó</th><th class="c">Presente</th><th class="c">Hora</th></tr>
+    <tr><th>Profesor/a</th><th>Departamento</th><th class="c">Confirmó</th><th class="c">Presente</th><th class="c">Hora</th><th class="c">Forma</th></tr>
     ${personas.map(p => `<tr><td>${e(p.nombre)}</td><td>${e(p.departamento)}</td>
       <td class="c">${p.asistira === true ? 'Sí' : p.asistira === false ? 'No' : '—'}</td>
-      <td class="c">${p.fichado_at ? 'Sí' : 'No'}</td>
-      <td class="c">${p.fichado_at ? new Date(p.fichado_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</td></tr>`).join('')}
+      <td class="c">${p.fichado_at ? (p.tarde ? 'Sí (incorporado tarde)' : 'Sí') : 'No'}</td>
+      <td class="c">${p.fichado_at ? new Date(p.fichado_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }) : ''}</td>
+      <td class="c">${p.fichado_at ? e((METODO_LABEL[p.metodo] || '').replace(/^\S+\s/, '')) : ''}</td></tr>`).join('')}
   </table>
 
   ${(d.votaciones || []).some(v => v.estado === 'cerrada') ? `<div class="nota">
@@ -480,6 +599,49 @@ export default function GestionConvocatorias() {
             <button onClick={nueva} style={{ ...btnPrimario(VERDE), width: '100%', padding: 14, marginBottom: 18, fontSize: 15 }}>
               ➕ Nueva convocatoria
             </button>
+
+            {/* Etiquetas NFC del centro: se graban una vez y valen para todas las reuniones */}
+            <div style={{ backgroundColor: 'white', borderRadius: 12, marginBottom: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <button onClick={() => { const v = !verNfc; setVerNfc(v); if (v) cargarEtiquetas(); }}
+                style={{ width: '100%', padding: '12px 16px', border: 'none', background: 'white', textAlign: 'left', cursor: 'pointer',
+                  fontWeight: 800, fontSize: 13.5, color: AZUL, display: 'flex', justifyContent: 'space-between' }}>
+                <span>📶 Etiquetas NFC para fichar en la entrada</span><span>{verNfc ? '▲' : '▼'}</span>
+              </button>
+              {verNfc && (
+                <div style={{ padding: '0 16px 16px' }}>
+                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.55, marginBottom: 10 }}>
+                    Cada etiqueta se graba <strong>una sola vez</strong> y sirve para todas las reuniones con fichaje en la entrada:
+                    al acercar el móvil, ficha en la reunión que tenga el fichaje abierto en ese momento.
+                    Para grabarla: instala <strong>NFC Tools</strong> (gratis, Android e iPhone) → <em>Escribir</em> → <em>Añadir un registro</em> →
+                    <em> URL</em> → pega el enlace → <em>Escribir</em> y acerca la etiqueta.
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                    <input value={nombreNfc} onChange={e => setNombreNfc(e.target.value)} placeholder="Dónde va pegada: «Puerta del salón de actos»"
+                      style={{ ...campo, fontSize: 13, padding: '9px 11px' }} />
+                    <button onClick={crearEtiqueta} style={{ ...btnPrimario(VERDE), padding: '9px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>+ Nueva</button>
+                  </div>
+                  {etiquetas.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', textAlign: 'center', padding: 8 }}>Todavía no hay ninguna etiqueta</div>}
+                  {etiquetas.map(e => {
+                    const enlace = `${typeof window !== 'undefined' ? window.location.origin : ''}/fichar?n=${e.codigo}`;
+                    return (
+                      <div key={e.codigo} style={{ padding: '10px 12px', borderRadius: 9, border: '1px solid #e2e8f0', marginBottom: 8, opacity: e.activa ? 1 : 0.55 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <div style={{ fontWeight: 700, fontSize: 13.5 }}>{e.activa ? '🟢' : '⚪'} {e.nombre}</div>
+                          <div style={{ display: 'flex', gap: 6 }}>
+                            {e.activa && <button onClick={() => copiar(enlace)} style={{ ...btnSecundario, padding: '5px 11px', fontSize: 12 }}>📋 Copiar enlace</button>}
+                            <button onClick={() => activarEtiqueta(e)} style={{ ...btnSecundario, padding: '5px 11px', fontSize: 12, color: e.activa ? ROJO : VERDE }}>
+                              {e.activa ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </div>
+                        </div>
+                        {e.activa && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5, wordBreak: 'break-all', fontFamily: 'monospace' }}>{enlace}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             {cargando ? (
               <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
             ) : lista.length === 0 ? (
@@ -498,6 +660,7 @@ export default function GestionConvocatorias() {
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: '#1e293b', marginTop: 6 }}>{c.titulo}</div>
                       <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 3 }}>
                         {c.fecha ? fechaCorta(c.fecha) : 'sin fecha'}{c.hora ? ` · ${c.hora}` : ''} · {c.totalConvocados} convocados
+                        {c.modalidad === 'online' ? ' · 💻 online' : c.modo_fichaje === 'fisico' ? ' · 📶 fichaje en la entrada' : ''}
                         {c.estado !== 'borrador' && ` · ${c.presentes} presentes`}
                         {c.votaciones > 0 && ` · ${c.votacionesHechas}/${c.votaciones} votaciones`}
                       </div>
@@ -506,6 +669,10 @@ export default function GestionConvocatorias() {
                       {c.estado === 'borrador' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>✏️ Editar</button>
                         <button onClick={() => eliminar(c)} style={{ ...btnSecundario, color: ROJO, borderColor: '#fecaca' }}>🗑️</button>
+                      </>}
+                      {['convocada', 'en_curso'].includes(c.estado) && c.modo_fichaje === 'fisico' && <>
+                        <button onClick={() => imprimirCartel(c)} style={btnSecundario}>🖨️ Cartel QR</button>
+                        <button onClick={() => imprimirFirmas(c)} style={btnSecundario}>🖨️ Hoja de firmas</button>
                       </>}
                       {c.estado === 'convocada' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>👁️ Ver</button>
@@ -553,6 +720,44 @@ export default function GestionConvocatorias() {
                     <label style={{ fontSize: 12.5, fontWeight: 700, color: '#555' }}>Lugar</label>
                     <input value={form.lugar} onChange={e => setForm(f => ({ ...f, lugar: e.target.value }))} placeholder="Salón de actos" style={{ ...campo, marginTop: 4 }} />
                   </div>
+                </div>
+
+                {/* Presencial u online, y cómo se ficha */}
+                <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', marginBottom: 14 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: VERDE, marginBottom: 10 }}>✋ Control de asistencia</div>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+                    {[['presencial', '🏫 Presencial'], ['online', '💻 Online']].map(([v, t]) => (
+                      <button key={v} onClick={() => setForm(f => ({ ...f, modalidad: v, modo_fichaje: v === 'online' ? 'notificacion' : f.modo_fichaje }))}
+                        style={{ flex: '1 1 140px', padding: '10px 12px', borderRadius: 9, fontWeight: 700, fontSize: 13.5, cursor: 'pointer',
+                          border: `2px solid ${form.modalidad === v ? VERDE : '#ddd'}`, backgroundColor: form.modalidad === v ? '#dcfce7' : 'white', color: '#333' }}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                  {form.modalidad === 'presencial' ? (
+                    <>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {[['fisico', '📶 En la entrada', 'QR y etiqueta NFC'], ['notificacion', '🔔 Por aviso en el móvil', 'Equipo directivo, reuniones pequeñas']].map(([v, t, sub]) => (
+                          <button key={v} onClick={() => setForm(f => ({ ...f, modo_fichaje: v }))}
+                            style={{ flex: '1 1 180px', padding: '10px 12px', borderRadius: 9, cursor: 'pointer', textAlign: 'left',
+                              border: `2px solid ${form.modo_fichaje === v ? VERDE : '#ddd'}`, backgroundColor: form.modo_fichaje === v ? '#dcfce7' : 'white' }}>
+                            <div style={{ fontWeight: 700, fontSize: 13.5, color: '#333' }}>{t}</div>
+                            <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 2 }}>{sub}</div>
+                          </button>
+                        ))}
+                      </div>
+                      {form.modo_fichaje === 'fisico' && (
+                        <div style={{ fontSize: 12, color: '#475569', marginTop: 9, lineHeight: 1.5 }}>
+                          El fichaje se abre solo <strong>30 minutos antes</strong> de la hora y se cierra <strong>15 minutos después</strong>.
+                          Quien fiche pasada la hora consta como incorporado tarde. Desde el aviso del móvil no se puede fichar.
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                      De momento se ficha con el aviso en el móvil. El QR dinámico en la pantalla compartida llegará en el siguiente paso.
+                    </div>
+                  )}
                 </div>
 
                 <label style={{ fontSize: 12.5, fontWeight: 700, color: '#555' }}>Cómo sale en el acta (opcional)</label>
@@ -766,9 +971,33 @@ export default function GestionConvocatorias() {
           return (
             <>
               <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 18, border: `2px solid ${AMBAR}`, marginBottom: 16 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 800, color: AMBAR, letterSpacing: 0.5 }}>🔴 REUNIÓN EN CURSO</div>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: AMBAR, letterSpacing: 0.5 }}>
+                  {c.estado === 'convocada' ? '⏳ ANTES DE EMPEZAR' : '🔴 REUNIÓN EN CURSO'}
+                </div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: '#1e293b', marginTop: 4 }}>{c.titulo}</div>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>{presentes.length} de {personas.length} han fichado</div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
+                  {presentes.length} de {personas.length} han fichado
+                  {presentes.some(p => p.tarde) && ` · ${presentes.filter(p => p.tarde).length} tarde`}
+                </div>
+                {c.estado === 'convocada' && (
+                  <button onClick={() => accionSesion('iniciar', { id: c.id })} style={{ ...btnPrimario(AMBAR), marginTop: 10 }}>
+                    ▶️ Iniciar la reunión
+                  </button>
+                )}
+                {c.estado === 'convocada' && (
+                  <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 5 }}>Para lanzar votaciones hay que iniciar la reunión. El fichaje no depende de esto.</div>
+                )}
+                {personas.some(p => p.movilCompartido) && (
+                  <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', fontSize: 12.5, color: ROJO, fontWeight: 600 }}>
+                    ⚠️ Un mismo móvil ha fichado por varias personas: {personas.filter(p => p.movilCompartido).map(p => p.nombre).join(' · ')}
+                  </div>
+                )}
+                {c.modo_fichaje === 'fisico' && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                    <button onClick={() => imprimirCartel(c)} style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>🖨️ Cartel QR</button>
+                    <button onClick={() => imprimirFirmas(c)} style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>🖨️ Hoja de firmas</button>
+                  </div>
+                )}
 
                 {/* Fichaje */}
                 <div style={{ marginTop: 14, padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
@@ -793,12 +1022,21 @@ export default function GestionConvocatorias() {
                       )}
                     </>
                   ) : (
+                    <>
+                    {c.modo_fichaje === 'fisico' && c.fichaje_inicio && (
+                      <div style={{ fontSize: 13, color: '#475569', marginBottom: 10 }}>
+                        {new Date(c.fichaje_inicio).getTime() > ahora
+                          ? <>📶 Se abre solo a las <strong>{horaMadrid(c.fichaje_inicio)}</strong> y se cierra a las <strong>{horaMadrid(c.fichaje_fin)}</strong>.</>
+                          : <>📶 El fichaje en la entrada se cerró a las <strong>{horaMadrid(c.fichaje_fin)}</strong>. Si hace falta, ábrelo de nuevo:</>}
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <input type="number" min="1" max="120" value={minutosFichaje} onChange={e => setMinutosFichaje(e.target.value)}
                         style={{ width: 80, padding: '9px 11px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box' }} />
                       <span style={{ fontSize: 13, color: '#555' }}>minutos</span>
                       <button onClick={() => accionSesion('abrir_fichaje', { id: c.id, minutos: minutosFichaje })} style={btnPrimario(VERDE)}>✋ Abrir el fichaje</button>
                     </div>
+                    </>
                   )}
                 </div>
 
@@ -808,7 +1046,10 @@ export default function GestionConvocatorias() {
                     <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', fontSize: 13, borderBottom: '1px solid #f1f5f9' }}>
                       <span style={{ fontSize: 14 }}>{p.fichado_at ? '✅' : '⬜'}</span>
                       <span style={{ flex: 1 }}>{p.nombre}</span>
-                      {p.fichado_a_mano_por && <span style={{ fontSize: 10.5, color: '#94a3b8' }}>a mano</span>}
+                      {p.movilCompartido && <span title="Este móvil ha fichado por más de una persona" style={{ fontSize: 12 }}>⚠️</span>}
+                      {p.fichado_at && <span style={{ fontSize: 10.5, color: p.tarde ? AMBAR : '#94a3b8', fontWeight: p.tarde ? 700 : 400 }}>
+                        {METODO_LABEL[p.metodo] || ''} · {horaMadrid(p.fichado_at)}{p.tarde ? ' · tarde' : ''}
+                      </span>}
                       {p.fichado_at ? (
                         <button onClick={() => accionSesion('fichar_a_mano', { id: c.id, profesor_id: p.id, quitar: true })}
                           style={{ border: 'none', background: 'none', color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}>quitar</button>

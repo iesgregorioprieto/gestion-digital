@@ -27,7 +27,7 @@ export default function AvisoConvocatoria() {
   const [enviando, setEnviando] = useState(false);
   const [ahora, setAhora] = useState(Date.now());
 
-  const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta === '/';
+  const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta.startsWith('/fichar') || ruta === '/';
 
   useEffect(() => {
     if (typeof window === 'undefined' || fuera) return;
@@ -39,7 +39,7 @@ export default function AvisoConvocatoria() {
       .then(d => {
         if (!vivo) return;
         const lista = d.convocatorias || [];
-        const cand = lista.find(x => x.votacion && !x.votacion.yaVote) || lista.find(x => x.fichajeAbierto && !x.fichado);
+        const cand = lista.find(x => x.votacion && !x.votacion.yaVote) || lista.find(x => x.fichajeAbierto && !x.fichado && x.modo_fichaje !== 'fisico');
         setC(cand || null);
       })
       .catch(() => {});
@@ -73,7 +73,7 @@ export default function AvisoConvocatoria() {
   }
 
   const tocaVotar = c.votacion && !c.votacion.yaVote;
-  const tocaFichar = !tocaVotar && c.fichajeAbierto && !c.fichado;
+  const tocaFichar = !tocaVotar && c.fichajeAbierto && !c.fichado && c.modo_fichaje !== 'fisico';
   if (!tocaVotar && !tocaFichar) return null;
 
   let restante = null;

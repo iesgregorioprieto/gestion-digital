@@ -24,6 +24,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { hoyLocal } from '@/lib/fechas';
 import { enviarPushA } from '@/lib/pushServidor';
+import { randomBytes, timingSafeEqual } from 'crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +52,14 @@ async function sesionDe(request) {
 const json = (d, status = 200) => Response.json(d, { status });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ORGANOS = ['claustro', 'ccp', 'departamento', 'equipo_directivo', 'equipo', 'otro'];
+const MODALIDADES = ['presencial', 'online'];
+const MODOS_FICHAJE = ['fisico', 'notificacion'];   // 'pantalla' (QR dinámico) llegará después
+
+// Fichaje físico: se abre solo MEDIA HORA ANTES de la hora de la
+// reunión y se cierra 15 MINUTOS DESPUÉS. Quien ficha pasada la hora de
+// inicio consta en el acta como «incorporado tarde».
+const ANTES_MIN = 30;
+const DESPUES_MIN = 15;
 
 const MENSAJES = {
   no_existe: 'Esa votación no existe',
@@ -75,6 +84,50 @@ function fichajeAbierto(c) {
   const t = Date.now();
   return t >= new Date(c.fichaje_inicio).getTime() && t < new Date(c.fichaje_fin).getTime();
 }
+
+/**
+ * «2026-10-15» + «17:00» (hora de Madrid) → instante real (Date).
+ * Se calcula el desfase de Madrid ese día concreto, así que vale igual
+ * en horario de verano que de invierno.
+ */
+function instanteMadrid(fecha, hora) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '') || !/^\d{1,2}:\d{2}/.test(hora || '')) return null;
+  const [y, mo, d] = fecha.split('-').map(Number);
+  const [h, mi] = hora.split(':').map(Number);
+  const supuesto = Date.UTC(y, mo - 1, d, h, mi);
+  const partes = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(supuesto)).map(p => [p.type, p.value]));
+  const comoMadrid = Date.UTC(+partes.year, +partes.month - 1, +partes.day, +partes.hour, +partes.minute);
+  return new Date(supuesto - (comoMadrid - supuesto));
+}
+
+/** Ventana del fichaje físico, o null si falta fecha u hora */
+function ventanaFisica(fecha, hora) {
+  const inicio = instanteMadrid(fecha, hora);
+  if (!inicio) return null;
+  return {
+    fichaje_inicio: new Date(inicio.getTime() - ANTES_MIN * 60000).toISOString(),
+    fichaje_fin: new Date(inicio.getTime() + DESPUES_MIN * 60000).toISOString(),
+  };
+}
+
+/** ¿Fichó después de la hora de inicio? */
+function esTarde(c, fichadoAt) {
+  const inicio = instanteMadrid(c.fecha, c.hora);
+  return !!(inicio && fichadoAt && new Date(fichadoAt).getTime() > inicio.getTime() + 59999);
+}
+
+const nuevoToken = () => randomBytes(18).toString('base64url');
+
+function mismoTexto(a, b) {
+  const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || ''));
+  return x.length > 0 && x.length === y.length && timingSafeEqual(x, y);
+}
+
+/** Identificador del móvil que manda el navegador: solo letras y números */
+const limpiaDispositivo = v => String(v || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 64) || null;
 
 function fechaCorta(f) {
   if (!f) return '';
@@ -184,7 +237,7 @@ export async function GET(request) {
     // Lo que se consulta en bucle el día de la reunión: tiene que ser ligero.
     if (modo === 'mias') {
       const { data } = await cliente.from('convocatorias')
-        .select('id, titulo, organo, fecha, hora, lugar, orden_dia, estado, fichaje_inicio, fichaje_fin')
+        .select('id, titulo, organo, fecha, hora, lugar, orden_dia, estado, fichaje_inicio, fichaje_fin, modalidad, modo_fichaje')
         .contains('convocados', [sesion.id])
         .in('estado', ['convocada', 'en_curso'])
         .order('fecha', { ascending: true });
@@ -244,7 +297,7 @@ export async function GET(request) {
 
     if (modo === 'lista') {
       const { data } = await cliente.from('convocatorias')
-        .select('id, titulo, organo, convocados_texto, convocados, fecha, hora, lugar, estado, fichaje_inicio, fichaje_fin, creada_por_nombre, created_at')
+        .select('id, titulo, organo, convocados_texto, convocados, fecha, hora, lugar, estado, fichaje_inicio, fichaje_fin, modalidad, modo_fichaje, creada_por_nombre, created_at')
         .order('fecha', { ascending: false, nullsFirst: true })
         .order('created_at', { ascending: false });
       const lista = data || [];
@@ -290,6 +343,10 @@ export async function GET(request) {
         .select('*').eq('convocatoria_id', id);
       const asis = a || [];
 
+      // Móviles que han fichado por más de una persona
+      const porMovil = {};
+      for (const x of asis) if (x.dispositivo && x.fichado_at) (porMovil[x.dispositivo] ||= new Set()).add(x.profesor_id);
+
       let personas = [];
       if ((c.convocados || []).length) {
         const { data: ps } = await cliente.from('profesores')
@@ -304,6 +361,9 @@ export async function GET(request) {
             respondida_at: r.respondida_at || null,
             fichado_at: r.fichado_at || null,
             fichado_a_mano_por: r.fichado_a_mano_por || null,
+            metodo: r.fichado_at ? (r.metodo || (r.fichado_a_mano_por ? 'mano' : 'notificacion')) : null,
+            tarde: esTarde(c, r.fichado_at),
+            movilCompartido: !!(r.dispositivo && r.fichado_at && porMovil[r.dispositivo]?.size > 1),
           };
         }).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
       }
@@ -314,6 +374,13 @@ export async function GET(request) {
         personas,
         votaciones,
       });
+    }
+
+    // Etiquetas NFC del centro
+    if (modo === 'nfc') {
+      const { data } = await cliente.from('nfc_etiquetas')
+        .select('codigo, nombre, tipo, activa, created_at').order('created_at');
+      return json({ etiquetas: data || [] });
     }
 
     // Para el formulario: quién hay en el centro y en qué grupos encaja
@@ -428,16 +495,71 @@ export async function POST(request) {
         return json({ ok: true });
       }
 
-      // fichar
+      // fichar con el botón del aviso. En las reuniones con fichaje
+      // físico no vale: hay que estar en la puerta (QR o NFC).
+      if (c.modo_fichaje === 'fisico') {
+        return json({ error: 'Esta reunión se ficha en la entrada: escanea el QR o acerca el móvil a la etiqueta NFC' }, 400);
+      }
       if (c.estado !== 'en_curso' || !fichajeAbierto(c)) return json({ error: 'El control de asistencia está cerrado' }, 400);
       const { data: ya } = await cliente.from('convocatoria_asistencia')
         .select('fichado_at').eq('convocatoria_id', c.id).eq('profesor_id', sesion.id);
       if ((ya || [])[0]?.fichado_at) return json({ ok: true });   // ya estaba
       const { error } = await cliente.from('convocatoria_asistencia').upsert([{
         convocatoria_id: c.id, profesor_id: sesion.id, fichado_at: ahora(),
+        metodo: 'notificacion', dispositivo: limpiaDispositivo(datos.dispositivo),
       }], { onConflict: 'convocatoria_id,profesor_id' });
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true });
+    }
+
+    // Fichaje físico: con el QR del cartel (c + t) o con la etiqueta NFC
+    // de la entrada (n). La etiqueta es la misma para todas las
+    // reuniones: se ficha en la que tenga el fichaje abierto ahora.
+    if (accion === 'fichar_presencia') {
+      let c = null, metodo = null;
+
+      if (datos.n) {
+        const { data: et } = await cliente.from('nfc_etiquetas')
+          .select('codigo, activa').eq('codigo', txt(datos.n, 64));
+        if (!(et || [])[0]?.activa) return json({ error: 'Esta etiqueta no es válida. Avisa al equipo directivo.' }, 400);
+        const { data: cs } = await cliente.from('convocatorias')
+          .select('*').eq('modo_fichaje', 'fisico').in('estado', ['convocada', 'en_curso'])
+          .contains('convocados', [sesion.id]);
+        const abiertas = (cs || []).filter(fichajeAbierto)
+          .sort((x, y) => new Date(x.fichaje_inicio) - new Date(y.fichaje_inicio));
+        c = abiertas[0] || null;
+        if (!c) return json({ error: 'No tienes ninguna reunión con el fichaje abierto en este momento' }, 400);
+        metodo = 'nfc';
+      } else {
+        c = await convocatoria(cliente, idNum(datos.c));
+        if (!c || !mismoTexto(c.token_qr, datos.t)) return json({ error: 'Este código QR no es válido' }, 400);
+        metodo = 'qr';
+      }
+
+      if (!(c.convocados || []).includes(sesion.id)) return json({ error: 'Esta reunión no va dirigida a ti' }, 403);
+      if (c.modo_fichaje !== 'fisico') return json({ error: 'Esta reunión no se ficha en la entrada' }, 400);
+      if (!['convocada', 'en_curso'].includes(c.estado) || !fichajeAbierto(c)) {
+        const ini = c.fichaje_inicio ? new Date(c.fichaje_inicio) : null;
+        if (ini && Date.now() < ini.getTime()) {
+          const h = ini.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+          return json({ error: `Todavía no se puede fichar: se abre a las ${h}` }, 400);
+        }
+        return json({ error: 'El control de asistencia de esta reunión está cerrado. Avisa al equipo directivo.' }, 400);
+      }
+
+      const salida = { ok: true, titulo: c.titulo, lugar: c.lugar || '', metodo };
+      const { data: ya } = await cliente.from('convocatoria_asistencia')
+        .select('fichado_at').eq('convocatoria_id', c.id).eq('profesor_id', sesion.id);
+      if ((ya || [])[0]?.fichado_at) {
+        return json({ ...salida, yaEstaba: true, fichado_at: ya[0].fichado_at, tarde: esTarde(c, ya[0].fichado_at) });
+      }
+      const momento = ahora();
+      const { error } = await cliente.from('convocatoria_asistencia').upsert([{
+        convocatoria_id: c.id, profesor_id: sesion.id, fichado_at: momento,
+        metodo, dispositivo: limpiaDispositivo(datos.dispositivo),
+      }], { onConflict: 'convocatoria_id,profesor_id' });
+      if (error) return json({ error: 'No se ha podido registrar. Inténtalo otra vez.' }, 500);
+      return json({ ...salida, fichado_at: momento, tarde: esTarde(c, momento) });
     }
 
     if (accion === 'votar') {
@@ -478,7 +600,22 @@ export async function POST(request) {
           fecha: /^\d{4}-\d{2}-\d{2}$/.test(datos.fecha || '') ? datos.fecha : null,
           hora: txt(datos.hora, 20) || null,
           lugar: txt(datos.lugar, 200) || null,
+          modalidad: MODALIDADES.includes(datos.modalidad) ? datos.modalidad : 'presencial',
+          modo_fichaje: MODOS_FICHAJE.includes(datos.modo_fichaje) ? datos.modo_fichaje : 'notificacion',
         });
+        // En las online no hay puerta: de momento, fichaje por notificación
+        if (fila.modalidad === 'online') fila.modo_fichaje = 'notificacion';
+        // Ya enviada: si es física, la ventana sigue a la fecha y la hora
+        if (previa?.estado === 'convocada') {
+          if (fila.modo_fichaje === 'fisico') {
+            const v = ventanaFisica(fila.fecha, fila.hora);
+            if (!v) return json({ error: 'El fichaje en la entrada necesita fecha y hora' }, 400);
+            Object.assign(fila, v);
+            if (!previa.token_qr) fila.token_qr = nuevoToken();
+          } else if (previa.modo_fichaje === 'fisico') {
+            Object.assign(fila, { fichaje_inicio: null, fichaje_fin: null });
+          }
+        }
         if (previa?.estado === 'convocada') {
           if (!fila.fecha) return json({ error: 'Una convocatoria ya enviada necesita fecha' }, 400);
           if (!fila.convocados.length) return json({ error: 'Una convocatoria ya enviada necesita convocados' }, 400);
@@ -511,6 +648,22 @@ export async function POST(request) {
       return json({ ok: true, id: previa.id });
     }
 
+    // ── Etiquetas NFC ──
+    if (accion === 'nfc_crear') {
+      const nombre = txt(datos.nombre, 100);
+      if (!nombre) return json({ error: 'Ponle un nombre a la etiqueta (dónde va pegada)' }, 400);
+      const codigo = randomBytes(9).toString('base64url');
+      const { error } = await cliente.from('nfc_etiquetas').insert([{ codigo, nombre, tipo: 'fija' }]);
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true, codigo });
+    }
+    if (accion === 'nfc_activar') {
+      const { error } = await cliente.from('nfc_etiquetas')
+        .update({ activa: datos.activa === true }).eq('codigo', txt(datos.codigo, 64));
+      if (error) return json({ error: error.message }, 500);
+      return json({ ok: true });
+    }
+
     // El resto de acciones trabajan sobre una convocatoria existente
     const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'reenviar_fichaje', 'ampliar_fichaje', 'fichar_a_mano',
                       'finalizar', 'reanudar', 'eliminar', 'guardar_votacion'];
@@ -522,8 +675,14 @@ export async function POST(request) {
         if (c.estado !== 'borrador') return json({ error: 'Ya estaba convocada' }, 400);
         if (!c.fecha) return json({ error: 'Falta la fecha de la reunión' }, 400);
         if (!(c.convocados || []).length) return json({ error: 'No hay nadie convocado' }, 400);
+        const cambios = { estado: 'convocada', convocada_at: ahora() };
+        if (c.modo_fichaje === 'fisico') {
+          const v = ventanaFisica(c.fecha, c.hora);
+          if (!v) return json({ error: 'El fichaje en la entrada necesita la hora de la reunión' }, 400);
+          Object.assign(cambios, v, { token_qr: c.token_qr || nuevoToken() });
+        }
         const { error } = await cliente.from('convocatorias')
-          .update({ estado: 'convocada', convocada_at: ahora() }).eq('id', c.id).eq('estado', 'borrador');
+          .update(cambios).eq('id', c.id).eq('estado', 'borrador');
         if (error) return json({ error: error.message }, 500);
         const r = await enviarPushA(cliente, c.convocados, {
           titulo: `📅 Convocatoria: ${c.titulo}`,
@@ -608,6 +767,8 @@ export async function POST(request) {
           convocatoria_id: c.id, profesor_id: pid,
           fichado_at: quitar ? null : ahora(),
           fichado_a_mano_por: quitar ? null : (sesion.nombre || 'Dirección'),
+          metodo: quitar ? null : 'mano',
+          dispositivo: null,
         }], { onConflict: 'convocatoria_id,profesor_id' });
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true });

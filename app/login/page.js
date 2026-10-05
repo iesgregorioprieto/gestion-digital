@@ -114,6 +114,11 @@ export default function Login() {
     sessionStorage.setItem('profesor_rol_gestion', prof.rol_gestion || '');
     sessionStorage.setItem('profesor_roles', JSON.stringify(prof.roles || ['profesor']));
 
+    // Venía de escanear el QR o la etiqueta de una reunión: de vuelta
+    // allí para que fiche. Solo rutas propias de /fichar, nunca otra web.
+    const volver = new URLSearchParams(window.location.search).get('volver') || '';
+    if (/^\/fichar(\?|$)/.test(volver)) { window.location.href = volver; return; }
+
     // Si aún no ha rellenado su ficha → a completarla
     window.location.href = prof.fichaCompleta ? '/profesor' : '/completar-perfil';
   }
