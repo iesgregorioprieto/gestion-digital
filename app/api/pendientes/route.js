@@ -126,13 +126,15 @@ export async function GET(request) {
     // ── TODOS: encuesta de valoración abierta y sin contestar ──────
     bloque('valoracion', async () => {
       const { data: rondas } = await c.from('valoracion_rondas')
-        .select('id, titulo, cierra').lte('abre', hoy).gte('cierra', hoy)
-        .order('created_at', { ascending: false }).limit(1);
-      const r = (rondas || [])[0];
-      if (!r) return;
+        .select('id, titulo, cierra, destinatarios').lte('abre', hoy).gte('cierra', hoy)
+        .order('created_at', { ascending: false });
+      const mias = (rondas || []).filter(r => !Array.isArray(r.destinatarios) || r.destinatarios.includes(sesion.id));
+      if (!mias.length) return;
       const { data: ya } = await c.from('valoracion_contestados')
-        .select('ronda_id').eq('ronda_id', r.id).eq('profesor_id', sesion.id).limit(1);
-      if ((ya || []).length) return;
+        .select('ronda_id').eq('profesor_id', sesion.id).in('ronda_id', mias.map(r => r.id));
+      const hechas = new Set((ya || []).map(x => x.ronda_id));
+      const r = mias.find(x => !hechas.has(x.id));
+      if (!r) return;
       const quedan = diasEntre(hoy, r.cierra);
       tareas.push({
         id: `valoracion-${r.id}`, icono: '⭐',

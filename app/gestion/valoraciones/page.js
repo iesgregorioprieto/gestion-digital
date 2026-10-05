@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { MODULOS_VALORACION, nombreModulo, textoModulo } from '@/lib/modulosValoracion';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
+import { DEPARTAMENTOS } from '@/lib/sectores';
 import RondaAntigua from './RondaAntigua';
 
 /**
@@ -45,6 +46,14 @@ export default function PanelValoraciones() {
   const [cierra, setCierra] = useState(sumarDias(hoyLocal(), 14));
   const [marcados, setMarcados] = useState(MODULOS_VALORACION.map(m => m.id));
   const [guardando, setGuardando] = useState(false);
+  // A quién va dirigida (mismo censo y grupos que Convocatorias)
+  const [censo, setCenso] = useState([]);
+  const [equipos, setEquipos] = useState([]);
+  const [destinatarios, setDestinatarios] = useState([]);
+  const [dirigidaA, setDirigidaA] = useState('');
+  const [dptoElegido, setDptoElegido] = useState(DEPARTAMENTOS[0]);
+  const [equipoElegido, setEquipoElegido] = useState('');
+  const [buscar, setBuscar] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -74,16 +83,31 @@ export default function PanelValoraciones() {
     } catch (e) { setError('No se pudieron cargar los resultados.'); }
   }
 
+  async function abrirFormulario() {
+    setCreando(true); setError('');
+    if (censo.length) return;
+    try {
+      const d = await (await fetch('/api/convocatorias?modo=censo')).json();
+      setCenso(d.profesores || []); setEquipos(d.equipos || []);
+    } catch (e) { setError('No se pudo cargar la lista del profesorado.'); }
+  }
+
+  function anadir(ids, etiqueta) {
+    setDestinatarios(prev => [...new Set([...prev, ...ids])]);
+    setDirigidaA(prev => prev ? `${prev} + ${etiqueta}` : etiqueta);
+  }
+  function quitar(ids) { setDestinatarios(prev => prev.filter(x => !ids.includes(x))); }
+
   async function lanzar() {
     setGuardando(true); setError('');
     try {
       const r = await fetch('/api/valoraciones/rondas', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'lanzar', titulo, cierra, modulos: marcados }),
+        body: JSON.stringify({ accion: 'lanzar', titulo, cierra, modulos: marcados, destinatarios, destinatarios_texto: dirigidaA }),
       });
       const d = await r.json();
       if (!r.ok) { setError(d.error || 'No se pudo lanzar.'); }
-      else { setCreando(false); await cargarLista(false); elegir(d.id); }
+      else { setCreando(false); setDestinatarios([]); setDirigidaA(''); await cargarLista(false); elegir(d.id); }
     } catch (e) { setError('No se pudo lanzar.'); }
     setGuardando(false);
   }
@@ -116,10 +140,12 @@ export default function PanelValoraciones() {
     doc.text(actual.titulo, 14, 20);
 
     doc.setTextColor(40, 40, 40); doc.setFontSize(10.5);
-    const pct = activos ? ` (${Math.round((actual.contestados / activos) * 100)} %)` : '';
+    const pct = actual.total ? ` (${Math.round((actual.contestados / actual.total) * 100)} %)` : '';
     doc.text(`Periodo: del ${fechaCorta(actual.abre)} al ${fechaCorta(actual.cierra)}`, 14, 34);
-    doc.text(`Participación: ${actual.contestados}${activos ? ` de ${activos}` : ''} profesores${pct}`, 14, 40);
-    doc.text('Escala de 1 a 5 estrellas. Encuesta anónima.', 14, 46);
+    doc.text(`Dirigida a: ${actual.destinatarios_texto || 'Claustro de profesores'}`, 14, 40);
+    doc.text(`Participación: ${actual.contestados}${actual.total ? ` de ${actual.total}` : ''} personas${pct}`, 14, 46);
+    doc.setFontSize(9); doc.setTextColor(120, 120, 120);
+    doc.text('Escala de 1 a 5 estrellas. Encuesta anónima.', 14, 51);
 
     const hayAnterior = !!datos.anterior;
     const cabecera = ['Módulo', 'Media', '5', '4', '3', '2', '1', 'No lo usan'];
@@ -136,7 +162,7 @@ export default function PanelValoraciones() {
     });
 
     autoTable(doc, {
-      startY: 52, head: [cabecera], body: filas,
+      startY: 56, head: [cabecera], body: filas,
       styles: { fontSize: 9.5, cellPadding: 2.2 },
       headStyles: { fillColor: [126, 34, 206] },
       columnStyles: { 0: { cellWidth: 62 }, 1: { fontStyle: 'bold', halign: 'center' } },
@@ -185,7 +211,6 @@ export default function PanelValoraciones() {
     doc.save(`${nombre}.pdf`);
   }
 
-  const abierta = rondas.find(r => r.abre <= hoy && r.cierra >= hoy);
   const actual = rondas.find(r => r.id === elegida);
   const caja = { backgroundColor: 'white', borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' };
 
@@ -203,8 +228,8 @@ export default function PanelValoraciones() {
       <div style={{ padding: 16, maxWidth: 1000, margin: '0 auto' }}>
 
         {/* ── Lanzar ronda ── */}
-        {!abierta && !creando && !cargando && (
-          <button onClick={() => setCreando(true)}
+        {!creando && !cargando && (
+          <button onClick={abrirFormulario}
             style={{ width: '100%', padding: 15, borderRadius: 12, border: 'none', backgroundColor: '#7e22ce', color: 'white', fontWeight: 800, fontSize: 15.5, cursor: 'pointer', marginBottom: 14 }}>
             ＋ Lanzar nueva ronda
           </button>
@@ -237,13 +262,69 @@ export default function PanelValoraciones() {
               ))}
             </div>
 
+            {/* ── Dirigida a ── */}
+            <div style={{ padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', marginBottom: 14 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, color: AZUL, marginBottom: 10 }}>👥 Dirigida a — {destinatarios.length}</div>
+              {(() => {
+                const par = (ids, etiqueta) => (
+                  <div style={{ display: 'inline-flex', border: '1.5px solid #ddd', borderRadius: 8, overflow: 'hidden' }}>
+                    <button onClick={() => anadir(ids, etiqueta)} style={{ padding: '7px 12px', fontSize: 12.5, border: 'none', background: 'white', cursor: 'pointer', color: '#333' }}>+ {etiqueta}</button>
+                    <button onClick={() => quitar(ids)} title={`Quitar ${etiqueta}`} style={{ padding: '7px 10px', fontSize: 12.5, border: 'none', borderLeft: '1.5px solid #ddd', background: '#fef2f2', color: '#991b1b', cursor: 'pointer', fontWeight: 700 }}>−</button>
+                  </div>
+                );
+                const eq = equipos.find(x => String(x.id) === equipoElegido);
+                return (
+                  <>
+                    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
+                      {par(censo.map(p => p.id), 'Todo el claustro')}
+                      {par(censo.filter(p => p.jefeDpto || p.directivo).map(p => p.id), 'CCP')}
+                      {par(censo.filter(p => p.tutor).map(p => p.id), 'Tutores')}
+                      {par(censo.filter(p => p.directivo).map(p => p.id), 'Equipo directivo')}
+                      <button onClick={() => { setDestinatarios([]); setDirigidaA(''); }} style={{ ...enlace, color: '#991b1b', padding: '7px 8px' }}>Vaciar</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
+                      <select value={dptoElegido} onChange={e => setDptoElegido(e.target.value)} style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 12.5 }}>
+                        {DEPARTAMENTOS.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      {par(censo.filter(p => p.departamento === dptoElegido).map(p => p.id), dptoElegido)}
+                    </div>
+                    {equipos.length > 0 && (
+                      <div style={{ display: 'flex', gap: 7, marginBottom: 10 }}>
+                        <select value={equipoElegido} onChange={e => setEquipoElegido(e.target.value)} style={{ flex: 1, padding: '7px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 12.5 }}>
+                          <option value="">— elige un equipo —</option>
+                          {equipos.map(x => <option key={x.id} value={x.id}>{x.nombre}</option>)}
+                        </select>
+                        {par(eq?.miembros || [], eq?.nombre || 'equipo')}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+              <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por nombre…"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13, marginBottom: 8, boxSizing: 'border-box' }} />
+              <div style={{ maxHeight: 200, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 8, backgroundColor: 'white' }}>
+                {censo.filter(p => !buscar.trim() || p.nombre.toLowerCase().includes(buscar.trim().toLowerCase())).map(p => (
+                  <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', fontSize: 13, borderBottom: '1px solid #f1f5f9', cursor: 'pointer', backgroundColor: destinatarios.includes(p.id) ? '#faf5ff' : 'white' }}>
+                    <input type="checkbox" checked={destinatarios.includes(p.id)}
+                      onChange={() => setDestinatarios(prev => prev.includes(p.id) ? prev.filter(x => x !== p.id) : [...prev, p.id])} />
+                    <span style={{ flex: 1 }}>{p.nombre}</span>
+                    <span style={{ fontSize: 11, color: '#94a3b8' }}>{p.departamento}</span>
+                  </label>
+                ))}
+                {!censo.length && <div style={{ padding: 14, textAlign: 'center', color: '#aaa', fontSize: 13 }}>⏳ Cargando profesorado…</div>}
+              </div>
+              <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#444', marginTop: 10 }}>Cómo aparece en el informe</label>
+              <input value={dirigidaA} onChange={e => setDirigidaA(e.target.value)} placeholder="Claustro de profesores"
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, marginTop: 4, boxSizing: 'border-box' }} />
+            </div>
+
             <div style={{ fontSize: 12.5, color: '#666', marginBottom: 12, lineHeight: 1.5 }}>
-              Al lanzarla, a todo el profesorado le aparece en <strong>Tareas pendientes</strong> hasta que conteste o cierre la ronda.
+              Al lanzarla, a las personas elegidas les aparece en <strong>Tareas pendientes</strong> hasta que contesten o cierre la ronda.
             </div>
 
             {error && <div style={{ color: '#991b1b', fontSize: 13.5, marginBottom: 10 }}>⚠️ {error}</div>}
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={lanzar} disabled={guardando || !marcados.length || !titulo.trim()}
+              <button onClick={lanzar} disabled={guardando || !marcados.length || !titulo.trim() || !destinatarios.length}
                 style={{ padding: '11px 22px', borderRadius: 10, border: 'none', backgroundColor: guardando ? '#cbd5e1' : '#7e22ce', color: 'white', fontWeight: 700, cursor: 'pointer' }}>
                 {guardando ? 'Lanzando...' : '🚀 Lanzar'}
               </button>
@@ -279,11 +360,14 @@ export default function PanelValoraciones() {
                   Del {fechaCorta(actual.abre)} al {fechaCorta(actual.cierra)}
                   {actual.abre <= hoy && actual.cierra >= hoy ? ' · abierta' : ' · cerrada'}
                 </div>
+                {actual.destinatarios_texto && (
+                  <div style={{ fontSize: 13, color: '#7e22ce', marginTop: 3, fontWeight: 600 }}>👥 {actual.destinatarios_texto}</div>
+                )}
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: 22, fontWeight: 800, color: '#7e22ce' }}>{actual.contestados}{activos ? ` / ${activos}` : ''}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: '#7e22ce' }}>{actual.contestados}{actual.total ? ` / ${actual.total}` : ''}</div>
                 <div style={{ fontSize: 12, color: '#888' }}>
-                  han contestado{activos ? ` (${Math.round((actual.contestados / activos) * 100)} %)` : ''}
+                  han contestado{actual.total ? ` (${Math.round((actual.contestados / actual.total) * 100)} %)` : ''}
                 </div>
               </div>
             </div>

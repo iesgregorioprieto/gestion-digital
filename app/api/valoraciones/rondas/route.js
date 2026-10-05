@@ -7,8 +7,10 @@ import { IDS_MODULOS, tieneModulo } from '@/lib/modulosValoracion';
 /**
  * RONDAS DE VALORACIÓN (oct. 2026)
  *
- * El equipo directivo lanza una ronda con los módulos que quiera y una
- * fecha de cierre. Mientras está abierta, a cada profesor le sale en
+ * El equipo directivo lanza una ronda con los módulos que quiera, una
+ * fecha de cierre y a quién va dirigida (todo el claustro, CCP, un
+ * departamento, el equipo directivo… igual que en Convocatorias).
+ * Puede haber varias abiertas a la vez. Mientras está abierta, a cada profesor le sale en
  * Tareas pendientes hasta que contesta. Cada módulo: de 1 a 5 estrellas
  * o «No lo uso», con comentario opcional.
  *
@@ -34,14 +36,19 @@ async function sesionDe(request) {
   return m ? verificarSesion(m[1], secreto) : null;
 }
 
-/** La ronda abierta hoy, si la hay (la más reciente) */
-async function rondaAbierta(c) {
+// ¿Va dirigida a esta persona? (las rondas sin lista, de antes, van a todos)
+function esDestinatario(ronda, id) {
+  return !Array.isArray(ronda.destinatarios) || ronda.destinatarios.includes(id);
+}
+
+/** Rondas abiertas hoy, las más recientes primero */
+async function rondasAbiertas(c) {
   const hoy = hoyLocal();
   const { data } = await c.from('valoracion_rondas')
-    .select('id, titulo, modulos, abre, cierra')
+    .select('id, titulo, modulos, abre, cierra, destinatarios')
     .lte('abre', hoy).gte('cierra', hoy)
-    .order('created_at', { ascending: false }).limit(1);
-  return (data || [])[0] || null;
+    .order('created_at', { ascending: false });
+  return data || [];
 }
 
 // Resume las respuestas de una ronda por módulo
@@ -69,18 +76,23 @@ export async function GET(request) {
   try {
     // ── La encuesta del profesor ──
     if (vista === 'mia') {
-      const ronda = await rondaAbierta(c);
-      if (!ronda) return Response.json({ ronda: null });
+      // Puede haber varias abiertas a la vez (p. ej. una de prueba al
+      // equipo directivo y otra al claustro): la primera sin contestar.
+      const mias = (await rondasAbiertas(c)).filter(r => esDestinatario(r, sesion.id));
+      if (!mias.length) return Response.json({ ronda: null });
       const { data } = await c.from('valoracion_contestados')
-        .select('ronda_id').eq('ronda_id', ronda.id).eq('profesor_id', sesion.id).limit(1);
-      return Response.json({ ronda, contestada: (data || []).length > 0 });
+        .select('ronda_id').eq('profesor_id', sesion.id).in('ronda_id', mias.map(r => r.id));
+      const ya = new Set((data || []).map(x => x.ronda_id));
+      const pendiente = mias.find(r => !ya.has(r.id));
+      const { destinatarios, ...ronda } = pendiente || mias[0];
+      return Response.json({ ronda, contestada: !pendiente });
     }
 
     // ── Panel del equipo directivo ──
     if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
     const { data: rondas } = await c.from('valoracion_rondas')
-      .select('id, titulo, modulos, abre, cierra, created_at')
+      .select('id, titulo, modulos, abre, cierra, destinatarios, destinatarios_texto, created_at')
       .order('created_at', { ascending: false });
 
     const { count: activos } = await c.from('profesores')
@@ -90,7 +102,10 @@ export async function GET(request) {
     for (const r of (rondas || [])) {
       const { count } = await c.from('valoracion_contestados')
         .select('profesor_id', { count: 'exact', head: true }).eq('ronda_id', r.id);
-      lista.push({ ...r, contestados: count || 0 });
+      const { destinatarios, ...resto } = r;
+      // Participación sobre a quién iba dirigida; las antiguas, sobre el claustro
+      lista.push({ ...resto, contestados: count || 0,
+        total: Array.isArray(destinatarios) ? destinatarios.length : (activos || 0) });
     }
 
     const id = url.searchParams.get('ronda');
@@ -147,9 +162,10 @@ export async function POST(request) {
   try {
     // ── Contestar la encuesta ──
     if (body.accion === 'responder') {
-      const ronda = await rondaAbierta(c);
-      if (!ronda || ronda.id !== body.ronda_id) {
-        return Response.json({ error: 'La encuesta ya está cerrada.' }, { status: 400 });
+      const ronda = (await rondasAbiertas(c)).find(r => r.id === body.ronda_id);
+      if (!ronda) return Response.json({ error: 'La encuesta ya está cerrada.' }, { status: 400 });
+      if (!esDestinatario(ronda, sesion.id)) {
+        return Response.json({ error: 'Esta encuesta no va dirigida a ti.' }, { status: 403 });
       }
       const respuestas = Array.isArray(body.respuestas) ? body.respuestas : [];
       const porModulo = new Map(respuestas.map(r => [r.modulo, r]));
@@ -206,13 +222,15 @@ export async function POST(request) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cierra) || cierra < hoy || cierra > sumarDias(hoy, 60)) {
         return Response.json({ error: 'La fecha de cierre debe estar entre hoy y dentro de 60 días.' }, { status: 400 });
       }
-      if (await rondaAbierta(c)) {
-        return Response.json({ error: 'Ya hay una ronda abierta. Ciérrala antes de lanzar otra.' }, { status: 409 });
-      }
+      const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const destinatarios = [...new Set((Array.isArray(body.destinatarios) ? body.destinatarios : [])
+        .map(String).filter(x => UUID.test(x)))];
+      if (!destinatarios.length) return Response.json({ error: 'Elige a quién va dirigida.' }, { status: 400 });
+      const destinatarios_texto = String(body.destinatarios_texto || '').trim().slice(0, 200) || null;
       // Se guardan en el orden de la lista común, elija en el orden que elija
       const ordenados = IDS_MODULOS.filter(m => modulos.includes(m));
       const { data, error } = await c.from('valoracion_rondas')
-        .insert([{ titulo, modulos: ordenados, abre: hoy, cierra, creada_por: sesion.id }])
+        .insert([{ titulo, modulos: ordenados, abre: hoy, cierra, creada_por: sesion.id, destinatarios, destinatarios_texto }])
         .select('id').single();
       if (error) throw error;
       return Response.json({ ok: true, id: data.id });
