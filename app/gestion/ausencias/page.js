@@ -294,6 +294,7 @@ export default function GestionAusencias() {
         justificacion_urls: [], subtipo: null,
         esDLD: true,
         tramitado: !!d.tramitado,
+        tramitado_obs: d.tramitado_obs || '',
       }));
     // Las ausencias normales solo traen profesor_id y profesor_nombre —
     // los apellidos hay que sacarlos de su ficha para poder agrupar y
@@ -350,6 +351,7 @@ export default function GestionAusencias() {
         : '—';
       const yaTram = a.tramitado ? 'checked' : '';
       const idAt = String(a.id).replace(/"/g, '&quot;');
+      const obsAt = (a.tramitado_obs || '').replace(/"/g, '&quot;');
       return `
       <tr>
         <td>${nombre.replace(/^,\s*/, '').replace(/,\s*$/, '') || '—'}</td>
@@ -360,6 +362,10 @@ export default function GestionAusencias() {
         <td class="c">${enlaces}</td>
         <td class="c">
           <label><input type="checkbox" data-id="${idAt}" ${yaTram} onchange="marcarTramitado(this)"> Sí</label>
+        </td>
+        <td>
+          <input type="text" class="obs" data-id="${idAt}" value="${obsAt}" placeholder="…"
+            onblur="guardarObservacion(this)" onkeydown="if(event.key==='Enter')this.blur()">
         </td>
       </tr>`;
     };
@@ -377,7 +383,7 @@ export default function GestionAusencias() {
       <table>
         <thead><tr>
           <th>Profesor/a</th><th>Fecha</th><th>Motivo</th><th>Horas de clase</th>
-          <th class="c">Justif.</th><th class="c">Documento</th><th class="c">Tramitado</th>
+          <th class="c">Justif.</th><th class="c">Documento</th><th class="c">Tramitado</th><th>Observaciones</th>
         </tr></thead>
         <tbody>${delMes.map(filaDetalle).join('')}</tbody>
       </table>`;
@@ -418,9 +424,13 @@ export default function GestionAusencias() {
   .pend { color: #92400e; font-weight: 700; }
   a { color: #1e3a5f; }
   input[type=checkbox] { transform: scale(1.15); margin-right: 4px; }
+  input.obs { width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 4px;
+    padding: 4px 6px; font-size: 11px; font-family: inherit; }
+  input.obs:focus { border-color: #1e3a5f; outline: none; }
   @media print {
     .barra { display: none; }
     a { color: #1a1a1a; text-decoration: none; }
+    input.obs { border: none; padding: 0; }
   }
 </style></head><body>
 
@@ -464,6 +474,36 @@ function marcarTramitado(chk) {
     chk.disabled = false;
     chk.checked = !chk.checked;
     alert('No se ha podido guardar. Inténtalo de nuevo.');
+  });
+}
+
+// Observaciones de Elena sobre la tramitación. Se guarda al salir del
+// campo (o al pulsar Intro), no en cada tecla, e independientemente de
+// si la fila está marcada como tramitada o no.
+function guardarObservacion(input) {
+  var valorOriginal = input.defaultValue;
+  var valor = input.value;
+  if (valor === valorOriginal) return;
+  var id = input.dataset.id;
+  var esDld = id.indexOf('dld-') === 0;
+  var idReal = esDld ? id.slice(4) : id;
+  input.style.opacity = '0.6';
+  fetch(esDld ? '/api/dld' : '/api/ausencias', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      accion: 'tramitar',
+      id: idReal,
+      datos: { observaciones: valor },
+    }),
+  }).then(function (r) {
+    input.style.opacity = '1';
+    if (r.ok) { input.defaultValue = valor; }
+    else { input.value = valorOriginal; alert('No se ha podido guardar la observación.'); }
+  }).catch(function () {
+    input.style.opacity = '1';
+    input.value = valorOriginal;
+    alert('No se ha podido guardar la observación.');
   });
 }
 </script>

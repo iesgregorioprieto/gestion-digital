@@ -383,12 +383,24 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
-      const marcar = !!datos?.tramitado;
-      const { error } = await supa().from('dld').update({
-        tramitado: marcar,
-        tramitado_por: marcar ? sesion.id : null,
-        tramitado_at: marcar ? new Date().toISOString() : null,
-      }).eq('id', id);
+      // El checkbox y las observaciones se guardan por separado: escribir
+      // una nota no tiene por qué marcar la fila como tramitada, y
+      // marcarla no debe borrar lo que Elena ya había anotado.
+      const cambios = {};
+      if (datos?.tramitado !== undefined) {
+        const marcar = !!datos.tramitado;
+        cambios.tramitado = marcar;
+        cambios.tramitado_por = marcar ? sesion.id : null;
+        cambios.tramitado_at = marcar ? new Date().toISOString() : null;
+      }
+      if (datos?.observaciones !== undefined) {
+        cambios.tramitado_obs = String(datos.observaciones).trim() || null;
+      }
+      if (Object.keys(cambios).length === 0) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+
+      const { error } = await supa().from('dld').update(cambios).eq('id', id);
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
