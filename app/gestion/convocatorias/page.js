@@ -85,9 +85,6 @@ export default function GestionConvocatorias() {
   const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
   const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
   const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
-  const [verNfc, setVerNfc] = useState(false);
-  const [etiquetas, setEtiquetas] = useState([]);
-  const [nombreNfc, setNombreNfc] = useState('');
   const [etiquetasConv, setEtiquetasConv] = useState([]);   // etiquetas NFC de la reunión abierta en directo
 
   useEffect(() => {
@@ -439,13 +436,6 @@ export default function GestionConvocatorias() {
     setTimeout(() => w.print(), 500);
   }
 
-  async function cargarEtiquetas() {
-    try {
-      const r = await fetch('/api/convocatorias?modo=nfc');
-      const d = await r.json();
-      setEtiquetas(d.etiquetas || []);
-    } catch (e) { /* se queda con lo anterior */ }
-  }
   async function cargarEtiquetasConv(convId) {
     try {
       const r = await fetch(`/api/convocatorias?modo=nfc&convocatoria=${convId}`);
@@ -462,18 +452,6 @@ export default function GestionConvocatorias() {
   const enlaceNfc = codigo => `${typeof window !== 'undefined' ? window.location.origin : ''}/fichar?n=${codigo}`;
   const abrirPantallaFichaje = convId => window.open(`/gestion/convocatorias/fichaje?id=${convId}`, '_blank');
 
-  async function crearEtiqueta() {
-    const d = await apiPost('nfc_crear', { nombre: nombreNfc });
-    if (!d) return;
-    setNombreNfc('');
-    aviso('📶 Etiqueta creada. Copia su enlace y grábalo en la etiqueta.', 'ok');
-    cargarEtiquetas();
-  }
-  async function activarEtiqueta(e) {
-    if (e.activa && !confirm(`¿Desactivar «${e.nombre}»? Dejará de servir para fichar.`)) return;
-    const d = await apiPost('nfc_activar', { codigo: e.codigo, activa: !e.activa });
-    if (d) cargarEtiquetas();
-  }
   function copiar(texto) {
     navigator.clipboard?.writeText(texto).then(() => aviso('📋 Enlace copiado', 'ok'), () => aviso('No se ha podido copiar: selecciónalo a mano', 'error'));
   }
@@ -628,48 +606,6 @@ export default function GestionConvocatorias() {
               ➕ Nueva convocatoria
             </button>
 
-            {/* Etiquetas NFC del centro: se graban una vez y valen para todas las reuniones */}
-            <div style={{ backgroundColor: 'white', borderRadius: 12, marginBottom: 16, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
-              <button onClick={() => { const v = !verNfc; setVerNfc(v); if (v) cargarEtiquetas(); }}
-                style={{ width: '100%', padding: '12px 16px', border: 'none', background: 'white', textAlign: 'left', cursor: 'pointer',
-                  fontWeight: 800, fontSize: 13.5, color: AZUL, display: 'flex', justifyContent: 'space-between' }}>
-                <span>📶 Etiquetas NFC para fichar en la entrada</span><span>{verNfc ? '▲' : '▼'}</span>
-              </button>
-              {verNfc && (
-                <div style={{ padding: '0 16px 16px' }}>
-                  <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.55, marginBottom: 10 }}>
-                    Cada etiqueta se graba <strong>una sola vez</strong> y sirve para todas las reuniones con fichaje en la entrada:
-                    al acercar el móvil, ficha en la reunión que tenga el fichaje abierto en ese momento.
-                    Para grabarla: instala <strong>NFC Tools</strong> (gratis, Android e iPhone) → <em>Escribir</em> → <em>Añadir un registro</em> →
-                    <em> URL</em> → pega el enlace → <em>Escribir</em> y acerca la etiqueta.
-                  </div>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                    <input value={nombreNfc} onChange={e => setNombreNfc(e.target.value)} placeholder="Dónde va pegada: «Puerta del salón de actos»"
-                      style={{ ...campo, fontSize: 13, padding: '9px 11px' }} />
-                    <button onClick={crearEtiqueta} style={{ ...btnPrimario(VERDE), padding: '9px 14px', fontSize: 13, whiteSpace: 'nowrap' }}>+ Nueva</button>
-                  </div>
-                  {etiquetas.length === 0 && <div style={{ fontSize: 12.5, color: '#aaa', textAlign: 'center', padding: 8 }}>Todavía no hay ninguna etiqueta</div>}
-                  {etiquetas.map(e => {
-                    const enlace = `${typeof window !== 'undefined' ? window.location.origin : ''}/fichar?n=${e.codigo}`;
-                    return (
-                      <div key={e.codigo} style={{ padding: '10px 12px', borderRadius: 9, border: '1px solid #e2e8f0', marginBottom: 8, opacity: e.activa ? 1 : 0.55 }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                          <div style={{ fontWeight: 700, fontSize: 13.5 }}>{e.activa ? '🟢' : '⚪'} {e.nombre}</div>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {e.activa && <button onClick={() => copiar(enlace)} style={{ ...btnSecundario, padding: '5px 11px', fontSize: 12 }}>📋 Copiar enlace</button>}
-                            <button onClick={() => activarEtiqueta(e)} style={{ ...btnSecundario, padding: '5px 11px', fontSize: 12, color: e.activa ? ROJO : VERDE }}>
-                              {e.activa ? 'Desactivar' : 'Activar'}
-                            </button>
-                          </div>
-                        </div>
-                        {e.activa && <div style={{ fontSize: 11, color: '#64748b', marginTop: 5, wordBreak: 'break-all', fontFamily: 'monospace' }}>{enlace}</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
             {cargando ? (
               <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
             ) : lista.length === 0 ? (
@@ -701,6 +637,7 @@ export default function GestionConvocatorias() {
                       {['convocada', 'en_curso'].includes(c.estado) && <>
                         <button onClick={() => abrirPantallaFichaje(c.id)} style={btnSecundario}>📺 Pantalla fichaje</button>
                         <button onClick={() => imprimirCartel(c)} style={btnSecundario}>🖨️ Cartel QR</button>
+                        <button onClick={() => abrirSesion(c)} style={btnSecundario}>📶 Enlaces NFC</button>
                         <button onClick={() => imprimirFirmas(c)} style={btnSecundario}>🖨️ Firmas</button>
                       </>}
                       {c.estado === 'convocada' && <>

@@ -377,13 +377,13 @@ export async function GET(request) {
       });
     }
 
-    // Etiquetas NFC del centro
+    // Etiquetas NFC de una convocatoria
     if (modo === 'nfc') {
       const conv = idNum(url.searchParams.get('convocatoria'));
-      let q = cliente.from('nfc_etiquetas')
-        .select('codigo, nombre, tipo, activa, convocatoria_id, created_at').order('created_at');
-      q = conv ? q.eq('convocatoria_id', conv) : q.is('convocatoria_id', null);
-      const { data } = await q;
+      if (!conv) return json({ error: 'falta_convocatoria' }, 400);
+      const { data } = await cliente.from('nfc_etiquetas')
+        .select('codigo, nombre, tipo, activa, convocatoria_id, created_at')
+        .eq('convocatoria_id', conv).order('created_at');
       return json({ etiquetas: data || [] });
     }
 
@@ -550,8 +550,7 @@ export async function POST(request) {
     }
 
     // Fichaje físico: con el QR del cartel (c + t) o con la etiqueta NFC
-    // de la entrada (n). La etiqueta es la misma para todas las
-    // reuniones: se ficha en la que tenga el fichaje abierto ahora.
+    // (n). Los dos van ligados a UNA convocatoria: no hay códigos generales.
     if (accion === 'fichar_presencia') {
       let c = null, metodo = null;
 
@@ -559,21 +558,10 @@ export async function POST(request) {
         const { data: et } = await cliente.from('nfc_etiquetas')
           .select('codigo, activa, convocatoria_id').eq('codigo', txt(datos.n, 64));
         const etiqueta = (et || [])[0];
-        if (!etiqueta?.activa) return json({ error: 'Esta etiqueta no es válida. Avisa al equipo directivo.' }, 400);
-        if (etiqueta.convocatoria_id) {
-          // Etiqueta grabada para una reunión concreta
-          c = await convocatoria(cliente, etiqueta.convocatoria_id);
-          if (!c) return json({ error: 'Esta etiqueta es de una reunión que ya no existe' }, 400);
-        } else {
-          // Etiqueta general: la reunión que tenga el fichaje abierto ahora
-          const { data: cs } = await cliente.from('convocatorias')
-            .select('*').in('estado', ['convocada', 'en_curso'])
-            .contains('convocados', [sesion.id]);
-          const abiertas = (cs || []).filter(fichajeAbierto)
-            .sort((x, y) => new Date(x.fichaje_inicio) - new Date(y.fichaje_inicio));
-          c = abiertas[0] || null;
-          if (!c) return json({ error: 'No tienes ninguna reunión con el fichaje abierto en este momento' }, 400);
-        }
+        // Cada etiqueta es de UNA reunión. Sin reunión no vale para nada.
+        if (!etiqueta?.activa || !etiqueta.convocatoria_id) return json({ error: 'Esta etiqueta no es válida. Avisa al equipo directivo.' }, 400);
+        c = await convocatoria(cliente, etiqueta.convocatoria_id);
+        if (!c) return json({ error: 'Esta etiqueta es de una reunión que ya no existe' }, 400);
         metodo = 'nfc';
       } else {
         c = await convocatoria(cliente, idNum(datos.c));
@@ -696,19 +684,17 @@ export async function POST(request) {
     // ── Etiquetas NFC ──
     if (accion === 'nfc_crear') {
       const convId = idNum(datos.convocatoria_id);
-      let nombre = txt(datos.nombre, 100);
-      if (convId) {
-        const cv = await convocatoria(cliente, convId);
-        if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
-        if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
-        const { count } = await cliente.from('nfc_etiquetas')
-          .select('codigo', { count: 'exact', head: true }).eq('convocatoria_id', convId);
-        nombre = nombre || `${cv.titulo} · etiqueta ${(count || 0) + 1}`;
-      }
-      if (!nombre) return json({ error: 'Ponle un nombre a la etiqueta (dónde va pegada)' }, 400);
+      if (!convId) return json({ error: 'Cada enlace NFC tiene que ser de una convocatoria' }, 400);
+      const cv = await convocatoria(cliente, convId);
+      if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
+      if (cv.estado === 'borrador') return json({ error: 'Primero hay que convocarla' }, 400);
+      if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
+      const { count } = await cliente.from('nfc_etiquetas')
+        .select('codigo', { count: 'exact', head: true }).eq('convocatoria_id', convId);
+      const nombre = txt(datos.nombre, 100) || `${cv.titulo} · etiqueta ${(count || 0) + 1}`;
       const codigo = randomBytes(9).toString('base64url');
       const { error } = await cliente.from('nfc_etiquetas')
-        .insert([{ codigo, nombre, tipo: 'fija', convocatoria_id: convId || null }]);
+        .insert([{ codigo, nombre, tipo: 'fija', convocatoria_id: convId }]);
       if (error) return json({ error: error.message }, 500);
       return json({ ok: true, codigo });
     }
