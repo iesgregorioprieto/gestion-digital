@@ -279,8 +279,6 @@ export default function GestionConvocatorias() {
 
   async function abrirSesion(c) {
     setNuevaVot(null);
-    setEtiquetasConv([]);
-    cargarEtiquetasConv(c.id);
     await cargarDetalle(c.id);
     setVista('sesion');
   }
@@ -1011,22 +1009,6 @@ export default function GestionConvocatorias() {
                     <button onClick={() => abrirPantallaFichaje(c.id)} style={{ ...btnPrimario(VERDE), padding: '8px 14px', fontSize: 13 }}>📺 Pantalla de fichaje</button>
                     <button onClick={() => imprimirFirmas(c)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>🖨️ Hoja de firmas</button>
                   </div>
-                  {etiquetasConv.length > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      {etiquetasConv.map(e => (
-                        <div key={e.codigo} style={{ padding: '8px 11px', borderRadius: 8, backgroundColor: 'white', border: '1px solid #dcfce7', marginBottom: 6, opacity: e.activa ? 1 : 0.55 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{e.activa ? '🟢' : '⚪'} {e.nombre}</span>
-                            {e.activa && <button onClick={() => copiar(enlaceNfc(e.codigo))} style={{ ...btnSecundario, padding: '4px 10px', fontSize: 11.5 }}>📋 Copiar enlace</button>}
-                          </div>
-                          {e.activa && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, wordBreak: 'break-all', fontFamily: 'monospace' }}>{enlaceNfc(e.codigo)}</div>}
-                        </div>
-                      ))}
-                      <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5 }}>
-                        Etiquetas de esta reunión. Se desactivan solas al finalizarla.
-                      </div>
-                    </div>
-                  )}
                 </div>
 
                 {/* Fichaje */}
