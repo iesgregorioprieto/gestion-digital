@@ -6,6 +6,9 @@ import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
 import { diasDeLaAusencia } from '@/lib/diasAusencia';
+import { normClave, normHora } from '@/lib/asignacionGuardias';
+import { adjuntosDe, MAX_ADJUNTOS } from '@/lib/adjuntos';
+import { hoyLocal } from '@/lib/fechas';
 
 /**
  * LECTURA DE AUSENCIAS
@@ -541,6 +544,155 @@ export async function POST(request) {
         return Response.json({ error: 'no_encontrada_o_ajena' }, { status: 403 });
       }
       return Response.json({ ok: true });
+    }
+
+    /**
+     * TAREAS PUESTAS POR JEFATURA (petición de Sebas, oct. 2026)
+     *
+     * A veces el profesor registra la ausencia sin tareas y luego las
+     * manda por correo. Jefatura las escribe aquí, en su ausencia.
+     *
+     * Solo se tocan las tareas: ni las horas, ni las fechas, ni el motivo.
+     *   · Ausencia de un día → una tarea por hora de clase.
+     *   · Varios días o baja → una tarea por módulo. Se guardan TODOS los
+     *     módulos, también los que quedan vacíos: si solo hubiera uno, el
+     *     motor lo engancharía a todas sus clases.
+     *
+     * La tarea ya está copiada en las guardias repartidas, así que se
+     * lleva también allí (de hoy en adelante, fichadas incluidas) para
+     * que quien está en el aula vea la nueva al momento.
+     *
+     * Cada tarea cambiada queda firmada (tarea_jefatura: por y cuándo),
+     * para que no parezca que la dejó el profesor.
+     */
+    if (accion === 'editar_tareas') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      if (!id || !Array.isArray(datos?.tareas)) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+
+      const { data: filas, error: errLee } = await supa()
+        .from('ausencias')
+        .select('id, profesor_id, fecha_inicio, fecha_fin, horas')
+        .eq('id', id);
+      if (errLee) return Response.json({ error: errLee.message }, { status: 500 });
+      const aus = (filas || [])[0];
+      if (!aus) return Response.json({ error: 'no_encontrada' }, { status: 404 });
+
+      const numHora = h => String(h?.hora || h?.hora_id || '').trim().match(/^(\d)/)?.[1] || '';
+      const limpia = t => ({
+        instrucciones: String(t?.instrucciones || '').trim() || null,
+        archivos: (Array.isArray(t?.archivos) ? t.archivos : [])
+          .filter(a => a && a.url)
+          .slice(0, MAX_ADJUNTOS)
+          .map(a => ({ url: String(a.url), nombre: String(a.nombre || 'Archivo') })),
+      });
+      // El aviso que pone "Cambiar horas" en las horas añadidas no es una tarea
+      const textoDe = h => (/^Hora añadida por jefatura/.test(h?.instrucciones || '') ? null : (h?.instrucciones || null));
+      const mismaTarea = (h, t) =>
+        textoDe(h) === t.instrucciones
+        && JSON.stringify(adjuntosDe(h).map(a => a.url)) === JSON.stringify(t.archivos.map(a => a.url));
+      const firma = { por: sesion.nombre || 'Jefatura', en: new Date().toISOString() };
+      const conTarea = (h, t) => ({
+        ...h,
+        instrucciones: t.instrucciones,
+        archivos: t.archivos,
+        archivo_url: t.archivos[0]?.url || null,
+        archivo_nombre: t.archivos[0]?.nombre || null,
+        tarea_jefatura: firma,
+      });
+
+      const horas = Array.isArray(aus.horas) ? aus.horas : [];
+      // Por horas si marcó alguna hora concreta (también de tarde); si no, por módulos
+      const porHoras = horas.some(h => numHora(h) || /^tarde/i.test(String(h?.hora || h?.hora_id || '').trim()));
+      let nuevas = [...horas];
+      let cambiadas = 0;
+
+      if (porHoras) {
+        nuevas = horas.map(h => {
+          const n = numHora(h);
+          const llega = n && datos.tareas.find(t => String(t?.hora || '') === n);
+          if (!llega) return h;
+          const t = limpia(llega);
+          if (mismaTarea(h, t)) return h;
+          cambiadas++;
+          return conTarea(h, t);
+        });
+      } else {
+        const clave = x => normClave(x?.grupo) + '|' + normClave(x?.materia);
+        for (const llega of datos.tareas) {
+          if (!llega?.grupo) continue;
+          const t = limpia(llega);
+          const i = nuevas.findIndex(b => clave(b) === clave(llega));
+          if (i >= 0) {
+            if (mismaTarea(nuevas[i], t)) continue;
+            nuevas[i] = conTarea(nuevas[i], t);
+            cambiadas++;
+          } else {
+            const bloque = {
+              hora: 'Ausencia larga', tipo: 'clase',
+              grupo: String(llega.grupo), materia: llega.materia ? String(llega.materia) : null,
+            };
+            if (t.instrucciones || t.archivos.length) { nuevas.push(conTarea(bloque, t)); cambiadas++; }
+            else nuevas.push({ ...bloque, instrucciones: null, archivo_url: null, archivo_nombre: null });
+          }
+        }
+      }
+
+      if (cambiadas === 0 && nuevas.length === horas.length) {
+        return Response.json({ ok: true, horas, cambiadas: 0, guardias_actualizadas: 0 });
+      }
+
+      const cambios = { horas: nuevas };
+      try {
+        const dias = await calcularDias({ ...aus, horas: nuevas });
+        if (dias) cambios.dias = dias;
+      } catch (e) {
+        console.error('editar_tareas: no se han podido rehacer los días:', e?.message);
+      }
+      const { error: errGuarda } = await supa().from('ausencias').update(cambios).eq('id', id);
+      if (errGuarda) return Response.json({ error: errGuarda.message }, { status: 500 });
+
+      // Llevar la tarea a las guardias ya repartidas, de hoy en adelante
+      let guardiasActualizadas = 0;
+      try {
+        const hoy = hoyLocal();
+        const desde = aus.fecha_inicio > hoy ? aus.fecha_inicio : hoy;
+        const hasta = porHoras ? (aus.fecha_fin || aus.fecha_inicio) : aus.fecha_fin;
+        if (!hasta || hasta >= desde) {
+          let q = supa().from('apoyos_asignados')
+            .select('id, fecha, hora, grupo, materia, tarea, tarea_archivos')
+            .eq('profesor_ausente_id', aus.profesor_id)
+            .gte('fecha', desde);
+          if (hasta) q = q.lte('fecha', hasta);
+          const { data: apoyos } = await q;
+
+          const bloques = nuevas.filter(h => !numHora(h));
+          const unico = bloques.length === 1 ? bloques[0] : null;
+          const n = s => normClave(s || '');
+
+          for (const ap of apoyos || []) {
+            const t = porHoras
+              ? nuevas.find(h => numHora(h) && numHora(h) === normHora(ap.hora))
+              : (bloques.find(b => n(b.grupo) === n(ap.grupo) && n(b.materia) === n(ap.materia))
+                || bloques.find(b => n(b.grupo) === n(ap.grupo))
+                || unico);
+            if (!t) continue;
+            const tarea = t.instrucciones || null;
+            const archivos = adjuntosDe(t);
+            const antes = JSON.stringify((ap.tarea_archivos || []).map(a => a?.url));
+            if ((ap.tarea || null) === tarea && antes === JSON.stringify(archivos.map(a => a.url))) continue;
+            const { error } = await supa().from('apoyos_asignados')
+              .update({ tarea, tarea_archivos: archivos.length ? archivos : null })
+              .eq('id', ap.id);
+            if (!error) guardiasActualizadas++;
+          }
+        }
+      } catch (e) {
+        console.error('editar_tareas: no se han podido actualizar las guardias:', e?.message);
+      }
+
+      return Response.json({ ok: true, horas: nuevas, cambiadas, guardias_actualizadas: guardiasActualizadas });
     }
 
     // ─── Resolver: justificada o sin justificar ───

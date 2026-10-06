@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { adjuntosDe, enlaceDocumento } from '@/lib/adjuntos';
 import EditarHorasAusencia from '@/components/EditarHorasAusencia';
+import EditarTareasAusencia from '@/components/EditarTareasAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -78,6 +79,7 @@ export default function GestionAusencias() {
   const [dldAprobados, setDldAprobados] = useState([]);
   const [periodoInforme, setPeriodoInforme] = useState(null);   // ventana para elegir el periodo
   const [editandoHoras, setEditandoHoras] = useState(null);
+  const [editandoTareas, setEditandoTareas] = useState(null);
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
@@ -1020,6 +1022,15 @@ ${a.observaciones_directivo ? `
           </div>
         );
       })()}
+      {editandoTareas && (
+        <EditarTareasAusencia ausencia={editandoTareas} onCerrar={() => setEditandoTareas(null)}
+          onGuardado={(horas, guardias, cambiadas) => {
+            setAusencias(l => l.map(x => x.id === editandoTareas.id ? { ...x, horas } : x));
+            setEditandoTareas(null);
+            mostrarMensaje(cambiadas === 0 ? 'No había cambios en las tareas'
+              : `Tareas guardadas${guardias ? ` · actualizadas en ${guardias} guardia${guardias === 1 ? '' : 's'} ya repartida${guardias === 1 ? '' : 's'}` : ''}`, 'ok');
+          }} />
+      )}
       {editandoHoras && (
         <EditarHorasAusencia ausencia={editandoHoras} onCerrar={() => setEditandoHoras(null)}
           onGuardado={horas => {
@@ -1291,6 +1302,13 @@ ${a.observaciones_directivo ? `
                         padding: '7px 14px', borderRadius: 7, border: '1.5px solid #b45309', backgroundColor: '#fffbeb',
                         color: '#92400e', fontSize: 12, fontWeight: 700, cursor: 'pointer',
                       }} title="Añadir o quitar horas (p. ej. el médico se retrasa o sale antes)">🕐 Cambiar horas</button>
+                    )}
+                    {/* Tareas: las que el profesor manda después por correo (Sebas, oct. 2026) */}
+                    {(!a.fecha_fin || a.fecha_fin >= new Date().toLocaleDateString('sv-SE')) && (
+                      <button onClick={() => setEditandoTareas(a)} style={{
+                        padding: '7px 14px', borderRadius: 7, border: '1.5px solid #7c3aed', backgroundColor: '#f5f3ff',
+                        color: '#5b21b6', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      }} title="Escribir o cambiar las tareas que ha mandado el profesor">✏️ Tareas</button>
                     )}
                     <button
                       onClick={() => generarInformeAusencia(a)}
