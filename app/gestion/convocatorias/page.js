@@ -88,6 +88,7 @@ export default function GestionConvocatorias() {
   const [verNfc, setVerNfc] = useState(false);
   const [etiquetas, setEtiquetas] = useState([]);
   const [nombreNfc, setNombreNfc] = useState('');
+  const [etiquetasConv, setEtiquetasConv] = useState([]);   // etiquetas NFC de la reunión abierta en directo
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -263,6 +264,8 @@ export default function GestionConvocatorias() {
 
   async function abrirSesion(c) {
     setNuevaVot(null);
+    setEtiquetasConv([]);
+    cargarEtiquetasConv(c.id);
     await cargarDetalle(c.id);
     setVista('sesion');
   }
@@ -364,7 +367,12 @@ export default function GestionConvocatorias() {
     const r = await fetch(`/api/convocatorias?modo=detalle&id=${conv.id}`);
     const d = await r.json();
     const c = d.convocatoria;
-    if (d.error || !c?.token_qr) { w.close(); return aviso('Esta convocatoria todavía no tiene código: convócala con fichaje en la entrada', 'error'); }
+    if (d.error || !c) { w.close(); return aviso(d.error || 'No se ha podido leer la convocatoria', 'error'); }
+    if (!c.token_qr) {
+      const q = await apiPost('preparar_qr', { id: c.id });
+      if (!q?.token) { w.close(); return; }
+      c.token_qr = q.token;
+    }
     const url = `${window.location.origin}/fichar?c=${c.id}&t=${encodeURIComponent(c.token_qr)}`;
     const QR = (await import('qrcode')).default;
     const img = await QR.toDataURL(url, { width: 900, margin: 1, errorCorrectionLevel: 'M' });
@@ -438,6 +446,22 @@ export default function GestionConvocatorias() {
       setEtiquetas(d.etiquetas || []);
     } catch (e) { /* se queda con lo anterior */ }
   }
+  async function cargarEtiquetasConv(convId) {
+    try {
+      const r = await fetch(`/api/convocatorias?modo=nfc&convocatoria=${convId}`);
+      const d = await r.json();
+      setEtiquetasConv(d.etiquetas || []);
+    } catch (e) { /* se queda con lo anterior */ }
+  }
+  async function crearEtiquetaConv(convId) {
+    const d = await apiPost('nfc_crear', { convocatoria_id: convId });
+    if (!d) return;
+    aviso('📶 Enlace NFC creado. Cópialo y grábalo en la etiqueta con NFC Tools.', 'ok');
+    cargarEtiquetasConv(convId);
+  }
+  const enlaceNfc = codigo => `${typeof window !== 'undefined' ? window.location.origin : ''}/fichar?n=${codigo}`;
+  const abrirPantallaFichaje = convId => window.open(`/gestion/convocatorias/fichaje?id=${convId}`, '_blank');
+
   async function crearEtiqueta() {
     const d = await apiPost('nfc_crear', { nombre: nombreNfc });
     if (!d) return;
@@ -674,9 +698,10 @@ export default function GestionConvocatorias() {
                         <button onClick={() => editar(c)} style={btnSecundario}>✏️ Editar</button>
                         <button onClick={() => eliminar(c)} style={{ ...btnSecundario, color: ROJO, borderColor: '#fecaca' }}>🗑️</button>
                       </>}
-                      {['convocada', 'en_curso'].includes(c.estado) && c.modo_fichaje === 'fisico' && <>
+                      {['convocada', 'en_curso'].includes(c.estado) && <>
+                        <button onClick={() => abrirPantallaFichaje(c.id)} style={btnSecundario}>📺 Pantalla fichaje</button>
                         <button onClick={() => imprimirCartel(c)} style={btnSecundario}>🖨️ Cartel QR</button>
-                        <button onClick={() => imprimirFirmas(c)} style={btnSecundario}>🖨️ Hoja de firmas</button>
+                        <button onClick={() => imprimirFirmas(c)} style={btnSecundario}>🖨️ Firmas</button>
                       </>}
                       {c.estado === 'convocada' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>👁️ Ver</button>
@@ -754,12 +779,13 @@ export default function GestionConvocatorias() {
                         <div style={{ fontSize: 12, color: '#475569', marginTop: 9, lineHeight: 1.5 }}>
                           El fichaje se abre solo <strong>30 minutos antes</strong> de la hora y se cierra <strong>15 minutos después</strong>.
                           Quien fiche pasada la hora consta como incorporado tarde. Desde el aviso del móvil no se puede fichar.
+                          Al convocarla tendrás el cartel QR, los enlaces NFC y la pantalla de fichaje.
                         </div>
                       )}
                     </>
                   ) : (
                     <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
-                      De momento se ficha con el aviso en el móvil. El QR dinámico en la pantalla compartida llegará en el siguiente paso.
+                      Se ficha con el aviso en el móvil. También puedes enseñar el QR en la pantalla compartida desde «Pantalla de fichaje».
                     </div>
                   )}
                 </div>
@@ -996,12 +1022,33 @@ export default function GestionConvocatorias() {
                     ⚠️ Un mismo móvil ha fichado por varias personas: {personas.filter(p => p.movilCompartido).map(p => p.nombre).join(' · ')}
                   </div>
                 )}
-                {c.modo_fichaje === 'fisico' && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                    <button onClick={() => imprimirCartel(c)} style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>🖨️ Cartel QR</button>
-                    <button onClick={() => imprimirFirmas(c)} style={{ ...btnSecundario, padding: '7px 13px', fontSize: 12.5 }}>🖨️ Hoja de firmas</button>
+                {/* Fichaje fijo: QR, NFC, pantalla y firmas. Valen en cualquier reunión. */}
+                <div style={{ marginTop: 14, padding: 14, borderRadius: 10, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: VERDE, marginBottom: 10 }}>📶 Fichaje en la entrada</div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <button onClick={() => abrirPantallaFichaje(c.id)} style={{ ...btnPrimario(VERDE), padding: '8px 14px', fontSize: 13 }}>📺 Pantalla de fichaje</button>
+                    <button onClick={() => imprimirCartel(c)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>🖨️ Cartel QR</button>
+                    <button onClick={() => crearEtiquetaConv(c.id)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>📶 Generar enlace NFC</button>
+                    <button onClick={() => imprimirFirmas(c)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>🖨️ Hoja de firmas</button>
                   </div>
-                )}
+                  {etiquetasConv.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      {etiquetasConv.map(e => (
+                        <div key={e.codigo} style={{ padding: '8px 11px', borderRadius: 8, backgroundColor: 'white', border: '1px solid #dcfce7', marginBottom: 6, opacity: e.activa ? 1 : 0.55 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{e.activa ? '🟢' : '⚪'} {e.nombre}</span>
+                            {e.activa && <button onClick={() => copiar(enlaceNfc(e.codigo))} style={{ ...btnSecundario, padding: '4px 10px', fontSize: 11.5 }}>📋 Copiar enlace</button>}
+                          </div>
+                          {e.activa && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, wordBreak: 'break-all', fontFamily: 'monospace' }}>{enlaceNfc(e.codigo)}</div>}
+                        </div>
+                      ))}
+                      <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5 }}>
+                        Grábalo con NFC Tools: <em>Escribir → Añadir un registro → URL</em> → pega el enlace → <em>Escribir</em> y acerca la etiqueta.
+                        Estas etiquetas solo valen para esta reunión y se desactivan solas al finalizarla.
+                      </div>
+                    </div>
+                  )}
+                </div>
 
                 {/* Fichaje */}
                 <div style={{ marginTop: 14, padding: 14, borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
