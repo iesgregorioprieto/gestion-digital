@@ -687,7 +687,6 @@ export async function POST(request) {
       if (!convId) return json({ error: 'Cada enlace NFC tiene que ser de una convocatoria' }, 400);
       const cv = await convocatoria(cliente, convId);
       if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
-      if (cv.estado === 'borrador') return json({ error: 'Primero hay que convocarla' }, 400);
       if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
       const { count } = await cliente.from('nfc_etiquetas')
         .select('codigo', { count: 'exact', head: true }).eq('convocatoria_id', convId);
@@ -703,7 +702,7 @@ export async function POST(request) {
     if (accion === 'preparar_qr') {
       const cv = await convocatoria(cliente, idNum(datos.id));
       if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
-      if (cv.estado === 'borrador') return json({ error: 'Primero hay que convocarla' }, 400);
+      if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
       if (cv.token_qr) return json({ ok: true, token: cv.token_qr });
       const token = nuevoToken();
       const { error } = await cliente.from('convocatorias').update({ token_qr: token }).eq('id', cv.id);

@@ -168,7 +168,34 @@ export default function GestionConvocatorias() {
 
   // ─── Formulario: crear / editar ──────────────────────────────────
 
+  // Desde el formulario: si aún no está guardada, se guarda primero
+  // (como borrador) para que el QR y el NFC tengan a qué reunión ir.
+  async function idDelForm() {
+    if (form.id) return form.id;
+    return await guardarBorrador(true) || null;
+  }
+  async function cartelDesdeForm() {
+    const w = ventanaImpresion(); if (!w) return;
+    const id = await idDelForm(); if (!id) { w.close(); return; }
+    imprimirCartel({ id }, w);
+  }
+  async function firmasDesdeForm() {
+    const w = ventanaImpresion(); if (!w) return;
+    const id = await idDelForm(); if (!id) { w.close(); return; }
+    imprimirFirmas({ id }, w);
+  }
+  async function nfcDesdeForm() {
+    const id = await idDelForm(); if (!id) return;
+    crearEtiquetaConv(id);
+  }
+  async function pantallaDesdeForm() {
+    const w = window.open('', '_blank');
+    const id = await idDelForm(); if (!id) { w?.close(); return; }
+    if (w) w.location.href = `/gestion/convocatorias/fichaje?id=${id}`;
+  }
+
   function nueva() {
+    setEtiquetasConv([]);
     setForm(vacia());
     setVotacionesForm([]);
     setNuevaVot(null);
@@ -176,6 +203,8 @@ export default function GestionConvocatorias() {
   }
 
   async function editar(c) {
+    setEtiquetasConv([]);
+    cargarEtiquetasConv(c.id);
     const r = await fetch(`/api/convocatorias?modo=detalle&id=${c.id}`);
     const d = await r.json();
     if (d.error) { aviso(d.error, 'error'); return; }
@@ -358,8 +387,8 @@ export default function GestionConvocatorias() {
     return w;
   }
 
-  async function imprimirCartel(conv) {
-    const w = ventanaImpresion();
+  async function imprimirCartel(conv, wPrevia) {
+    const w = wPrevia || ventanaImpresion();
     if (!w) return;
     const r = await fetch(`/api/convocatorias?modo=detalle&id=${conv.id}`);
     const d = await r.json();
@@ -400,8 +429,8 @@ export default function GestionConvocatorias() {
     setTimeout(() => w.print(), 500);
   }
 
-  async function imprimirFirmas(conv) {
-    const w = ventanaImpresion();
+  async function imprimirFirmas(conv, wPrevia) {
+    const w = wPrevia || ventanaImpresion();
     if (!w) return;
     const r = await fetch(`/api/convocatorias?modo=detalle&id=${conv.id}`);
     const d = await r.json();
@@ -723,6 +752,38 @@ export default function GestionConvocatorias() {
                   ) : (
                     <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
                       Se ficha con el aviso en el móvil.
+                    </div>
+                  )}
+
+                  {/* QR, NFC, pantalla y firmas de ESTA convocatoria */}
+                  {!soloActa && (
+                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #86efac' }}>
+                      <div style={{ fontWeight: 800, fontSize: 12.5, color: VERDE, marginBottom: 8 }}>Fichaje de esta convocatoria</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={cartelDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>🖨️ Cartel QR</button>
+                        <button onClick={nfcDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>📶 Generar enlace NFC</button>
+                        <button onClick={pantallaDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>📺 Pantalla de fichaje</button>
+                        <button onClick={firmasDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>🖨️ Hoja de firmas</button>
+                      </div>
+                      {!form.id && (
+                        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 7 }}>
+                          Al pulsar cualquiera se guarda primero como borrador.
+                        </div>
+                      )}
+                      {etiquetasConv.map(e => (
+                        <div key={e.codigo} style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: 'white', border: '1px solid #dcfce7', opacity: e.activa ? 1 : 0.55 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{e.activa ? '🟢' : '⚪'} {e.nombre}</span>
+                            {e.activa && <button onClick={() => copiar(enlaceNfc(e.codigo))} style={{ ...btnSecundario, padding: '4px 10px', fontSize: 11.5 }}>📋 Copiar enlace</button>}
+                          </div>
+                          {e.activa && <div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4, wordBreak: 'break-all', fontFamily: 'monospace' }}>{enlaceNfc(e.codigo)}</div>}
+                        </div>
+                      ))}
+                      {etiquetasConv.length > 0 && (
+                        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 6, lineHeight: 1.5 }}>
+                          Grábalo con NFC Tools: <em>Escribir → Añadir un registro → URL</em> → pega el enlace → <em>Escribir</em> y acerca la etiqueta.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
