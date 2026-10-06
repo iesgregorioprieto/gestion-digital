@@ -85,6 +85,7 @@ export default function GestionConvocatorias() {
   const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
   const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
   const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
+  const [faltaFichaje, setFaltaFichaje] = useState('');   // qué falta para el QR / NFC, junto a los botones
   const [etiquetasConv, setEtiquetasConv] = useState([]);   // etiquetas NFC de la reunión abierta en directo
 
   useEffect(() => {
@@ -112,9 +113,12 @@ export default function GestionConvocatorias() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista, sesionDetalle?.convocatoria?.id]);
 
+  // Cada aviso borra solo el suyo: si llega otro antes, el temporizador
+  // del primero ya no se lleva por delante al segundo.
   function aviso(texto, tipo = 'ok') {
-    setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje(null), tipo === 'error' ? 6000 : 3500);
+    const m = { texto, tipo, n: Date.now() + Math.random() };
+    setMensaje(m);
+    setTimeout(() => setMensaje(actual => (actual?.n === m.n ? null : actual)), tipo === 'error' ? 6000 : 3500);
   }
 
   async function apiPost(accion, datos) {
@@ -171,7 +175,19 @@ export default function GestionConvocatorias() {
   // Desde el formulario: se guarda primero, para que el QR y el NFC
   // tengan a qué reunión ir y el servidor vea el modo de fichaje elegido.
   async function idDelForm() {
-    return await guardarBorrador(true) || null;
+    setFaltaFichaje('');
+    if (!form.titulo.trim()) {
+      setFaltaFichaje('Primero ponle un título a la convocatoria');
+      document.getElementById('campo-titulo-conv')?.focus();
+      return null;
+    }
+    if (!form.hora) {
+      setFaltaFichaje('Primero indica la hora de la reunión: el fichaje se abre media hora antes');
+      return null;
+    }
+    const id = await guardarBorrador(true) || null;
+    if (!id) setFaltaFichaje('No se ha podido guardar la convocatoria. Mira el aviso de arriba.');
+    return id;
   }
   async function cartelDesdeForm() {
     const w = ventanaImpresion(); if (!w) return;
@@ -183,6 +199,7 @@ export default function GestionConvocatorias() {
     crearEtiquetaConv(id);
   }
   function nueva() {
+    setFaltaFichaje('');
     setEtiquetasConv([]);
     setForm(vacia());
     setVotacionesForm([]);
@@ -607,7 +624,9 @@ export default function GestionConvocatorias() {
 
       <div style={{ maxWidth: 900, margin: '0 auto', padding: 16 }}>
         {mensaje && (
-          <div style={{ padding: '11px 15px', borderRadius: 9, marginBottom: 14, fontSize: 13.5, fontWeight: 600,
+          <div role="status" style={{ position: 'fixed', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 2000,
+            width: 'calc(100% - 32px)', maxWidth: 620, boxSizing: 'border-box', boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+            padding: '12px 16px', borderRadius: 10, fontSize: 14, fontWeight: 700,
             backgroundColor: mensaje.tipo === 'error' ? '#fef2f2' : '#f0fdf4', color: mensaje.tipo === 'error' ? ROJO : VERDE,
             border: `1.5px solid ${mensaje.tipo === 'error' ? '#fecaca' : '#bbf7d0'}` }}>
             {mensaje.texto}
@@ -679,7 +698,7 @@ export default function GestionConvocatorias() {
 
               <label style={{ fontSize: 12.5, fontWeight: 700, color: '#555' }}>Título</label>
               <input value={form.titulo} disabled={!editable} onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
-                placeholder="Claustro ordinario de octubre" style={{ ...campo, marginTop: 4, marginBottom: 14 }} />
+                id="campo-titulo-conv" placeholder="Claustro ordinario de octubre" style={{ ...campo, marginTop: 4, marginBottom: 14 }} />
 
               {editable && <>
                 <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
@@ -749,6 +768,11 @@ export default function GestionConvocatorias() {
                       <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
                         Al pulsar cualquiera se guardan antes los cambios.
                       </div>
+                      {faltaFichaje && (
+                        <div style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: ROJO, fontSize: 12.5, fontWeight: 700 }}>
+                          ⚠️ {faltaFichaje}
+                        </div>
+                      )}
                       {etiquetasConv.map(e => (
                         <div key={e.codigo} style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: 'white', border: '1px solid #dcfce7', opacity: e.activa ? 1 : 0.55 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
