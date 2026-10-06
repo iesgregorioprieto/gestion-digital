@@ -44,6 +44,7 @@ export default function AvisoComunicacion() {
     || ruta.startsWith('/gestion')
     || ruta.startsWith('/login')
     || ruta.startsWith('/sala')
+    || ruta.startsWith('/fichar')
     || ruta === '/';
 
   useEffect(() => {

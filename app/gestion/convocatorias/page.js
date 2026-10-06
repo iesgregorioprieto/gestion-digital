@@ -397,7 +397,7 @@ export default function GestionConvocatorias() {
   <div class="paso"><strong>1.</strong> Abre la cámara del móvil y apunta al código</div>
   <div class="paso"><strong>2.</strong> Toca el enlace. Si te pide entrar, usa tu cuenta de APrieto</div>
   <div class="nfc">📶 También puedes acercar el móvil a la etiqueta NFC de la entrada</div>
-  <div class="pie">Válido solo para esta reunión · Se abre 30 minutos antes · IES Gregorio Prieto</div>
+  <div class="pie">Válido solo para esta reunión · ${c.modo_fichaje === 'fisico' ? 'Se abre 30 minutos antes' : 'Solo mientras el fichaje esté abierto'} · IES Gregorio Prieto</div>
 </div></body></html>`);
     w.document.close();
     setTimeout(() => w.print(), 500);

@@ -91,7 +91,7 @@ const RECORDATORIOS = [
 // Pantallas donde no pinta nada: acceso, pantalla de la sala, urna y la
 // propia pantalla donde se hace la tarea.
 function oculto(ruta) {
-  return !ruta || ruta === '/' || ruta.startsWith('/login') || ruta.startsWith('/sala')
+  return !ruta || ruta === '/' || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta.startsWith('/fichar')
     || ruta.startsWith('/urna') || ruta.startsWith('/registro') || ruta.startsWith('/completar-perfil')
     || ruta.startsWith('/recuperar') || ruta.startsWith('/activar');
 }

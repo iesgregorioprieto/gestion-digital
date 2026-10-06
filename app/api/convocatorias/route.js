@@ -784,7 +784,9 @@ export async function POST(request) {
         const yaFichados = new Set((f || []).map(x => x.profesor_id));
         const r = await enviarPushA(cliente, (c.convocados || []).filter(x => !yaFichados.has(x)), {
           titulo: '✋ Ficha tu asistencia',
-          cuerpo: `${c.titulo} — tienes ${min} minutos`,
+          cuerpo: c.modo_fichaje === 'fisico'
+            ? `${c.titulo} — en la entrada, con el QR o la etiqueta NFC`
+            : `${c.titulo} — tienes ${min} minutos`,
           url: '/convocatorias',
         });
         return json({ ok: true, avisados: r.enviados });
@@ -808,7 +810,8 @@ export async function POST(request) {
         if (!faltan.length) return json({ error: 'Ya ha fichado todo el mundo' }, 400);
         const r = await enviarPushA(cliente, faltan, {
           titulo: '✋ Todavía puedes fichar',
-          cuerpo: c.titulo, url: '/convocatorias',
+          cuerpo: c.modo_fichaje === 'fisico' ? `${c.titulo} — en la entrada, con el QR o la etiqueta NFC` : c.titulo,
+          url: '/convocatorias',
         });
         return json({ ok: true, avisados: r.enviados, faltaban: faltan.length });
       }
@@ -861,6 +864,8 @@ export async function POST(request) {
         const { error } = await cliente.from('convocatorias')
           .update({ estado: 'en_curso', fin_real: null }).eq('id', c.id);
         if (error) return json({ error: error.message }, 500);
+        // Se finalizó sin querer: sus etiquetas NFC vuelven a valer
+        await cliente.from('nfc_etiquetas').update({ activa: true }).eq('convocatoria_id', c.id);
         return json({ ok: true });
       }
 
