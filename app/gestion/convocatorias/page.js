@@ -179,21 +179,10 @@ export default function GestionConvocatorias() {
     const id = await idDelForm(); if (!id) { w.close(); return; }
     imprimirCartel({ id }, w);
   }
-  async function firmasDesdeForm() {
-    const w = ventanaImpresion(); if (!w) return;
-    const id = await idDelForm(); if (!id) { w.close(); return; }
-    imprimirFirmas({ id }, w);
-  }
   async function nfcDesdeForm() {
     const id = await idDelForm(); if (!id) return;
     crearEtiquetaConv(id);
   }
-  async function pantallaDesdeForm() {
-    const w = window.open('', '_blank');
-    const id = await idDelForm(); if (!id) { w?.close(); return; }
-    if (w) w.location.href = `/gestion/convocatorias/fichaje?id=${id}`;
-  }
-
   function nueva() {
     setEtiquetasConv([]);
     setForm(vacia());
@@ -663,12 +652,6 @@ export default function GestionConvocatorias() {
                         <button onClick={() => editar(c)} style={btnSecundario}>✏️ Editar</button>
                         <button onClick={() => eliminar(c)} style={{ ...btnSecundario, color: ROJO, borderColor: '#fecaca' }}>🗑️</button>
                       </>}
-                      {['convocada', 'en_curso'].includes(c.estado) && <>
-                        <button onClick={() => abrirPantallaFichaje(c.id)} style={btnSecundario}>📺 Pantalla fichaje</button>
-                        <button onClick={() => imprimirCartel(c)} style={btnSecundario}>🖨️ Cartel QR</button>
-                        <button onClick={() => abrirSesion(c)} style={btnSecundario}>📶 Enlaces NFC</button>
-                        <button onClick={() => imprimirFirmas(c)} style={btnSecundario}>🖨️ Firmas</button>
-                      </>}
                       {c.estado === 'convocada' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>👁️ Ver</button>
                         <button onClick={() => abrirSesion(c)} style={btnPrimario(AMBAR)}>▶️ Iniciar reunión</button>
@@ -762,8 +745,9 @@ export default function GestionConvocatorias() {
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <button onClick={cartelDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>🖨️ Cartel QR</button>
                         <button onClick={nfcDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>📶 Generar enlace NFC</button>
-                        <button onClick={pantallaDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>📺 Pantalla de fichaje</button>
-                        <button onClick={firmasDesdeForm} disabled={guardando} style={{ ...btnSecundario, padding: '8px 13px', fontSize: 13 }}>🖨️ Hoja de firmas</button>
+                      </div>
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 7 }}>
+                        La pantalla de fichaje y la hoja de firmas están en la reunión, al iniciarla.
                       </div>
                       {!form.id && (
                         <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 7 }}>
@@ -1022,11 +1006,9 @@ export default function GestionConvocatorias() {
                 )}
                 {/* Fichaje fijo: QR, NFC, pantalla y firmas. Valen en cualquier reunión. */}
                 <div style={{ marginTop: 14, padding: 14, borderRadius: 10, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-                  <div style={{ fontWeight: 800, fontSize: 13, color: VERDE, marginBottom: 10 }}>📶 Fichaje en la entrada</div>
+                  <div style={{ fontWeight: 800, fontSize: 13, color: VERDE, marginBottom: 10 }}>✋ Control de asistencia</div>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     <button onClick={() => abrirPantallaFichaje(c.id)} style={{ ...btnPrimario(VERDE), padding: '8px 14px', fontSize: 13 }}>📺 Pantalla de fichaje</button>
-                    <button onClick={() => imprimirCartel(c)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>🖨️ Cartel QR</button>
-                    <button onClick={() => crearEtiquetaConv(c.id)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>📶 Generar enlace NFC</button>
                     <button onClick={() => imprimirFirmas(c)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>🖨️ Hoja de firmas</button>
                   </div>
                   {etiquetasConv.length > 0 && (
@@ -1041,8 +1023,7 @@ export default function GestionConvocatorias() {
                         </div>
                       ))}
                       <div style={{ fontSize: 11.5, color: '#64748b', lineHeight: 1.5 }}>
-                        Grábalo con NFC Tools: <em>Escribir → Añadir un registro → URL</em> → pega el enlace → <em>Escribir</em> y acerca la etiqueta.
-                        Estas etiquetas solo valen para esta reunión y se desactivan solas al finalizarla.
+                        Etiquetas de esta reunión. Se desactivan solas al finalizarla.
                       </div>
                     </div>
                   )}
