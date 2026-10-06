@@ -24,6 +24,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { indiceProfesores, buscaProfesor, normClave, claveLaxa } from '@/lib/asignacionGuardias';
 import { getCursoActual } from '@/lib/curso';
+import { invalidarCacheNombres } from '@/lib/cacheNombres';
 
 let _cliente = null;
 function supa() {
@@ -231,6 +232,8 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  // Cambian horarios o equivalencias: la identificación de nombres se recalcula
+  invalidarCacheNombres();
   const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
   if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });

@@ -4,6 +4,7 @@ import { claveServidor } from '@/lib/claveServidor';
 import { indiceProfesores, buscaProfesor, nombreDe } from '@/lib/asignacionGuardias';
 import { getCursoActual } from '@/lib/curso';
 import { esSectorRecreo } from '@/lib/sectores';
+import { invalidarCacheNombres } from '@/lib/cacheNombres';
 
 /**
  * HORARIOS DEL PROFESORADO
@@ -34,6 +35,8 @@ async function sesionDe(request) {
 }
 
 export async function POST(request) {
+  // Cambian horarios o equivalencias: la identificación de nombres se recalcula
+  invalidarCacheNombres();
   try {
     const sesion = await sesionDe(request);
     if (!esDirectivo(sesion)) {

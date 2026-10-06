@@ -26,9 +26,8 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
-import {
-  indiceProfesores, buscaProfesor, puedeSerLaMisma, normHora, franja,
-} from '@/lib/asignacionGuardias';
+import { puedeSerLaMisma, normHora, franja } from '@/lib/asignacionGuardias';
+import { datosNombres, invalidarCacheNombres } from '@/lib/cacheNombres';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,21 +67,6 @@ async function cursoActivo(cliente) {
 
 const ORDEN_DIA = { lunes: 1, martes: 2, miercoles: 3, miércoles: 3, jueves: 4, viernes: 5 };
 
-async function horariosDelCurso(cliente, curso) {
-  let filas = [];
-  for (let offset = 0; ; offset += 1000) {
-    const { data } = await cliente
-      .from('horarios_profesores')
-      .select('profesor_nombre_pdf, hora_id, dia, tipo, grupo, aula')
-      .eq('curso_academico', curso)
-      .range(offset, offset + 999);
-    if (!data || data.length === 0) break;
-    filas = filas.concat(data);
-    if (data.length < 1000) break;
-  }
-  return filas;
-}
-
 /**
  * Los puestos del cuadrante que podrían ser de esta persona: sin dueño,
  * que el motor no sabe resolver, compatibles con su nombre y que ella
@@ -91,23 +75,22 @@ async function horariosDelCurso(cliente, curso) {
 async function propuestasPara(cliente, sesion) {
   const curso = await cursoActivo(cliente);
 
-  const [{ data: profesores }, { data: equivalencias }, { data: descartes }] = await Promise.all([
-    cliente.from('profesores').select('id, nombre, apellidos, departamento'),
-    cliente.from('equivalencias_horario').select('nombre_horario, profesor_id'),
+  // Lo común a todo el centro sale de la caché de 10 minutos; lo que
+  // cada uno ha descartado se lee siempre al momento.
+  const [{ profesores, equivalencias, duenio, guardias }, { data: descartes }] = await Promise.all([
+    datosNombres(cliente, curso),
     cliente.from('descartes_horario').select('nombre_horario').eq('profesor_id', sesion.id),
   ]);
 
   const yo = (profesores || []).find(p => p.id === sesion.id);
   if (!yo) return { propuestas: [], curso };
 
-  const horarios = await horariosDelCurso(cliente, curso);
-  const indice = indiceProfesores(profesores || [], equivalencias || []);
   const yaCogidos = new Set((equivalencias || []).map(e => e.nombre_horario));
   const descartados = new Set((descartes || []).map(d => d.nombre_horario));
 
   // Agrupa las guardias del cuadrante por nombre abreviado
   const porNombre = new Map();
-  horarios.filter(h => h.tipo === 'guardia').forEach(h => {
+  guardias.forEach(h => {
     const n = h.profesor_nombre_pdf;
     if (!n) return;
     if (!porNombre.has(n)) porNombre.set(n, { nombre: n, sector: '', horas: [] });
@@ -120,7 +103,7 @@ async function propuestasPara(cliente, sesion) {
   for (const [nombre, info] of porNombre) {
     if (yaCogidos.has(nombre)) continue;       // ya lo reconoció alguien
     if (descartados.has(nombre)) continue;     // yo ya dije que no soy
-    if (buscaProfesor(indice, nombre)) continue; // el motor ya sabe quién es
+    if (duenio.get(nombre)) continue;           // el motor ya sabe quién es
     if (!puedeSerLaMisma(nombre, yo)) continue;  // no encaja con mi apellido
 
     info.horas.sort((a, b) =>
@@ -192,6 +175,7 @@ export async function POST(request) {
       }, { onConflict: 'nombre_horario' });
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
+      invalidarCacheNombres(); // ya se sabe quién es: que se note al momento
 
       /**
        * Y se queda con las guardias que ya tenía ese puesto.
