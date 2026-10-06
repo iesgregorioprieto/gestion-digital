@@ -54,6 +54,7 @@ export default function PanelValoraciones() {
   const [dptoElegido, setDptoElegido] = useState(DEPARTAMENTOS[0]);
   const [equipoElegido, setEquipoElegido] = useState('');
   const [buscar, setBuscar] = useState('');
+  const [nuevaCierre, setNuevaCierre] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -75,7 +76,7 @@ export default function PanelValoraciones() {
   }
 
   async function elegir(id) {
-    setElegida(id); setDatos(null); setAbiertoComentarios(null);
+    setElegida(id); setDatos(null); setAbiertoComentarios(null); setNuevaCierre('');
     if (id === ANTIGUA) return;
     try {
       const d = await (await fetch(`/api/valoraciones/rondas?ronda=${id}`)).json();
@@ -110,6 +111,18 @@ export default function PanelValoraciones() {
       else { setCreando(false); setDestinatarios([]); setDirigidaA(''); await cargarLista(false); elegir(d.id); }
     } catch (e) { setError('No se pudo lanzar.'); }
     setGuardando(false);
+  }
+
+  async function cambiarCierre(id) {
+    if (!nuevaCierre) return;
+    const r = await fetch('/api/valoraciones/rondas', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'ampliar', id, cierra: nuevaCierre }),
+    });
+    const d = await r.json();
+    if (!r.ok) { alert(d.error || 'No se pudo cambiar la fecha.'); return; }
+    setNuevaCierre('');
+    await cargarLista(false); elegir(id);
   }
 
   async function cerrarYa(id) {
@@ -375,6 +388,19 @@ export default function PanelValoraciones() {
               style={{ marginTop: 12, marginRight: 8, padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: datos ? AZUL : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13, cursor: datos ? 'pointer' : 'default' }}>
               📄 Descargar informe en PDF
             </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12, padding: '10px 12px', borderRadius: 10, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#444' }}>
+                {actual.cierra >= hoy ? '📅 Ampliar hasta el' : '📅 Reabrir hasta el'}
+              </span>
+              <input type="date" value={nuevaCierre} min={hoy} max={sumarDias(actual.abre, 90)}
+                onChange={e => setNuevaCierre(e.target.value)}
+                style={{ padding: '7px 9px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5 }} />
+              <button onClick={() => cambiarCierre(actual.id)} disabled={!nuevaCierre}
+                style={{ padding: '7px 14px', borderRadius: 8, border: 'none', backgroundColor: nuevaCierre ? '#7e22ce' : '#cbd5e1', color: 'white', fontWeight: 700, fontSize: 13, cursor: nuevaCierre ? 'pointer' : 'default' }}>
+                Guardar
+              </button>
+              <span style={{ fontSize: 11.5, color: '#888' }}>Se puede contestar hasta el final de ese día.</span>
+            </div>
             {actual.abre <= hoy && actual.cierra >= hoy && (
               <button onClick={() => cerrarYa(actual.id)}
                 style={{ marginTop: 12, padding: '8px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: 'white', color: '#991b1b', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
