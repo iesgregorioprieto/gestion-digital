@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
  * PANTALLA DE FICHAJE — para proyectar en la entrada o en la sala
  *
  * Igual que el tablero de las votaciones: los nombres se ponen en verde
- * según cada uno ficha. Al lado, en grande, el QR de la reunión para
- * quien entre y no lo haya escaneado del cartel.
+ * según cada uno ficha. Aquí NO hay QR: el fichaje es físico, con los
+ * carteles impresos y las etiquetas NFC repartidos por la entrada.
  *
  * Quien no ha fichado sale en gris, como todos al principio: no se le
  * marca en rojo ni en una lista aparte.
@@ -33,8 +33,6 @@ export default function PantallaFichaje() {
   const [datos, setDatos] = useState(null);
   const [error, setError] = useState('');
   const [ahora, setAhora] = useState(Date.now());
-  const [verQR, setVerQR] = useState(true);
-  const [qr, setQr] = useState(null);
   const [completa, setCompleta] = useState(false);
   const desfase = useRef(0);   // reloj del servidor − reloj de este ordenador
 
@@ -42,7 +40,6 @@ export default function PantallaFichaje() {
     const q = new URL(window.location.href).searchParams;
     if (!q.get('id')) { setError('Falta la convocatoria'); return; }
     setId(q.get('id'));
-    if (q.get('qr') === '0') setVerQR(false);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
     const fs = () => setCompleta(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', fs);
@@ -77,26 +74,6 @@ export default function PantallaFichaje() {
     cargar();
     return () => { vivo = false; clearTimeout(t); };
   }, [id]);
-
-  // QR de la reunión. Si aún no tiene código, se crea.
-  useEffect(() => {
-    if (!datos || qr) return;
-    (async () => {
-      let token = datos.token_qr;
-      if (!token && datos.estado !== 'cerrada') {
-        const r = await fetch('/api/convocatorias', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'preparar_qr', datos: { id: Number(id) } }),
-        });
-        const d = await r.json().catch(() => ({}));
-        token = d.token;
-      }
-      if (!token) return;
-      const QR = (await import('qrcode')).default;
-      const url = `${window.location.origin}/fichar?c=${id}&t=${encodeURIComponent(token)}`;
-      setQr(await QR.toDataURL(url, { width: 800, margin: 1, errorCorrectionLevel: 'M' }));
-    })();
-  }, [datos, qr, id]);
 
   function pantallaCompleta() {
     if (document.fullscreenElement) document.exitFullscreen?.();
@@ -137,13 +114,11 @@ export default function PantallaFichaje() {
 
       {/* Controles: discretos, arriba a la derecha */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
-        <button onClick={() => setVerQR(v => !v)} style={boton}>{verQR ? '🙈 Ocultar QR' : '📷 Mostrar QR'}</button>
         <button onClick={pantallaCompleta} style={boton}>{completa ? '↙️ Salir de pantalla completa' : '⛶ Pantalla completa'}</button>
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-        {/* Izquierda: estado, progreso y nombres */}
         <div style={{ flex: '1 1 560px', minWidth: 0 }}>
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: '18px 24px', marginBottom: 16,
             boxShadow: '0 2px 10px rgba(0,0,0,0.07)', borderLeft: `6px solid ${estado.c}` }}>
@@ -162,6 +137,9 @@ export default function PantallaFichaje() {
             </div>
             <div style={{ marginTop: 10, height: 16, borderRadius: 8, backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', backgroundColor: VERDE, transition: 'width .6s ease' }} />
+            </div>
+            <div style={{ marginTop: 10, fontSize: 14, color: '#475569' }}>
+              Se ficha en la entrada: 📷 QR de los carteles o 📶 etiqueta NFC
             </div>
             {ultimos.length > 0 && (
               <div style={{ marginTop: 10, fontSize: 14, color: '#475569' }}>
@@ -183,22 +161,6 @@ export default function PantallaFichaje() {
           </div>
         </div>
 
-        {/* Derecha: el QR en grande */}
-        {verQR && (
-          <div style={{ flex: '0 1 380px', minWidth: 280, backgroundColor: 'white', borderRadius: 14, padding: 22,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.07)', textAlign: 'center', position: 'sticky', top: 20 }}>
-            <div style={{ fontSize: 15, fontWeight: 800, color: AZUL, letterSpacing: 0.4 }}>📷 ESCANEA PARA FICHAR</div>
-            {qr
-              ? <img src={qr} alt="QR para fichar" style={{ width: '100%', maxWidth: 340, marginTop: 14, opacity: abierto ? 1 : 0.25 }} />
-              : <div style={{ padding: 60, color: '#94a3b8' }}>Preparando el código…</div>}
-            <div style={{ fontSize: 14, color: '#475569', marginTop: 10, lineHeight: 1.5 }}>
-              {abierto ? 'Abre la cámara del móvil y apunta al código' : antes ? `Se podrá fichar a partir de las ${horaMadrid(datos.fichaje_inicio)}` : 'El fichaje está cerrado'}
-            </div>
-            <div style={{ fontSize: 13, color: VERDE, marginTop: 12, padding: '9px 10px', backgroundColor: '#f0fdf4', borderRadius: 9 }}>
-              📶 O acerca el móvil a la etiqueta NFC de la entrada
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

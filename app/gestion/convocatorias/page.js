@@ -785,7 +785,7 @@ export default function GestionConvocatorias() {
                     </>
                   ) : (
                     <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
-                      Se ficha con el aviso en el móvil. También puedes enseñar el QR en la pantalla compartida desde «Pantalla de fichaje».
+                      Se ficha con el aviso en el móvil.
                     </div>
                   )}
                 </div>

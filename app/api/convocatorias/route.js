@@ -411,7 +411,6 @@ export async function GET(request) {
         titulo: c.titulo, fecha: c.fecha, hora: c.hora, lugar: c.lugar || '',
         estado: c.estado, fichaje_inicio: c.fichaje_inicio, fichaje_fin: c.fichaje_fin,
         abierto: fichajeAbierto(c),
-        token_qr: c.token_qr || null,
         total: personas.length,
         presentes: personas.filter(p => p.fichado).length,
         tarde: personas.filter(p => p.tarde).length,
