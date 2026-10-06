@@ -362,7 +362,8 @@ export async function GET(request) {
             fichado_at: r.fichado_at || null,
             fichado_a_mano_por: r.fichado_a_mano_por || null,
             metodo: r.fichado_at ? (r.metodo || (r.fichado_a_mano_por ? 'mano' : 'notificacion')) : null,
-            tarde: esTarde(c, r.fichado_at),
+            // Fichado a mano por el equipo directivo: presente, sin más
+            tarde: !r.fichado_a_mano_por && esTarde(c, r.fichado_at),
             movilCompartido: !!(r.dispositivo && r.fichado_at && porMovil[r.dispositivo]?.size > 1),
           };
         }).sort((x, y) => x.nombre.localeCompare(y.nombre, 'es'));
@@ -392,8 +393,9 @@ export async function GET(request) {
       const c = id ? await convocatoria(cliente, id) : null;
       if (!c) return json({ error: 'no_encontrada' }, 404);
       const { data: a } = await cliente.from('convocatoria_asistencia')
-        .select('profesor_id, fichado_at').eq('convocatoria_id', id).not('fichado_at', 'is', null);
+        .select('profesor_id, fichado_at, fichado_a_mano_por').eq('convocatoria_id', id).not('fichado_at', 'is', null);
       const fich = new Map((a || []).map(x => [x.profesor_id, x.fichado_at]));
+      const aMano = new Set((a || []).filter(x => x.fichado_a_mano_por).map(x => x.profesor_id));
       let gente = [];
       if ((c.convocados || []).length) {
         const { data: ps } = await cliente.from('profesores')
@@ -403,7 +405,7 @@ export async function GET(request) {
       const personas = gente.map(p => ({
         nombre: nombreCorto(p.nombre, p.apellidos),
         fichado: fich.has(p.id),
-        tarde: esTarde(c, fich.get(p.id)),
+        tarde: !aMano.has(p.id) && esTarde(c, fich.get(p.id)),
         at: fich.get(p.id) || null,
       }));
       return json({
