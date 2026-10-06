@@ -35,9 +35,12 @@ export default function Convocatorias() {
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
     cargar();
-    const t = setInterval(cargar, hayVotacionAbierta() ? 3000 : 20000);
+    // Solo con la pestaña a la vista; al volver a ella, al momento
+    const alVolver = () => { if (!document.hidden) cargar(); };
+    const t = setInterval(alVolver, hayVotacionAbierta() ? 3000 : 20000);
+    document.addEventListener('visibilitychange', alVolver);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { clearInterval(t); clearInterval(reloj); };
+    return () => { clearInterval(t); clearInterval(reloj); document.removeEventListener('visibilitychange', alVolver); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lista.length]);
 

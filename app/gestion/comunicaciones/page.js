@@ -84,8 +84,11 @@ export default function GestionComunicaciones() {
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
     cargar();
     cargarProfesores();
-    const t = setInterval(cargar, 15000);
-    return () => clearInterval(t);
+    // Cada minuto y solo con la pestaña a la vista; al volver a ella, al momento
+    const t = setInterval(() => { if (!document.hidden) cargar(); }, 60000);
+    const alVolver = () => { if (!document.hidden) cargar(); };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', alVolver); };
   }, []);
 
   async function borrarViejas(viejas) {

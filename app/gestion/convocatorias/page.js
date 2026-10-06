@@ -102,11 +102,15 @@ export default function GestionConvocatorias() {
 
   // Refresco automático: la lista cada 20s, la sesión en directo cada 4s
   useEffect(() => {
-    const t = setInterval(() => {
+    // Solo con la pestaña a la vista; al volver a ella, al momento
+    const refrescar = () => {
+      if (document.hidden) return;
       if (vista === 'lista') cargarLista();
       if (vista === 'sesion' && sesionDetalle) cargarDetalle(sesionDetalle.convocatoria.id, true);
-    }, vista === 'sesion' ? 4000 : 20000);
-    return () => clearInterval(t);
+    };
+    const t = setInterval(refrescar, vista === 'sesion' ? 4000 : 20000);
+    document.addEventListener('visibilitychange', refrescar);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', refrescar); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista, sesionDetalle?.convocatoria?.id]);
 
