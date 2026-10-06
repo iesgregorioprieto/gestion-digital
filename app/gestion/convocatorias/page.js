@@ -168,10 +168,9 @@ export default function GestionConvocatorias() {
 
   // ─── Formulario: crear / editar ──────────────────────────────────
 
-  // Desde el formulario: si aún no está guardada, se guarda primero
-  // (como borrador) para que el QR y el NFC tengan a qué reunión ir.
+  // Desde el formulario: se guarda primero, para que el QR y el NFC
+  // tengan a qué reunión ir y el servidor vea el modo de fichaje elegido.
   async function idDelForm() {
-    if (form.id) return form.id;
     return await guardarBorrador(true) || null;
   }
   async function cartelDesdeForm() {
@@ -736,8 +735,8 @@ export default function GestionConvocatorias() {
                     </div>
                   )}
 
-                  {/* QR, NFC, pantalla y firmas de ESTA convocatoria */}
-                  {!soloActa && (
+                  {/* QR y NFC de ESTA convocatoria: solo presencial con fichaje en la entrada */}
+                  {!soloActa && form.modalidad === 'presencial' && form.modo_fichaje === 'fisico' && (
                     <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px dashed #86efac' }}>
                       <div style={{ fontWeight: 800, fontSize: 12.5, color: VERDE, marginBottom: 8 }}>Fichaje de esta convocatoria</div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -747,11 +746,9 @@ export default function GestionConvocatorias() {
                       <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 7 }}>
                         La pantalla de fichaje y la hoja de firmas están en la reunión, al iniciarla.
                       </div>
-                      {!form.id && (
-                        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 7 }}>
-                          Al pulsar cualquiera se guarda primero como borrador.
-                        </div>
-                      )}
+                      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>
+                        Al pulsar cualquiera se guardan antes los cambios.
+                      </div>
                       {etiquetasConv.map(e => (
                         <div key={e.codigo} style={{ marginTop: 8, padding: '8px 11px', borderRadius: 8, backgroundColor: 'white', border: '1px solid #dcfce7', opacity: e.activa ? 1 : 0.55 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>

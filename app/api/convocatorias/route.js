@@ -570,7 +570,10 @@ export async function POST(request) {
       }
 
       if (!(c.convocados || []).includes(sesion.id)) return json({ error: 'Esta reunión no va dirigida a ti' }, 403);
-      // QR y NFC valen en cualquier convocatoria mientras el fichaje esté abierto
+      // QR y NFC solo en las presenciales con fichaje en la entrada
+      if (c.modalidad === 'online' || c.modo_fichaje !== 'fisico') {
+        return json({ error: 'Esta reunión no se ficha en la entrada: usa el aviso de APrieto en el móvil' }, 400);
+      }
       if (!['convocada', 'en_curso'].includes(c.estado) || !fichajeAbierto(c)) {
         const ini = c.fichaje_inicio ? new Date(c.fichaje_inicio) : null;
         if (ini && Date.now() < ini.getTime()) {
@@ -688,6 +691,7 @@ export async function POST(request) {
       const cv = await convocatoria(cliente, convId);
       if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
       if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
+      if (cv.modalidad === 'online' || cv.modo_fichaje !== 'fisico') return json({ error: 'Los enlaces NFC son solo para reuniones presenciales con fichaje en la entrada' }, 400);
       const { count } = await cliente.from('nfc_etiquetas')
         .select('codigo', { count: 'exact', head: true }).eq('convocatoria_id', convId);
       const nombre = txt(datos.nombre, 100) || `${cv.titulo} · etiqueta ${(count || 0) + 1}`;
@@ -703,6 +707,7 @@ export async function POST(request) {
       const cv = await convocatoria(cliente, idNum(datos.id));
       if (!cv) return json({ error: 'Esa convocatoria no existe' }, 404);
       if (cv.estado === 'cerrada') return json({ error: 'La reunión ya está cerrada' }, 400);
+      if (cv.modalidad === 'online' || cv.modo_fichaje !== 'fisico') return json({ error: 'El cartel QR es solo para reuniones presenciales con fichaje en la entrada' }, 400);
       if (cv.token_qr) return json({ ok: true, token: cv.token_qr });
       const token = nuevoToken();
       const { error } = await cliente.from('convocatorias').update({ token_qr: token }).eq('id', cv.id);
