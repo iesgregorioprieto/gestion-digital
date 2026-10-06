@@ -19,9 +19,12 @@ export default function BannerHoy() {
     const cargar = () => fetch('/api/hoy').then(r => r.ok ? r.json() : { lineas: [] })
       .then(d => { if (vivo) setLineas(d.lineas || []); }).catch(() => {});
     cargar();
-    // Se refresca cada 5 minutos: lo fichado o lo pasado desaparece
-    const t = setInterval(cargar, 5 * 60 * 1000);
-    return () => { vivo = false; clearInterval(t); };
+    // Se refresca cada 5 minutos: lo fichado o lo pasado desaparece.
+    // Solo con la pestaña a la vista; al volver a ella, al momento.
+    const alVolver = () => { if (!document.hidden) cargar(); };
+    const t = setInterval(alVolver, 5 * 60 * 1000);
+    document.addEventListener('visibilitychange', alVolver);
+    return () => { vivo = false; clearInterval(t); document.removeEventListener('visibilitychange', alVolver); };
   }, []);
 
   if (!lineas.length) return null;

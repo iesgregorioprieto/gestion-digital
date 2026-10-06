@@ -121,8 +121,16 @@ export default function SalaProfesores() {
   }, []);
 
   useEffect(() => {
+    // Solo refresca en horario de centro: de lunes a viernes, de 7:30 a
+    // 14:00. Fuera de ahí la tele se queda con lo último que cargó; si
+    // está encendida por la noche o el fin de semana, no gasta nada.
+    const enHorario = () => {
+      const d = new Date();
+      const m = d.getHours() * 60 + d.getMinutes();
+      return d.getDay() >= 1 && d.getDay() <= 5 && m >= 450 && m < 840;
+    };
     cargarDatos();
-    const intervalo = setInterval(cargarDatos, 120000); // cada 2 minutos: sobra para una tele
+    const intervalo = setInterval(() => { if (enHorario()) cargarDatos(); }, 120000); // cada 2 minutos: sobra para una tele
 
     // Noticias de la web del centro (se refrescan cada media hora)
     const traerNoticias = () => {
@@ -132,7 +140,7 @@ export default function SalaProfesores() {
         .catch(() => {});
     };
     traerNoticias();
-    const intervaloNoticias = setInterval(traerNoticias, 1800000);
+    const intervaloNoticias = setInterval(() => { if (enHorario()) traerNoticias(); }, 1800000);
 
     // Cada minuto cambia de avisos a noticias y vuelta
     const CICLO = ['avisos', 'extraescolares', 'noticias'];

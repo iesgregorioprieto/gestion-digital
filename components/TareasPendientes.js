@@ -21,7 +21,7 @@ export default function TareasPendientes() {
     const cargar = () => fetch('/api/pendientes').then(r => r.ok ? r.json() : { tareas: [] })
       .then(d => { if (vivo) setTareas(d.tareas || []); }).catch(() => {});
     cargar();
-    const t = setInterval(cargar, 5 * 60 * 1000);
+    const t = setInterval(() => { if (!document.hidden) cargar(); }, 5 * 60 * 1000); // solo a la vista
     const alVolver = () => { if (document.visibilityState === 'visible') cargar(); };
     document.addEventListener('visibilitychange', alVolver);
     const alActualizar = () => cargar();
