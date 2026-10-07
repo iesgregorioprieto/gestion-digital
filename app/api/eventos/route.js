@@ -7,12 +7,19 @@
  *      se gestionan en su propio módulo, aquí solo se ven).
  *
  * POST { accion: 'crear' | 'editar' | 'eliminar', id?, datos? }
- *      Solo equipo directivo.
+ *      Equipo directivo y jefes de departamento (sugerencia de José
+ *      María, oct. 2026). Un jefe de departamento crea con las mismas
+ *      opciones que dirección (cualquier ámbito, cualquier destinatario),
+ *      pero solo puede editar o eliminar los eventos que él mismo creó —
+ *      nunca los de dirección ni los de otro jefe. Dirección edita y
+ *      elimina cualquiera, como siempre.
  *
  * Quién ve qué lo decide SIEMPRE el servidor:
- *   · Dirección ve todos.
- *   · El resto ve los marcados «visibles para todo el claustro» y
- *     aquellos de los que es destinatario.
+ *   · Dirección ve todos los eventos, para poder gestionarlos.
+ *   · El resto (jefes de departamento incluidos) ve los marcados
+ *     «visibles para todo el claustro» y aquellos de los que es
+ *     destinatario — igual que el profesorado normal; ser jefe de
+ *     departamento no abre los eventos privados de otros.
  *   · El aviso del banner solo les llega a los destinatarios (/api/hoy).
  */
 
@@ -37,6 +44,11 @@ async function sesionDe(request) {
   return verificarSesion(m[1], secreto);
 }
 
+/** ¿Puede crear y gestionar eventos? Dirección, o jefe de cualquier departamento */
+function esGestor(sesion) {
+  return esDirectivo(sesion) || (Array.isArray(sesion?.roles) && sesion.roles.includes('jefe_departamento'));
+}
+
 const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 const AMBITOS_VALIDOS = ['claustro', 'ccp', 'jefes_dpto', 'tutores', 'equipo_directivo',
   'jefes_estudios', 'director', 'secretario', 'departamento', 'equipo', 'manual'];
@@ -56,6 +68,7 @@ export async function GET(request) {
   try {
     const c = supa();
     const directivo = esDirectivo(sesion);
+    const gestor = esGestor(sesion);
 
     const { data: fichas } = await c.from('profesores')
       .select('id, nombre, apellidos, departamento, rol, rol_gestion').eq('id', sesion.id);
@@ -71,10 +84,18 @@ export async function GET(request) {
     const eventos = [];
     for (const ev of data || []) {
       const mio = esDestinatario(ev, ficha);
-      if (!directivo && !ev.visible_todos && !mio) continue;
-      const fila = { ...ev, origen: 'evento', esMio: mio };
-      // Quién creó y a quién va es cosa de gestión; al profesorado le basta el evento
-      if (!directivo) { delete fila.destinatarios; delete fila.creado_por; }
+      const propio = gestor && ev.creado_por === sesion.id;
+      // La visibilidad no cambia por ser jefe de departamento: solo
+      // dirección ve los eventos privados de otros. La excepción es el
+      // propio evento de uno — si lo creaste, lo sigues viendo aunque lo
+      // hayas dirigido a un ámbito que no te incluye a ti.
+      if (!directivo && !propio && !ev.visible_todos && !mio) continue;
+      // Puede editar este evento en concreto quien sea de dirección, o
+      // quien lo creó (un jefe de departamento, el suyo propio).
+      const puedeGestionar = directivo || propio;
+      const fila = { ...ev, origen: 'evento', esMio: mio, puedeGestionar };
+      // Quién creó y a quién va es cosa de gestión; al resto le basta el evento
+      if (!puedeGestionar) { delete fila.destinatarios; delete fila.creado_por; }
       eventos.push(fila);
     }
 
@@ -101,7 +122,7 @@ export async function GET(request) {
     }
 
     eventos.sort((a, b) => (a.fecha + (a.hora_inicio || '')).localeCompare(b.fecha + (b.hora_inicio || '')));
-    return Response.json({ eventos, puedeEditar: directivo });
+    return Response.json({ eventos, puedeEditar: gestor });
   } catch (e) {
     return Response.json({ error: e.message, eventos: [] }, { status: 500 });
   }
@@ -164,14 +185,26 @@ async function prepararFila(c, datos) {
 export async function POST(request) {
   const sesion = await sesionDe(request);
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
-  if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+  if (!esGestor(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+  const directivo = esDirectivo(sesion);
 
   try {
     const { accion, id, datos } = await request.json();
     const c = supa();
 
-    if (accion === 'eliminar') {
+    // Editar y eliminar: dirección puede con cualquiera; un jefe de
+    // departamento, solo con los que él mismo creó.
+    if (accion === 'eliminar' || accion === 'editar') {
       if (!id) return Response.json({ error: 'Falta el evento' }, { status: 400 });
+      if (!directivo) {
+        const { data: actual } = await c.from('eventos').select('creado_por').eq('id', id);
+        if ((actual || [])[0]?.creado_por !== sesion.id) {
+          return Response.json({ error: 'Solo puedes editar o eliminar los eventos que tú mismo creaste' }, { status: 403 });
+        }
+      }
+    }
+
+    if (accion === 'eliminar') {
       const { error } = await c.from('eventos').delete().eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
@@ -192,7 +225,6 @@ export async function POST(request) {
       return Response.json({ ok: true, id: (data || [])[0]?.id });
     }
 
-    if (!id) return Response.json({ error: 'Falta el evento' }, { status: 400 });
     const { error } = await c.from('eventos')
       .update({ ...fila, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) return Response.json({ error: error.message }, { status: 500 });

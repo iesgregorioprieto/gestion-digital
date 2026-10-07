@@ -91,6 +91,7 @@ export default function GestionEventos() {
   const [error, setError] = useState(null);
   const [mensaje, setMensaje] = useState(null);
   const [listo, setListo] = useState(false);
+  const [directivoCompleto, setDirectivoCompleto] = useState(false);
 
   const [vista, setVista] = useState('calendario');
   const [form, setForm] = useState(FORM_VACIO);
@@ -102,7 +103,10 @@ export default function GestionEventos() {
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
     const rol = sessionStorage.getItem('profesor_rol_gestion') || '';
-    if (!['director', 'secretario', 'jefe_estudios'].includes(rol)) { window.location.href = '/profesor'; return; }
+    const roles = JSON.parse(sessionStorage.getItem('profesor_roles') || '[]');
+    const directivo = ['director', 'secretario', 'jefe_estudios'].includes(rol);
+    if (!directivo && !roles.includes('jefe_departamento')) { window.location.href = '/profesor'; return; }
+    setDirectivoCompleto(directivo);
     setListo(true);
     cargarProximos();
   }, []);
@@ -285,15 +289,21 @@ export default function GestionEventos() {
             )}
             {!esConv && (
               <div style={{ fontSize: 12.5, color: '#64748b', marginTop: 6, lineHeight: 1.6 }}>
-                <div>Afecta a: {ambs.map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^\S+\s/, '') || a).join(' · ')}
-                  {ev.departamento?.length ? ` (${ev.departamento.join(', ')})` : ''}
-                  {ev.destinatarios?.length ? ` (${ev.destinatarios.length} persona${ev.destinatarios.length !== 1 ? 's' : ''})` : ''}</div>
+                {ev.puedeGestionar && (
+                  <div>Afecta a: {ambs.map(a => AMBITOS.find(x => x.valor === a)?.label.replace(/^\S+\s/, '') || a).join(' · ')}
+                    {ev.departamento?.length ? ` (${ev.departamento.join(', ')})` : ''}
+                    {ev.destinatarios?.length ? ` (${ev.destinatarios.length} persona${ev.destinatarios.length !== 1 ? 's' : ''})` : ''}</div>
+                )}
                 <div>Banner: {etiquetaAviso(ev.aviso_minutos)} · {ev.visible_todos ? 'visible para todo el claustro' : 'solo lo ven sus destinatarios'}</div>
                 {ev.creado_por_nombre && <div>Creado por {ev.creado_por_nombre}</div>}
-                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                  <button onClick={() => abrirFormulario(ev)} style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${AZUL}`, backgroundColor: 'white', color: AZUL, fontWeight: 700, cursor: 'pointer' }}>✏️ Editar</button>
-                  <button onClick={() => eliminar(ev)} style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${ROJO}`, backgroundColor: 'white', color: ROJO, fontWeight: 700, cursor: 'pointer' }}>🗑️ Eliminar</button>
-                </div>
+                {ev.puedeGestionar ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                    <button onClick={() => abrirFormulario(ev)} style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${AZUL}`, backgroundColor: 'white', color: AZUL, fontWeight: 700, cursor: 'pointer' }}>✏️ Editar</button>
+                    <button onClick={() => eliminar(ev)} style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${ROJO}`, backgroundColor: 'white', color: ROJO, fontWeight: 700, cursor: 'pointer' }}>🗑️ Eliminar</button>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: 4, fontStyle: 'italic' }}>No lo creaste tú, así que no puedes editarlo ni eliminarlo.</div>
+                )}
               </div>
             )}
           </div>
@@ -519,7 +529,9 @@ export default function GestionEventos() {
                 <label style={etiqueta}>Equipos ({form.equipos.length}) *</label>
                 {equipos.length === 0 ? (
                   <div style={{ fontSize: 12.5, color: '#92400e', padding: '10px 13px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1px solid #fcd34d' }}>
-                    No hay equipos creados. Se crean en Gestión → Avisos → Equipos.
+                    {directivoCompleto
+                      ? 'No hay equipos creados. Se crean en Gestión → Avisos → Equipos.'
+                      : 'Los equipos de trabajo los gestiona dirección. Para avisar a un grupo de personas, usa «Elegir personas a dedo».'}
                   </div>
                 ) : (
                   <div style={{ maxHeight: 200, overflowY: 'auto', border: '1.5px solid #ddd', borderRadius: 8, padding: 8 }}>
