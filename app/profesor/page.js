@@ -195,17 +195,6 @@ export default function PanelProfesor() {
       color: '#c2410c', bg: '#fff7ed', border: '#fdba74',
     },
     {
-      id: 'gestion-eventos',
-      emoji: '🗓️',
-      titulo: 'Gestionar calendario',
-      descripcion: 'Crea evaluaciones, reuniones y charlas para tu departamento o el claustro',
-      href: '/gestion/eventos',
-      disponible: true,
-      roles: ['todos'],
-      soloJefeDepartamento: true,
-      color: '#0369a1', bg: '#f0f9ff', border: '#7dd3fc',
-    },
-    {
       id: 'mantenimiento',
       emoji: '🔧',
       titulo: 'Incidencias de mantenimiento',

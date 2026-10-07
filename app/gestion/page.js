@@ -201,16 +201,6 @@ export default function PanelGestion() {
       color: '#1e3a5f',
     },
     {
-      id: 'eventos',
-      emoji: '🗓️',
-      titulo: 'Calendario de eventos',
-      descripcion: 'Crea evaluaciones, reuniones y charlas: a quién afectan y el aviso en el banner',
-      href: '/gestion/eventos',
-      bg: '#ecfeff',
-      border: '#67e8f9',
-      color: '#0e7490',
-    },
-    {
       id: 'incidencias',
       emoji: '🐞',
       titulo: 'Incidencias y sugerencias de la app',
