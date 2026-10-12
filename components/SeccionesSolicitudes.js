@@ -29,6 +29,7 @@ export function SeccionMantenimiento() {
   const [comentario, setComentario] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
+  const [fotosVisibles, setFotosVisibles] = useState({});
 
   useEffect(() => { cargar(); }, []);
 
@@ -153,11 +154,19 @@ export function SeccionMantenimiento() {
 
             <div style={{ fontSize: 14, color: '#444', marginBottom: 10, lineHeight: 1.5 }}>{inc.descripcion}</div>
 
+            {/* La foto no se descarga hasta que se pide: cada una pesa
+                alrededor de 1 MB y la lista entera son decenas de megas
+                que cuentan en el tráfico de Supabase cada vez que se abre
+                el panel. */}
             {inc.foto_url && (
               <div style={{ marginBottom: 10 }}>
-                <a href={inc.foto_url} target="_blank" rel="noopener noreferrer">
-                  <img src={inc.foto_url} alt="Foto incidencia" style={{ maxHeight: 140, borderRadius: 8, border: '1px solid #e0e0e0', cursor: 'pointer' }} />
-                </a>
+                {fotosVisibles[inc.id] ? (
+                  <a href={inc.foto_url} target="_blank" rel="noopener noreferrer">
+                    <img src={inc.foto_url} alt="Foto incidencia" loading="lazy" style={{ maxHeight: 140, borderRadius: 8, border: '1px solid #e0e0e0', cursor: 'pointer' }} />
+                  </a>
+                ) : (
+                  <button onClick={() => setFotosVisibles(v => ({ ...v, [inc.id]: true }))} style={{ padding: '6px 12px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f8fafc', color: azul, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>📷 Ver foto</button>
+                )}
               </div>
             )}
 
