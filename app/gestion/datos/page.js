@@ -7,6 +7,11 @@ import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
 import { indiceProfesores, buscaProfesor } from '@/lib/asignacionGuardias';
+// Nombre de sector comparable: sin tildes ni mayúsculas («HOSTELERÍA» = «Hosteleria»)
+function claveSector(s) {
+  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+}
+
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 
@@ -70,6 +75,9 @@ export default function GestionDatos() {
   // Guardias
   const [previewGuardias, setPreviewGuardias] = useState([]);
   const [modalGuardias, setModalGuardias] = useState(false);
+  // 'completo' = sustituye todo el cuadrante; 'sectores' = solo los sectores subidos
+  const [modoGuardias, setModoGuardias] = useState('completo');
+  const [cambiosGuardias, setCambiosGuardias] = useState(null);
   const [, setProgresoGuardias] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefGuardias = useRef(null);
 
@@ -829,6 +837,49 @@ export default function GestionDatos() {
    * clase? Es la señal de un cuadrante que no corresponde a los horarios
    * cargados (p. ej. el de verano con los horarios de septiembre).
    */
+  /**
+   * QUÉ CAMBIA RESPECTO A LO CARGADO
+   *
+   * Para cada sector que se sube: qué guardias entran y cuáles salen.
+   * Las guardias ya pasadas a un sustituto se comparan con el nombre
+   * original del cuadrante, para que no salgan como cambio sin serlo.
+   */
+  async function compararConCargado(registros) {
+    setCambiosGuardias(null);
+    try {
+      let actuales = [];
+      for (let desde = 0; ; desde += 1000) {
+        const { data, error } = await consulta('horarios_profesores')
+          .select('profesor_nombre_pdf, nombre_original_pdf, grupo, dia, hora_id, aula')
+          .eq('tipo', 'guardia').eq('curso_academico', cursoNuevo).range(desde, desde + 999);
+        if (error) throw error;
+        actuales = actuales.concat(data || []);
+        if (!data || data.length < 1000) break;
+      }
+      const hora = h => String(h || '').replace(/a$/, '');
+      const clave = (sector, dia, h, nombre, aula) =>
+        [claveSector(sector), dia, hora(h), String(nombre || '').trim(), h === 'recreo' ? String(aula || '').trim() : ''].join('|');
+      const subidos = new Set(registros.map(g => claveSector(g.sector)));
+
+      const antes = new Map();
+      actuales.filter(a => subidos.has(claveSector(a.grupo))).forEach(a => {
+        const nombre = a.nombre_original_pdf || a.profesor_nombre_pdf;
+        antes.set(clave(a.grupo, a.dia, a.hora_id, nombre, a.aula), { sector: a.grupo, dia: a.dia, hora: hora(a.hora_id), nombre, aula: a.aula });
+      });
+      const despues = new Map();
+      registros.forEach(g => {
+        despues.set(clave(g.sector, g.dia, g.hora_id, g.nombre_abrev, g.aula), { sector: g.sector, dia: g.dia, hora: hora(g.hora_id), nombre: g.nombre_abrev, aula: g.aula });
+      });
+
+      const entran = [...despues].filter(([k]) => !antes.has(k)).map(([, v]) => v);
+      const salen = [...antes].filter(([k]) => !despues.has(k)).map(([, v]) => v);
+      const conGuardias = new Set(actuales.map(a => claveSector(a.grupo)));
+      const nuevos = [...new Set(registros.map(g => g.sector))].filter(s => !conGuardias.has(claveSector(s)));
+      const fuera = [...new Set(actuales.map(a => a.grupo))].filter(s => s && !subidos.has(claveSector(s)));
+      setCambiosGuardias({ entran, salen, nuevos, fuera });
+    } catch { setCambiosGuardias({ error: true }); }
+  }
+
   async function comprobarConHorarios(registros) {
     setConflictosGuardias(null);
     try {
@@ -1038,6 +1089,14 @@ export default function GestionDatos() {
 
     setArchivosGuardias(archivos.map(f => ({ nombre: f.webkitRelativePath || f.name, fecha: f.lastModified })));
     comprobarConHorarios(registros);
+    // Si se suben menos sectores de los que hay cargados, lo normal es que
+    // sea una actualización de unos pocos: se propone «solo estos sectores».
+    {
+      const cargados = new Set((stats.sectoresGuardia || []).map(s => claveSector(s.sector)));
+      const subidos = new Set(registros.map(g => claveSector(g.sector)));
+      setModoGuardias(cargados.size > 0 && subidos.size < cargados.size ? 'sectores' : 'completo');
+    }
+    compararConCargado(registros);
     setPreviewGuardias(registros);
     setModalGuardias(true);
     setProcesando(false);
@@ -1092,12 +1151,16 @@ export default function GestionDatos() {
     if (!previewGuardias.length) return;
     setProcesando(true);
 
-    // Cuadrante nuevo = se borran TODAS las guardias anteriores (recreos
-    // incluidos) y se cargan estas. Si no se puede borrar todo, no se carga.
+    // Cuadrante completo = se borran TODAS las guardias anteriores (recreos
+    // incluidos) y se cargan estas. Solo sectores = se borran únicamente
+    // los sectores que vienen en la subida. Si no se puede borrar, no se carga.
+    const parcial = modoGuardias === 'sectores';
     const rb = await fetch('/api/horarios', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'borrar_todas_las_guardias' }),
+      body: JSON.stringify(parcial
+        ? { accion: 'reemplazar_sectores', curso: cursoNuevo, sectores: [...new Set(previewGuardias.map(g => g.sector))] }
+        : { accion: 'borrar_todas_las_guardias' }),
     });
     if (!rb.ok) {
       const e = await rb.json().catch(() => ({}));
@@ -1135,10 +1198,15 @@ export default function GestionDatos() {
     setUltimaGuardias(tsGua);
     try { localStorage.setItem('ultima_importacion_guardias', tsGua); } catch {}
     const sust = await reaplicarSustituciones();
+    // Las ausencias abiertas guardan también sus horas de guardia: con el
+    // cuadrante nuevo hay que rehacerlas (antes solo se hacía al subir horarios).
+    const ausAb = await recalcularAusenciasAbiertas();
     const reca = await recalcularProximos();
-    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados correctamente — ${tsGua}.${sust}${reca}` });
+    const que = parcial ? `Sectores actualizados: ${[...new Set(previewGuardias.map(g => g.sector))].join(', ')}. El resto del cuadrante no se ha tocado` : 'Cuadrante completo sustituido';
+    setMensaje({ tipo: 'ok', texto: `✅ ${previewGuardias.length} registros de guardias cargados — ${tsGua}. ${que}.${sust}${ausAb}${reca}` });
     setModalGuardias(false);
     setPreviewGuardias([]);
+    setCambiosGuardias(null);
     setProcesando(false);
     cargarStats();
   }
@@ -1700,7 +1768,7 @@ export default function GestionDatos() {
             <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>🛡️ Cuadrante de Guardias (HTML de Peñalara)</div>
             <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.6 }}>
               Selecciona la <strong>carpeta</strong> con los archivos HTM de guardias que genera Peñalara. Cada archivo es un sector (TMV, FOL, Recreo...).
-              Cada carga <strong>borra todas las guardias anteriores</strong> (recreos incluidos) y deja solo las de la carpeta que subes. Sube siempre la carpeta completa, con el archivo de recreos dentro.
+              Antes de guardar podrás elegir: sustituir el <strong>cuadrante completo</strong>, o actualizar <strong>solo los sectores que subes</strong> (por ejemplo, solo INFORMÁTICA si a alguien le han cambiado las guardias), dejando el resto como está. Verás qué guardias entran y salen antes de confirmar.
             </div>
 
             <div style={{ backgroundColor: '#f8f8f8', borderRadius: 10, padding: 14, marginBottom: 14 }}>
@@ -1720,7 +1788,7 @@ export default function GestionDatos() {
                     ))}
                   </div>
                   {!stats.sectoresGuardia.some(s => /recreo/i.test(s.sector)) && (
-                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ No hay recreos cargados. Vuelve a subir la carpeta completa con el archivo de recreos dentro.</div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#92400e' }}>⚠️ No hay recreos cargados. Sube solo el archivo de recreos y elige «Solo estos sectores».</div>
                   )}
                 </>
               )}
@@ -1735,7 +1803,7 @@ export default function GestionDatos() {
             <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
               <input type="file" accept=".htm,.html" multiple onChange={procesarCarpetaGuardias} style={{ display: 'none' }} disabled={procesando} />
               <div style={{ padding: '12px', borderRadius: 10, border: '2px dashed #7c3aed', color: '#6d28d9', backgroundColor: '#faf5ff', fontWeight: 700, fontSize: 13, textAlign: 'center' }}>
-                📄 Seleccionar los archivos HTM sueltos (todos a la vez, recreos incluidos)
+                📄 Seleccionar archivos HTM sueltos (uno o varios sectores)
               </div>
             </label>
           </div>
@@ -1898,14 +1966,71 @@ export default function GestionDatos() {
                 </div>
               ))}
             </div>
-            <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef3c7', borderRadius: 8 }}>
-              ⚠️ Se borrarán <strong>todas las guardias anteriores</strong>, recreos incluidos, y quedarán solo estas: {[...new Set(previewGuardias.map(g => g.sector))].join(', ')}.
+            {/* QUÉ SE SUSTITUYE */}
+            <div style={{ marginBottom: 12, display: 'grid', gap: 6 }}>
+              {[
+                { valor: 'sectores', titulo: 'Solo estos sectores', texto: `Se sustituyen ${[...new Set(previewGuardias.map(g => g.sector))].join(', ')}. El resto del cuadrante (recreos incluidos) se queda como está.` },
+                { valor: 'completo', titulo: 'Cuadrante completo', texto: 'Se borran todas las guardias anteriores, recreos incluidos, y quedan solo las de esta subida.' },
+              ].map(op => {
+                const activo = modoGuardias === op.valor;
+                return (
+                  <label key={op.valor} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', border: `2px solid ${activo ? '#7c3aed' : '#e2e8f0'}`, backgroundColor: activo ? '#faf5ff' : 'white' }}>
+                    <input type="radio" name="modoGuardias" checked={activo} onChange={() => setModoGuardias(op.valor)} disabled={procesando} style={{ marginTop: 3 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: activo ? '#6d28d9' : '#334155' }}>{op.titulo}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>{op.texto}</div>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
+
+            {modoGuardias === 'completo' && cambiosGuardias?.fuera?.length > 0 && (
+              <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fef2f2', border: '1.5px solid #ef4444', borderRadius: 8, lineHeight: 1.5 }}>
+                ⚠️ <strong>Estos sectores no vienen en la subida y se quedarán sin guardias:</strong> {cambiosGuardias.fuera.join(', ')}. Si solo querías actualizar algunos sectores, elige «Solo estos sectores».
+              </div>
+            )}
+
+            {/* CAMBIOS RESPECTO A LO CARGADO */}
+            {cambiosGuardias === null && (
+              <div style={{ marginBottom: 12, fontSize: 12, color: '#64748b' }}>⏳ Comparando con el cuadrante cargado…</div>
+            )}
+            {cambiosGuardias?.error && (
+              <div style={{ marginBottom: 12, fontSize: 12, color: '#92400e' }}>⚠️ No se ha podido comparar con el cuadrante cargado.</div>
+            )}
+            {cambiosGuardias && !cambiosGuardias.error && (() => {
+              const { entran, salen, nuevos } = cambiosGuardias;
+              const dia3 = d => (d || '').substring(0, 3);
+              const linea = (g) => `${g.nombre} · ${g.sector} · ${dia3(g.dia)} ${g.hora === 'recreo' ? `recreo${g.aula ? ` (${g.aula})` : ''}` : `${g.hora}ª`}`;
+              if (!entran.length && !salen.length) {
+                return (
+                  <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', fontSize: 12.5, color: '#475569' }}>
+                    ＝ Estos sectores son idénticos a lo que ya está cargado: no cambia ninguna guardia.
+                  </div>
+                );
+              }
+              return (
+                <div style={{ marginBottom: 12, padding: 12, borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>🔍 Qué cambia en estos sectores</div>
+                  {nuevos.length > 0 && (
+                    <div style={{ fontSize: 12, color: '#92400e', marginBottom: 8 }}>⚠️ Sector que no estaba cargado: <strong>{nuevos.join(', ')}</strong>. Si debería existir ya, revisa que el nombre del archivo sea el de siempre.</div>
+                  )}
+                  <div style={{ maxHeight: 220, overflowY: 'auto', fontSize: 12, lineHeight: 1.6 }}>
+                    {salen.length > 0 && <div style={{ fontWeight: 700, color: '#991b1b' }}>➖ Salen ({salen.length})</div>}
+                    {salen.slice(0, 80).map((g, i) => <div key={'s' + i} style={{ color: '#991b1b' }}>{linea(g)}</div>)}
+                    {salen.length > 80 && <div style={{ color: '#991b1b' }}>… y {salen.length - 80} más</div>}
+                    {entran.length > 0 && <div style={{ fontWeight: 700, color: '#166534', marginTop: salen.length ? 8 : 0 }}>➕ Entran ({entran.length})</div>}
+                    {entran.slice(0, 80).map((g, i) => <div key={'e' + i} style={{ color: '#166534' }}>{linea(g)}</div>)}
+                    {entran.length > 80 && <div style={{ color: '#166534' }}>… y {entran.length - 80} más</div>}
+                  </div>
+                </div>
+              );
+            })()}
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={confirmarGuardias} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: '#7c3aed', color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
                 {procesando ? '⏳ Guardando...' : `✅ Confirmar (${previewGuardias.length} registros)`}
               </button>
-              <button onClick={() => { setModalGuardias(false); setPreviewGuardias([]); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setModalGuardias(false); setPreviewGuardias([]); setCambiosGuardias(null); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
             </div>
           </div>
         </div>

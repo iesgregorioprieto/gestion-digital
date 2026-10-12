@@ -65,6 +65,42 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    /**
+     * ACTUALIZACIÓN PARCIAL DEL CUADRANTE: solo los sectores que se suben.
+     *
+     * Si a un profesor le cambian las guardias (p. ej. le ponen horas de
+     * proyectos y le sobran guardias de INFORMÁTICA), basta con subir el
+     * archivo de ese sector. Se borran las guardias de esos sectores y
+     * nada más: GENERAL, RECREO y el resto se quedan como estaban.
+     * Los nombres se comparan sin tildes: «HOSTELERÍA» = «HOSTELERIA».
+     */
+    if (accion === 'reemplazar_sectores') {
+      const sectores = Array.isArray(cuerpo.sectores) ? cuerpo.sectores.filter(Boolean) : [];
+      if (!curso || sectores.length === 0) {
+        return Response.json({ error: 'Faltan el curso o los sectores' }, { status: 400 });
+      }
+      const clave = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+      const pedidos = new Set(sectores.map(clave));
+      const cliente = supa();
+
+      const { data: filas, error: e1 } = await cliente.from('horarios_profesores')
+        .select('grupo').eq('curso_academico', curso).eq('tipo', 'guardia');
+      if (e1) return Response.json({ error: e1.message }, { status: 500 });
+      const borrar = [...new Set((filas || []).map(f => f.grupo))].filter(g => g && pedidos.has(clave(g)));
+
+      if (borrar.length) {
+        const { error } = await cliente.from('horarios_profesores').delete()
+          .eq('curso_academico', curso).eq('tipo', 'guardia').in('grupo', borrar);
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        const { count, error: e2 } = await cliente.from('horarios_profesores')
+          .select('id', { count: 'exact', head: true })
+          .eq('curso_academico', curso).eq('tipo', 'guardia').in('grupo', borrar);
+        if (e2) return Response.json({ error: e2.message }, { status: 500 });
+        if (count > 0) return Response.json({ error: `No se han podido borrar ${count} guardias de esos sectores. No se ha cargado nada.` }, { status: 500 });
+      }
+      return Response.json({ ok: true, borrados: borrar });
+    }
+
     if (accion === 'borrar_curso') {
       if (!curso) return Response.json({ error: 'Falta el curso' }, { status: 400 });
 

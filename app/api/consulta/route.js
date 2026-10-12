@@ -52,7 +52,7 @@ const TABLAS = {
     directivo: true,
   },
   horarios_profesores: {
-    columns: 'id, profesor_nombre_pdf, hora_id, hora_label, tipo, grupo, materia, dia, aula, curso_academico',
+    columns: 'id, profesor_nombre_pdf, nombre_original_pdf, hora_id, hora_label, tipo, grupo, materia, dia, aula, curso_academico',
     directivo: false,
   },
   grupos: {
