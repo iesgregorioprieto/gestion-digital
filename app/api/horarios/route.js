@@ -101,6 +101,41 @@ export async function POST(request) {
       return Response.json({ ok: true, borrados: borrar });
     }
 
+    /**
+     * ACTUALIZACIÓN PARCIAL DE HORARIOS: solo los profesores que se suben.
+     *
+     * Peñalara saca un archivo por profesor. Si a uno le cambian el
+     * horario, se sube su archivo y se sustituyen sus clases y
+     * complementarias; las de los demás no se tocan. Las guardias van
+     * en el cuadrante y aquí no se tocan nunca.
+     *
+     * Se borran:
+     *   · las filas a su nombre que sean suyas (no las que tenga
+     *     prestadas de un titular al que sustituye), y
+     *   · las suyas que se pasaron a un sustituto (nombre_original_pdf),
+     *     que el paso de «pasar a los sustitutos» vuelve a traspasar.
+     */
+    if (accion === 'reemplazar_profesores') {
+      const nombres = Array.isArray(cuerpo.nombres) ? [...new Set(cuerpo.nombres.filter(Boolean))] : [];
+      if (!curso || nombres.length === 0) {
+        return Response.json({ error: 'Faltan el curso o los profesores' }, { status: 400 });
+      }
+      if (nombres.length > 200) return Response.json({ error: 'Demasiados profesores' }, { status: 400 });
+      const cliente = supa();
+
+      const { error: e1 } = await cliente.from('horarios_profesores').delete()
+        .eq('curso_academico', curso).neq('tipo', 'guardia')
+        .in('profesor_nombre_pdf', nombres).is('titular_original_id', null);
+      if (e1) return Response.json({ error: e1.message }, { status: 500 });
+
+      const { error: e2 } = await cliente.from('horarios_profesores').delete()
+        .eq('curso_academico', curso).neq('tipo', 'guardia')
+        .in('nombre_original_pdf', nombres);
+      if (e2) return Response.json({ error: e2.message }, { status: 500 });
+
+      return Response.json({ ok: true, profesores: nombres.length });
+    }
+
     if (accion === 'borrar_curso') {
       if (!curso) return Response.json({ error: 'Falta el curso' }, { status: 400 });
 

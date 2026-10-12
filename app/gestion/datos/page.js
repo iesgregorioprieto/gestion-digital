@@ -78,6 +78,9 @@ export default function GestionDatos() {
   // 'completo' = sustituye todo el cuadrante; 'sectores' = solo los sectores subidos
   const [modoGuardias, setModoGuardias] = useState('completo');
   const [cambiosGuardias, setCambiosGuardias] = useState(null);
+  // 'completo' = sustituye todos los horarios; 'profesores' = solo los subidos
+  const [modoHorarios, setModoHorarios] = useState('completo');
+  const [cambiosHorarios, setCambiosHorarios] = useState(null);
   const [, setProgresoGuardias] = useState({ actual: 0, total: 0, mensaje: '' });
   const fileRefGuardias = useRef(null);
 
@@ -633,6 +636,10 @@ export default function GestionDatos() {
       totalRegistros,
       errores,
     });
+    // Si se suben pocos archivos (menos de la mitad del claustro), lo normal
+    // es que sea una actualización de unos profesores: se propone esa opción.
+    setModoHorarios(stats.horarios > 0 && profesoresParseados.length < (stats.profesores || 0) / 2 ? 'profesores' : 'completo');
+    compararHorarios(profesoresParseados);
     setModalHorarios(true);
     setProcesando(false);
     if (fileRefHorarios.current) fileRefHorarios.current.value = '';
@@ -748,21 +755,103 @@ export default function GestionDatos() {
     };
   }
 
+  /**
+   * QUÉ CAMBIA EN EL HORARIO DE CADA PROFESOR SUBIDO
+   *
+   * Compara cada archivo con lo cargado de esa persona (también lo que
+   * se pasó a su sustituto) y avisa de dos cosas que la carga parcial
+   * no arregla sola:
+   *   · un nombre que no está cargado: si es la misma persona con el
+   *     nombre cambiado, su horario viejo se quedaría duplicado;
+   *   · una clase nueva a una hora en la que el cuadrante le pone
+   *     guardia: hay que subir también ese sector del cuadrante.
+   */
+  async function compararHorarios(profesores) {
+    setCambiosHorarios(null);
+    if (!profesores.length || profesores.length > 60) { setCambiosHorarios({ omitido: true }); return; }
+    try {
+      const nombres = profesores.map(p => p.nombre);
+      const leer = async (col) => {
+        let todas = [];
+        for (let desde = 0; ; desde += 1000) {
+          const { data, error } = await consulta('horarios_profesores')
+            .select('profesor_nombre_pdf, nombre_original_pdf, dia, hora_id, tipo, grupo, materia, aula')
+            .eq('curso_academico', cursoNuevo).neq('tipo', 'guardia').in(col, nombres).range(desde, desde + 999);
+          if (error) throw error;
+          todas = todas.concat(data || []);
+          if (!data || data.length < 1000) break;
+        }
+        return todas;
+      };
+      const [aSuNombre, prestadas, rp, guardias] = await Promise.all([
+        leer('profesor_nombre_pdf'),
+        leer('nombre_original_pdf'),
+        fetch('/api/profesores').then(r => r.json()),
+        (async () => {
+          let todas = [];
+          for (let desde = 0; ; desde += 1000) {
+            const { data } = await consulta('horarios_profesores').select('profesor_nombre_pdf, nombre_original_pdf, grupo, dia, hora_id')
+              .eq('tipo', 'guardia').eq('curso_academico', cursoNuevo).range(desde, desde + 999);
+            todas = todas.concat(data || []);
+            if (!data || data.length < 1000) break;
+          }
+          return todas;
+        })(),
+      ]);
+
+      const hora = h => String(h || '').replace(/a$/, '');
+      const clave = h => [h.dia, hora(h.hora_id), (h.tipo || '').toLowerCase(), h.grupo || '', h.materia || '', h.aula || ''].join('|');
+      const delNombre = (n) => [
+        ...aSuNombre.filter(h => h.profesor_nombre_pdf === n && !h.nombre_original_pdf),
+        ...prestadas.filter(h => h.nombre_original_pdf === n),
+      ];
+
+      const indice = indiceProfesores(rp.profesores || []);
+      const guardiasDe = new Map();
+      for (const g of guardias) {
+        const p = buscaProfesor(indice, g.nombre_original_pdf || g.profesor_nombre_pdf);
+        if (!p) continue;
+        if (!guardiasDe.has(p.id)) guardiasDe.set(p.id, []);
+        guardiasDe.get(p.id).push(g);
+      }
+
+      const porProfesor = profesores.map(prof => {
+        const antes = delNombre(prof.nombre);
+        const mapaAntes = new Map(antes.map(h => [clave(h), h]));
+        const mapaDespues = new Map(prof.horas.map(h => [clave(h), h]));
+        const entran = [...mapaDespues].filter(([k]) => !mapaAntes.has(k)).map(([, v]) => v);
+        const salen = [...mapaAntes].filter(([k]) => !mapaDespues.has(k)).map(([, v]) => v);
+        const persona = buscaProfesor(indice, prof.nombre);
+        const choques = persona ? (guardiasDe.get(persona.id) || []).filter(g =>
+          g.hora_id !== 'recreo' && prof.horas.some(h =>
+            (h.tipo || '').toLowerCase() === 'clase' && h.dia === g.dia && hora(h.hora_id) === hora(g.hora_id))) : [];
+        return { nombre: prof.nombre, nuevo: antes.length === 0, entran, salen, choques };
+      });
+      setCambiosHorarios({ porProfesor });
+    } catch { setCambiosHorarios({ error: true }); }
+  }
+
   async function confirmarHorarios() {
     if (!previewHorarios) return;
     setProcesando(true);
     setProgresoHorarios({ actual: 0, total: previewHorarios.profesores.length, mensaje: 'Guardando...' });
     
     try {
-      // 1. Borrar horarios del curso actual (para reemplazar)
+      // 1. Borrar lo que se va a sustituir: todo el curso, o solo los
+      // profesores subidos. El cuadrante de guardias no se toca nunca aquí.
+      const parcial = modoHorarios === 'profesores';
       setProgresoHorarios(p => ({ ...p, mensaje: 'Borrando horarios anteriores...' }));
-      await fetch('/api/horarios', {
+      const _b = await fetch('/api/horarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Solo clases y complementarias: el cuadrante de guardias (y el de
-        // recreo) se sube aparte y no se toca al cargar los horarios.
-        body: JSON.stringify({ accion: 'borrar_curso', curso: cursoNuevo, excepto_guardias: true }),
+        body: JSON.stringify(parcial
+          ? { accion: 'reemplazar_profesores', curso: cursoNuevo, nombres: previewHorarios.profesores.map(p => p.nombre) }
+          : { accion: 'borrar_curso', curso: cursoNuevo, excepto_guardias: true }),
       });
+      if (!_b.ok) {
+        const e = await _b.json().catch(() => ({}));
+        throw new Error(`no se pudo borrar lo anterior (${e.error || 'error'}). No se ha cargado nada`);
+      }
       
       // 2. Insertar los nuevos en lotes de 500
       const registros = [];
@@ -806,9 +895,11 @@ export default function GestionDatos() {
       const sust = await reaplicarSustituciones();
       const ausAb = await recalcularAusenciasAbiertas();
       const reca = await recalcularProximos();
-      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${sust}${ausAb}${reca}` });
+      const que = parcial ? ' Solo se han cambiado estos profesores; el resto de horarios sigue igual.' : '';
+      setMensaje({ tipo: 'ok', texto: `✅ ${previewHorarios.totalProfesores} profesores y ${registros.length} horas cargadas correctamente — ${tsHor}.${que}${sust}${ausAb}${reca}` });
       setModalHorarios(false);
       setPreviewHorarios(null);
+      setCambiosHorarios(null);
       cargarStats();
     } catch (err) {
       setMensaje({ tipo: 'error', texto: `❌ Error al guardar: ${err.message}` });
@@ -1715,7 +1806,7 @@ export default function GestionDatos() {
               </label>
 
               {/* ALTERNATIVA: subir archivos HTML sueltos */}
-              <div style={{ textAlign: 'center', margin: '10px 0', fontSize: 12, color: '#aaa' }}>— o si no puedes seleccionar carpeta —</div>
+              <div style={{ textAlign: 'center', margin: '10px 0', fontSize: 12, color: '#aaa' }}>— o, para actualizar solo a algunos profesores, sus archivos sueltos —</div>
               <label style={{ display: 'block', cursor: procesando ? 'not-allowed' : 'pointer' }}>
                 <input
                   type="file"
@@ -1733,7 +1824,7 @@ export default function GestionDatos() {
                   cursor: procesando ? 'not-allowed' : 'pointer',
                   border: `2px dashed ${procesando ? '#ddd' : verde}`,
                 }}>
-                  {procesando ? '⏳ Procesando...' : '📄 Seleccionar archivos HTML sueltos (selecciona todos a la vez)'}
+                  {procesando ? '⏳ Procesando...' : '📄 Seleccionar archivos HTML sueltos (uno o varios profesores)'}
                 </div>
               </label>
 
@@ -1844,9 +1935,62 @@ export default function GestionDatos() {
               )}
             </div>
             
-            <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fee2e2', borderRadius: 8 }}>
-              ⚠️ <strong>Atención:</strong> Al confirmar, se BORRARÁN todos los horarios existentes del curso {cursoNuevo} y se sustituirán por estos.
+            {/* QUÉ SE SUSTITUYE */}
+            <div style={{ marginBottom: 12, display: 'grid', gap: 6 }}>
+              {[
+                { valor: 'profesores', titulo: 'Solo estos profesores', texto: `Se sustituye el horario de ${previewHorarios.totalProfesores === 1 ? 'este profesor' : `estos ${previewHorarios.totalProfesores} profesores`}. Los demás horarios y el cuadrante de guardias se quedan como están.` },
+                { valor: 'completo', titulo: 'Todos los horarios', texto: `Se borran todos los horarios del curso ${cursoNuevo} y quedan solo los de esta subida (el cuadrante de guardias no se toca).` },
+              ].map(op => {
+                const activo = modoHorarios === op.valor;
+                return (
+                  <label key={op.valor} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', border: `2px solid ${activo ? verde : '#e2e8f0'}`, backgroundColor: activo ? '#f0fdf4' : 'white' }}>
+                    <input type="radio" name="modoHorarios" checked={activo} onChange={() => setModoHorarios(op.valor)} disabled={procesando} style={{ marginTop: 3 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 13, color: activo ? verde : '#334155' }}>{op.titulo}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.4 }}>{op.texto}</div>
+                    </div>
+                  </label>
+                );
+              })}
             </div>
+            {modoHorarios === 'completo' && previewHorarios.totalProfesores < (stats.profesores || 0) / 2 && (
+              <div style={{ fontSize: 12, color: '#991b1b', marginBottom: 12, padding: '10px 12px', backgroundColor: '#fee2e2', border: '1.5px solid #ef4444', borderRadius: 8 }}>
+                ⚠️ <strong>Solo subes {previewHorarios.totalProfesores} horarios</strong> y con esta opción el resto del profesorado se quedaría sin horario. Si solo querías actualizar a estos, elige «Solo estos profesores».
+              </div>
+            )}
+
+            {/* CAMBIOS POR PROFESOR (solo tiene sentido en la parcial) */}
+            {modoHorarios === 'profesores' && (
+              <div style={{ marginBottom: 12 }}>
+                {cambiosHorarios === null && <div style={{ fontSize: 12, color: '#64748b' }}>⏳ Comparando con lo cargado…</div>}
+                {cambiosHorarios?.error && <div style={{ fontSize: 12, color: '#92400e' }}>⚠️ No se ha podido comparar con lo cargado.</div>}
+                {cambiosHorarios?.porProfesor && (() => {
+                  const dia3 = d => (d || '').substring(0, 3);
+                  const linea = h => `${dia3(h.dia)} ${String(h.hora_id || '').replace(/a$/, '')}ª · ${(h.tipo || '').toLowerCase()}${h.grupo ? ` ${h.grupo}` : ''}${h.materia ? ` (${h.materia})` : ''}`;
+                  return (
+                    <div style={{ padding: 12, borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', maxHeight: 300, overflowY: 'auto' }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>🔍 Qué cambia</div>
+                      {cambiosHorarios.porProfesor.map((p, i) => (
+                        <div key={i} style={{ marginBottom: 10, fontSize: 12, lineHeight: 1.55 }}>
+                          <div style={{ fontWeight: 700, color: azul }}>{p.nombre}</div>
+                          {p.nuevo && (
+                            <div style={{ color: '#92400e' }}>⚠️ No tenía horario cargado con este nombre. Si es alguien nuevo, bien. Si es la misma persona con el nombre escrito distinto, su horario viejo se quedaría también: avísame antes de confirmar.</div>
+                          )}
+                          {!p.nuevo && !p.entran.length && !p.salen.length && <div style={{ color: '#475569' }}>＝ Sin cambios</div>}
+                          {!p.nuevo && p.salen.map((h, j) => <div key={'s' + j} style={{ color: '#991b1b' }}>➖ {linea(h)}</div>)}
+                          {!p.nuevo && p.entran.map((h, j) => <div key={'e' + j} style={{ color: '#166534' }}>➕ {linea(h)}</div>)}
+                          {p.choques.length > 0 && (
+                            <div style={{ color: '#991b1b', marginTop: 4, fontWeight: 600 }}>
+                              ⚠️ Tiene clase a una hora en la que el cuadrante le pone guardia: {p.choques.map(g => `${dia3(g.dia)} ${String(g.hora_id).replace(/a$/, '')}ª (${g.grupo})`).join(', ')}. Sube también {[...new Set(p.choques.map(g => g.grupo))].join(', ')} en la pestaña de Guardias.
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
             
             {/* PROGRESO DE GUARDADO */}
             {procesando && (
@@ -1862,7 +2006,7 @@ export default function GestionDatos() {
               <button onClick={confirmarHorarios} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: procesando ? 'not-allowed' : 'pointer' }}>
                 {procesando ? '⏳ Guardando...' : '✅ Confirmar y guardar'}
               </button>
-              <button onClick={() => { setModalHorarios(false); setPreviewHorarios(null); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
+              <button onClick={() => { setModalHorarios(false); setPreviewHorarios(null); setCambiosHorarios(null); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: procesando ? 'not-allowed' : 'pointer' }}>Cancelar</button>
             </div>
           </div>
         </div>
