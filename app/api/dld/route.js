@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { getConfigCurso, calcularAntiguedad, calcularDiasDLD } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
+import { rehacerReparto } from '@/lib/rehacerReparto';
 
 /**
  * SOLICITUDES DE DLD
@@ -323,6 +324,9 @@ export async function POST(request) {
       if (!data || data.length === 0) {
         return Response.json({ error: 'ya_resuelta' }, { status: 409 });
       }
+      // Un DLD aprobado para hoy o mañana tiene que salir ya en guardias,
+      // no al día siguiente con el cron (#132).
+      if (datos.estado === 'aprobada') await rehacerReparto(request);
       return Response.json({ ok: true });
     }
 
@@ -339,6 +343,9 @@ export async function POST(request) {
       }).eq('id', id);
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
+      // Revocado: el profesor vuelve a estar en el centro y nadie tiene
+      // que cubrirle.
+      await rehacerReparto(request);
       return Response.json({ ok: true });
     }
 
@@ -374,6 +381,7 @@ export async function POST(request) {
 
       const { error } = await supa().from('dld').delete().eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
+      await rehacerReparto(request);
       return Response.json({ ok: true });
     }
 

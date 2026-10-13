@@ -6,9 +6,10 @@ import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
 import { diasDeLaAusencia } from '@/lib/diasAusencia';
-import { normClave, normHora } from '@/lib/asignacionGuardias';
+import { normClave, normHora, ahoraEnCentro } from '@/lib/asignacionGuardias';
 import { adjuntosDe, MAX_ADJUNTOS } from '@/lib/adjuntos';
-import { hoyLocal } from '@/lib/fechas';
+import { hoyLocal, sumarDias } from '@/lib/fechas';
+import { rehacerReparto } from '@/lib/rehacerReparto';
 
 /**
  * LECTURA DE AUSENCIAS
@@ -170,10 +171,10 @@ export async function GET(request) {
  */
 // Ayer, en formato AAAA-MM-DD. Se usa como corte: lo de hoy en adelante
 // se limpia; lo de días pasados se queda como registro de lo ocurrido.
+// Con la fecha de Madrid: el servidor va en UTC y, de 00:00 a 02:00,
+// toISOString() daba un día de menos.
 function ayer() {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return sumarDias(ahoraEnCentro().fecha, -1);
 }
 
 async function limpiarGuardias(profesorId, desde = null) {
@@ -448,34 +449,10 @@ export async function POST(request) {
       // y la rotación. No espera a que nadie abra la app ni pulse nada.
       //
       // Se espera a que termine (antes iba sin await y en el servidor la
-      // función se cerraba a veces antes de que saliera la petición), y se
-      // manda el rango entero: una ausencia de tres días se preasigna
-      // completa, no solo el primer día. Una baja sin fecha de fin la cubre
-      // el tope de días de la propia preasignación.
-      const fechaAusencia = fila.fecha_inicio;
-      if (fechaAusencia) {
-        const hoyEnMadrid = () => new Intl.DateTimeFormat('sv-SE', {
-          timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
-        }).format(new Date());
-        const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
-        try {
-          await fetch(`${baseUrl}/api/guardias/preasignar`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Cookie': request.headers.get('cookie') || '',
-            },
-            // Solo el día que se está viviendo. Los siguientes se
-            // recalculan esa misma mañana: repartir el jueves con los
-            // datos del lunes no sirve de nada.
-            body: JSON.stringify({ fecha: hoyEnMadrid() }),
-          });
-        } catch (err) {
-          // Que falle la preasignación no puede tumbar el registro de la
-          // ausencia: lo importante es que quede guardada.
-          console.error('preasignar tras ausencia:', err?.message);
-        }
-      }
+      // función se cerraba a veces antes de que saliera la petición).
+      // Solo el día que se está viviendo y el siguiente: los demás se
+      // recalculan esa misma mañana.
+      if (fila.fecha_inicio) await rehacerReparto(request);
 
       // Permiso de formación: la aprobación (jefe de departamento y
       // director) se hace ANTES, en el módulo de Formación. Aquí ya no se
@@ -523,7 +500,8 @@ export async function POST(request) {
 
       // Si se cambian las fechas o las horas, los días hay que rehacerlos:
       // si no, quedarían los del registro anterior.
-      if ('horas' in cambios || 'fecha_inicio' in cambios || 'fecha_fin' in cambios) {
+      const cambiaCuandoFalta = 'horas' in cambios || 'fecha_inicio' in cambios || 'fecha_fin' in cambios;
+      if (cambiaCuandoFalta) {
         try {
           const { data: previa } = await supa().from('ausencias')
             .select('profesor_id, fecha_inicio, fecha_fin, horas').eq('id', id);
@@ -543,6 +521,11 @@ export async function POST(request) {
       if (!data || data.length === 0) {
         return Response.json({ error: 'no_encontrada_o_ajena' }, { status: 403 });
       }
+
+      // Si ha cambiado cuándo falta, el reparto de hoy ya no vale. Justificar
+      // (solo estado y documentos) no cambia nada y no lo dispara.
+      if (cambiaCuandoFalta) await rehacerReparto(request);
+
       return Response.json({ ok: true });
     }
 
@@ -759,6 +742,11 @@ export async function POST(request) {
       // compañero haya fichado se quedan: esas se hicieron.
       if (dueño?.profesor_id) {
         await limpiarGuardias(dueño.profesor_id, ayer());
+        // limpiarGuardias se lleva TODAS las guardias pendientes de esta
+        // persona, también las de otra ausencia o DLD suyo que siga en
+        // pie. El reparto las vuelve a poner, y de paso recoloca a quien
+        // estaba cubriendo y ahora queda libre.
+        await rehacerReparto(request);
       }
 
       return Response.json({ ok: true });
@@ -782,6 +770,7 @@ export async function POST(request) {
 
       // A partir del cierre ya no hay que cubrirle: viene el sustituto.
       await limpiarGuardias(datos.profesor_id, datos.fecha_fin);
+      await rehacerReparto(request);
 
       return Response.json({ ok: true });
     }
