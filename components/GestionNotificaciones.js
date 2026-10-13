@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { registroAvisos } from '@/lib/swAvisos';
 
 const VERDE = '#1e6b2e';
 
@@ -31,7 +32,7 @@ export default function GestionNotificaciones({ profesorId }) {
     if (Notification.permission === 'denied') { setEstado('bloqueado'); return; }
 
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await registroAvisos();
       const sub = await reg.pushManager.getSubscription();
       setEstado(sub ? 'activo' : 'inactivo');
     } catch (_) {
@@ -50,7 +51,7 @@ export default function GestionNotificaciones({ profesorId }) {
       const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!clave) { setError('Falta la clave de notificaciones.'); setEstado('error'); return; }
 
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await registroAvisos();
       let sub = await reg.pushManager.getSubscription();
       if (!sub) {
         sub = await reg.pushManager.subscribe({
@@ -82,7 +83,7 @@ export default function GestionNotificaciones({ profesorId }) {
     setError(''); setMensaje('');
     setEstado('trabajando');
     try {
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await registroAvisos();
       const sub = await reg.pushManager.getSubscription();
       if (sub) {
         await fetch('/api/push', {

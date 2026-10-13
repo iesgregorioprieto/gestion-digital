@@ -6,6 +6,7 @@ import BannerHoy from '@/components/BannerHoy';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
+import { quitarSwViejos } from '@/lib/swAvisos';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
 import TareasPendientes from '@/components/TareasPendientes';
 import ValoracionModulo from '@/components/ValoracionModulo';
@@ -85,11 +86,10 @@ export default function PanelProfesor() {
       const backup = {};
       claves.forEach(k => { backup[k] = sessionStorage.getItem(k); });
 
-      // 2. Desregistrar TODOS los Service Workers y esperar a que terminen
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(registrations.map(reg => reg.unregister()));
-      }
+      // 2. Desregistrar los Service Workers viejos y esperar a que terminen.
+      //    El de los avisos se queda: quitarlo borraría la suscripción y el
+      //    profesor dejaría de recibir notificaciones sin enterarse.
+      if ('serviceWorker' in navigator) await quitarSwViejos();
 
       // 3. Borrar TODAS las caches del navegador
       if ('caches' in window) {

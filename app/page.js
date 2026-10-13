@@ -1,15 +1,15 @@
 'use client';
 
+import { quitarSwViejos } from '@/lib/swAvisos';
+
 export default function Home() {
   const verde = '#1e6b2e';
   const verdeClaro = '#e8f5e9';
 
   async function forzarActualizacion() {
     try {
-      if ('serviceWorker' in navigator) {
-        const registrations = await navigator.serviceWorker.getRegistrations();
-        for (const reg of registrations) await reg.unregister();
-      }
+      // El de los avisos se queda: quitarlo borraría la suscripción
+      if ('serviceWorker' in navigator) await quitarSwViejos();
       if ('caches' in window) {
         const nombres = await caches.keys();
         await Promise.all(nombres.map(n => caches.delete(n)));

@@ -95,16 +95,26 @@ export default function RootLayout({ children }) {
 
               if (!('serviceWorker' in navigator)) return;
 
-              // Se desinstala cualquier componente que quede instalado de
-              // antes y se borran sus copias. La aplicación pasa a ser una
-              // web normal: el navegador gestiona la caché como en cualquier
-              // otra página, y ya no hay nada que pueda devolver «Sin
-              // conexion» en lugar de una pieza de la aplicación.
+              // Se desinstala cualquier componente VIEJO que quede de antes y
+              // se borran sus copias. La aplicación es una web normal: el
+              // navegador gestiona la caché como en cualquier otra página, y
+              // ya no hay nada que pueda devolver «Sin conexion» en lugar de
+              // una pieza de la aplicación.
               //
-              // Se hace en cada carga, sin coste: si no hay ninguno
-              // instalado, no hace nada.
+              // El de los avisos (/sw-avisos.js) se respeta y se instala:
+              // no intercepta nada, solo recibe las notificaciones. Antes se
+              // borraba todo, y con ello las suscripciones: desde el 22/09
+              // no llegaba ningún aviso al móvil.
+              var AVISOS = '/sw-avisos.js';
+              function esAvisos(r) {
+                var w = r.active || r.waiting || r.installing;
+                try { return !!w && new URL(w.scriptURL).pathname === AVISOS; } catch (e) { return false; }
+              }
               navigator.serviceWorker.getRegistrations().then(function(rs) {
-                rs.forEach(function(r) { r.unregister().catch(function(){}); });
+                return Promise.all(rs.filter(function(r) { return !esAvisos(r); })
+                  .map(function(r) { return r.unregister().catch(function(){}); }));
+              }).catch(function(){}).then(function() {
+                return navigator.serviceWorker.register(AVISOS, { scope: '/' });
               }).catch(function(){});
 
               if (window.caches && caches.keys) {

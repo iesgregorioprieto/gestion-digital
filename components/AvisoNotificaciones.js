@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
+import { registroAvisos } from '@/lib/swAvisos';
 
 const VERDE = '#1e6b2e';
 
@@ -31,6 +32,33 @@ export default function AvisoNotificaciones({ profesorId }) {
         return;
       }
 
+      /**
+       * Con el permiso ya dado, la suscripción de ESTE navegador se
+       * comprueba y, si falta, se rehace sola: no hace falta preguntar
+       * nada. Es lo que recupera los avisos de quien los activó antes
+       * del 22/09, cuando se desinstaló el service worker y con él todas
+       * las suscripciones. Va antes que lo de «no volver a insistir»
+       * porque no molesta: no enseña nada.
+       */
+      if (Notification.permission === 'granted') {
+        try {
+          const reg = await registroAvisos();
+          let sub = await reg.pushManager.getSubscription();
+          const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+          if (!sub && clave) {
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(clave),
+            });
+          }
+          if (sub) {
+            setEstado('activo');
+            await guardarSuscripcion(sub);
+            return;
+          }
+        } catch (_) {}
+      }
+
       // Si el profesor lo ha descartado, no volver a insistir
       try {
         if (localStorage.getItem('ies-aviso-notif-oculto') === '1') {
@@ -41,19 +69,11 @@ export default function AvisoNotificaciones({ profesorId }) {
 
       if (Notification.permission === 'denied') { setEstado('bloqueado'); return; }
 
-      if (Notification.permission === 'granted') {
-        // a) ¿Hay suscripción en este navegador?
-        try {
-          const reg = await navigator.serviceWorker.ready;
-          const sub = await reg.pushManager.getSubscription();
-          if (sub) {
-            setEstado('activo');
-            await guardarSuscripcion(sub);
-            return;
-          }
-        } catch (_) {}
-
-        // b) ¿La tiene registrada en algún dispositivo?
+      // Aquí el permiso no está dado en este navegador. Si ya los tiene
+      // activos en otro dispositivo (el móvil), no se le insiste en este.
+      // Solo vale si NO hay permiso aquí: con permiso, una fila en la base
+      // de datos puede ser una suscripción muerta y taparía el problema.
+      if (Notification.permission !== 'granted') {
         try {
           const { data } = await consulta('push_suscripciones')
             .select('id')
@@ -102,7 +122,7 @@ export default function AvisoNotificaciones({ profesorId }) {
         return;
       }
 
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await registroAvisos();
       let sub = await reg.pushManager.getSubscription();
 
       if (!sub) {
