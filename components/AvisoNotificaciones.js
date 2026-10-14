@@ -56,7 +56,17 @@ export default function AvisoNotificaciones({ profesorId }) {
             await guardarSuscripcion(sub);
             return;
           }
-        } catch (_) {}
+        } catch (e) {
+          // El permiso ya está dado: no se vuelve a enseñar el cartel
+          // grande. Se apunta el motivo y se reintenta sola en la próxima
+          // carga (normalmente basta con estar fuera de la WiFi del centro).
+          reportarFallo(e);
+          try {
+            if (localStorage.getItem('ies-aviso-notif-oculto') === '1') { setEstado('activo'); return; }
+          } catch (_) {}
+          setEstado('red_bloqueada');
+          return;
+        }
       }
 
       // Si el profesor lo ha descartado, no volver a insistir
@@ -144,6 +154,7 @@ export default function AvisoNotificaciones({ profesorId }) {
         origen = `${window.location.origin} · SW:${reg ? 'sí' : 'NO'} · scope:${reg?.scope || '-'}`;
       } catch (_) {}
       setDetalle(`${e.name || 'Error'}: ${e.message || '-'} · ${origen}`);
+      reportarFallo(e, origen);
 
       if (msg.includes('push service') || msg.includes('registration failed') || e.name === 'AbortError') {
         setEstado('red_bloqueada');
@@ -171,41 +182,29 @@ export default function AvisoNotificaciones({ profesorId }) {
   }
 
   if (estado === 'red_bloqueada') {
+    // Fallo al conectar con el servicio de avisos de Google. Casi siempre
+    // es la red (la WiFi del centro lo corta). NO se pide reinstalar: la
+    // app instalada funciona por dentro con Chrome y sí admite avisos.
+    // Con el permiso ya dado, se reintenta sola en cada carga.
     return (
       <Caja fondo="#fef3c7" borde="#fbbf24" color="#78350f">
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-          <div style={{ fontSize: 28, lineHeight: 1 }}>📲</div>
+          <div style={{ fontSize: 24, lineHeight: 1 }}>📶</div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: 800, marginBottom: 8, fontSize: 15 }}>
-              Reinstala la app para recibir avisos
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontWeight: 800, marginBottom: 6, fontSize: 15 }}>
+                Los avisos no se han podido activar desde esta conexión
+              </div>
+              <button onClick={ocultarParaSiempre} title="No volver a mostrar"
+                style={{ background: 'transparent', border: 'none', color: '#78350f', fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>✕</button>
             </div>
             <div style={{ fontSize: 13, lineHeight: 1.6, marginBottom: 12 }}>
-              La versión de la app que tienes instalada no admite notificaciones.
-              Hay que instalarla de otra forma — se ve exactamente igual, pero
-              sí recibe los avisos.
+              Suele pasar con la WiFi del centro. No tienes que hacer nada:
+              se activarán solos la próxima vez que abras la app con datos
+              móviles o desde casa. Si quieres, quita la WiFi un momento y
+              pulsa el botón.
             </div>
-
-            <div style={{
-              backgroundColor: 'rgba(255,255,255,0.6)', borderRadius: 8,
-              padding: '12px 14px', marginBottom: 12,
-              fontSize: 13, lineHeight: 2,
-            }}>
-              <strong>Cómo hacerlo (2 minutos):</strong><br />
-              1. Desinstala esta app del móvil<br />
-              2. Abre <strong>Chrome</strong> y entra en<br />
-              <span style={{ fontSize: 12.5, wordBreak: 'break-all' }}>app.iesgregorioprieto.com</span><br />
-              3. Pulsa el menú <strong>⋮</strong> (arriba a la derecha)<br />
-              4. Elige <strong>Instalar aplicación</strong><br />
-              5. Ábrela y pulsa <strong>🔔 Activar</strong>
-            </div>
-
-            <div style={{ fontSize: 12.5, lineHeight: 1.6, marginBottom: 12 }}>
-              Si prefieres no reinstalar ahora, puedes usar el portal desde
-              Chrome y activar los avisos allí.
-            </div>
-
             <button onClick={activar} style={botonEstilo('#b45309')}>🔔 Intentar de nuevo</button>
-
             {detalle && (
               <div style={{ marginTop: 12, fontSize: 10, color: '#a16207', wordBreak: 'break-all', lineHeight: 1.4, opacity: 0.8 }}>
                 {detalle}
@@ -291,6 +290,25 @@ export default function AvisoNotificaciones({ profesorId }) {
       </div>
     </div>
   );
+}
+
+/**
+ * Deja el motivo del fallo en los registros del servidor (Vercel → Logs,
+ * buscar «push-fallo»), para saber por qué falla sin preguntar a nadie.
+ */
+function reportarFallo(e, origen = '') {
+  try {
+    fetch('/api/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        accion: 'fallo',
+        detalle: `${e?.name || 'Error'}: ${e?.message || '-'} ${origen}`.slice(0, 300),
+        instalada: window.matchMedia('(display-mode: standalone)').matches,
+        ua: navigator.userAgent.slice(0, 200),
+      }),
+    }).catch(() => {});
+  } catch (_) {}
 }
 
 function Caja({ fondo, borde, color, children }) {

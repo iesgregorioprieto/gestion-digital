@@ -76,6 +76,17 @@ export async function POST(request) {
       return Response.json({ error: 'sin_sesion' }, { status: 401 });
     }
 
+    // ── Apuntar por qué no se pudo activar (solo a los registros) ──
+    if (accion === 'fallo') {
+      console.warn('push-fallo', JSON.stringify({
+        profesor_id: sesion.id,
+        detalle: String(body.detalle || '').slice(0, 300),
+        instalada: !!body.instalada,
+        ua: String(body.ua || '').slice(0, 200),
+      }));
+      return Response.json({ ok: true });
+    }
+
     // ── Guardar suscripción del navegador ──
     // Siempre para uno mismo: el profesor_id sale de la sesión.
     if (accion === 'suscribir') {
