@@ -1,18 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { registroAvisos } from '@/lib/swAvisos';
+import { registroAvisos, suscribirAvisos } from '@/lib/swAvisos';
 
 const VERDE = '#1e6b2e';
-
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = window.atob(base64);
-  const salida = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) salida[i] = raw.charCodeAt(i);
-  return salida;
-}
 
 export default function GestionNotificaciones({ profesorId }) {
   const [estado, setEstado]   = useState('comprobando');
@@ -51,14 +42,7 @@ export default function GestionNotificaciones({ profesorId }) {
       const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
       if (!clave) { setError('Falta la clave de notificaciones.'); setEstado('error'); return; }
 
-      const reg = await registroAvisos();
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(clave),
-        });
-      }
+      const sub = await suscribirAvisos(clave);
 
       await fetch('/api/push', {
         method: 'POST',

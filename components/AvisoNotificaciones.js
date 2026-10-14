@@ -3,19 +3,9 @@
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
-import { registroAvisos } from '@/lib/swAvisos';
+import { registroAvisos, suscribirAvisos } from '@/lib/swAvisos';
 
 const VERDE = '#1e6b2e';
-
-// Convierte la clave VAPID base64url al formato que espera el navegador
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = window.atob(base64);
-  const salida = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) salida[i] = raw.charCodeAt(i);
-  return salida;
-}
 
 export default function AvisoNotificaciones({ profesorId }) {
   const [estado, setEstado] = useState('comprobando');
@@ -42,15 +32,8 @@ export default function AvisoNotificaciones({ profesorId }) {
        */
       if (Notification.permission === 'granted') {
         try {
-          const reg = await registroAvisos();
-          let sub = await reg.pushManager.getSubscription();
           const clave = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-          if (!sub && clave) {
-            sub = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: urlBase64ToUint8Array(clave),
-            });
-          }
+          const sub = clave ? await suscribirAvisos(clave) : null;
           if (sub) {
             setEstado('activo');
             await guardarSuscripcion(sub);
@@ -132,15 +115,7 @@ export default function AvisoNotificaciones({ profesorId }) {
         return;
       }
 
-      const reg = await registroAvisos();
-      let sub = await reg.pushManager.getSubscription();
-
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(clave),
-        });
-      }
+      const sub = await suscribirAvisos(clave);
 
       await guardarSuscripcion(sub);
       try { localStorage.removeItem('ies-aviso-notif-oculto'); } catch (_) {}
