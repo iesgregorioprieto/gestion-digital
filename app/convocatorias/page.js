@@ -70,14 +70,28 @@ export default function Convocatorias() {
     window.dispatchEvent(new Event('pendientes:actualizar'));
   }
 
+  // Antes no se veía nada al pulsar: si ya estaba marcado «Sí», el botón
+  // seguía igual y parecía que no dejaba pulsar. Ahora se marca en el
+  // acto, se confirma con un mensaje y se puede cambiar cuando se quiera.
   async function responder(c, asistira) {
-    const r = await fetch('/api/convocatorias', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'responder', datos: { id: c.id, asistira } }),
-    });
-    if (!r.ok) { const e = await r.json().catch(() => ({})); aviso(e.error || 'No se ha podido guardar', 'error'); return; }
-    avisarResuelto();
-    cargar();
+    if (enviando) return;
+    setEnviando(true);
+    try {
+      const r = await fetch('/api/convocatorias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'responder', datos: { id: c.id, asistira } }),
+      });
+      if (!r.ok) { const e = await r.json().catch(() => ({})); aviso(e.error || 'No se ha podido guardar', 'error'); return; }
+      setLista(l => l.map(x => x.id === c.id ? { ...x, asistira } : x));
+      aviso(asistira ? '✅ Guardado: asistirás a la reunión' : 'Guardado: no podrás asistir', 'ok');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      avisarResuelto();
+      cargar();
+    } catch {
+      aviso('Sin conexión. Comprueba los datos o la wifi e inténtalo otra vez.', 'error');
+    } finally {
+      setEnviando(false);
+    }
   }
 
   async function fichar(c) {
@@ -277,19 +291,24 @@ export default function Convocatorias() {
                 <div style={{ padding: 16, borderTop: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: AZUL, marginBottom: 9, textAlign: 'center' }}>¿Vas a asistir?</div>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => responder(c, true)}
+                    <button onClick={() => responder(c, true)} disabled={enviando}
                       style={{ flex: 1, padding: 12, borderRadius: 10, border: c.asistira === true ? 'none' : `2px solid ${VERDE}`,
                         backgroundColor: c.asistira === true ? VERDE : 'white', color: c.asistira === true ? 'white' : VERDE,
                         fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                       ✅ Sí, asistiré
                     </button>
-                    <button onClick={() => responder(c, false)}
+                    <button onClick={() => responder(c, false)} disabled={enviando}
                       style={{ flex: 1, padding: 12, borderRadius: 10, border: c.asistira === false ? 'none' : `2px solid ${ROJO}`,
                         backgroundColor: c.asistira === false ? ROJO : 'white', color: c.asistira === false ? 'white' : ROJO,
                         fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
                       No podré
                     </button>
                   </div>
+                  {c.asistira !== null && c.asistira !== undefined && (
+                    <div style={{ marginTop: 9, fontSize: 12.5, color: '#64748b', textAlign: 'center' }}>
+                      {c.asistira ? '✔ Ya has confirmado que asistirás.' : '✔ Ya has indicado que no podrás asistir.'} Puedes cambiarlo cuando quieras.
+                    </div>
+                  )}
                 </div>
               )}
             </div>
