@@ -741,6 +741,23 @@ export async function POST(request) {
         const { error } = await cliente.from('convocatorias')
           .update(cambios).eq('id', c.id).eq('estado', 'borrador');
         if (error) return json({ error: error.message }, 500);
+
+        // Fichaje en la entrada: el QR ya queda creado arriba, y el enlace
+        // NFC también, si no se generó desde el formulario. Así los dos
+        // códigos existen desde que se convoca y no depende de acordarse
+        // de pulsar un botón la víspera.
+        if (c.modo_fichaje === 'fisico' && c.modalidad !== 'online') {
+          const { count } = await cliente.from('nfc_etiquetas')
+            .select('codigo', { count: 'exact', head: true }).eq('convocatoria_id', c.id);
+          if (!count) {
+            const { error: errNfc } = await cliente.from('nfc_etiquetas').insert([{
+              codigo: randomBytes(9).toString('base64url'),
+              nombre: `${c.titulo} · etiqueta 1`, tipo: 'fija', convocatoria_id: c.id,
+            }]);
+            if (errNfc) console.error('convocar: enlace NFC:', errNfc.message);
+          }
+        }
+
         const r = await enviarPushA(cliente, c.convocados, {
           titulo: `📅 Convocatoria: ${c.titulo}`,
           cuerpo: [fechaCorta(c.fecha), c.hora, c.lugar].filter(Boolean).join(' · '),

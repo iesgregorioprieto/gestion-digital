@@ -26,53 +26,124 @@ export default function AvisoConvocatoria() {
   const [votando, setVotando] = useState(null);
   const [enviando, setEnviando] = useState(false);
   const [ahora, setAhora] = useState(Date.now());
+  const [error, setError] = useState('');
+  const [hecho, setHecho] = useState('');
 
   const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta.startsWith('/fichar') || ruta === '/';
 
+  /**
+   * CUÁNDO SE VUELVE A MIRAR
+   *
+   * Antes se miraba una sola vez, al abrir o cambiar de pantalla. En un
+   * claustro, quien tenía la app abierta en el panel no veía saltar la
+   * votación: solo le llegaba si le entraba la notificación y la pulsaba.
+   *
+   * Ahora se vuelve a mirar mientras haga falta, y solo entonces, para no
+   * gastar peticiones el resto del curso:
+   *   · reunión en curso      → cada 10 s (lo que tarda en saltar un voto)
+   *   · reunión convocada hoy → cada minuto (para enterarse de que empieza)
+   *   · nada hoy              → no se repite
+   * Y siempre al volver a la app (desbloquear el móvil, cambiar de pestaña).
+   */
   useEffect(() => {
     if (typeof window === 'undefined' || fuera) return;
     if (!sessionStorage.getItem('profesor_id')) return;
     let vivo = true;
+    let espera = null;
 
-    fetch('/api/convocatorias?modo=mias')
-      .then(r => r.ok ? r.json() : { convocatorias: [] })
-      .then(d => {
-        if (!vivo) return;
-        const lista = d.convocatorias || [];
-        const cand = lista.find(x => x.votacion && !x.votacion.yaVote) || lista.find(x => x.fichajeAbierto && !x.fichado && x.modo_fichaje !== 'fisico');
-        setC(cand || null);
-      })
-      .catch(() => {});
+    const hoy = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
+
+    function programar(lista) {
+      clearTimeout(espera);
+      const enCurso = lista.some(x => x.estado === 'en_curso');
+      const hoyHay = lista.some(x => x.estado === 'convocada' && x.fecha === hoy());
+      const ms = enCurso ? 10000 : hoyHay ? 60000 : 0;
+      if (ms) espera = setTimeout(() => { if (!document.hidden) mirar(); else programar(lista); }, ms);
+    }
+
+    function mirar() {
+      fetch('/api/convocatorias?modo=mias')
+        .then(r => r.ok ? r.json() : { convocatorias: [] })
+        .then(d => {
+          if (!vivo) return;
+          const lista = d.convocatorias || [];
+          const cand = lista.find(x => x.votacion && !x.votacion.yaVote) || lista.find(x => x.fichajeAbierto && !x.fichado && x.modo_fichaje !== 'fisico');
+          setC(cand || null);
+          programar(lista);
+        })
+        .catch(() => { if (vivo) espera = setTimeout(mirar, 20000); });
+    }
+
+    const alVolver = () => { if (!document.hidden) { clearTimeout(espera); mirar(); } };
+    mirar();
+    document.addEventListener('visibilitychange', alVolver);
 
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { vivo = false; clearInterval(reloj); };
+    return () => {
+      vivo = false; clearTimeout(espera); clearInterval(reloj);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ruta]);
 
+  // Confirmación del voto, que se va sola
+  useEffect(() => {
+    if (!hecho) return;
+    const t = setTimeout(() => setHecho(''), 3000);
+    return () => clearTimeout(t);
+  }, [hecho]);
+
+  if (hecho) {
+    return (
+      <div style={{ position: 'fixed', left: 16, right: 16, bottom: 24, zIndex: 9997, display: 'flex', justifyContent: 'center' }}>
+        <div style={{ backgroundColor: VERDE, color: 'white', padding: '14px 22px', borderRadius: 14, fontWeight: 800, fontSize: 15.5,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)' }}>{hecho}</div>
+      </div>
+    );
+  }
+
   if (fuera || !c) return null;
 
+  // Antes, si el servidor decía que no (cerrada, ya votado, sin conexión),
+  // no pasaba nada: el profesor pulsaba y se quedaba sin saber si contaba.
+  async function enviar(accion, datos) {
+    setEnviando(true); setError('');
+    try {
+      const r = await fetch('/api/convocatorias', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion, datos }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) setError(d.error || 'No se ha podido registrar. Inténtalo otra vez.');
+      return r.ok || d.error === 'Ya has votado en esta votación';
+    } catch {
+      setError('Sin conexión. Comprueba los datos o la wifi e inténtalo otra vez.');
+      return false;
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   async function fichar() {
-    setEnviando(true);
-    const r = await fetch('/api/convocatorias', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'fichar', datos: { id: c.id } }),
-    });
-    if (r.ok) setC(x => ({ ...x, fichado: true }));
-    setEnviando(false);
+    if (await enviar('fichar', { id: c.id })) {
+      setC(x => ({ ...x, fichado: true }));
+      setHecho('✅ Asistencia registrada');
+    }
   }
 
   async function votar() {
-    if (!votando) return;
-    setEnviando(true);
-    const r = await fetch('/api/convocatorias', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accion: 'votar', datos: { votacion_id: c.votacion.id, opcion: votando } }),
-    });
-    if (r.ok) setC(x => ({ ...x, votacion: { ...x.votacion, yaVote: true } }));
-    setEnviando(false);
+    if (!elegida) return;
+    if (await enviar('votar', { votacion_id: c.votacion.id, opcion: elegida })) {
+      setC(x => ({ ...x, votacion: { ...x.votacion, yaVote: true } }));
+      setHecho('✅ Voto registrado');
+    }
   }
 
-  const tocaVotar = c.votacion && !c.votacion.yaVote;
+  // Si se acaba el tiempo, el aviso se quita sin esperar a la siguiente consulta
+  const votoVencido = c.votacion?.cierre_at && new Date(c.votacion.cierre_at).getTime() <= ahora;
+  const tocaVotar = c.votacion && !c.votacion.yaVote && !votoVencido;
+  // La opción marcada va con su votación: una nueva empieza sin nada marcado
+  const elegida = votando?.id === c.votacion?.id ? votando.opcion : null;
   const tocaFichar = !tocaVotar && c.fichajeAbierto && !c.fichado && c.modo_fichaje !== 'fisico';
   if (!tocaVotar && !tocaFichar) return null;
 
@@ -110,16 +181,16 @@ export default function AvisoConvocatoria() {
               <div style={{ fontSize: 17, fontWeight: 800, color: '#222', marginBottom: 12 }}>{c.votacion.pregunta}</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
                 {(c.votacion.opciones || []).map(o => (
-                  <button key={o} onClick={() => setVotando(o)} disabled={enviando}
+                  <button key={o} onClick={() => { setVotando({ id: c.votacion.id, opcion: o }); setError(''); }} disabled={enviando}
                     style={{ padding: '12px 15px', borderRadius: 10, textAlign: 'left', cursor: 'pointer', fontSize: 14.5, fontWeight: 700,
-                      border: `2px solid ${votando === o ? MORADO : '#e9d5ff'}`, backgroundColor: votando === o ? '#f3e8ff' : 'white', color: '#333' }}>
-                    {votando === o ? '◉ ' : '○ '}{o}
+                      border: `2px solid ${elegida === o ? MORADO : '#e9d5ff'}`, backgroundColor: elegida === o ? '#f3e8ff' : 'white', color: '#333' }}>
+                    {elegida === o ? '◉ ' : '○ '}{o}
                   </button>
                 ))}
               </div>
-              <button onClick={votar} disabled={!votando || enviando}
+              <button onClick={votar} disabled={!elegida || enviando}
                 style={{ width: '100%', padding: 15, borderRadius: 11, border: 'none', backgroundColor: MORADO, color: 'white',
-                  fontWeight: 800, fontSize: 15.5, cursor: 'pointer', opacity: votando ? 1 : 0.5 }}>
+                  fontWeight: 800, fontSize: 15.5, cursor: 'pointer', opacity: elegida ? 1 : 0.5 }}>
                 {enviando ? 'Enviando...' : 'Votar'}
               </button>
             </>
@@ -132,6 +203,10 @@ export default function AvisoConvocatoria() {
               </button>
               <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 10, textAlign: 'center' }}>Queda constancia de tu asistencia a la reunión</div>
             </>
+          )}
+          {error && (
+            <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: 9, backgroundColor: '#fef2f2', border: '1px solid #fecaca',
+              color: ROJO, fontSize: 13.5, fontWeight: 700, textAlign: 'center' }}>⚠️ {error}</div>
           )}
           <a href="/convocatorias" style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 12.5, color: '#94a3b8' }}>Ver todas las convocatorias</a>
         </div>
