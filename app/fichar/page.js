@@ -120,8 +120,11 @@ export default function Fichar() {
                       Consta como incorporación después de la hora de inicio
                     </div>
                   )}
-                  <div style={{ marginTop: 14, fontSize: 12, color: '#94a3b8' }}>
-                    {res.metodo === 'nfc' ? '📶 Etiqueta NFC' : '📷 Código QR'} · ya puedes guardar el móvil
+                  <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 10, backgroundColor: '#f3e8ff', color: '#6b21a8', fontSize: 13, fontWeight: 700, lineHeight: 1.45 }}>
+                    🗳️ Deja esta pantalla abierta: cuando se abra una votación aparecerá aquí sola.
+                  </div>
+                  <div style={{ marginTop: 10, fontSize: 12, color: '#94a3b8' }}>
+                    {res.metodo === 'nfc' ? '📶 Etiqueta NFC' : '📷 Código QR'} 
                   </div>
                 </>
               )}

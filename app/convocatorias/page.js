@@ -33,7 +33,6 @@ export default function Convocatorias() {
   const [mensaje, setMensaje] = useState(null);
 
   useEffect(() => {
-    if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
     cargar();
     // Solo con la pestaña a la vista; al volver a ella, al momento
     const alVolver = () => { if (!document.hidden) cargar(); };
@@ -51,6 +50,9 @@ export default function Convocatorias() {
   async function cargar() {
     try {
       const r = await fetch('/api/convocatorias?modo=mias');
+      // Sin sesión (cookie): a entrar y volver aquí. No se mira
+      // sessionStorage: desde el QR se llega en pestañas que no lo tienen.
+      if (r.status === 401) { window.location.href = '/login?volver=/convocatorias'; return; }
       const d = await r.json();
       setLista(d.convocatorias || []);
     } catch (e) { /* se queda con lo último visto */ }

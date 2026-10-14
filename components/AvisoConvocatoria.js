@@ -29,7 +29,7 @@ export default function AvisoConvocatoria() {
   const [error, setError] = useState('');
   const [hecho, setHecho] = useState('');
 
-  const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta.startsWith('/fichar') || ruta === '/';
+  const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta === '/';
 
   /**
    * CUÁNDO SE VUELVE A MIRAR
@@ -47,7 +47,11 @@ export default function AvisoConvocatoria() {
    */
   useEffect(() => {
     if (typeof window === 'undefined' || fuera) return;
-    if (!sessionStorage.getItem('profesor_id')) return;
+    // En /fichar se llega desde el QR o la etiqueta, a veces en una
+    // pestaña nueva sin los datos de la app: basta con la sesión (cookie),
+    // que es lo que mira el servidor. Así, tras fichar, la votación salta
+    // en esa misma pantalla aunque el móvil no reciba notificaciones.
+    if (!ruta.startsWith('/fichar') && !sessionStorage.getItem('profesor_id')) return;
     let vivo = true;
     let espera = null;
 
