@@ -562,8 +562,12 @@ export default function GestionDatos() {
     if (t.startsWith('GUARDIA')) return 'complementaria';
     if (t.includes('RECREO') || t.includes('MEDIOD')) return 'libre';
     if (t.startsWith('REUNI')) return 'complementaria';
-    // Si tiene formato MATERIA-CODIGO<br>GRUPO<br>(aula) → clase
-    if (t.match(/^[A-Z]+-?\d+/) || t.match(/[A-Z]{2,}/)) return 'clase';
+    // Clase = lleva el aula entre paréntesis: «SISI-3094386 GS-1DAM (1 A007
+    // INF)». Lo que no la lleva («EAPP», «OTRA», «LCEPE», «T», «CHLE»…) es
+    // hora complementaria del profesor, sin alumnos (Luis Javier, oct. 2026).
+    // Antes valía cualquier palabra en mayúsculas y las complementarias
+    // entraban como clase y generaban guardia.
+    if (/\([^)]*\)/.test(t)) return 'clase';
     return 'complementaria';
   }
 
