@@ -169,6 +169,9 @@ export default function HojaServicios({ profesorId = null, ficha = {}, onGuardad
           <div style={{ fontSize: 14, color: azul, margin: '10px 0', lineHeight: 1.5 }}>
             Total de servicio docente: <strong>{tiempo(lectura.total)}</strong>, a {fechaES(lectura.fecha)}.
           </div>
+          <div style={{ fontSize: 12.5, color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '7px 10px', marginBottom: 10, fontWeight: 700 }}>
+            ⚠️ Todavía no está guardada: pulsa «Es correcto, guardar» para terminar.
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" onClick={confirmar} disabled={guardando} style={{
               padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: '#15803d', color: 'white',

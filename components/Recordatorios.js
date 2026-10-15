@@ -18,8 +18,8 @@
  *
  * Para añadir uno nuevo, se añade al registro y ya está.
  *
- * Se consulta UNA vez por sesión (no en cada pantalla) para no gastar
- * peticiones. Una pantalla puede pedir que se vuelva a mirar lanzando el
+ * Se guarda una copia de 5 minutos (no se pregunta en cada pantalla) y se
+ * vuelve a mirar al volver a la app si ha caducado. Una pantalla puede pedir que se vuelva a mirar lanzando el
  * evento 'recordatorios:actualizar' (lo hace la hoja de servicios al
  * guardarse, para que la pestaña se vaya en el acto).
  */
@@ -28,7 +28,8 @@ import { usePathname } from 'next/navigation';
 import { mismoGrupo } from '@/lib/grupos';
 
 const PORTAL_DOCENTE = 'https://portalpersonaldocente.jccm.es/misdatos/administrativosyformacion';
-const CACHE = 'recordatorios_pendientes';
+const CACHE = 'recordatorios_pendientes_v2';   // v2: con hora, para que caduque
+const VIGENCIA = 5 * 60 * 1000;                 // 5 minutos
 
 const RECORDATORIOS = [
   {
@@ -113,8 +114,13 @@ export default function Recordatorios() {
       try {
         if (!sessionStorage.getItem('profesor_id')) { setPendientes([]); return; }
         if (!forzar) {
-          const guardado = sessionStorage.getItem(CACHE);
-          if (guardado) { setPendientes(JSON.parse(guardado)); return; }
+          // La copia guardada vale unos minutos, no toda la sesión: la app
+          // del móvil puede seguir abierta días, y si la hoja se sube desde
+          // el ordenador (o la sube secretaría) la pestaña no se iría nunca.
+          const guardado = JSON.parse(sessionStorage.getItem(CACHE) || 'null');
+          if (guardado && Array.isArray(guardado.ids) && Date.now() - guardado.t < VIGENCIA) {
+            setPendientes(guardado.ids); return;
+          }
         }
       } catch { return; }
 
@@ -125,14 +131,22 @@ export default function Recordatorios() {
         try { if (await r.pendiente()) ids.push(r.id); } catch {}
       }
       if (!vivo) return;
-      try { sessionStorage.setItem(CACHE, JSON.stringify(ids)); } catch {}
+      try { sessionStorage.setItem(CACHE, JSON.stringify({ ids, t: Date.now() })); } catch {}
       setPendientes(ids);
     }
 
     mirar();
     const alActualizar = () => mirar(true);
+    // Al volver a la app (móvil sacado del bolsillo, otra pestaña) se
+    // vuelve a mirar si la copia ha caducado.
+    const alVolver = () => { if (document.visibilityState === 'visible') mirar(); };
     window.addEventListener('recordatorios:actualizar', alActualizar);
-    return () => { vivo = false; window.removeEventListener('recordatorios:actualizar', alActualizar); };
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      vivo = false;
+      window.removeEventListener('recordatorios:actualizar', alActualizar);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, []);
 
   const lista = RECORDATORIOS.filter(r => pendientes.includes(r.id));
