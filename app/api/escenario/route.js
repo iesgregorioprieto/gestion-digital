@@ -92,6 +92,22 @@ export async function GET(request) {
   // 1 y 3. Ausencias → las de formación van a su propio bloque
   (rAus.data || []).forEach(a => {
     const esFormacion = a.subtipo === 'permiso_formacion';
+    /**
+     * Un DLD puede llegar por dos caminos: el módulo de DLD o una ausencia
+     * con el motivo «Día de libre disposición concedido» (lo registra
+     * jefatura). Los dos son un DLD y van al mismo bloque; antes los del
+     * segundo camino salían en Ausencias (Carmen Peinado, 16/10/2026).
+     */
+    if (a.subtipo === 'dld') {
+      items.push({
+        bloque: 'dld',
+        profesor: a.profesor_nombre || '—',
+        detalle: 'DLD (registrado como ausencia)',
+        nHoras: Array.isArray(a.horas) ? a.horas.length : 0,
+        estado: a.estado,
+      });
+      return;
+    }
     // Una ausencia abierta es una baja. Se marca como tal para que en el
     // vistazo del día se distinga de quien falta una mañana.
     const esBaja = !a.fecha_fin && a.fecha_inicio < fecha;
@@ -140,7 +156,14 @@ export async function GET(request) {
   });
 
   // 4. DLD aprobados y pendientes
+  // Si alguien tiene el DLD en el módulo Y además como ausencia, sale una vez.
+  const yaComoAusencia = new Set(items.filter(i => i.bloque === 'dld').map(i => i.profesor));
   (rDld.data || []).filter(d => d.estado === 'aprobada' || d.estado === 'pendiente').forEach(d => {
+    if (yaComoAusencia.has(d.profesor_nombre)) {
+      const i = items.find(x => x.bloque === 'dld' && x.profesor === d.profesor_nombre);
+      i.detalle = TIPOS_DLD[d.tipo_dld] || d.tipo_dld || 'DLD';
+      return;
+    }
     items.push({
       bloque: 'dld',
       profesor: d.profesor_nombre || '—',
