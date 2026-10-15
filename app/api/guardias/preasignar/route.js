@@ -357,17 +357,21 @@ export async function POST(request) {
      *   · lo ya fichado, que es trabajo hecho
      *   · lo que puso una persona a mano desde jefatura
      *   · el recreo, que no sustituye a nadie
-     *   · las horas que ya han pasado: rehacerlas no cambia nada de lo
-     *     ocurrido y solo confunde a quien ya estuvo allí
+     *   · las horas que ya han empezado: quien está de guardia ya está en
+     *     el aula aunque no haya fichado todavía, y moverle a mitad de hora
+     *     deja el grupo solo. Si a una hora en curso aparece una ausencia
+     *     nueva, se cubre con quien quede libre sin tocar lo ya puesto.
+     *     (Antes solo las horas terminadas; al pasar el recálculo a 30
+     *     minutos antes del timbre, la hora en curso quedaba expuesta.)
      */
     const ahora = ahoraEnCentro();
     const aMin = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 
-    const yaPasada = (f, h) => {
+    const yaEmpezada = (f, h) => {
       if (f < ahora.fecha) return true;
       if (f > ahora.fecha) return false;
-      const fin = franja(h)?.fin;
-      return fin ? ahora.minutos >= aMin(fin) : false;
+      const inicio = franja(h)?.inicio;
+      return inicio ? ahora.minutos >= aMin(inicio) : false;
     };
 
     const esIntocable = a =>
@@ -376,7 +380,7 @@ export async function POST(request) {
       || a.estado === 'anulada'          // jefatura decidió que no hace falta cubrirla
       || !!a.asignado_por
       || esSectorRecreo(a.sector_apoyo)
-      || yaPasada(a.fecha, normHora(a.hora));
+      || yaEmpezada(a.fecha, normHora(a.hora));
 
     const aBorrar = [];
 
