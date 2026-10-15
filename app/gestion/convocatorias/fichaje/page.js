@@ -136,15 +136,17 @@ export default function PantallaFichaje() {
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
 
-        {/* QR grande: solo mientras se puede fichar o está a punto */}
-        {qrImg && verQr && (abierto || antes) && (
+        {/* QR grande: siempre que la reunión no esté finalizada; en gris si no se puede fichar */}
+        {qrImg && verQr && datos.estado !== 'cerrada' && (
           <div style={{ flex: '0 1 420px', minWidth: 260, backgroundColor: 'white', borderRadius: 14, padding: 18,
             boxShadow: '0 2px 10px rgba(0,0,0,0.07)', textAlign: 'center', borderTop: `6px solid ${estado.c}` }}>
             <div style={{ fontSize: 20, fontWeight: 800, color: AZUL, marginBottom: 10 }}>📷 Escanea para fichar</div>
             <img src={qrImg} alt="QR para fichar" style={{ width: '100%', maxWidth: 380, height: 'auto', imageRendering: 'pixelated',
               opacity: abierto ? 1 : 0.35 }} />
             <div style={{ fontSize: 14, color: '#475569', marginTop: 8 }}>
-              {abierto ? 'Con la cámara del móvil y la sesión de APrieto iniciada' : `Se podrá fichar a partir de las ${horaMadrid(datos.fichaje_inicio)}`}
+              {abierto ? 'Con la cámara del móvil y la sesión de APrieto iniciada'
+                : antes ? `Se podrá fichar a partir de las ${horaMadrid(datos.fichaje_inicio)}`
+                : <strong style={{ color: '#991b1b' }}>🔒 El fichaje está cerrado. Ábrelo desde la reunión en directo.</strong>}
             </div>
           </div>
         )}
