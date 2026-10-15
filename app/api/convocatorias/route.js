@@ -722,7 +722,7 @@ export async function POST(request) {
     }
 
     // El resto de acciones trabajan sobre una convocatoria existente
-    const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'reenviar_fichaje', 'ampliar_fichaje', 'fichar_a_mano',
+    const acciones = ['convocar', 'iniciar', 'abrir_fichaje', 'cerrar_fichaje', 'reenviar_fichaje', 'ampliar_fichaje', 'editar_fichaje', 'fichar_a_mano',
                       'finalizar', 'reanudar', 'eliminar', 'guardar_votacion'];
     if (acciones.includes(accion)) {
       const c = await convocatoria(cliente, idNum(datos.id ?? datos.convocatoria_id));
@@ -832,6 +832,26 @@ export async function POST(request) {
         const { error } = await cliente.from('convocatorias').update({ fichaje_fin: nuevoFin }).eq('id', c.id);
         if (error) return json({ error: error.message }, 500);
         return json({ ok: true, fichaje_fin: nuevoFin });
+      }
+
+      // Cambiar a mano la hora de apertura y de cierre del fichaje, con la
+      // reunión ya convocada o iniciada (p. ej. si empezó con retraso).
+      // Llegan como «AAAA-MM-DDTHH:MM» en hora de Madrid.
+      if (accion === 'editar_fichaje') {
+        if (!['convocada', 'en_curso'].includes(c.estado)) return json({ error: 'La reunión no está en marcha' }, 400);
+        const aInstante = v => {
+          const m = /^(\d{4}-\d{2}-\d{2})T(\d{1,2}:\d{2})/.exec(String(v || ''));
+          return m ? instanteMadrid(m[1], m[2]) : null;
+        };
+        const ini = aInstante(datos.desde);
+        const fin = aInstante(datos.hasta);
+        if (!ini || !fin) return json({ error: 'Indica la fecha y la hora de apertura y de cierre' }, 400);
+        if (fin <= ini) return json({ error: 'El cierre tiene que ser posterior a la apertura' }, 400);
+        if (fin.getTime() - ini.getTime() > 12 * 3600000) return json({ error: 'El fichaje no puede durar más de 12 horas' }, 400);
+        const { error } = await cliente.from('convocatorias')
+          .update({ fichaje_inicio: ini.toISOString(), fichaje_fin: fin.toISOString() }).eq('id', c.id);
+        if (error) return json({ error: error.message }, 500);
+        return json({ ok: true, fichaje_inicio: ini.toISOString(), fichaje_fin: fin.toISOString() });
       }
 
       // Fichar (o quitar el fichaje) a mano, para quien no tenga la app

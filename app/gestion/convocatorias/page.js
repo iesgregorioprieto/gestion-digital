@@ -61,6 +61,15 @@ const vacia = () => ({
 });
 
 const METODO_LABEL = { nfc: '📶 NFC', qr: '📷 QR', notificacion: '🔔 Aviso', mano: '✍️ A mano' };
+// ISO → «AAAA-MM-DDTHH:MM» en hora de Madrid, para los campos datetime-local
+const localMadrid = iso => {
+  if (!iso) return '';
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Madrid', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(iso)).map(x => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`;
+};
 const horaMadrid = iso => iso ? new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }) : '';
 
 export default function GestionConvocatorias() {
@@ -82,6 +91,7 @@ export default function GestionConvocatorias() {
 
   const [sesionDetalle, setSesionDetalle] = useState(null); // detalle completo de la convocatoria abierta
   const [minutosFichaje, setMinutosFichaje] = useState('10');
+  const [editFichaje, setEditFichaje] = useState(null);   // { desde, hasta } en «AAAA-MM-DDTHH:MM» de Madrid, mientras se edita
   const [votacionesForm, setVotacionesForm] = useState([]); // votaciones preparadas, vistas desde el formulario (antes de la reunión)
   const [nuevaVot, setNuevaVot] = useState(null); // { convId, origen, punto, pregunta, opciones, duracion_seg, votacion_id? }
   const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
@@ -1070,6 +1080,44 @@ export default function GestionConvocatorias() {
                       <button onClick={() => accionSesion('abrir_fichaje', { id: c.id, minutos: minutosFichaje })} style={btnPrimario(VERDE)}>✋ Abrir el fichaje</button>
                     </div>
                     </>
+                  )}
+                </div>
+
+                {/* Editar el periodo de fichaje con la reunión ya en marcha */}
+                <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 10, backgroundColor: '#f8fafc', border: '1px dashed #cbd5e1' }}>
+                  {!editFichaje ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', fontSize: 12.5, color: '#475569' }}>
+                      <span>🕐 Periodo de fichaje: {c.fichaje_inicio && c.fichaje_fin
+                        ? <>de <strong>{horaMadrid(c.fichaje_inicio)}</strong> a <strong>{horaMadrid(c.fichaje_fin)}</strong></>
+                        : 'sin definir'}</span>
+                      <button onClick={() => {
+                        const ahoraIso = new Date().toISOString();
+                        setEditFichaje({
+                          desde: localMadrid(c.fichaje_inicio || ahoraIso),
+                          hasta: localMadrid(c.fichaje_fin || new Date(Date.now() + 15 * 60000).toISOString()),
+                        });
+                      }} style={{ ...btnSecundario, padding: '6px 12px', fontSize: 12.5 }}>✏️ Editar</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, color: '#334155' }}>✏️ Editar el periodo de fichaje</div>
+                      <label style={{ fontSize: 12.5, color: '#475569' }}>Se abre
+                        <input type="datetime-local" value={editFichaje.desde} onChange={e => setEditFichaje({ ...editFichaje, desde: e.target.value })}
+                          style={{ display: 'block', width: '100%', marginTop: 3, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box' }} />
+                      </label>
+                      <label style={{ fontSize: 12.5, color: '#475569' }}>Se cierra
+                        <input type="datetime-local" value={editFichaje.hasta} onChange={e => setEditFichaje({ ...editFichaje, hasta: e.target.value })}
+                          style={{ display: 'block', width: '100%', marginTop: 3, padding: '8px 10px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 13.5, boxSizing: 'border-box' }} />
+                      </label>
+                      <div style={{ fontSize: 11.5, color: '#94a3b8' }}>Quien fiche después de la hora de la reunión ({c.hora || 'sin hora'}) constará como «tarde».</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <button onClick={async () => {
+                          const d = await accionSesion('editar_fichaje', { id: c.id, desde: editFichaje.desde, hasta: editFichaje.hasta });
+                          if (d) setEditFichaje(null);
+                        }} style={{ ...btnPrimario(VERDE), padding: '8px 14px', fontSize: 13 }}>💾 Guardar</button>
+                        <button onClick={() => setEditFichaje(null)} style={{ ...btnSecundario, padding: '8px 14px', fontSize: 13 }}>Cancelar</button>
+                      </div>
+                    </div>
                   )}
                 </div>
 
