@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { fichajeAbierto, fichajeCerrado, MARGEN_FICHAJE_MIN, MARGEN_CREADA_TARDE_MIN } from '@/lib/asignacionGuardias';
 import { enlaceDocumento } from '@/lib/adjuntos';
 import MiContadorGuardias from '@/components/MiContadorGuardias';
+import RepartoGuardias from '@/components/RepartoGuardias';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
@@ -639,6 +640,8 @@ export default function Guardias() {
             <div style={{ fontSize:11, opacity:0.85 }}>{cursoTexto || ' '}</div>
           </div>
         </div>
+        {/* ¿Cómo se reparten? Regla, ejemplo y tabla real de rotación */}
+        <RepartoGuardias />
       </div>
 
 

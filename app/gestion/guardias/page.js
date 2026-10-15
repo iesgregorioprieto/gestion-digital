@@ -10,6 +10,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
+import RepartoGuardias from '@/components/RepartoGuardias';
 
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
@@ -616,6 +617,7 @@ export default function GestionGuardias() {
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <a href="/gestion/guardias/informe" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>📄 Informe</a>
           <a href="/gestion/guardias/contador" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>📊 Contador</a>
+          <RepartoGuardias />
                   <a href="/gestion" style={{ color:'white', padding:'6px 12px', border:'1px solid rgba(255,255,255,0.3)', borderRadius:6, fontSize:13, textDecoration:'none' }}>← Volver</a>
         </div>
       </div>

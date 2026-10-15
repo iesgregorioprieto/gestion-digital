@@ -11,7 +11,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { hoyLocal } from '@/lib/fechas';
-import { calcularContador } from '@/lib/contadorGuardias';
+import { calcularContador, rotacionPorSector } from '@/lib/contadorGuardias';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,8 +68,10 @@ export async function GET(request) {
     ]);
 
     const r = calcularContador({ horarios, profesores, equivalencias, apoyos, hoy: hoyLocal() });
+    // Por sector, sin nombres: la pueden ver todos
+    const rotacion = rotacionPorSector({ profesores, apoyos });
 
-    if (esDirectivo(sesion)) return Response.json({ curso, ...r });
+    if (esDirectivo(sesion)) return Response.json({ curso, ...r, rotacion });
 
     const mio = r.filas.find(f => f.profesorId === sesion.id) || null;
     const sector = mio ? r.sectores.find(s => s.sector === mio.sector) : null;
@@ -77,6 +79,7 @@ export async function GET(request) {
       curso,
       mio: mio && { semanales: mio.semanales, hechas: mio.hechas, esperadas: mio.esperadas, sector: mio.sector },
       sector: sector && { sector: sector.sector, media: Math.round(sector.media * 10) / 10, profesores: sector.profesores },
+      rotacion,
     });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
