@@ -98,16 +98,16 @@ export default function SalaProfesores() {
     setUltimaCarga(new Date());
   }, [dia]);
 
-  // El cuadrante se pone al día diez minutos antes de que acabe cada
+  // El cuadrante se pone al día treinta minutos antes de que acabe cada
   // hora. Esta pantalla está encendida todo el día en la sala de
   // profesores, así que es la que mejor puede dispararlo. Si no hay nadie
   // mirando, lo hará el primer profesor que abra sus guardias.
   useEffect(() => {
-    // Solo dentro de los diez minutos antes de cada timbre, que es cuando
+    // Solo dentro de los treinta minutos antes de cada timbre, que es cuando
     // sirve. Antes llamaba cada minuto, todo el día, y cada llamada cuenta
     // en el límite gratuito de Vercel: pasado ese límite, pausan la
     // aplicación entera.
-    const VENTANAS = [[555,565],[610,620],[665,675],[695,705],[750,760],[805,815],[860,870]];
+    const VENTANAS = [[535,565],[590,620],[645,675],[675,705],[730,760],[785,815],[840,870]];
     const alDia = () => {
       const d = new Date();
       const m = d.getHours() * 60 + d.getMinutes();

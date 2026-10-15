@@ -178,7 +178,7 @@ export default function Guardias() {
   const [fichando, setFichando]           = useState(false);
   const [verAyuda, setVerAyuda]           = useState(false);
 
-  // Pone el cuadrante al día si estamos en los diez minutos previos al
+  // Pone el cuadrante al día si estamos en los treinta minutos previos al
   // final de una hora. Solo recalcula el primero que pasa por aquí.
   useEffect(() => {
     fetch('/api/guardias/al-dia', { method: 'POST' }).catch(() => {});

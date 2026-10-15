@@ -6,16 +6,17 @@
  * registran con tiempo, pero las de verdad aparecen sobre la marcha, y
  * el cuadrante tiene que ir con ellas.
  *
- * Por eso el reparto se rehace DIEZ MINUTOS ANTES de que termine cada
- * hora de clase: cuando suena el timbre, todo el mundo sabe ya lo que le
- * toca en la siguiente, con su grupo y su aula.
+ * Por eso el reparto se rehace TREINTA MINUTOS ANTES de que termine cada
+ * hora de clase (antes eran diez, y no daba tiempo a recoger el aula y
+ * cruzar el instituto): a media hora del timbre todo el mundo sabe ya lo
+ * que le toca en la siguiente, con su grupo y su aula.
  *
  * No lo hace un cron. Los cron de Vercel en plan Hobby solo corren una
  * vez al día y a la hora que ellos quieran dentro de esa hora, así que
  * no valen para esto. Lo dispara la propia aplicación: la pantalla de la
  * sala de profesores, que está encendida todo el día, y cualquiera que
- * entre en sus guardias. El primero que pasa por la ventana de los diez
- * minutos lo lanza, y solo él: la marca se guarda antes de recalcular,
+ * entre en sus guardias. El primero que pasa por la ventana de los
+ * treinta minutos lo lanza, y solo él: la marca se guarda antes de recalcular,
  * así que aunque entren treinta personas a la vez el reparto se hace una
  * sola vez.
  */
@@ -25,7 +26,7 @@ import { FRANJAS } from '@/lib/asignacionGuardias';
 
 export const dynamic = 'force-dynamic';
 
-const MINUTOS_ANTES = 10;
+const MINUTOS_ANTES = 30;
 
 let _cliente = null;
 function supa() {
@@ -54,7 +55,7 @@ function ahoraEnMadrid() {
 const aMinutos = t => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 
 /**
- * ¿Estamos en los diez minutos finales de alguna hora? Devuelve cuál,
+ * ¿Estamos en los treinta minutos finales de alguna hora? Devuelve cuál,
  * que es la marca que impide repetir el recálculo dentro de la misma
  * ventana.
  */
