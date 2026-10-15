@@ -511,7 +511,11 @@ export async function POST(request) {
         });
 
         for (const asig of asignaciones) {
-          if (!asig.cubre?.profesorId) {
+          // Solo es "sin cubrir" si el motor no encontró a NADIE. Si eligió a
+          // un guardia del cuadrante sin ficha (profesorId null), la guardia
+          // se guarda igual a nombre del cuadrante: antes se descartaba aquí
+          // y la hora desaparecía sin dejar rastro (Carmona, 16/10/2026, 2ª).
+          if (!asig.cubre) {
             sinCubrir.push({
               fecha: diaFecha, hora,
               ausente: asig.hueco.profesor,
