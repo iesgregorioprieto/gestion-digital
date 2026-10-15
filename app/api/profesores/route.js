@@ -3,6 +3,7 @@ import { tutoriaEfectiva } from '@/lib/tutoriaEfectiva';
 import { grupoTutoriaValido, MENSAJE_TUTORIA } from '@/lib/gruposDelCurso';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { buscarDuplicado } from '@/lib/duplicadosProfesor';
 
 /**
  * DATOS DEL PROFESORADO
@@ -260,6 +261,18 @@ export async function POST(request) {
     if (accion === 'alta_manual') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!datos?.email) return Response.json({ error: 'Falta el correo' }, { status: 400 });
+
+      // Que no se cree una segunda ficha de alguien que ya la tiene.
+      if (!datos.forzar) {
+        const dup = await buscarDuplicado(supa(), datos);
+        if (dup) {
+          return Response.json({
+            error: `Ya existe una ficha de ${dup.apellidos}, ${dup.nombre} (${dup.email}). No se ha creado otra.`,
+            duplicado: { id: dup.id, nombre: dup.nombre, apellidos: dup.apellidos, email: dup.email },
+          }, { status: 409 });
+        }
+      }
+      delete datos.forzar;
 
       const { data: creado, error } = await supa().from('profesores').insert([datos]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });

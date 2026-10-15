@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { grupoTutoriaValido, MENSAJE_TUTORIA } from '@/lib/gruposDelCurso';
 import { claveServidor } from '@/lib/claveServidor';
 import { cifrarPassword } from '@/lib/password';
+import { buscarDuplicado } from '@/lib/duplicadosProfesor';
 
 /**
  * ALTA DE PROFESORADO
@@ -58,12 +59,38 @@ export async function POST(request) {
     // ── ¿Existe ya esa persona? ──
     const { data: filas, error: errBusca } = await supa()
       .from('profesores')
-      .select('id, password_hash, solicitud_acceso, estado')
+      .select('id, password_hash, solicitud_acceso, estado, provisional')
       .ilike('email', email);
 
     if (errBusca) return Response.json({ error: errBusca.message }, { status: 500 });
 
-    const prof = (filas || [])[0];
+    let prof = (filas || [])[0];
+    // Si se le encuentra por otra vía (nombre), su ficha se queda y se le
+    // corrige el correo al bueno, el que acaba de escribir.
+    let corregirEmail = false;
+
+    /**
+     * ¿YA TIENE FICHA CON OTRO CORREO?
+     *
+     * Dirección pudo darle de alta rápida antes (con un correo personal o
+     * mal escrito). Si se crea otra ficha, quedan dos con el mismo nombre y
+     * el cuadrante de guardias deja de reconocerle (Javier Merino, oct.
+     * 2026). Así que se completa la que ya había en vez de crear otra.
+     */
+    if (!prof) {
+      const dup = await buscarDuplicado(supa(), { nombre, apellidos, email });
+      if (dup && dup.provisional) {
+        prof = dup;
+        corregirEmail = true;
+      } else if (dup) {
+        const [u, d] = (dup.email || '').split('@');
+        const oculto = u ? `${u.slice(0, 2)}***@${d || ''}` : 'otro correo';
+        return Response.json({
+          error: `Ya hay una cuenta a nombre de ${dup.nombre} ${dup.apellidos} con el correo ${oculto}. `
+            + `Entra con ese correo, o avisa a Secretaría si no eres tú.`,
+        }, { status: 409 });
+      }
+    }
 
     // Ya tiene contraseña: que entre por el login, no por aquí.
     // Excepción: si es una cuenta provisional creada por dirección, se
@@ -100,7 +127,7 @@ export async function POST(request) {
     // El estado y el cargo los decide siempre el servidor: aunque el
     // formulario mandase rol_gestion o estado 'activo', se ignoran.
     const escritura = prof
-      ? await supa().from('profesores').update(datos).eq('id', prof.id)
+      ? await supa().from('profesores').update(corregirEmail ? { ...datos, email } : datos).eq('id', prof.id)
       : await supa().from('profesores').insert({ ...datos, email });
 
     if (escritura.error) {

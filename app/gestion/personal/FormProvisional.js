@@ -20,7 +20,7 @@ export default function FormProvisional() {
     setTimeout(() => setMensaje(null), 6000);
   }
 
-  async function crear() {
+  async function crear(forzar = false) {
     if (!nombre.trim() || !apellidos.trim() || !departamento.trim() || !email.trim()) {
       return aviso('Rellena todos los campos', 'error');
     }
@@ -33,9 +33,19 @@ export default function FormProvisional() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: nombre.trim(), apellidos: apellidos.trim(),
-          departamento: departamento.trim(), email: email.trim() }),
+          departamento: departamento.trim(), email: email.trim(), forzar }),
       });
       const d = await r.json();
+      // Ya hay una ficha que parece la misma persona: solo se crea otra si
+      // quien da el alta confirma que son personas distintas.
+      if (d.duplicado) {
+        setGuardando(false);
+        const otra = window.confirm(
+          `${d.error}\n\n¿Es OTRA persona distinta con el mismo nombre?\n`
+          + `Pulsa Aceptar solo si estás seguro. Si es la misma, pulsa Cancelar.`);
+        if (otra) return crear(true);
+        return aviso('No se ha creado: esa persona ya tiene ficha.', 'error');
+      }
       if (d.error) throw new Error(d.error);
       setCreados(prev => [{ nombre: nombre.trim(), apellidos: apellidos.trim(),
         departamento: departamento.trim(), email: email.trim() }, ...prev]);
@@ -95,7 +105,7 @@ export default function FormProvisional() {
           🔑 La contraseña inicial será <strong>1234</strong>. Comunícasela tú directamente.
         </div>
 
-        <button onClick={crear} disabled={guardando}
+        <button onClick={() => crear()} disabled={guardando}
           style={{ padding: '12px 22px', borderRadius: 9, border: 'none',
             backgroundColor: guardando ? '#94a3b8' : VERDE, color: 'white',
             fontWeight: 800, fontSize: 14, cursor: guardando ? 'default' : 'pointer' }}>

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { cifrarPassword } from '@/lib/password';
+import { buscarDuplicado, errataDominio } from '@/lib/duplicadosProfesor';
 
 let _c = null;
 function supa() {
@@ -18,15 +19,33 @@ export async function POST(request) {
   if (!sesion) return Response.json({ error: 'sin_sesion' }, { status: 401 });
   if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
-  const { nombre, apellidos, departamento, email } = await request.json().catch(() => ({}));
+  const { nombre, apellidos, departamento, email, forzar } = await request.json().catch(() => ({}));
   if (!nombre?.trim() || !apellidos?.trim() || !departamento?.trim() || !email?.trim())
     return Response.json({ error: 'Faltan datos obligatorios' }, { status: 400 });
 
   const emailLimpio = email.trim().toLowerCase();
-  const { data: ex } = await supa().from('profesores').select('id, estado, password_hash').ilike('email', emailLimpio);
+
+  // Correo corporativo mal escrito: la cuenta nacería sin poder usarse.
+  const sugerido = errataDominio(emailLimpio);
+  if (sugerido)
+    return Response.json({ error: `El correo parece mal escrito: ¿querías decir @${sugerido}?` }, { status: 400 });
+
+  const { data: ex } = await supa().from('profesores').select('id, estado, password_hash, provisional').ilike('email', emailLimpio);
   const ya = (ex || [])[0];
   if (ya && ya.estado === 'activo' && ya.password_hash && !ya.provisional)
     return Response.json({ error: 'Ya existe una cuenta activa con ese email' }, { status: 409 });
+
+  // ¿La misma persona con otro correo? (dos del equipo directivo dando de
+  // alta a la misma persona, o el profesor ya registrado por su cuenta).
+  if (!ya && !forzar) {
+    const dup = await buscarDuplicado(supa(), { nombre, apellidos, email: emailLimpio });
+    if (dup) {
+      return Response.json({
+        error: `Ya existe una ficha de ${dup.apellidos}, ${dup.nombre} (${dup.email}). No se ha creado otra.`,
+        duplicado: { id: dup.id, nombre: dup.nombre, apellidos: dup.apellidos, email: dup.email },
+      }, { status: 409 });
+    }
+  }
 
   const datos = {
     nombre: nombre.trim(), apellidos: apellidos.trim(), departamento: departamento.trim(),
