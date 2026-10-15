@@ -413,6 +413,11 @@ export async function GET(request) {
         titulo: c.titulo, fecha: c.fecha, hora: c.hora, lugar: c.lugar || '',
         estado: c.estado, fichaje_inicio: c.fichaje_inicio, fichaje_fin: c.fichaje_fin,
         abierto: fichajeAbierto(c),
+        // El QR en grande en la pantalla (lo pidió José María): el mismo
+        // del cartel, para fichar desde el sitio. Solo esta pantalla, que
+        // es de directivos.
+        id: c.id,
+        token_qr: (c.modo_fichaje === 'fisico' && c.modalidad !== 'online') ? (c.token_qr || null) : null,
         total: personas.length,
         presentes: personas.filter(p => p.fichado).length,
         tarde: personas.filter(p => p.tarde).length,

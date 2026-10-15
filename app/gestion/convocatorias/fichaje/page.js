@@ -5,8 +5,8 @@ export const dynamic = 'force-dynamic';
  * PANTALLA DE FICHAJE — para proyectar en la entrada o en la sala
  *
  * Igual que el tablero de las votaciones: los nombres se ponen en verde
- * según cada uno ficha. Aquí NO hay QR: el fichaje es físico, con los
- * carteles impresos y las etiquetas NFC repartidos por la entrada.
+ * según cada uno ficha. Muestra también en grande el QR de la reunión
+ * (el mismo de los carteles), para quien quiera fichar desde su sitio.
  *
  * Quien no ha fichado sale en gris, como todos al principio: no se le
  * marca en rojo ni en una lista aparte.
@@ -34,6 +34,8 @@ export default function PantallaFichaje() {
   const [error, setError] = useState('');
   const [ahora, setAhora] = useState(Date.now());
   const [completa, setCompleta] = useState(false);
+  const [qrImg, setQrImg] = useState('');
+  const [verQr, setVerQr] = useState(true);
   const desfase = useRef(0);   // reloj del servidor − reloj de este ordenador
 
   useEffect(() => {
@@ -75,6 +77,20 @@ export default function PantallaFichaje() {
     return () => { vivo = false; clearTimeout(t); };
   }, [id]);
 
+  // Dibujar el QR cuando llega el token (solo cambia si cambia el token)
+  const token = datos?.token_qr || '';
+  useEffect(() => {
+    if (!token || !datos?.id) { setQrImg(''); return; }
+    let vivo = true;
+    (async () => {
+      const QR = (await import('qrcode')).default;
+      const url = `${window.location.origin}/fichar?c=${datos.id}&t=${encodeURIComponent(token)}`;
+      const img = await QR.toDataURL(url, { width: 700, margin: 1, errorCorrectionLevel: 'M' });
+      if (vivo) setQrImg(img);
+    })().catch(() => {});
+    return () => { vivo = false; };
+  }, [token, datos?.id]);
+
   function pantallaCompleta() {
     if (document.fullscreenElement) document.exitFullscreen?.();
     else document.documentElement.requestFullscreen?.();
@@ -114,10 +130,24 @@ export default function PantallaFichaje() {
 
       {/* Controles: discretos, arriba a la derecha */}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+        {qrImg && <button onClick={() => setVerQr(v => !v)} style={boton}>{verQr ? '🙈 Ocultar QR' : '📷 Mostrar QR'}</button>}
         <button onClick={pantallaCompleta} style={boton}>{completa ? '↙️ Salir de pantalla completa' : '⛶ Pantalla completa'}</button>
       </div>
 
       <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+
+        {/* QR grande: solo mientras se puede fichar o está a punto */}
+        {qrImg && verQr && (abierto || antes) && (
+          <div style={{ flex: '0 1 420px', minWidth: 260, backgroundColor: 'white', borderRadius: 14, padding: 18,
+            boxShadow: '0 2px 10px rgba(0,0,0,0.07)', textAlign: 'center', borderTop: `6px solid ${estado.c}` }}>
+            <div style={{ fontSize: 20, fontWeight: 800, color: AZUL, marginBottom: 10 }}>📷 Escanea para fichar</div>
+            <img src={qrImg} alt="QR para fichar" style={{ width: '100%', maxWidth: 380, height: 'auto', imageRendering: 'pixelated',
+              opacity: abierto ? 1 : 0.35 }} />
+            <div style={{ fontSize: 14, color: '#475569', marginTop: 8 }}>
+              {abierto ? 'Con la cámara del móvil y la sesión de APrieto iniciada' : `Se podrá fichar a partir de las ${horaMadrid(datos.fichaje_inicio)}`}
+            </div>
+          </div>
+        )}
 
         <div style={{ flex: '1 1 560px', minWidth: 0 }}>
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: '18px 24px', marginBottom: 16,
@@ -139,7 +169,7 @@ export default function PantallaFichaje() {
               <div style={{ width: `${pct}%`, height: '100%', backgroundColor: VERDE, transition: 'width .6s ease' }} />
             </div>
             <div style={{ marginTop: 10, fontSize: 14, color: '#475569' }}>
-              Se ficha en la entrada: 📷 QR de los carteles o 📶 etiqueta NFC
+              Se ficha con el 📷 QR (aquí o en los carteles) o con la 📶 etiqueta NFC
             </div>
             {ultimos.length > 0 && (
               <div style={{ marginTop: 10, fontSize: 14, color: '#475569' }}>
