@@ -14,7 +14,7 @@
  */
 
 import { useState } from 'react';
-import { TIPOS_MANTENIMIENTO, TIPO_OTROS, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
+import { SECCIONES, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
 
 const azul = '#1e3a5f';
 
@@ -37,7 +37,7 @@ export default function InformeConserjes({ incidencias, onActualizado, avisar })
   const fechaMs = (i) => (i.created_at ? new Date(i.created_at).getTime() : 0);
 
   // Grupos con su lista numerada, según el alcance elegido
-  const todosTipos = [...TIPOS_MANTENIMIENTO, TIPO_OTROS];
+  const todosTipos = SECCIONES;
   const gruposTodos = todosTipos.map(tipo => {
     const items = incidencias
       .filter(i => tipoDeIncidencia(i).id === tipo.id)

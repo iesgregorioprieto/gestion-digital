@@ -14,7 +14,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
-import { TIPOS_MANTENIMIENTO, TIPO_OTROS, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
+import { SECCIONES, tipoDeIncidencia, deducirSeccion } from '@/lib/tiposMantenimiento';
 import InformeConserjes from '@/components/InformeConserjes';
 
 
@@ -40,8 +40,33 @@ export function SeccionMantenimiento() {
   async function cargar() {
     setCargando(true);
     const { data } = await consulta('mantenimiento').select('*').order('created_at', { ascending: false });
-    setIncidencias(data || []);
+    const filas = data || [];
+    setIncidencias(filas);
     setCargando(false);
+
+    // Las incidencias de antes de elegir sección no la tienen guardada:
+    // se les asigna una vez la que se deduce de lo escrito. Si la
+    // columna aún no existe en la tabla, no se hace nada.
+    const sinSeccion = filas.filter(i => 'seccion' in i && !i.seccion);
+    if (sinSeccion.length) {
+      const lista = sinSeccion.map(i => ({ id: i.id, seccion: deducirSeccion(i).id }));
+      try {
+        const r = await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'asignar_secciones', datos: { lista } }) });
+        if (r.ok) {
+          const mapa = Object.fromEntries(lista.map(x => [x.id, x.seccion]));
+          setIncidencias(prev => prev.map(i => (mapa[i.id] && !i.seccion ? { ...i, seccion: mapa[i.id] } : i)));
+        }
+      } catch { /* se reintentará la próxima vez */ }
+    }
+  }
+
+  async function cambiarSeccion(inc, seccion) {
+    if (!seccion || seccion === tipoDeIncidencia(inc).id) return;
+    const r = await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'cambiar_seccion', id: inc.id, datos: { seccion } }) });
+    if (!r.ok) { mostrarMensaje('❌ No se ha podido cambiar la sección', 'error'); return; }
+    setIncidencias(prev => prev.map(i => (i.id === inc.id ? { ...i, seccion } : i)));
+    const sec = SECCIONES.find(x => x.id === seccion);
+    mostrarMensaje(`↪️ Movida a ${sec?.emoji} ${sec?.label}`, 'ok');
   }
 
   function mostrarMensaje(texto, tipo) {
@@ -123,7 +148,7 @@ export function SeccionMantenimiento() {
   const terminadas = incidenciasFiltradas
     .filter(i => i.estado === 'resuelta')
     .sort((a, b) => fechaMs(b) - fechaMs(a));
-  const grupos = [...TIPOS_MANTENIMIENTO, TIPO_OTROS]
+  const grupos = SECCIONES
     .map(tipo => ({ tipo, items: activas.filter(i => tipoInc(i).id === tipo.id) }))
     .filter(g => g.items.length > 0);
   const terminadasAbiertas = !!gruposAbiertos.__terminadas || (filtroEstado === 'resuelta' && grupos.length === 0);
@@ -170,7 +195,12 @@ export function SeccionMantenimiento() {
             )}
 
             {/* BOTONES */}
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              {inc.estado !== 'resuelta' && (
+                <select value={tipoInc(inc).id} onChange={e => cambiarSeccion(inc, e.target.value)} title="Cambiar de sección" style={{ padding: '6px 8px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 12.5, color: '#475569', backgroundColor: '#f8fafc', cursor: 'pointer' }}>
+                  {SECCIONES.map(sec => <option key={sec.id} value={sec.id}>{sec.emoji} {sec.label}</option>)}
+                </select>
+              )}
               {inc.estado === 'pendiente' && (
                 <button onClick={() => { setAbierta(inc); setComentario(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔧 Poner en proceso</button>
               )}
