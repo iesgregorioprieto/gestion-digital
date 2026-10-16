@@ -61,8 +61,13 @@ export default function Mantenimiento() {
     let query = consulta('mantenimiento').select('*');
     // Directivo ve todas las incidencias; profesor solo las suyas
     if (!esDirectivo) query = query.eq('profesor_id', profesorId);
-    const { data } = await query.order('created_at', { ascending: false }).limit(20);
-    setHistorial(data || []);
+    const { data } = await query.order('created_at', { ascending: false }).limit(200);
+    // Primero las que faltan por resolver (pendientes y en proceso, la
+    // más reciente arriba) y las resueltas siempre al final.
+    const lista = (data || []).slice().sort((a, b) =>
+      (a.estado === 'resuelta' ? 1 : 0) - (b.estado === 'resuelta' ? 1 : 0)
+    );
+    setHistorial(lista);
     setCargandoHistorial(false);
   }
 
