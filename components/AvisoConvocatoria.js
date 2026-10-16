@@ -40,9 +40,9 @@ export default function AvisoConvocatoria() {
    *
    * Ahora se vuelve a mirar mientras haga falta, y solo entonces, para no
    * gastar peticiones el resto del curso:
-   *   · reunión en curso      → cada 10 s (lo que tarda en saltar un voto)
-   *   · reunión convocada hoy → cada minuto (para enterarse de que empieza)
-   *   · nada hoy              → no se repite
+   *   · votación abierta sin votar → cada 10 s
+   *   · cualquier otro momento     → no se repite (oct. 2026: una reunión
+   *     abierta todo el día gastaba CPU sin necesidad)
    * Y siempre al volver a la app (desbloquear el móvil, cambiar de pestaña).
    */
   useEffect(() => {
@@ -55,13 +55,14 @@ export default function AvisoConvocatoria() {
     let vivo = true;
     let espera = null;
 
-    const hoy = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Madrid' }).format(new Date());
-
     function programar(lista) {
       clearTimeout(espera);
-      const enCurso = lista.some(x => x.estado === 'en_curso');
-      const hoyHay = lista.some(x => x.estado === 'convocada' && x.fecha === hoy());
-      const ms = enCurso ? 10000 : hoyHay ? 60000 : 0;
+      // Solo se repite mientras hay una votación abierta (cada 10 s, hasta
+      // que se vota o se cierra). Fuera de eso no se pregunta: la reunión
+      // y la votación llegan por notificación, y siempre se mira al abrir
+      // la app o volver a ella.
+      const votando = lista.some(x => x.votacion && !x.votacion.yaVote);
+      const ms = votando ? 10000 : 0;
       if (ms) espera = setTimeout(() => { if (!document.hidden) mirar(); else programar(lista); }, ms);
     }
 

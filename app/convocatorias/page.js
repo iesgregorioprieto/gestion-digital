@@ -34,14 +34,17 @@ export default function Convocatorias() {
 
   useEffect(() => {
     cargar();
-    // Solo con la pestaña a la vista; al volver a ella, al momento
+    // Solo se pregunta de forma repetida mientras hay una votación abierta
+    // (cada 3 s, para el cierre y el resultado). El resto del tiempo, solo
+    // al abrir la pantalla o volver a ella: la votación nueva llega por
+    // notificación o al abrir la app.
     const alVolver = () => { if (!document.hidden) cargar(); };
-    const t = setInterval(alVolver, hayVotacionAbierta() ? 3000 : 20000);
+    const t = hayVotacionAbierta() ? setInterval(alVolver, 3000) : null;
     document.addEventListener('visibilitychange', alVolver);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { clearInterval(t); clearInterval(reloj); document.removeEventListener('visibilitychange', alVolver); };
+    return () => { if (t) clearInterval(t); clearInterval(reloj); document.removeEventListener('visibilitychange', alVolver); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lista.length]);
+  }, [lista.length, hayVotacionAbierta()]);
 
   function hayVotacionAbierta() {
     return lista.some(c => c.votacion);

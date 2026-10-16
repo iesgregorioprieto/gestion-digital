@@ -109,19 +109,23 @@ export default function GestionConvocatorias() {
     return () => clearInterval(reloj);
   }, []);
 
-  // Refresco automático: la lista cada 20s, la sesión en directo cada 4s
+  // Refresco automático SOLO mientras hay una votación abierta en la
+  // sesión en directo (cada 4 s, para ver el recuento). El resto del
+  // tiempo no se pregunta nada: se actualiza al volver a la pestaña, tras
+  // cada acción propia o con el botón «Actualizar». Una sesión olvidada
+  // abierta en un ordenador ya no gasta nada.
+  const votacionAbierta = vista === 'sesion' && (sesionDetalle?.votaciones || []).some(v => v.estado === 'abierta');
   useEffect(() => {
-    // Solo con la pestaña a la vista; al volver a ella, al momento
     const refrescar = () => {
       if (document.hidden) return;
       if (vista === 'lista') cargarLista();
       if (vista === 'sesion' && sesionDetalle) cargarDetalle(sesionDetalle.convocatoria.id, true);
     };
-    const t = setInterval(refrescar, vista === 'sesion' ? 4000 : 20000);
+    const t = votacionAbierta ? setInterval(refrescar, 4000) : null;
     document.addEventListener('visibilitychange', refrescar);
-    return () => { clearInterval(t); document.removeEventListener('visibilitychange', refrescar); };
+    return () => { if (t) clearInterval(t); document.removeEventListener('visibilitychange', refrescar); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vista, sesionDetalle?.convocatoria?.id]);
+  }, [vista, sesionDetalle?.convocatoria?.id, votacionAbierta]);
 
   // Cada aviso borra solo el suyo: si llega otro antes, el temporizador
   // del primero ya no se lleva por delante al segundo.
@@ -1019,6 +1023,10 @@ export default function GestionConvocatorias() {
                 <div style={{ fontSize: 13, color: '#64748b', marginTop: 3 }}>
                   {presentes.length} de {personas.length} han fichado
                   {presentes.some(p => p.tarde) && ` · ${presentes.filter(p => p.tarde).length} tarde`}
+                  {' · '}
+                  <button onClick={() => cargarDetalle(c.id)} style={{ background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, fontSize: 13, cursor: 'pointer', padding: 0 }}>
+                    🔄 Actualizar
+                  </button>
                 </div>
                 {c.estado === 'convocada' && (
                   <button onClick={() => accionSesion('iniciar', { id: c.id })} style={{ ...btnPrimario(AMBAR), marginTop: 10 }}>
