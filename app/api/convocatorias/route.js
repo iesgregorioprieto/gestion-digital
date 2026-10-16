@@ -121,6 +121,38 @@ function esTarde(c, fichadoAt) {
 
 const nuevoToken = () => randomBytes(18).toString('base64url');
 
+/**
+ * Quien inicia la reunión está en la sala: queda fichado solo (oct. 2026).
+ * Si ya había fichado, no se toca su hora.
+ */
+async function ficharAlQueInicia(cliente, c, sesion) {
+  if (!sesion?.id || !(c.convocados || []).includes(sesion.id)) return;
+  const { data: ya } = await cliente.from('convocatoria_asistencia')
+    .select('fichado_at').eq('convocatoria_id', c.id).eq('profesor_id', sesion.id);
+  if (ya?.[0]?.fichado_at) return;
+  const { error } = await cliente.from('convocatoria_asistencia').upsert([{
+    convocatoria_id: c.id, profesor_id: sesion.id,
+    fichado_at: new Date().toISOString(),
+    fichado_a_mano_por: `${sesion.nombre || 'Dirección'} (inicia la reunión)`,
+    metodo: 'mano', dispositivo: null,
+  }], { onConflict: 'convocatoria_id,profesor_id' });
+  if (error) console.error('ficharAlQueInicia:', error.message);
+}
+
+/**
+ * Quien pasa a estar presente con una votación ya abierta (fichado a mano
+ * porque llegó tarde) no recibió el aviso al lanzarla, y su móvil no
+ * pregunta solo: se le avisa ahora.
+ */
+async function avisarVotacionAbierta(cliente, convId, pid) {
+  const { data: vs } = await cliente.from('convocatoria_votaciones')
+    .select('id, pregunta, cierre_at').eq('convocatoria_id', convId).eq('estado', 'abierta');
+  const v = (vs || []).find(x => !x.cierre_at || new Date(x.cierre_at) > new Date());
+  if (!v) return 0;
+  const r = await enviarPushA(cliente, [pid], { titulo: '🗳️ Votación abierta', cuerpo: v.pregunta, url: '/convocatorias' });
+  return r.enviados || 0;
+}
+
 function mismoTexto(a, b) {
   const x = Buffer.from(String(a || '')), y = Buffer.from(String(b || ''));
   return x.length > 0 && x.length === y.length && timingSafeEqual(x, y);
@@ -776,6 +808,7 @@ export async function POST(request) {
         const { error } = await cliente.from('convocatorias')
           .update({ estado: 'en_curso', inicio_real: ahora() }).eq('id', c.id);
         if (error) return json({ error: error.message }, 500);
+        await ficharAlQueInicia(cliente, c, sesion);
         return json({ ok: true });
       }
 
@@ -790,6 +823,7 @@ export async function POST(request) {
         if (c.estado === 'convocada') Object.assign(cambios, { estado: 'en_curso', inicio_real: ahora() });
         const { error } = await cliente.from('convocatorias').update(cambios).eq('id', c.id);
         if (error) return json({ error: error.message }, 500);
+        if (c.estado === 'convocada') await ficharAlQueInicia(cliente, c, sesion);
 
         const { data: f } = await cliente.from('convocatoria_asistencia')
           .select('profesor_id').eq('convocatoria_id', c.id).not('fichado_at', 'is', null);
@@ -873,7 +907,8 @@ export async function POST(request) {
           dispositivo: null,
         }], { onConflict: 'convocatoria_id,profesor_id' });
         if (error) return json({ error: error.message }, 500);
-        return json({ ok: true });
+        const avisados = !quitar && c.estado === 'en_curso' ? await avisarVotacionAbierta(cliente, c.id, pid) : 0;
+        return json({ ok: true, avisados });
       }
 
       if (accion === 'finalizar') {
