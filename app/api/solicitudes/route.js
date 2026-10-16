@@ -78,6 +78,22 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    // ─── Resolver varias de golpe (hoja de revisión de conserjes) ───
+    // Solo cambia el estado; el comentario que tuviera cada una se
+    // conserva.
+    if (accion === 'resolver_varios') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      const ids = Array.isArray(datos?.ids) ? datos.ids.filter(Boolean) : [];
+      if (!ids.length) return Response.json({ error: 'No hay ninguna seleccionada' }, { status: 400 });
+
+      const { data, error } = await supa().from(tabla)
+        .update({ estado: 'resuelta' })
+        .in('id', ids)
+        .select('id');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ ok: true, n: (data || []).length });
+    }
+
     // ─── Borrar ───
     if (accion === 'borrar') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });

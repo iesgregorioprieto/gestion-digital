@@ -15,6 +15,7 @@ import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 import { TIPOS_MANTENIMIENTO, TIPO_OTROS, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
+import InformeConserjes from '@/components/InformeConserjes';
 
 
 export { DEPARTAMENTOS };
@@ -32,6 +33,7 @@ export function SeccionMantenimiento() {
   const [mensaje, setMensaje] = useState(null);
   const [fotosVisibles, setFotosVisibles] = useState({});
   const [gruposAbiertos, setGruposAbiertos] = useState({});
+  const [pestana, setPestana] = useState('incidencias');
 
   useEffect(() => { cargar(); }, []);
 
@@ -187,6 +189,16 @@ export function SeccionMantenimiento() {
     <div>
       {mensaje && <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>{mensaje.texto}</div>}
 
+      {/* PESTAÑAS */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 16, borderBottom: '2px solid #e2e8f0' }}>
+        {[['incidencias', '🔧 Incidencias'], ['conserjes', '🖨️ Hoja para conserjes']].map(([id, txt]) => (
+          <button key={id} onClick={() => setPestana(id)} style={{ padding: '10px 16px', border: 'none', borderBottom: `3px solid ${pestana === id ? azul : 'transparent'}`, marginBottom: -2, background: 'none', color: pestana === id ? azul : '#64748b', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{txt}</button>
+        ))}
+      </div>
+
+      {pestana === 'conserjes' ? (
+        <InformeConserjes incidencias={incidencias} onActualizado={cargar} avisar={mostrarMensaje} />
+      ) : (<>
       {/* CONTADORES */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
         {[['pendiente','⏳','#fef3c7','#92400e'], ['en_proceso','🔧','#dbeafe','#1e40af'], ['resuelta','✅','#d1fae5','#065f46']].map(([est, emoji, bg, color]) => (
@@ -269,6 +281,8 @@ export function SeccionMantenimiento() {
           )}
         </div>
       )}
+
+      </>)}
 
       {/* MODAL GESTIÓN */}
       {abierta && (
