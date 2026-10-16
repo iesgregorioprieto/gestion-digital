@@ -572,7 +572,11 @@ export default function Ausencias() {
     }
 
     setEnviando(false);
-    if (error) { mostrarMensaje(`Error: ${error.message} (${error.code || ''} ${error.details || ''})`, 'error'); return; }
+    if (error) {
+      const extra = [error.code, error.details].filter(Boolean).join(' ');
+      mostrarMensaje(`Error: ${error.message || error.error}${extra ? ` (${extra})` : ''}`, 'error');
+      return;
+    }
 
     mostrarMensaje(
       editandoId

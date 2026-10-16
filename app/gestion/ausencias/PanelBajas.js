@@ -125,7 +125,7 @@ export default function PanelBajas() {
 
       // Ausencia abierta: es lo que hace que sus grupos salgan en el
       // cuadrante de guardias mientras no haya sustituto.
-      await fetch('/api/ausencias', {
+      const rAus = await fetch('/api/ausencias', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           accion: 'crear',
@@ -141,6 +141,17 @@ export default function PanelBajas() {
           },
         }),
       });
+
+      // Si ya tenía una ausencia esos días, la baja queda marcada en su
+      // ficha pero no se crea otra ausencia encima: se avisa a jefatura.
+      if (!rAus.ok) {
+        const j = await rAus.json().catch(() => ({}));
+        aviso('Baja marcada en su ficha, pero no se ha creado la ausencia: ' + (j.message || j.error || 'error'), 'error');
+        setAbriendo(false); setElegido(null); setBusqueda(''); setFechaInicio(hoyISO());
+        cargar();
+        setTrabajando(false);
+        return;
+      }
 
       aviso(`Baja registrada. Sus grupos ya salen en el cuadrante de guardias.`);
       setAbriendo(false); setElegido(null); setBusqueda(''); setFechaInicio(hoyISO());

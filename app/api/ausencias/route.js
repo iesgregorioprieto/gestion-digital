@@ -31,6 +31,39 @@ function supa() {
   );
 }
 
+/**
+ * UNA SOLA AUSENCIA POR PROFESOR Y DÍA (oct. 2026)
+ *
+ * El 15/10 Ana Isabel Romero tenía dos ausencias para los mismos días
+ * (la suya y la licencia de jefatura). El motor vio dos huecos en cada
+ * hora y mandó a dos profesores a cada aula.
+ *
+ * Devuelve la primera ausencia de ese profesor cuyas fechas se pisan con
+ * [inicio, fin]. fin = null es una baja abierta: llega hasta siempre.
+ * El motor lee todas las ausencias sin mirar su estado, así que aquí
+ * tampoco se mira.
+ */
+async function ausenciaQueSePisa(profesorId, inicio, fin, excluirId = null) {
+  if (!profesorId || !inicio) return null;
+  let q = supa().from('ausencias')
+    .select('id, fecha_inicio, fecha_fin, motivo')
+    .eq('profesor_id', profesorId)
+    .or(`fecha_fin.gte.${inicio},fecha_fin.is.null`);
+  if (fin) q = q.lte('fecha_inicio', fin);
+  if (excluirId) q = q.neq('id', excluirId);
+  const { data } = await q.order('fecha_inicio').limit(1);
+  return (data || [])[0] || null;
+}
+
+function textoSolape(a) {
+  const f = d => d ? d.split('-').reverse().join('/') : null;
+  const fechas = a.fecha_fin
+    ? (a.fecha_fin === a.fecha_inicio ? `el ${f(a.fecha_inicio)}` : `del ${f(a.fecha_inicio)} al ${f(a.fecha_fin)}`)
+    : `abierta desde el ${f(a.fecha_inicio)}`;
+  return `Ya hay una ausencia registrada para esas fechas (${fechas}${a.motivo ? ': ' + a.motivo : ''}). ` +
+    'No se pueden tener dos ausencias el mismo día: edita la que ya existe.';
+}
+
 async function sesionDe(request) {
   const secreto = process.env.SESSION_SECRET;
   if (!secreto) return null;
@@ -373,6 +406,15 @@ export async function POST(request) {
 
       const fila = { ...datos, profesor_id: dueño };
 
+      // Dos ausencias el mismo día = dos guardias por hora. No se permite.
+      // fecha_fin null = baja abierta (igual que la lee el motor); vacía = un solo día.
+      const finNueva = fila.fecha_fin === '' ? fila.fecha_inicio : (fila.fecha_fin ?? null);
+      const pisada = await ausenciaQueSePisa(dueño, fila.fecha_inicio, finNueva);
+      if (pisada) {
+        const texto = textoSolape(pisada);
+        return Response.json({ error: texto, message: texto, ausencia_existente: pisada.id }, { status: 409 });
+      }
+
       /**
        * FORMACIÓN: solo con autorización previa (sugerencia #93).
        *
@@ -501,6 +543,23 @@ export async function POST(request) {
       // Si se cambian las fechas o las horas, los días hay que rehacerlos:
       // si no, quedarían los del registro anterior.
       const cambiaCuandoFalta = 'horas' in cambios || 'fecha_inicio' in cambios || 'fecha_fin' in cambios;
+      // Mover las fechas encima de otra ausencia suya tampoco se permite.
+      if ('fecha_inicio' in cambios || 'fecha_fin' in cambios) {
+        const { data: actual } = await supa().from('ausencias')
+          .select('profesor_id, fecha_inicio, fecha_fin').eq('id', id);
+        const a = (actual || [])[0];
+        if (a) {
+          const ini = cambios.fecha_inicio ?? a.fecha_inicio;
+          const finRaw = 'fecha_fin' in cambios ? cambios.fecha_fin : a.fecha_fin;
+          const fin = finRaw === '' ? ini : (finRaw ?? null);
+          const pisada = await ausenciaQueSePisa(cambios.profesor_id || a.profesor_id, ini, fin, id);
+          if (pisada) {
+            const texto = textoSolape(pisada);
+            return Response.json({ error: texto, message: texto, ausencia_existente: pisada.id }, { status: 409 });
+          }
+        }
+      }
+
       if (cambiaCuandoFalta) {
         try {
           const { data: previa } = await supa().from('ausencias')
