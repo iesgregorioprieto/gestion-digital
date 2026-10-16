@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
+import { TIPOS_MANTENIMIENTO, TIPO_OTROS, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
 
 
 export { DEPARTAMENTOS };
@@ -30,6 +31,7 @@ export function SeccionMantenimiento() {
   const [procesando, setProcesando] = useState(false);
   const [mensaje, setMensaje] = useState(null);
   const [fotosVisibles, setFotosVisibles] = useState({});
+  const [gruposAbiertos, setGruposAbiertos] = useState({});
 
   useEffect(() => { cargar(); }, []);
 
@@ -66,6 +68,7 @@ export function SeccionMantenimiento() {
     const filas = incidenciasFiltradas.map(i => [
       new Date(i.created_at).toLocaleDateString('es-ES'),
       i.profesor_nombre || '',
+      tipoDeIncidencia(i).label,
       i.estancia || '',
       i.ubicacion_exacta || '',
       i.descripcion || '',
@@ -73,7 +76,7 @@ export function SeccionMantenimiento() {
       i.comentario_secretario || '',
     ]);
 
-    const cabecera = ['Fecha', 'Profesor', 'Estancia', 'Ubicación', 'Descripción', 'Estado', 'Comentario secretario'];
+    const cabecera = ['Fecha', 'Profesor', 'Tipo', 'Estancia', 'Ubicación', 'Descripción', 'Estado', 'Comentario secretario'];
     const contenido = [cabecera, ...filas].map(f => f.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
     const blob = new Blob(['\uFEFF' + contenido], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -106,46 +109,34 @@ export function SeccionMantenimiento() {
     resuelta:   incidencias.filter(i => i.estado === 'resuelta').length,
   };
 
-  return (
-    <div>
-      {mensaje && <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>{mensaje.texto}</div>}
+  // ── Agrupación por tipo de avería ──
+  const tiposPorId = {};
+  for (const i of incidencias) tiposPorId[i.id] = tipoDeIncidencia(i);
+  const tipoInc = (inc) => tiposPorId[inc.id] || tipoDeIncidencia(inc);
 
-      {/* CONTADORES */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
-        {[['pendiente','⏳','#fef3c7','#92400e'], ['en_proceso','🔧','#dbeafe','#1e40af'], ['resuelta','✅','#d1fae5','#065f46']].map(([est, emoji, bg, color]) => (
-          <div key={est} onClick={() => setFiltroEstado(filtroEstado === est ? 'todos' : est)} style={{ backgroundColor: bg, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', border: `2px solid ${filtroEstado === est ? color : 'transparent'}`, textAlign: 'center' }}>
-            <div style={{ fontSize: 22 }}>{emoji}</div>
-            <div style={{ fontSize: 20, fontWeight: 800, color }}>{contadores[est]}</div>
-            <div style={{ fontSize: 12, color, fontWeight: 600 }}>{ESTADOS[est].label}</div>
-          </div>
-        ))}
-      </div>
+  const fechaMs = (i) => (i.created_at ? new Date(i.created_at).getTime() : 0);
+  const activas = incidenciasFiltradas
+    .filter(i => i.estado !== 'resuelta')
+    .sort((a, b) => ((a.estado === 'en_proceso' ? 0 : 1) - (b.estado === 'en_proceso' ? 0 : 1)) || (fechaMs(a) - fechaMs(b)));
+  const terminadas = incidenciasFiltradas
+    .filter(i => i.estado === 'resuelta')
+    .sort((a, b) => fechaMs(b) - fechaMs(a));
+  const grupos = [...TIPOS_MANTENIMIENTO, TIPO_OTROS]
+    .map(tipo => ({ tipo, items: activas.filter(i => tipoInc(i).id === tipo.id) }))
+    .filter(g => g.items.length > 0);
+  const terminadasAbiertas = !!gruposAbiertos.__terminadas || (filtroEstado === 'resuelta' && grupos.length === 0);
 
-      {/* FILTROS */}
-      <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={{ flex: 1, minWidth: 140 }}>
-          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Estancia</label>
-          <select value={filtroEstancia} onChange={e => setFiltroEstancia(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
-            <option value="">Todas las estancias</option>
-            {estancias.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-        </div>
-        <button onClick={() => { setFiltroEstado('todos'); setFiltroEstancia(''); }} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
-        <button onClick={generarInforme} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>📊 Informe CSV</button>
-      </div>
+  function alternarGrupo(id) {
+    setGruposAbiertos(g => ({ ...g, [id]: !g[id] }));
+  }
 
-      {/* LISTA */}
-      {cargando ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
-      ) : incidenciasFiltradas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}><div style={{ fontSize: 36, marginBottom: 8 }}>🔧</div>No hay incidencias con esos filtros</div>
-      ) : incidenciasFiltradas.map(inc => {
+  function tarjeta(inc, mostrarTipo) {
         const est = ESTADOS[inc.estado] || ESTADOS.pendiente;
         return (
           <div key={inc.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color || '#f59e0b'}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{inc.estancia}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{inc.estancia}{mostrarTipo && <span style={{ fontWeight: 600, fontSize: 12, color: '#64748b' }}> · {tipoInc(inc).emoji} {tipoInc(inc).label}</span>}</div>
                 <div style={{ fontSize: 12, color: '#888' }}>{inc.profesor_nombre} · {inc.created_at ? new Date(inc.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : 'Sin fecha'}</div>
                 {inc.ubicacion_exacta && <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>📍 {inc.ubicacion_exacta}</div>}
               </div>
@@ -190,7 +181,94 @@ export function SeccionMantenimiento() {
             </div>
           </div>
         );
-      })}
+  }
+
+  return (
+    <div>
+      {mensaje && <div style={{ marginBottom: 12, padding: '10px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : '#991b1b', fontWeight: 600, fontSize: 14 }}>{mensaje.texto}</div>}
+
+      {/* CONTADORES */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
+        {[['pendiente','⏳','#fef3c7','#92400e'], ['en_proceso','🔧','#dbeafe','#1e40af'], ['resuelta','✅','#d1fae5','#065f46']].map(([est, emoji, bg, color]) => (
+          <div key={est} onClick={() => setFiltroEstado(filtroEstado === est ? 'todos' : est)} style={{ backgroundColor: bg, borderRadius: 10, padding: '12px 16px', cursor: 'pointer', border: `2px solid ${filtroEstado === est ? color : 'transparent'}`, textAlign: 'center' }}>
+            <div style={{ fontSize: 22 }}>{emoji}</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color }}>{contadores[est]}</div>
+            <div style={{ fontSize: 12, color, fontWeight: 600 }}>{ESTADOS[est].label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* FILTROS */}
+      <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 14, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Estancia</label>
+          <select value={filtroEstancia} onChange={e => setFiltroEstancia(e.target.value)} style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13 }}>
+            <option value="">Todas las estancias</option>
+            {estancias.map(e => <option key={e} value={e}>{e}</option>)}
+          </select>
+        </div>
+        <button onClick={() => { setFiltroEstado('todos'); setFiltroEstancia(''); }} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔄 Borrar filtros</button>
+        <button onClick={generarInforme} style={{ padding: '8px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>📊 Informe CSV</button>
+      </div>
+
+      {/* LISTA AGRUPADA POR TIPO DE AVERÍA
+          Las abiertas van por grupos plegables (persianas, cristales,
+          puertas...) para poder abrir uno y arreglarlas todas de una
+          vez. Dentro de cada grupo, primero las que están en proceso y
+          luego las pendientes, por orden de llegada. Las terminadas van
+          todas al final, en su propio bloque plegado. */}
+      {cargando ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>Cargando...</div>
+      ) : incidenciasFiltradas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}><div style={{ fontSize: 36, marginBottom: 8 }}>🔧</div>No hay incidencias con esos filtros</div>
+      ) : (
+        <div>
+          {grupos.length > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
+              <button onClick={() => setGruposAbiertos(Object.fromEntries(grupos.map(g => [g.tipo.id, true])))} style={{ background: 'none', border: 'none', color: azul, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>▾ Abrir todos</button>
+              <button onClick={() => setGruposAbiertos({})} style={{ background: 'none', border: 'none', color: azul, fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>▸ Cerrar todos</button>
+            </div>
+          )}
+
+          {grupos.map(g => {
+            const abiertoG = !!gruposAbiertos[g.tipo.id];
+            const nPend = g.items.filter(i => i.estado === 'pendiente').length;
+            const nProc = g.items.filter(i => i.estado === 'en_proceso').length;
+            return (
+              <div key={g.tipo.id} style={{ marginBottom: 10 }}>
+                <button onClick={() => alternarGrupo(g.tipo.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, border: `1.5px solid ${abiertoG ? azul : '#e2e8f0'}`, backgroundColor: 'white', cursor: 'pointer', boxShadow: '0 1px 4px rgba(0,0,0,0.06)', textAlign: 'left' }}>
+                  <span style={{ fontSize: 22 }}>{g.tipo.emoji}</span>
+                  <span style={{ flex: 1, fontWeight: 700, fontSize: 15, color: azul }}>{g.tipo.label}</span>
+                  {nPend > 0 && <span style={{ padding: '3px 10px', borderRadius: 20, backgroundColor: '#fef3c7', color: '#92400e', fontWeight: 700, fontSize: 12 }}>⏳ {nPend}</span>}
+                  {nProc > 0 && <span style={{ padding: '3px 10px', borderRadius: 20, backgroundColor: '#dbeafe', color: '#1e40af', fontWeight: 700, fontSize: 12 }}>🔧 {nProc}</span>}
+                  <span style={{ fontSize: 14, color: '#888', width: 14 }}>{abiertoG ? '▾' : '▸'}</span>
+                </button>
+                {abiertoG && (
+                  <div style={{ padding: '10px 0 0 12px', borderLeft: '3px solid #e2e8f0', marginLeft: 14, marginTop: 6 }}>
+                    {g.items.map(inc => tarjeta(inc, false))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {terminadas.length > 0 && (
+            <div style={{ marginTop: grupos.length ? 20 : 0 }}>
+              <button onClick={() => alternarGrupo('__terminadas')} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, border: '1.5px solid #d1d5db', backgroundColor: '#f3f4f6', cursor: 'pointer', textAlign: 'left' }}>
+                <span style={{ fontSize: 22 }}>✅</span>
+                <span style={{ flex: 1, fontWeight: 700, fontSize: 15, color: '#065f46' }}>Terminadas</span>
+                <span style={{ padding: '3px 10px', borderRadius: 20, backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 12 }}>{terminadas.length}</span>
+                <span style={{ fontSize: 14, color: '#888', width: 14 }}>{terminadasAbiertas ? '▾' : '▸'}</span>
+              </button>
+              {terminadasAbiertas && (
+                <div style={{ marginTop: 8, opacity: 0.85 }}>
+                  {terminadas.map(inc => tarjeta(inc, true))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* MODAL GESTIÓN */}
       {abierta && (
