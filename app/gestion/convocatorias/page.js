@@ -97,6 +97,7 @@ export default function GestionConvocatorias() {
   const [vistaCircular, setVistaCircular] = useState({}); // { [votacion_id]: true } — resultado como gráfico circular en vez de barras
   const [faltaFichaje, setFaltaFichaje] = useState('');   // qué falta para el QR / NFC, junto a los botones
   const [etiquetasConv, setEtiquetasConv] = useState([]);   // etiquetas NFC de la reunión abierta en directo
+  const [respuestas, setRespuestas] = useState({});         // { [convId]: personas[] | 'cargando' } — quién ha confirmado asistencia
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -152,6 +153,26 @@ export default function GestionConvocatorias() {
       setLista(d.convocatorias || []);
     } catch (e) { /* se queda con lo anterior */ }
     setCargando(false);
+  }
+
+  // Quién ha confirmado asistencia (o no) desde Tareas pendientes
+  async function verRespuestas(c) {
+    if (respuestas[c.id]) { setRespuestas(r => { const n = { ...r }; delete n[c.id]; return n; }); return; }
+    setRespuestas(r => ({ ...r, [c.id]: 'cargando' }));
+    try {
+      const r = await fetch(`/api/convocatorias?modo=detalle&id=${c.id}`);
+      const d = await r.json();
+      if (d.error) throw new Error(d.error);
+      setRespuestas(x => ({ ...x, [c.id]: d.personas || [] }));
+    } catch (e) {
+      aviso('No se pudieron cargar las respuestas', 'error');
+      setRespuestas(x => { const n = { ...x }; delete n[c.id]; return n; });
+    }
+  }
+
+  function horaRespuesta(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleString('es-ES', { timeZone: 'Europe/Madrid', day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   async function cargarCenso() {
@@ -676,12 +697,24 @@ export default function GestionConvocatorias() {
                         {c.estado !== 'borrador' && ` · ${c.presentes} presentes`}
                         {c.votaciones > 0 && ` · ${c.votacionesHechas}/${c.votaciones} votaciones`}
                       </div>
+                      {c.estado !== 'borrador' && (
+                        <div style={{ fontSize: 12.5, marginTop: 5, fontWeight: 700 }}>
+                          <span style={{ color: VERDE }}>✅ {c.siAsistiran} asistirán</span>
+                          <span style={{ color: ROJO }}> · ❌ {c.noAsistiran} no</span>
+                          <span style={{ color: '#94a3b8' }}> · ⏳ {Math.max(0, c.totalConvocados - c.siAsistiran - c.noAsistiran)} sin responder</span>
+                        </div>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
                       {c.estado === 'borrador' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>✏️ Editar</button>
                         <button onClick={() => eliminar(c)} style={{ ...btnSecundario, color: ROJO, borderColor: '#fecaca' }}>🗑️</button>
                       </>}
+                      {c.estado !== 'borrador' && (
+                        <button onClick={() => verRespuestas(c)} style={btnSecundario}>
+                          👥 {respuestas[c.id] ? 'Ocultar respuestas' : 'Respuestas'}
+                        </button>
+                      )}
                       {c.estado === 'convocada' && <>
                         <button onClick={() => editar(c)} style={btnSecundario}>👁️ Ver</button>
                         <button onClick={() => abrirSesion(c)} style={btnPrimario(AMBAR)}>▶️ Iniciar reunión</button>
@@ -694,6 +727,34 @@ export default function GestionConvocatorias() {
                       </>}
                     </div>
                   </div>
+                  {respuestas[c.id] === 'cargando' && (
+                    <div style={{ marginTop: 12, fontSize: 13, color: '#888' }}>Cargando respuestas...</div>
+                  )}
+                  {Array.isArray(respuestas[c.id]) && (() => {
+                    const ps = respuestas[c.id];
+                    const grupos = [
+                      { t: '✅ Asistirán', color: VERDE, bg: '#f0fdf4', gente: ps.filter(p => p.asistira === true) },
+                      { t: '❌ No asistirán', color: ROJO, bg: '#fef2f2', gente: ps.filter(p => p.asistira === false) },
+                      { t: '⏳ Sin responder', color: '#64748b', bg: '#f8fafc', gente: ps.filter(p => p.asistira !== true && p.asistira !== false) },
+                    ];
+                    return (
+                      <div style={{ marginTop: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                        {grupos.map(g => (
+                          <div key={g.t} style={{ backgroundColor: g.bg, borderRadius: 10, padding: '10px 12px', border: '1px solid #e5e7eb' }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 800, color: g.color, marginBottom: 6 }}>{g.t} ({g.gente.length})</div>
+                            {g.gente.length === 0 ? (
+                              <div style={{ fontSize: 12, color: '#aaa' }}>Nadie</div>
+                            ) : g.gente.map(p => (
+                              <div key={p.id} style={{ fontSize: 12.5, color: '#1e293b', padding: '2px 0', display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                                <span>{p.nombre}</span>
+                                {p.respondida_at && <span style={{ color: '#94a3b8', whiteSpace: 'nowrap' }}>{horaRespuesta(p.respondida_at)}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
