@@ -79,6 +79,44 @@ export async function POST(request) {
       });
     }
 
+    // ─── REFRESCAR ROLES ───
+    // Los roles se guardaban solo al entrar. A quien secretaría marcaba
+    // como jefe de departamento con la sesión ya abierta no le llegaba el
+    // cambio hasta volver a entrar (y la app instalada casi nunca cierra
+    // sesión). Esto relee la ficha y vuelve a firmar la cookie con los
+    // roles reales, manteniendo la misma caducidad.
+    if (accion === 'refrescar') {
+      const cookies = request.headers.get('cookie') || '';
+      const m = cookies.match(new RegExp(`${COOKIE}=([^;]+)`));
+      const sesion = m ? await verificarSesion(m[1], secreto) : null;
+      if (!sesion?.id) return Response.json({ ok: false }, { status: 401 });
+
+      const { data: filas } = await supa()
+        .from('profesores')
+        .select('id, nombre, apellidos, rol, rol_gestion, estado')
+        .eq('id', sesion.id);
+      const p = (filas || [])[0];
+      if (!p) return Response.json({ ok: false }, { status: 401 });
+      if ((p.estado || '').toString().trim().toLowerCase() !== 'activo') {
+        return Response.json({ ok: false, error: 'inactivo' }, { status: 403 });
+      }
+
+      const rol = MAPA_ROLES[(p.rol_gestion || '').toString().trim().toLowerCase()] || '';
+      const roles = Array.isArray(p.rol) ? p.rol : ['profesor'];
+      const nombre = `${p.nombre || ''} ${p.apellidos || ''}`.trim();
+      const exp = sesion.exp || Date.now() + HORAS * 3600 * 1000;
+      const token = await firmarSesion({ id: p.id, rol, roles, nombre, exp }, secreto);
+      const quedan = Math.max(0, Math.floor((exp - Date.now()) / 1000));
+
+      return new Response(JSON.stringify({ ok: true, rol_gestion: rol, roles, nombre }), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Set-Cookie': `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${quedan}`,
+        },
+      });
+    }
+
     // ─── INICIAR SESIÓN ───
     if (accion === 'entrar') {
       const em = (email || '').trim().toLowerCase();

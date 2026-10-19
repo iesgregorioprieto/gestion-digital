@@ -46,9 +46,33 @@ export default function PanelProfesor() {
     setNombre(nombreGuardado || '');
     setRolGestion(rolGestionGuardado || '');
     setRoles(rolesGuardados ? JSON.parse(rolesGuardados) : ['profesor']);
-    
+
     cargarApoyosPendientes(id);
+    refrescarRoles();
   }, []);
+
+  // Los roles guardados son los del momento de entrar. Si secretaría le
+  // ha marcado después como jefe de departamento (o le ha quitado algo),
+  // aquí se ponen al día sin tener que cerrar sesión.
+  async function refrescarRoles() {
+    try {
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'refrescar' }),
+      });
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d?.ok) return;
+      const rolesNuevos = Array.isArray(d.roles) ? d.roles : ['profesor'];
+      sessionStorage.setItem('profesor_roles', JSON.stringify(rolesNuevos));
+      sessionStorage.setItem('profesor_rol_gestion', d.rol_gestion || '');
+      setRoles(rolesNuevos);
+      setRolGestion(d.rol_gestion || '');
+    } catch (e) {
+      // Sin conexión: se queda con lo que había.
+    }
+  }
   
   async function cargarApoyosPendientes(id) {
     // Hoy y, como mucho, mañana. Nada más: el reparto se rehace cada vez
@@ -494,11 +518,15 @@ export default function PanelProfesor() {
           <div style={{ fontSize: 16, fontWeight: 800, color: verde, flex: 1, minWidth: 140 }}>
             👋 Hola, {nombre.split(' ')[0]}
           </div>
-          {rolGestion && (
+          {['director', 'jefe_estudios', 'secretario'].includes(rolGestion) && (
             <div style={{ fontSize: 11.5, backgroundColor: '#e8f5e9', color: verde, padding: '3px 10px', borderRadius: 20, fontWeight: 700, whiteSpace: 'nowrap' }}>
               {rolGestion === 'director' ? '👔 Director/a' :
-               rolGestion === 'jefe_estudios' ? '📋 Jefe/a de Estudios' :
-               rolGestion === 'secretario' ? '📁 Secretario/a' : ''}
+               rolGestion === 'jefe_estudios' ? '📋 Jefe/a de Estudios' : '📁 Secretario/a'}
+            </div>
+          )}
+          {roles.includes('jefe_departamento') && (
+            <div style={{ fontSize: 11.5, backgroundColor: '#e8f5e9', color: verde, padding: '3px 10px', borderRadius: 20, fontWeight: 700, whiteSpace: 'nowrap' }}>
+              📂 Jefe/a de Departamento
             </div>
           )}
         </div>
