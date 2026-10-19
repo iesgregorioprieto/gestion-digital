@@ -311,7 +311,9 @@ export default function Actividades() {
   }
 
   const hoy = hoyLocal();
-  const proximas = actividades.filter(a => a.fecha_inicio >= hoy && a.estado !== 'rechazada');
+  // Siguen saliendo mientras duran: una salida de tres días que empezó
+  // ayer tiene hoy a sus alumnos fuera, y quien está de guardia lo necesita.
+  const proximas = actividades.filter(a => (a.fecha_fin || a.fecha_inicio) >= hoy && a.estado !== 'rechazada');
   // Va a la actividad quien la propone y quien acompaña
   const voyYo = a => a.profesor_id === profId ||
     (Array.isArray(a.acompanantes) && a.acompanantes.includes(profId));
@@ -392,7 +394,7 @@ export default function Actividades() {
             ) : (
               <>
                 <Sub>Próximas actividades</Sub>
-                {proximas.map(a => <Tarjeta key={a.id} a={a} />)}
+                {proximas.map(a => <Tarjeta key={a.id} a={a} profesores={profesores} />)}
               </>
             )}
 
@@ -799,49 +801,168 @@ export default function Actividades() {
 
 // ── Componentes ──
 
-function Tarjeta({ a }) {
+/**
+ * TARJETA DE ACTIVIDAD
+ *
+ * Se despliega para que cualquier profesor —sobre todo quien está de
+ * guardia— sepa qué grupos se han ido, quién los acompaña y, grupo por
+ * grupo, qué alumnos van y cuáles se quedan en el centro.
+ *
+ * Solo se enseñan nombres y apellidos; el resto de la ficha del alumno
+ * no se pinta. La lista se pide al desplegar, no antes.
+ */
+function Tarjeta({ a, profesores = [] }) {
   const est = ESTADOS[a.estado] || ESTADOS.pendiente;
   const tipo = TIPOS.find(t => t.valor === a.tipo) || TIPOS[0];
   const d = new Date(a.fecha_inicio + 'T12:00:00');
+  const [abierta, setAbierta] = useState(false);
+  const [porGrupo, setPorGrupo] = useState(null);
+  const [verQuien, setVerQuien] = useState({});   // grupo -> true si despliega la lista
+
+  const hoy = hoyLocal();
+  const esHoy = a.fecha_inicio <= hoy && (a.fecha_fin || a.fecha_inicio) >= hoy;
+  const grupos = Array.isArray(a.grupos) ? a.grupos : [];
+  const nombreProf = id => {
+    const p = profesores.find(x => x.id === id);
+    return p ? `${p.nombre || ''} ${p.apellidos || ''}`.trim() : null;
+  };
+  const acompanantes = (Array.isArray(a.acompanantes) ? a.acompanantes : [])
+    .filter(id => id !== a.profesor_id).map(nombreProf).filter(Boolean);
+  const nombreAlumno = al => `${al.apellidos || ''}, ${al.nombre || ''}`.trim();
+
+  async function abrir() {
+    const nueva = !abierta;
+    setAbierta(nueva);
+    if (!nueva || porGrupo) return;
+    const res = {};
+    for (const g of grupos) {
+      const sel = a.alumnos_asistentes?.[g];
+      try {
+        const r = await fetch(`/api/alumnos?grupo=${encodeURIComponent(g)}`);
+        const dd = await r.json();
+        const todos = (dd.alumnos || []).map(al => ({ id: al.id, nombre: nombreAlumno(al) }));
+        const vanTodos = sel === undefined || sel === 'todos';
+        const ids = Array.isArray(sel) ? sel : [];
+        res[g] = {
+          total: todos.length,
+          vanTodos,
+          van: vanTodos ? todos : todos.filter(al => ids.includes(al.id)),
+          seQuedan: vanTodos ? [] : todos.filter(al => !ids.includes(al.id)),
+        };
+      } catch (e) {
+        res[g] = { total: 0, vanTodos: true, van: [], seQuedan: [], error: true };
+      }
+    }
+    setPorGrupo(res);
+  }
+
+  const dato = (icono, etiqueta, valor) => valor ? (
+    <div style={{ padding: '7px 10px', borderRadius: 8, backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+      <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase' }}>{icono} {etiqueta}</div>
+      <div style={{ fontSize: 13, fontWeight: 700, color: '#334155', marginTop: 1 }}>{valor}</div>
+    </div>
+  ) : null;
 
   return (
     <div style={{
-      display: 'flex', gap: 13, padding: '13px 15px', marginBottom: 9,
-      backgroundColor: 'white', borderRadius: 10,
-      border: '1px solid #e5e7eb', borderLeft: `4px solid ${est.borde}`,
+      marginBottom: 9, backgroundColor: 'white', borderRadius: 10,
+      border: esHoy ? `2px solid ${VERDE}` : '1px solid #e5e7eb', borderLeft: `4px solid ${est.borde}`,
+      overflow: 'hidden',
     }}>
-      <div style={{
-        flexShrink: 0, width: 50, textAlign: 'center',
-        backgroundColor: '#f0f4f0', borderRadius: 8, padding: '7px 4px',
-      }}>
-        <div style={{ fontSize: 18, fontWeight: 800, color: VERDE, lineHeight: 1 }}>
-          {d.getDate()}
+      <div onClick={abrir} style={{ display: 'flex', gap: 13, padding: '13px 15px', cursor: 'pointer' }}>
+        <div style={{
+          flexShrink: 0, width: 50, textAlign: 'center',
+          backgroundColor: esHoy ? VERDE : '#f0f4f0', borderRadius: 8, padding: '7px 4px',
+        }}>
+          <div style={{ fontSize: 18, fontWeight: 800, color: esHoy ? 'white' : VERDE, lineHeight: 1 }}>
+            {d.getDate()}
+          </div>
+          <div style={{ fontSize: 9.5, color: esHoy ? 'white' : '#888', textTransform: 'uppercase', marginTop: 2 }}>
+            {esHoy ? 'hoy' : d.toLocaleDateString('es-ES', { month: 'short' })}
+          </div>
         </div>
-        <div style={{ fontSize: 9.5, color: '#888', textTransform: 'uppercase', marginTop: 2 }}>
-          {d.toLocaleDateString('es-ES', { month: 'short' })}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{a.titulo}</div>
+          <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>
+            {tipo.emoji} {a.departamento || '—'}
+            {grupos.length > 0 && ` · ${grupos.join(', ')}`}
+            {a.hora_salida && ` · ${String(a.hora_salida).slice(0, 5)}${a.hora_regreso ? `–${String(a.hora_regreso).slice(0, 5)}` : ''}`}
+          </div>
+          <div style={{ marginTop: 7, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{
+              display: 'inline-block', padding: '3px 10px', borderRadius: 20,
+              fontSize: 11, fontWeight: 700,
+              backgroundColor: est.bg, color: est.color, border: `1px solid ${est.borde}`,
+            }}>{est.emoji} {est.label}</span>
+            <span style={{ fontSize: 11.5, color: VERDE, fontWeight: 700 }}>
+              {abierta ? '▲ Ocultar' : '▼ Ver grupos y alumnado'}
+            </span>
+          </div>
+          {a.estado === 'rechazada' && a.motivo_rechazo && (
+            <div style={{ marginTop: 7, fontSize: 12, color: '#991b1b', backgroundColor: '#fef2f2', padding: '7px 11px', borderRadius: 7, lineHeight: 1.5 }}>
+              {a.motivo_rechazo}
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>{a.titulo}</div>
-        <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>
-          {tipo.emoji} {a.departamento || '—'}
-          {Array.isArray(a.grupos) && a.grupos.length > 0 && ` · ${a.grupos.join(', ')}`}
-          {Array.isArray(a.acompanantes) && a.acompanantes.length > 0 && ` · ${a.acompanantes.length} acompañante(s)`}
-        </div>
-        <div style={{ marginTop: 7 }}>
-          <span style={{
-            display: 'inline-block', padding: '3px 10px', borderRadius: 20,
-            fontSize: 11, fontWeight: 700,
-            backgroundColor: est.bg, color: est.color, border: `1px solid ${est.borde}`,
-          }}>{est.emoji} {est.label}</span>
-        </div>
-        {a.estado === 'rechazada' && a.motivo_rechazo && (
-          <div style={{ marginTop: 7, fontSize: 12, color: '#991b1b', backgroundColor: '#fef2f2', padding: '7px 11px', borderRadius: 7, lineHeight: 1.5 }}>
-            {a.motivo_rechazo}
+      {abierta && (
+        <div style={{ padding: '4px 15px 14px', borderTop: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 7, margin: '10px 0' }}>
+            {dato('🕗', 'Salida', a.hora_salida ? String(a.hora_salida).slice(0, 5) : 'Día completo')}
+            {dato('🕘', 'Regreso', a.hora_regreso ? String(a.hora_regreso).slice(0, 5) : null)}
+            {dato('📍', 'Lugar', a.lugar)}
+            {a.fecha_fin && a.fecha_fin !== a.fecha_inicio &&
+              dato('📅', 'Vuelven', new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }))}
           </div>
-        )}
-      </div>
+
+          <div style={{ fontSize: 13, color: '#444', lineHeight: 1.6, marginBottom: 10 }}>
+            <strong>👩‍🏫 Responsable:</strong> {a.profesor_nombre || '—'}
+            {acompanantes.length > 0 && (<><br /><strong>Acompañan:</strong> {acompanantes.join(', ')}</>)}
+            {a.necesita_guardia && (<><br /><strong>Se queda con el alumnado que no va:</strong> {a.profesor_guardia || 'sin asignar'}</>)}
+          </div>
+
+          {!porGrupo ? (
+            <div style={{ fontSize: 12.5, color: '#888' }}>Cargando alumnado…</div>
+          ) : grupos.map(g => {
+            const info = porGrupo[g] || {};
+            const ver = !!verQuien[g];
+            return (
+              <div key={g} style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 9, backgroundColor: '#f0f9ff', border: '1px solid #bae6fd' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ fontWeight: 800, color: '#075985', fontSize: 13.5 }}>{g}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: info.vanTodos ? VERDE : '#b45309' }}>
+                    {info.error ? 'No se ha podido cargar'
+                      : info.vanTodos ? `Va el grupo entero (${info.total})`
+                      : `Van ${info.van.length} · se quedan ${info.seQuedan.length}`}
+                  </div>
+                </div>
+
+                {!info.error && info.total > 0 && (
+                  <button onClick={() => setVerQuien(v => ({ ...v, [g]: !v[g] }))}
+                    style={{ marginTop: 6, padding: '4px 10px', borderRadius: 7, border: '1px solid #7dd3fc', backgroundColor: 'white', color: '#075985', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    {ver ? 'Ocultar nombres' : 'Ver nombres'}
+                  </button>
+                )}
+
+                {ver && (
+                  <div style={{ marginTop: 8, fontSize: 12.5, lineHeight: 1.6 }}>
+                    {info.seQuedan.length > 0 && (
+                      <div style={{ marginBottom: 8, padding: '8px 10px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1px solid #fcd34d' }}>
+                        <div style={{ fontWeight: 800, color: '#78350f', marginBottom: 3 }}>🏫 Se quedan en el centro ({info.seQuedan.length})</div>
+                        <div style={{ color: '#78350f' }}>{info.seQuedan.map(x => x.nombre).join(' · ')}</div>
+                      </div>
+                    )}
+                    <div style={{ fontWeight: 800, color: '#075985', marginBottom: 3 }}>🚌 Van a la actividad ({info.van.length})</div>
+                    <div style={{ color: '#334155' }}>{info.van.map(x => x.nombre).join(' · ') || '—'}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
