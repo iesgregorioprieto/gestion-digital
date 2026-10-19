@@ -50,6 +50,7 @@ export default function GestionActividades() {
   const [alumnosDe, setAlumnosDe] = useState({});   // id de actividad -> alumnado por grupo
   const [ausenciasPorFecha, setAusenciasPorFecha] = useState(null);
   const [editando, setEditando] = useState(null);   // actividad abierta en el editor
+  const [esDirector, setEsDirector] = useState(false);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -59,6 +60,7 @@ export default function GestionActividades() {
       return;
     }
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
+    setEsDirector(rol === 'director');
     cargar();
   }, []);
 
@@ -544,7 +546,13 @@ export default function GestionActividades() {
                         )}
                       </div>
 
-                      {(a.estado || 'pendiente') === 'pendiente' && (
+                      {(a.estado || 'pendiente') === 'pendiente' && !esDirector && (
+                        <div style={{ marginTop: 14, padding: '9px 12px', borderRadius: 9, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', color: '#78350f', fontSize: 13, fontWeight: 600 }}>
+                          ⏳ Pendiente de la autorización del director
+                        </div>
+                      )}
+
+                      {(a.estado || 'pendiente') === 'pendiente' && esDirector && (
                         <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
                           <button onClick={() => resolver(a.id, 'aprobada')} disabled={procesando === a.id}
                             style={{ padding: '9px 18px', borderRadius: 9, border: 'none', backgroundColor: VERDE, color: 'white', fontWeight: 700, fontSize: 13.5, cursor: 'pointer' }}>
@@ -558,7 +566,7 @@ export default function GestionActividades() {
                       )}
 
                       <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-                        {(a.estado || 'pendiente') !== 'pendiente' && (
+                        {(a.estado || 'pendiente') !== 'pendiente' && esDirector && (
                           <button onClick={() => resolver(a.id, 'pendiente')} disabled={procesando === a.id}
                             style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #ddd', backgroundColor: 'white', color: '#666', fontWeight: 600, fontSize: 12.5, cursor: 'pointer' }}>
                             ↩️ Volver a dejarla pendiente

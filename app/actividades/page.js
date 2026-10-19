@@ -292,7 +292,7 @@ export default function Actividades() {
 
       if (error) { aviso('Error al guardar: ' + (error.error || 'inténtalo de nuevo'), 'error'); setEnviando(false); return; }
 
-      aviso('📨 Propuesta enviada a jefatura de estudios');
+      aviso('📨 Propuesta enviada al director para su autorización');
       setForm({
         titulo: '', tipo: 'salida', relacion_curricular: '', en_pga: null, pga_seleccionada: '', profesor_guardia: '',
         fecha_inicio: '', fecha_fin: '', horas: [], hora_salida: '', hora_regreso: '',
@@ -789,7 +789,7 @@ export default function Actividades() {
               ...boton, width: '100%', padding: 14, fontSize: 15,
               cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1,
             }}>
-              {subiendoDoc ? '⏳ Subiendo el documento...' : enviando ? '⏳ Enviando...' : '📨 Enviar a jefatura de estudios'}
+              {subiendoDoc ? '⏳ Subiendo el documento...' : enviando ? '⏳ Enviando...' : '📨 Enviar al director para su autorización'}
             </button>
           </div>
         )}

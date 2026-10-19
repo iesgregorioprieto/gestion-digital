@@ -18,6 +18,7 @@ import { claveServidor } from '@/lib/claveServidor';
  */
 
 import { enviarAviso, AVISOS_ACTIVIDADES } from '@/lib/notificaciones';
+import { enviarPushA } from '@/lib/pushServidor';
 
 const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
 
@@ -88,6 +89,26 @@ export async function POST(request) {
             enPga: act.en_pga === true,
           }).catch(err => console.error('aviso de actividad:', err?.message));
         }
+
+        // Todas las actividades las autoriza el director (decisión de
+        // José María): además del correo, le salta en el móvil.
+        try {
+          const cliente = supa();
+          const { data: dirs } = await cliente.from('profesores')
+            .select('id').eq('rol_gestion', 'director');
+          const ids = (dirs || []).map(d => d.id).filter(id => id !== sesion.id);
+          if (ids.length) {
+            const primera = conAutor[0] || {};
+            await enviarPushA(cliente, ids, {
+              titulo: '🎒 Actividad por autorizar',
+              cuerpo: `${primera.profesor_nombre || sesion.nombre || 'Un profesor/a'}: ${primera.titulo || 'actividad complementaria'}`
+                + (primera.fecha_inicio ? ` (${primera.fecha_inicio})` : ''),
+              url: '/gestion/actividades',
+            });
+          }
+        } catch (err) {
+          console.error('push de actividad:', err?.message);
+        }
       }
 
       return Response.json({ ok: true, id: (data || [])[0]?.id });
@@ -96,6 +117,12 @@ export async function POST(request) {
     // ─── Actualizar por identificador ───
     if (accion === 'actualizar') {
       if (!id || !datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
+
+      // Aprobar, rechazar o devolver a pendiente una actividad es cosa
+      // solo del director. Jefatura puede editarla, pero no resolverla.
+      if (tabla === 'actividades' && 'estado' in datos && sesion.rol !== 'director') {
+        return Response.json({ error: 'Solo el director puede autorizar o rechazar una actividad' }, { status: 403 });
+      }
 
       const { error } = await supa().from(tabla).update(datos).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
