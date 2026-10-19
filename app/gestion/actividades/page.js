@@ -18,6 +18,7 @@ import { consulta, consultaRpc } from '@/lib/consulta';
 import { hoyLocal } from '@/lib/fechas';
 import { FRANJAS } from '@/lib/asignacionGuardias';
 import EscenarioDia from '@/components/EscenarioDia';
+import EditarActividad from './EditarActividad';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -48,6 +49,7 @@ export default function GestionActividades() {
   const [fechaEscenario, setFechaEscenario] = useState(hoyLocal());
   const [alumnosDe, setAlumnosDe] = useState({});   // id de actividad -> alumnado por grupo
   const [ausenciasPorFecha, setAusenciasPorFecha] = useState(null);
+  const [editando, setEditando] = useState(null);   // actividad abierta en el editor
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -90,8 +92,8 @@ export default function GestionActividades() {
   // De la actividad solo vienen los identificadores del alumnado, no los
   // nombres. Se piden al desplegar, no antes, para no cargar listados
   // enteros cada vez que se abre la pantalla.
-  async function cargarAlumnos(a) {
-    if (alumnosDe[a.id] || !a.alumnos_asistentes) return;
+  async function cargarAlumnos(a, forzar = false) {
+    if ((!forzar && alumnosDe[a.id]) || !a.alumnos_asistentes) return;
     const porGrupo = {};
     for (const g of Object.keys(a.alumnos_asistentes)) {
       const seleccion = a.alumnos_asistentes[g];
@@ -294,6 +296,21 @@ export default function GestionActividades() {
           ← Inicio
         </a>
       </div>
+
+      {editando && (
+        <EditarActividad
+          actividad={editando}
+          onCerrar={() => setEditando(null)}
+          onGuardada={(nueva, cambiaronHoras) => {
+            setActividades(prev => prev.map(x => (x.id === nueva.id ? nueva : x)));
+            setEditando(null);
+            aviso(cambiaronHoras && nueva.estado === 'aprobada'
+              ? '✏️ Actividad guardada. Ojo: si ya había ausencias registradas, revisa su fecha y horas en Ausencias, que no cambian solas.'
+              : '✏️ Actividad guardada', 'ok');
+            cargarAlumnos(nueva, true);
+          }}
+        />
+      )}
 
       <div style={{ maxWidth: 950, margin: '0 auto', padding: 16 }}>
 
@@ -547,6 +564,10 @@ export default function GestionActividades() {
                             ↩️ Volver a dejarla pendiente
                           </button>
                         )}
+                        <button onClick={() => setEditando(a)} disabled={procesando === a.id}
+                          style={{ padding: '7px 14px', borderRadius: 8, border: `1.5px solid ${AZUL}`, backgroundColor: 'white', color: AZUL, fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>
+                          ✏️ Editar
+                        </button>
                         <button onClick={() => borrar(a)} disabled={procesando === a.id}
                           title="Borra la actividad del todo. Para denegarla, usa Rechazar."
                           style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: 'white', color: ROJO, fontWeight: 600, fontSize: 12.5, cursor: 'pointer', marginLeft: 'auto' }}>
