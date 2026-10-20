@@ -37,8 +37,10 @@ export function SeccionMantenimiento() {
 
   useEffect(() => { cargar(); }, []);
 
+  // Solo la primera carga enseña «Cargando...». Las siguientes se hacen
+  // por debajo: si no, la lista desaparece un instante y la pantalla
+  // vuelve arriba del todo cada vez que se toca una incidencia.
   async function cargar() {
-    setCargando(true);
     const { data } = await consulta('mantenimiento').select('*').order('created_at', { ascending: false });
     const filas = data || [];
     setIncidencias(filas);
@@ -74,21 +76,26 @@ export function SeccionMantenimiento() {
     setTimeout(() => setMensaje(null), 4000);
   }
 
-  async function cambiarEstado(id, estado) {
+  // El cambio se aplica en la lista al momento, sin recargarla: así no
+  // se pierde el sitio y la resuelta desaparece de su grupo.
+  async function cambiarEstado(id, estado, comentarioDado) {
+    const coment = comentarioDado !== undefined ? comentarioDado : (comentario || null);
     setProcesando(true);
-    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'resolver', id, datos: { estado, comentario_secretario: comentario || null } }) });
+    const r = await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'resolver', id, datos: { estado, comentario_secretario: coment } }) });
     setProcesando(false);
     setAbierta(null);
     setComentario('');
-    mostrarMensaje(`✅ Incidencia marcada como "${estado}"`, 'ok');
-    cargar();
+    if (!r.ok) { mostrarMensaje('❌ No se ha podido guardar', 'error'); return; }
+    setIncidencias(prev => prev.map(i => (i.id === id ? { ...i, estado, comentario_secretario: coment } : i)));
+    mostrarMensaje(estado === 'resuelta' ? '✅ Resuelta' : '🔧 En proceso', 'ok');
   }
 
   async function eliminar(id) {
     if (!confirm('¿Eliminar esta incidencia? No se puede deshacer.')) return;
-    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'borrar', id }) });
+    const r = await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'mantenimiento', accion: 'borrar', id }) });
+    if (!r.ok) { mostrarMensaje('❌ No se ha podido eliminar', 'error'); return; }
+    setIncidencias(prev => prev.filter(i => i.id !== id));
     mostrarMensaje('🗑️ Incidencia eliminada', 'ok');
-    cargar();
   }
 
   function generarInforme() {
@@ -201,11 +208,14 @@ export function SeccionMantenimiento() {
                   {SECCIONES.map(sec => <option key={sec.id} value={sec.id}>{sec.emoji} {sec.label}</option>)}
                 </select>
               )}
+              {inc.estado !== 'resuelta' && (
+                <button onClick={() => cambiarEstado(inc.id, 'resuelta', inc.comentario_secretario || null)} disabled={procesando} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 700 }}>✅ Resuelta</button>
+              )}
               {inc.estado === 'pendiente' && (
                 <button onClick={() => { setAbierta(inc); setComentario(''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#dbeafe', color: '#1e40af', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🔧 Poner en proceso</button>
               )}
               {inc.estado === 'en_proceso' && (
-                <button onClick={() => { setAbierta(inc); setComentario(inc.comentario_secretario || ''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #6ee7b7', backgroundColor: '#d1fae5', color: '#065f46', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✅ Marcar como resuelta</button>
+                <button onClick={() => { setAbierta(inc); setComentario(inc.comentario_secretario || ''); }} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #ddd', backgroundColor: '#f8fafc', color: '#475569', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>💬 Comentario</button>
               )}
               {inc.estado === 'resuelta' && (
                 <button onClick={() => eliminar(inc.id)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #fca5a5', backgroundColor: '#fee2e2', color: '#991b1b', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>🗑️ Eliminar</button>
@@ -294,16 +304,15 @@ export function SeccionMantenimiento() {
             );
           })}
 
+          {/* Las resueltas no ocupan sitio: solo un enlace discreto al
+              final por si hace falta consultarlas o borrarlas. */}
           {terminadas.length > 0 && (
-            <div style={{ marginTop: grupos.length ? 20 : 0 }}>
-              <button onClick={() => alternarGrupo('__terminadas')} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 12, border: '1.5px solid #d1d5db', backgroundColor: '#f3f4f6', cursor: 'pointer', textAlign: 'left' }}>
-                <span style={{ fontSize: 22 }}>✅</span>
-                <span style={{ flex: 1, fontWeight: 700, fontSize: 15, color: '#065f46' }}>Terminadas</span>
-                <span style={{ padding: '3px 10px', borderRadius: 20, backgroundColor: '#d1fae5', color: '#065f46', fontWeight: 700, fontSize: 12 }}>{terminadas.length}</span>
-                <span style={{ fontSize: 14, color: '#888', width: 14 }}>{terminadasAbiertas ? '▾' : '▸'}</span>
+            <div style={{ marginTop: grupos.length ? 18 : 0, textAlign: 'center' }}>
+              <button onClick={() => alternarGrupo('__terminadas')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 13, cursor: 'pointer', fontWeight: 600, textDecoration: 'underline' }}>
+                {terminadasAbiertas ? 'Ocultar resueltas' : `Ver resueltas (${terminadas.length})`}
               </button>
               {terminadasAbiertas && (
-                <div style={{ marginTop: 8, opacity: 0.85 }}>
+                <div style={{ marginTop: 8, opacity: 0.8, textAlign: 'left' }}>
                   {terminadas.map(inc => tarjeta(inc, true))}
                 </div>
               )}
