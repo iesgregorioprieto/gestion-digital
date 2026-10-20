@@ -581,7 +581,8 @@ export async function POST(request) {
                     + `entre las familias, repartiendo según el tamaño de cada una.`
                   : `A esta hora no quedaba nadie de guardia en ${suyo}, así que `
                     + `se ha pedido a FP. Te ha tocado por rotación: de los `
-                    + `disponibles, eres quien menos guardias lleva hechas.`;
+                    + `disponibles, eres quien menos guardias lleva hechas en proporción `
+                    + `a las que tienes en tu horario.`;
               }
               return `A esta hora no quedaba nadie libre en ${suyo} ni en ninguna `
                 + `otra familia profesional. Para no dejar el grupo sin nadie, `
