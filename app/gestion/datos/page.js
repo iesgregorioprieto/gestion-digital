@@ -6,6 +6,7 @@ import { consulta } from '@/lib/consulta';
 import ConfigCurso from '@/components/ConfigCurso';
 import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
+import { leerTextoDelphos, parsearCsvDelphos, tipoFicheroDelphos, cruzarFicheros } from '@/lib/csvDelphos';
 import { indiceProfesores, buscaProfesor } from '@/lib/asignacionGuardias';
 // Nombre de sector comparable: sin tildes ni mayúsculas («HOSTELERÍA» = «Hosteleria»)
 function claveSector(s) {
@@ -59,7 +60,6 @@ export default function GestionDatos() {
   const [pgaLista, setPgaLista] = useState([]);
   const [previewPGA, setPreviewPGA] = useState(null);
   const [modalAlumnos, setModalAlumnos] = useState(false);
-  const fileRefAlumnos = useRef(null);
 
   // Horarios
   const [previewHorarios, setPreviewHorarios] = useState(null);
@@ -210,142 +210,72 @@ export default function GestionDatos() {
   }
 
   // ===== IMPORTAR ALUMNOS =====
-  const [identificando, setIdentificando] = useState(false);
-
-  /**
-   * LEER UN CSV DE DELPHOS CON SUS TILDES
-   *
-   * Delphos exporta en la codificación antigua de Windows (Latin-1). Si
-   * se lee como si fuera moderna, "María" se convierte en "Marí\uFFFDa" y
-   * ese alumno deja de reconocerse: por eso 746 de 1.226 salían como
-   * nuevos.
-   *
-   * Se prueba primero la moderna; si aparece el carácter de sustitución
-   * —la señal de que no era—, se vuelve a leer como Latin-1.
-   */
-  async function leerCsv(archivo) {
-    const bytes = await archivo.arrayBuffer();
-    const moderno = new TextDecoder('utf-8').decode(bytes);
-    if (!moderno.includes('\uFFFD')) return moderno;
-    return new TextDecoder('windows-1252').decode(bytes);
-  }
-
 
   // El resultado se queda escrito debajo de los botones: un mensaje que
   // aparece arriba y se va no sirve para comprobar nada.
   const [resultadoCarga, setResultadoCarga] = useState(null);
 
   /**
-   * PASO 1 · datAlumnos
+   * DOS FICHEROS DE DELPHOS, UNA SOLA CARGA
    *
-   * Solo pone a cada alumno que ya está su identificador de Delphos y su
-   * DNI. No crea ni borra a nadie, y se puede repetir. Hecho esto, el
-   * fichero de matrículas reconoce a todos por el identificador en vez de
-   * por el nombre, que es donde se perdía uno de cada cien.
+   * datMatriculas dice quién está y en qué grupo; datAlumnos añade el DNI.
+   * Se eligen los dos (o solo matrículas, si solo cambian grupos), se
+   * cruzan aquí por el identificador ALUMNO y, antes de guardar nada, el
+   * servidor dice qué va a cambiar: nuevos, cambios de grupo y quién estaba
+   * cargado y ya no viene. Solo al confirmar se guarda, y siempre
+   * actualizando: nunca se borra a nadie, así que el seguro escolar y las
+   * autorizaciones se conservan.
+   *
+   * Da igual en qué orden o en qué casilla se suban: cada fichero se
+   * reconoce por sus columnas.
    */
-  async function identificarAlumnos(archivo) {
+  const [ficheroMatriculas, setFicheroMatriculas] = useState(null);
+  const [ficheroAlumnos, setFicheroAlumnos] = useState(null);
+  const [revision, setRevision] = useState(null);
+
+  async function elegirFicheroDelphos(archivo) {
     if (!archivo) return;
-    setIdentificando(true);
     try {
-      const texto = await leerCsv(archivo);
-      const lineas = texto.replace(/^\uFEFF/, '').trim().split(/\r?\n/);
-      const sep = lineas[0].includes(';') ? ';' : ',';
-      const parte = l => l.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
-      const cab = parte(lineas[0]).map(c => c.toUpperCase());
-      const col = n => cab.indexOf(n);
-      if (col('ALUMNO') === -1 || col('APELLIDOS') === -1) {
-        mostrarMensaje('❌ Ese archivo no es datAlumnos: faltan las columnas ALUMNO y APELLIDOS.', 'error');
-        setIdentificando(false); return;
-      }
-      const lista = [];
-      for (let i = 1; i < lineas.length; i++) {
-        const c = parte(lineas[i]);
-        if (!c[col('ALUMNO')]) continue;
-        lista.push({
-          alumno_id: c[col('ALUMNO')],
-          apellidos: c[col('APELLIDOS')] || '',
-          nombre: col('NOMBRE') !== -1 ? (c[col('NOMBRE')] || '') : '',
-          dni: col('DNI') !== -1 ? (c[col('DNI')] || '') : '',
-        });
-      }
-      const r = await fetch('/api/alumnos', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'identificar', alumnos: lista }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        mostrarMensaje('❌ ' + (d.error || 'No se ha podido identificar'), 'error');
-      } else {
-        setResultadoCarga({
-          paso: 1,
-          bien: true,
-          titulo: `${d.identificados} alumnos identificados`,
-          lineas: [
-            `${d.por_dni} reconocidos por su DNI (sin margen de error)`,
-            `${d.por_nombre} reconocidos por apellidos y nombre`,
-            d.sin_pareja
-              ? `${d.sin_pareja} del fichero todavía no están en la aplicación: los creará el paso 2`
-              : 'Todos los del fichero estaban ya en la aplicación',
-          ],
-          aviso: 'Ahora sube datMatriculas. Ya no se puede duplicar a nadie que se haya identificado aquí.',
-          nombres: d.nombres_sin_pareja || [],
-        });
-      }
+      const { cabecera, filas } = parsearCsvDelphos(await leerTextoDelphos(archivo));
+      const tipo = tipoFicheroDelphos(cabecera);
+      const info = { nombre: archivo.name, filas };
+      if (tipo === 'matriculas') setFicheroMatriculas(info);
+      else if (tipo === 'alumnos') setFicheroAlumnos(info);
+      else mostrarMensaje('❌ «' + archivo.name + '» no es ni datMatriculas ni datAlumnos de Delphos: no tiene sus columnas.', 'error');
     } catch {
-      mostrarMensaje('❌ No se ha podido leer el archivo.', 'error');
+      mostrarMensaje('❌ No se ha podido leer «' + archivo.name + '».', 'error');
     }
-    setIdentificando(false);
   }
 
-  async function procesarCSVAlumnos(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  async function revisarImportacion() {
+    if (!ficheroMatriculas) return;
+    if (!cursoNuevo) { mostrarMensaje('❌ Falta el curso académico.', 'error'); return; }
     setProcesando(true);
-    // El mismo lector que el paso 1: prueba la codificación moderna y, si
-    // las tildes salen rotas, la antigua de Windows que usa Delphos.
-    const texto = await leerCsv(file);
-    const sep = texto.includes(';') ? ';' : ',';
-    const lineas = texto.split('\n').filter(l => l.trim());
-    const cabecera = lineas[0].split(sep).map(c => c.trim().replace(/"/g, '').toUpperCase());
-    const idx = {
-      nombre: cabecera.findIndex(c => c === 'NOMBRE'),
-      apellidos: cabecera.findIndex(c => c === 'APELLIDOS'),
-      grupo: cabecera.findIndex(c => c === 'GRUPO'),
-      numExp: cabecera.findIndex(c => c === 'NUM_EXP_CENTRO'),
-      // El identificador de Delphos. Es lo que permite reconocer a cada
-      // alumno aunque cambie de grupo, y por tanto actualizar sin borrar.
-      alumnoId: cabecera.findIndex(c => c === 'ALUMNO'),
-    };
-    if (idx.nombre === -1 || idx.apellidos === -1 || idx.grupo === -1) {
-      mostrarMensaje('❌ El CSV debe tener columnas NOMBRE, APELLIDOS y GRUPO.', 'error');
-      setProcesando(false); return;
-    }
-    const alumnosNuevos = [];
-    for (let i = 1; i < lineas.length; i++) {
-      const cols = lineas[i].split(sep).map(c => c.trim().replace(/"/g, ''));
-      const grupo = cols[idx.grupo]?.trim();
-      if (!detectarFamilia(grupo)) continue;
-      alumnosNuevos.push({
-        nombre: cols[idx.nombre] || '',
-        apellidos: cols[idx.apellidos] || '',
-        grupo,
-        num_expediente: idx.numExp !== -1 ? cols[idx.numExp] : null,
-        alumno_id: idx.alumnoId !== -1 ? (cols[idx.alumnoId] || null) : null,
-        curso_academico: cursoNuevo,
-      });
-    }
-    // También cargar grupos
-    const gruposSet = new Set();
-    alumnosNuevos.forEach(a => {
-      const fam = detectarFamilia(a.grupo);
-      if (fam) gruposSet.add(JSON.stringify({ codigo: a.grupo, familia: fam }));
+    const { lista, descartes, sinFicha } = cruzarFicheros({
+      matriculas: ficheroMatriculas.filas,
+      alumnos: ficheroAlumnos?.filas || null,
+      curso: cursoNuevo,
+      esGrupoValido: g => !!detectarFamilia(g),
     });
+    const gruposSet = new Set();
+    lista.forEach(a => gruposSet.add(JSON.stringify({ codigo: a.grupo, familia: detectarFamilia(a.grupo) })));
     const gruposNuevos = [...gruposSet].map(s => JSON.parse(s));
 
-    setPreviewAlumnos({ alumnos: alumnosNuevos, grupos: gruposNuevos });
-    setModalAlumnos(true);
+    const r = await fetch('/api/alumnos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accion: 'importar', simular: true, alumnos: lista }),
+    });
+    const d = await r.json().catch(() => ({}));
     setProcesando(false);
-    e.target.value = '';
+    if (!r.ok) {
+      mostrarMensaje(r.status === 403
+        ? '❌ Sin permisos: tu cuenta no está configurada como directivo.'
+        : '❌ No se ha podido revisar: ' + (d.error || r.status), 'error');
+      return;
+    }
+    setPreviewAlumnos({ alumnos: lista, grupos: gruposNuevos });
+    setRevision({ ...d, descartes, sinFicha, conAlumnos: !!ficheroAlumnos });
+    setModalAlumnos(true);
   }
 
   // ─── Actividades aprobadas en la PGA ───
@@ -474,7 +404,6 @@ export default function GestionDatos() {
         // NO se borra nada: se actualiza por el identificador de Delphos.
         // Un borrado se llevaría por delante los seguros escolares y las
         // autorizaciones que los tutores marcan uno a uno.
-        reemplazar: false,
         alumnos: alumnosNuevos,
         curso: cursoNuevo,
       }),
@@ -494,11 +423,10 @@ export default function GestionDatos() {
     setResultadoCarga((() => {
       const d = resumen || {};
       return {
-        paso: 2,
         bien: true,
         titulo: `${(d.actualizados || 0) + (d.creados || 0)} alumnos cargados`,
         lineas: [
-          `${d.actualizados || 0} ya estaban: solo se les ha cambiado el grupo`,
+          `${d.actualizados || 0} ya estaban: se les ha puesto al día el grupo${ficheroAlumnos ? ' y el DNI' : ''}`,
           d.adoptados ? `${d.adoptados} reconocidos por su nombre` : null,
           `${d.creados || 0} son nuevos en el centro`,
           `${gruposNuevos.length} grupos`,
@@ -522,6 +450,9 @@ export default function GestionDatos() {
         + `No se ha borrado nada: seguros y autorizaciones intactos.`;
     })(), 'ok');
     setPreviewAlumnos([]);
+    setRevision(null);
+    setFicheroMatriculas(null);
+    setFicheroAlumnos(null);
     setUltimaImportacion(fechaImport);
     try { localStorage.setItem('ultima_importacion_alumnos', fechaImport); } catch {}
     cargarStats();
@@ -1350,8 +1281,8 @@ export default function GestionDatos() {
                 {[
                   {
                     paso: 1,
-                    titulo: 'CSV de matrículas',
-                    descripcion: 'Delphos → Alumnado → Matrículas → Exportar CSV',
+                    titulo: 'Alumnado de Delphos (datMatriculas + datAlumnos)',
+                    descripcion: 'Delphos → Alumnado → Matrículas y Alumnos → Exportar CSV',
                     tab: 'alumnos',
                     emoji: '👥',
                     completado: stats.alumnos > 0,
@@ -1606,66 +1537,73 @@ export default function GestionDatos() {
         {vistaTab === 'alumnos' && (
           <div>
             <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.07)' }}>
-              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>📊 Subir CSV de matrículas de Delphos</div>
-              <div style={{ fontSize: 13, color: '#666', marginBottom: 6, lineHeight: 1.5 }}>
-                Este archivo carga <strong>simultáneamente</strong> los grupos y los alumnos del centro.
+              <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 6 }}>📊 Alumnado y grupos desde Delphos</div>
+              <div style={{ fontSize: 13, color: '#666', marginBottom: 12, lineHeight: 1.5 }}>
+                Sube los <strong>dos ficheros</strong> que exporta Delphos. Se cruzan por el número de
+                alumno, se te enseña qué va a cambiar y solo al confirmar se guarda.
+                <strong> Nunca se borra a nadie:</strong> el seguro escolar y las autorizaciones se conservan.
               </div>
 
-              {/* Las instrucciones escritas aquí, para no tener que
-                  acordarse de nada el curso que viene. */}
-              <div style={{ fontSize: 12.5, backgroundColor: '#f0f7ff', padding: '12px 14px', borderRadius: 8, color: '#1e3a8a', marginBottom: 14, lineHeight: 1.6 }}>
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>🖥️ Qué fichero subir, según el caso</div>
-
-                <div style={{ marginBottom: 10, padding: '8px 10px', backgroundColor: 'white', borderRadius: 7, border: '1px solid #bfdbfe' }}>
-                  <div style={{ fontWeight: 800 }}>🔄 Actualizar las listas durante el curso</div>
-                  <div>
-                    Solo el <strong>2º · datMatriculas</strong> — Delphos › Alumnado › Matrículas › Exportar.
-                    Cambia de grupo a quien haya cambiado y añade a los que se han
-                    matriculado. <strong>No hace falta el 1º.</strong> Es lo normal: se
-                    puede hacer tantas veces como haga falta.
-                  </div>
+              <div style={{ fontSize: 12.5, backgroundColor: '#f0f7ff', padding: '10px 14px', borderRadius: 8, color: '#1e3a8a', marginBottom: 14, lineHeight: 1.6 }}>
+                <div><strong>datMatriculas</strong> — Delphos › Alumnado › Matrículas › Exportar. <strong>Obligatorio:</strong> dice quién está y en qué grupo.</div>
+                <div><strong>datAlumnos</strong> — Delphos › Alumnado › Alumnos › Exportar. Recomendado: añade el DNI.</div>
+                <div style={{ marginTop: 6, fontSize: 11.5 }}>
+                  Durante el curso, si solo han cambiado grupos o hay matrículas nuevas, basta con datMatriculas.
+                  Las matrículas anuladas, trasladadas y con título obtenido no se cargan.
                 </div>
-
-                <div style={{ marginBottom: 10, padding: '8px 10px', backgroundColor: 'white', borderRadius: 7, border: '1px solid #bfdbfe' }}>
-                  <div style={{ fontWeight: 800 }}>🎓 Empezar un curso nuevo, o si faltan identificadores</div>
-                  <div>
-                    Los dos, en orden. Primero <strong>1º · datAlumnos</strong> — Delphos ›
-                    Alumnado › Alumnos › Exportar —, que trae el DNI y reconoce a los que ya
-                    están; no crea ni borra a nadie. Después el <strong>2º · datMatriculas</strong>.
-                  </div>
-                </div>
-
-                <div style={{ fontSize: 11.5, color: '#1e3a8a', marginBottom: 8 }}>
-                  Cómo saber si faltan identificadores: si al subir el 2º salen muchos
-                  como «nuevos» que ya estaban, sube el 1º y repite el 2º.
-                </div>
-
-                <div style={{ color: '#7f1d1d', fontWeight: 600 }}>
-                  ⚠️ El seguro escolar y las autorizaciones NO se tocan nunca.
-                  Aun así, haz antes la copia en Gestión de Autorizaciones.
+                <div style={{ color: '#7f1d1d', fontWeight: 600, marginTop: 6 }}>
+                  ⚠️ Haz antes la copia de seguridad.
                 </div>
               </div>
 
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 18px', borderRadius: 10, border: '2.5px dashed #86efac', backgroundColor: '#f0fdf4', color: '#166534', fontWeight: 700, fontSize: 14, cursor: 'pointer', marginBottom: 10 }}>
-                <span style={{ fontSize: 26 }}>🪪</span>
-                <div>
-                  <div>{identificando ? '⏳ Identificando…' : '1º · Subir datAlumnos (identificar)'}</div>
-                  <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.75, marginTop: 2 }}>
-                    Con DNI. Solo reconoce; no crea ni borra.
-                  </div>
+              {[
+                { clave: 'matriculas', fichero: ficheroMatriculas, quitar: () => setFicheroMatriculas(null),
+                  titulo: 'datMatriculas', icono: '📊', color: '#1e40af', fondo: '#f0f7ff', borde: '#93c5fd',
+                  detalle: f => `${f.filas.length} matrículas` },
+                { clave: 'alumnos', fichero: ficheroAlumnos, quitar: () => setFicheroAlumnos(null),
+                  titulo: 'datAlumnos', icono: '🪪', color: '#166534', fondo: '#f0fdf4', borde: '#86efac',
+                  detalle: f => `${f.filas.filter(x => x.ALUMNO).length} fichas` },
+              ].map(c => (
+                <div key={c.clave} style={{ marginBottom: 10 }}>
+                  {c.fichero ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 10,
+                      border: `2px solid ${c.borde}`, backgroundColor: c.fondo, color: c.color }}>
+                      <span style={{ fontSize: 24 }}>✅</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 700, fontSize: 14 }}>{c.titulo}</div>
+                        <div style={{ fontSize: 12, opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.fichero.nombre} · {c.detalle(c.fichero)}
+                        </div>
+                      </div>
+                      <button type="button" onClick={c.quitar} disabled={procesando}
+                        style={{ border: 'none', background: 'none', color: c.color, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+                        Cambiar
+                      </button>
+                    </div>
+                  ) : (
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 18px', borderRadius: 10,
+                      border: `2.5px dashed ${c.borde}`, backgroundColor: c.fondo, color: c.color, fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                      <span style={{ fontSize: 26 }}>{c.icono}</span>
+                      <div>Elegir {c.titulo}{c.clave === 'alumnos' ? ' (recomendado)' : ''}</div>
+                      <input type="file" accept=".csv,.txt" multiple disabled={procesando}
+                        onChange={async e => {
+                          // Si se eligen los dos a la vez en cualquier casilla,
+                          // cada uno va a su sitio por sus columnas.
+                          for (const f of Array.from(e.target.files || [])) await elegirFicheroDelphos(f);
+                          e.target.value = '';
+                        }}
+                        style={{ display: 'none' }} />
+                    </label>
+                  )}
                 </div>
-                <input type="file" accept=".csv,.txt" disabled={identificando}
-                  onChange={e => { identificarAlumnos(e.target.files?.[0]); e.target.value = ''; }}
-                  style={{ display: 'none' }} />
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '16px 20px', borderRadius: 10, border: '2.5px dashed #93c5fd', backgroundColor: '#f0f7ff', color: '#1e40af', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                <span style={{ fontSize: 28 }}>📊</span>
-                <div>
-                  <div>{procesando ? '⏳ Procesando...' : '2º · Subir datMatriculas (grupos)'}</div>
-                  <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>Formato: .csv exportado desde Delphos</div>
-                </div>
-                <input ref={fileRefAlumnos} type="file" accept=".csv,.txt" onChange={procesarCSVAlumnos} style={{ display: 'none' }} disabled={procesando} />
-              </label>
+              ))}
+
+              <button type="button" onClick={revisarImportacion} disabled={!ficheroMatriculas || procesando}
+                style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', marginTop: 4,
+                  backgroundColor: ficheroMatriculas ? azul : '#cbd5e1', color: 'white', fontWeight: 800, fontSize: 15,
+                  cursor: ficheroMatriculas ? 'pointer' : 'not-allowed' }}>
+                {procesando ? '⏳ Revisando…' : ficheroMatriculas ? '🔍 Revisar cambios antes de cargar' : 'Elige al menos datMatriculas'}
+              </button>
 
               {/* El resultado se queda aquí, debajo de los botones, hasta
                   que se haga otra carga. Es lo único que permite comprobar
@@ -1674,7 +1612,7 @@ export default function GestionDatos() {
                 <div style={{ marginTop: 14, padding: '14px 16px', borderRadius: 10,
                   backgroundColor: '#f0fdf4', border: '1.5px solid #86efac' }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: '#166534' }}>
-                    ✅ Paso {resultadoCarga.paso} terminado — {resultadoCarga.titulo}
+                    ✅ Carga terminada — {resultadoCarga.titulo}
                   </div>
                   <ul style={{ margin: '8px 0 0', paddingLeft: 20, fontSize: 13, color: '#166534', lineHeight: 1.7 }}>
                     {resultadoCarga.lineas.map((l, i) => <li key={i}>{l}</li>)}
@@ -2016,32 +1954,72 @@ export default function GestionDatos() {
         </div>
       )}
 
-      {/* MODAL PREVIEW ALUMNOS */}
-      {modalAlumnos && (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
-          <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 24, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 6 }}>👥 Vista previa</div>
-            <div style={{ fontSize: 13, color: '#666', marginBottom: 16 }}>
-              <strong>{previewAlumnos.alumnos?.length}</strong> alumnos y <strong>{previewAlumnos.grupos?.length}</strong> grupos detectados para el curso <strong>{cursoNuevo}</strong>.
-            </div>
-            <div style={{ maxHeight: 300, overflowY: 'auto', marginBottom: 16 }}>
-              {previewAlumnos.alumnos?.slice(0, 30).map((a, i) => (
-                <div key={i} style={{ padding: '6px 10px', borderRadius: 6, backgroundColor: '#f8f8f8', marginBottom: 4, fontSize: 13, display: 'flex', justifyContent: 'space-between' }}>
-                  <span><strong>{a.apellidos}</strong>, {a.nombre}</span>
-                  <span style={{ fontSize: 11, color: '#888', backgroundColor: '#e0e7ff', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>{a.grupo}</span>
+      {/* REVISIÓN ANTES DE CARGAR EL ALUMNADO */}
+      {modalAlumnos && revision && (() => {
+        const lista = (titulo, items, color, render) => items.length > 0 && (
+          <details style={{ marginBottom: 8, fontSize: 13 }}>
+            <summary style={{ cursor: 'pointer', fontWeight: 700, color }}>{titulo} ({items.length})</summary>
+            <div style={{ maxHeight: 220, overflowY: 'auto', marginTop: 6 }}>
+              {items.map((x, i) => (
+                <div key={i} style={{ padding: '5px 10px', borderRadius: 6, backgroundColor: '#f8f8f8', marginBottom: 3, fontSize: 12.5 }}>
+                  {render(x)}
                 </div>
               ))}
-              {previewAlumnos.alumnos?.length > 30 && <div style={{ textAlign: 'center', color: '#888', fontSize: 12, padding: 8 }}>...y {previewAlumnos.alumnos.length - 30} más</div>}
             </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={confirmarAlumnos} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
-                {procesando ? '⏳ Importando...' : `✅ Importar ${previewAlumnos.alumnos?.length} alumnos`}
-              </button>
-              <button onClick={() => { setModalAlumnos(false); setPreviewAlumnos([]); }} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+          </details>
+        );
+        const cifra = (n, texto, fondo, color) => (
+          <div style={{ flex: '1 1 110px', padding: '10px 8px', borderRadius: 9, backgroundColor: fondo, color, textAlign: 'center' }}>
+            <div style={{ fontSize: 22, fontWeight: 800 }}>{n}</div>
+            <div style={{ fontSize: 11.5, fontWeight: 600 }}>{texto}</div>
+          </div>
+        );
+        const d = revision.descartes || {};
+        return (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+            <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 22, maxWidth: 600, width: '100%', maxHeight: '88vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+              <div style={{ fontWeight: 800, fontSize: 16, color: azul, marginBottom: 4 }}>🔍 Qué va a cambiar</div>
+              <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
+                Curso <strong>{cursoNuevo}</strong> · {previewAlumnos.alumnos?.length} alumnos en {previewAlumnos.grupos?.length} grupos.
+                Todavía no se ha guardado nada.
+              </div>
+
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                {cifra(revision.nuevos.length, 'nuevos', '#ecfdf5', '#065f46')}
+                {cifra(revision.cambian.length, 'cambian de grupo', '#eff6ff', '#1e40af')}
+                {cifra(revision.iguales, 'sin cambios', '#f8fafc', '#475569')}
+                {cifra(revision.no_aparecen.length, 'ya no vienen', '#fff7ed', '#9a3412')}
+              </div>
+
+              {lista('🆕 Nuevos en el centro', revision.nuevos, '#065f46', x => <><strong>{x.nombre}</strong> · {x.grupo}</>)}
+              {lista('🔄 Cambian de grupo', revision.cambian, '#1e40af', x => <><strong>{x.nombre}</strong> · {x.de} → {x.a}</>)}
+              {lista('📤 Estaban cargados y ya no vienen en el fichero', revision.no_aparecen, '#9a3412', x => <><strong>{x.nombre}</strong> · {x.grupo}</>)}
+              {revision.no_aparecen.length > 0 && (
+                <div style={{ fontSize: 11.5, color: '#9a3412', margin: '-2px 0 10px' }}>
+                  No se borran: se quedan como están, con su seguro y sus autorizaciones. Revisa si son bajas o traslados.
+                </div>
+              )}
+              {lista('⚠️ Matrícula vigente sin grupo: no se cargan', d.sinGrupo || [], '#b45309', x => x)}
+              {lista('ℹ️ Grupos modulares u otros que no se cargan', d.otrosGrupos || [], '#64748b', x => x)}
+
+              <div style={{ fontSize: 12, color: '#64748b', lineHeight: 1.6, margin: '10px 0 16px', padding: '8px 10px', backgroundColor: '#f8fafc', borderRadius: 7 }}>
+                Descartadas del fichero: {d.anuladas || 0} anuladas · {d.trasladadas || 0} trasladadas · {d.tituladas || 0} con título obtenido.
+                {revision.conAlumnos
+                  ? <> DNI: {revision.dni_nuevos} se añaden o corrigen.{revision.sinFicha ? ` ${revision.sinFicha} matrículas sin ficha en datAlumnos.` : ''}</>
+                  : <> Sin datAlumnos: no se actualiza ningún DNI.</>}
+                {revision.adoptados ? ` ${revision.adoptados} reconocidos por DNI o nombre (no tenían número de Delphos).` : ''}
+              </div>
+
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button onClick={confirmarAlumnos} disabled={procesando} style={{ flex: 1, padding: 12, borderRadius: 9, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                  {procesando ? '⏳ Cargando...' : '✅ Confirmar y cargar'}
+                </button>
+                <button onClick={() => { setModalAlumnos(false); setPreviewAlumnos([]); setRevision(null); }} disabled={procesando} style={{ padding: '12px 18px', borderRadius: 9, border: '1.5px solid #ddd', backgroundColor: '#f5f5f5', color: '#555', fontWeight: 600, cursor: 'pointer' }}>Cancelar</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
       {/* MODAL GUARDIAS */}
       {modalGuardias && previewGuardias.length > 0 && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>

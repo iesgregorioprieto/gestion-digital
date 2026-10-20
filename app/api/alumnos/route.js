@@ -408,7 +408,8 @@ export async function POST(request) {
         .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
       const ndni = t => (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre');
+      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre, grupo, curso_academico');
+      const existentePorId = new Map(existentes.map(a => [a.id, a]));
       const porIdDelphos = new Map();
       const porDni = new Map();
       const porNombre = new Map();
@@ -448,7 +449,7 @@ export async function POST(request) {
 
         if (yaEsta) {
           if (!porIdDelphos.has(String(a.alumno_id))) adoptados++;
-          aActualizar.push({
+          const fila = {
             id: yaEsta,
             nombre: a.nombre,
             apellidos: a.apellidos,
@@ -456,9 +457,15 @@ export async function POST(request) {
             num_expediente: a.num_expediente,
             curso_academico: a.curso_academico,
             alumno_id: String(a.alumno_id),
-          });
+          };
+          // El DNI solo viaja si el fichero lo trae: un hueco en el
+          // fichero no debe borrar el que ya estaba guardado.
+          if (ndni(a.dni)) fila.dni = a.dni;
+          aActualizar.push(fila);
         } else {
-          aCrear.push(a);
+          const nuevo = { ...a };
+          if (!ndni(nuevo.dni)) delete nuevo.dni;
+          aCrear.push(nuevo);
         }
       }
 
@@ -476,17 +483,63 @@ export async function POST(request) {
       aActualizar.length = 0; aActualizar.push(...unicosActualizar);
       aCrear.length = 0; aCrear.push(...unicosCrear);
 
-      const LOTE = 500;
-      for (let i = 0; i < aActualizar.length; i += LOTE) {
-        const { error } = await supa().from('alumnos')
-          .upsert(aActualizar.slice(i, i + LOTE), { onConflict: 'id' });
-        if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
-        actualizados += Math.min(LOTE, aActualizar.length - i);
+      /**
+       * VISTA PREVIA: QUÉ VA A CAMBIAR, SIN TOCAR NADA.
+       *
+       * La pantalla la pide antes de importar para que se vea quién es
+       * nuevo, quién cambia de grupo y quién estaba cargado y ya no viene
+       * en el fichero. Esos últimos no se borran: se enseñan para que se
+       * revisen (bajas, traslados, títulos).
+       */
+      if (cuerpo.simular) {
+        const nombreDe = a => `${a.apellidos}, ${a.nombre}`;
+        const cambian = [];
+        let iguales = 0;
+        let dniNuevos = 0;
+        aActualizar.forEach(f => {
+          const antes = existentePorId.get(f.id) || {};
+          if (f.dni && ndni(f.dni) !== ndni(antes.dni)) dniNuevos++;
+          if ((antes.grupo || '') !== f.grupo) cambian.push({ nombre: nombreDe(f), de: antes.grupo || '—', a: f.grupo });
+          else iguales++;
+        });
+        const tocados = new Set(aActualizar.map(f => f.id));
+        const cursoFichero = alumnos.find(a => a.curso_academico)?.curso_academico;
+        const noAparecen = existentes
+          .filter(a => !tocados.has(a.id) && (!cursoFichero || a.curso_academico === cursoFichero))
+          .map(a => ({ nombre: nombreDe(a), grupo: a.grupo || '—' }));
+        const orden = (x, y) => x.nombre.localeCompare(y.nombre, 'es');
+        return Response.json({
+          ok: true,
+          simulacion: true,
+          nuevos: aCrear.map(a => ({ nombre: nombreDe(a), grupo: a.grupo })).sort(orden),
+          cambian: cambian.sort(orden),
+          iguales,
+          adoptados,
+          dni_nuevos: dniNuevos,
+          no_aparecen: noAparecen.sort(orden),
+          sin_identificador: sinId.length,
+        });
       }
-      for (let i = 0; i < aCrear.length; i += LOTE) {
-        const { error } = await supa().from('alumnos').insert(aCrear.slice(i, i + LOTE));
-        if (error) return Response.json({ error: error.message, creados }, { status: 500 });
-        creados += Math.min(LOTE, aCrear.length - i);
+
+      const LOTE = 500;
+      // Los que traen DNI y los que no van en órdenes distintas: en una
+      // misma orden, a la fila que no lo trae se le pondría el DNI en blanco.
+      const conDni = aActualizar.filter(f => f.dni);
+      const sinDni = aActualizar.filter(f => !f.dni);
+      for (const tanda of [conDni, sinDni]) {
+        for (let i = 0; i < tanda.length; i += LOTE) {
+          const { error } = await supa().from('alumnos')
+            .upsert(tanda.slice(i, i + LOTE), { onConflict: 'id' });
+          if (error) return Response.json({ error: error.message, actualizados }, { status: 500 });
+          actualizados += Math.min(LOTE, tanda.length - i);
+        }
+      }
+      for (const tanda of [aCrear.filter(a => a.dni), aCrear.filter(a => !a.dni)]) {
+        for (let i = 0; i < tanda.length; i += LOTE) {
+          const { error } = await supa().from('alumnos').insert(tanda.slice(i, i + LOTE));
+          if (error) return Response.json({ error: error.message, creados }, { status: 500 });
+          creados += Math.min(LOTE, tanda.length - i);
+        }
       }
 
       // Los que llegan sin identificador se insertan como antes: no hay
