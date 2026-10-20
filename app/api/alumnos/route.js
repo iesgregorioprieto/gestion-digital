@@ -5,6 +5,7 @@ import { claveGrupo } from '@/lib/grupos';
 import { mismoGrupo, resolverGrupo } from '@/lib/grupos';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { hoyLocal } from '@/lib/fechas';
 
 /**
  * DATOS DE ALUMNADO
@@ -42,11 +43,17 @@ async function sesionDe(request) {
  * desaparecían del desplegable: sus tutores no podían marcar ninguna
  * autorización porque su grupo no aparecía por ninguna parte.
  */
-async function todasLasFilas(columnas) {
+/**
+ * `soloActivos`: deja fuera a los dados de baja (los que dejaron de venir
+ * en el fichero de Delphos). Para listas, recuentos y desplegables. La
+ * importación los necesita a todos, para reconocerlos si vuelven.
+ */
+async function todasLasFilas(columnas, { soloActivos = false } = {}) {
   let filas = [];
   for (let desde = 0; ; desde += 1000) {
-    const { data, error } = await supa()
-      .from('alumnos').select(columnas).range(desde, desde + 999);
+    let q = supa().from('alumnos').select(columnas);
+    if (soloActivos) q = q.eq('baja', false);
+    const { data, error } = await q.range(desde, desde + 999);
     if (error || !data || data.length === 0) break;
     filas = filas.concat(data);
     if (data.length < 1000) break;
@@ -122,7 +129,8 @@ export async function GET(request) {
   // Resumen: solo cifras, sin datos personales
   if (resumen) {
     const filas = await todasLasFilas(
-      'grupo, auth_imagenes, auth_salidas, auth_actividades, auth_informar_progeni, auth_imagenes_mayor');
+      'grupo, auth_imagenes, auth_salidas, auth_actividades, auth_informar_progeni, auth_imagenes_mayor',
+      { soloActivos: true });
 
     const conRestricciones = filas.filter(a =>
       a.auth_imagenes === false || a.auth_salidas === false || a.auth_actividades === false ||
@@ -139,7 +147,7 @@ export async function GET(request) {
   // Lista de grupos: no contiene datos personales
   // Recuento por grupo, para el panel de datos del centro
   if (url.searchParams.get('recuento') === '1') {
-    return Response.json({ alumnos: await todasLasFilas('id, grupo') });
+    return Response.json({ alumnos: await todasLasFilas('id, grupo', { soloActivos: true }) });
   }
 
   // Búsqueda: siempre acotada, nunca el listado completo del centro
@@ -152,12 +160,12 @@ export async function GET(request) {
   // consultar; si no, el tutor no ve a su propia tutoría.
   let grupoReal = grupo;
   if (grupo) {
-    const todos = await todasLasFilas('grupo');
+    const todos = await todasLasFilas('grupo', { soloActivos: true });
     const existentes = [...new Set(todos.map(a => a.grupo).filter(Boolean))];
     grupoReal = resolverGrupo(grupo, existentes) || grupo;
   }
 
-  let consulta = supa().from('alumnos').select('*');
+  let consulta = supa().from('alumnos').select('*').eq('baja', false);
   if (grupo)          consulta = consulta.eq('grupo', grupoReal);
   else if (apellidos) consulta = consulta.ilike('apellidos', `%${apellidos}%`);
 
@@ -408,7 +416,7 @@ export async function POST(request) {
         .toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
       const ndni = t => (t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
-      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre, grupo, curso_academico');
+      const existentes = await todasLasFilas('id, alumno_id, dni, apellidos, nombre, grupo, curso_academico, baja');
       const existentePorId = new Map(existentes.map(a => [a.id, a]));
       const porIdDelphos = new Map();
       const porDni = new Map();
@@ -457,6 +465,9 @@ export async function POST(request) {
             num_expediente: a.num_expediente,
             curso_academico: a.curso_academico,
             alumno_id: String(a.alumno_id),
+            // Si estaba de baja y vuelve a venir en el fichero, vuelve a estar.
+            baja: false,
+            baja_fecha: null,
           };
           // El DNI solo viaja si el fichero lo trae: un hueco en el
           // fichero no debe borrar el que ya estaba guardado.
@@ -491,6 +502,32 @@ export async function POST(request) {
        * en el fichero. Esos últimos no se borran: se enseñan para que se
        * revisen (bajas, traslados, títulos).
        */
+      /**
+       * QUIÉN SE DA DE BAJA: estaba cargado en este curso, no estaba ya de
+       * baja y no viene en el fichero. No se borra: se marca, deja de salir
+       * en las listas y conserva su seguro y sus autorizaciones por si
+       * vuelve (al volver a venir en el fichero, se le quita la baja).
+       */
+      const cursoFichero = alumnos.find(a => a.curso_academico)?.curso_academico;
+      const tocados = new Set(aActualizar.map(f => f.id));
+      function quienesSeDanDeBaja() {
+        return existentes.filter(a => !tocados.has(a.id) && !a.baja
+          && (!cursoFichero || a.curso_academico === cursoFichero));
+      }
+
+      /**
+       * GRUPOS QUE SE QUEDAN SIN NADIE: están en la lista de grupos de este
+       * curso pero ningún alumno del fichero va a ellos (p. ej. «ESO-1»
+       * sin letra, de una carga antigua). Solo se quitan de la lista de
+       * grupos; no se toca a ningún alumno.
+       */
+      const clavesDelFichero = new Set(alumnos.map(a => claveGrupo(a.grupo || '')));
+      async function gruposQueSeQuedanVacios() {
+        if (!cursoFichero) return [];
+        const { data } = await supa().from('grupos').select('codigo').eq('curso_academico', cursoFichero);
+        return (data || []).map(g => g.codigo).filter(c => c && !clavesDelFichero.has(claveGrupo(c))).sort();
+      }
+
       if (cuerpo.simular) {
         const nombreDe = a => `${a.apellidos}, ${a.nombre}`;
         const cambian = [];
@@ -502,11 +539,9 @@ export async function POST(request) {
           if ((antes.grupo || '') !== f.grupo) cambian.push({ nombre: nombreDe(f), de: antes.grupo || '—', a: f.grupo });
           else iguales++;
         });
-        const tocados = new Set(aActualizar.map(f => f.id));
-        const cursoFichero = alumnos.find(a => a.curso_academico)?.curso_academico;
-        const noAparecen = existentes
-          .filter(a => !tocados.has(a.id) && (!cursoFichero || a.curso_academico === cursoFichero))
+        const noAparecen = quienesSeDanDeBaja()
           .map(a => ({ nombre: nombreDe(a), grupo: a.grupo || '—' }));
+        const vuelven = aActualizar.filter(f => existentePorId.get(f.id)?.baja).length;
         const orden = (x, y) => x.nombre.localeCompare(y.nombre, 'es');
         return Response.json({
           ok: true,
@@ -517,6 +552,8 @@ export async function POST(request) {
           adoptados,
           dni_nuevos: dniNuevos,
           no_aparecen: noAparecen.sort(orden),
+          vuelven,
+          grupos_vacios: await gruposQueSeQuedanVacios(),
           sin_identificador: sinId.length,
         });
       }
@@ -542,6 +579,23 @@ export async function POST(request) {
         }
       }
 
+      // Bajas: se marcan, no se borran
+      const deBaja = quienesSeDanDeBaja().map(a => a.id);
+      for (let i = 0; i < deBaja.length; i += LOTE) {
+        const { error } = await supa().from('alumnos')
+          .update({ baja: true, baja_fecha: hoyLocal() }).in('id', deBaja.slice(i, i + LOTE));
+        if (error) return Response.json({ error: 'Marcar bajas: ' + error.message, actualizados, creados }, { status: 500 });
+      }
+
+      // Grupos que se han quedado sin nadie: fuera de la lista de grupos
+      const vacios = await gruposQueSeQuedanVacios();
+      let gruposQuitados = 0;
+      if (vacios.length) {
+        const { error } = await supa().from('grupos').delete()
+          .eq('curso_academico', cursoFichero).in('codigo', vacios);
+        if (!error) gruposQuitados = vacios.length;
+      }
+
       // Los que llegan sin identificador se insertan como antes: no hay
       // forma de saber si ya estaban.
       for (let i = 0; i < sinId.length; i += LOTE) {
@@ -557,6 +611,8 @@ export async function POST(request) {
         creados,
         sin_identificador: sinId.length,
         insertados: actualizados + creados,
+        bajas: deBaja.length,
+        grupos_quitados: gruposQuitados,
       });
     }
 

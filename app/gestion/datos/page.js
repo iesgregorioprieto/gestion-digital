@@ -429,6 +429,8 @@ export default function GestionDatos() {
           `${d.actualizados || 0} ya estaban: se les ha puesto al día el grupo${ficheroAlumnos ? ' y el DNI' : ''}`,
           d.adoptados ? `${d.adoptados} reconocidos por su nombre` : null,
           `${d.creados || 0} son nuevos en el centro`,
+          d.bajas ? `${d.bajas} pasan a baja: ya no salen en las listas (no se ha borrado nada)` : null,
+          d.grupos_quitados ? `${d.grupos_quitados} grupos sin alumnos quitados de la lista` : null,
           `${gruposNuevos.length} grupos`,
         ].filter(Boolean),
         aviso: 'El seguro escolar y las autorizaciones no se han tocado. Compruébalo en Gestión de Autorizaciones.',
@@ -458,11 +460,17 @@ export default function GestionDatos() {
     cargarStats();
   }
 
-  const gruposPorFamilia = grupos.reduce((acc, g) => {
-    if (!acc[g.familia]) acc[g.familia] = [];
-    acc[g.familia].push(g.codigo);
-    return acc;
-  }, {});
+  // La familia sale del propio código (ESO-, BTO-, GM-…): la tabla de
+  // grupos no la trae en esta consulta y salían todos como «undefined».
+  // Solo los del curso actual, para no mezclar restos del año pasado.
+  const gruposPorFamilia = grupos
+    .filter(g => !stats.cursoActual || g.curso_academico === stats.cursoActual)
+    .reduce((acc, g) => {
+      const fam = detectarFamilia(g.codigo) || 'Otros';
+      if (!acc[fam]) acc[fam] = [];
+      acc[fam].push(g.codigo);
+      return acc;
+    }, {});
 
   // ═══════════════════════════════════════════════════════════════
   // PARSER HTML DE DELPHOS — Extrae horario de un profesor
@@ -1644,7 +1652,7 @@ export default function GestionDatos() {
                 <div style={{ fontWeight: 800, fontSize: 15, color: azul, marginBottom: 12 }}>
                   📚 Grupos cargados — curso {stats.cursoActual} ({stats.grupos} grupos · {stats.alumnos} alumnos){ultimaImportacion ? ` · Actualizado: ${ultimaImportacion}` : ''}
                 </div>
-                {Object.entries(gruposPorFamilia).sort().map(([familia, gs]) => (
+                {Object.entries(gruposPorFamilia).sort(([x], [y]) => { const o = Object.keys(FAMILIAS); const i = k => (o.indexOf(k) + 1) || 99; return i(x) - i(y); }).map(([familia, gs]) => (
                   <div key={familia} style={{ marginBottom: 12 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: '#888', marginBottom: 6, textTransform: 'uppercase' }}>{FAMILIAS[familia] || familia} ({gs.length})</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -1988,17 +1996,19 @@ export default function GestionDatos() {
                 {cifra(revision.nuevos.length, 'nuevos', '#ecfdf5', '#065f46')}
                 {cifra(revision.cambian.length, 'cambian de grupo', '#eff6ff', '#1e40af')}
                 {cifra(revision.iguales, 'sin cambios', '#f8fafc', '#475569')}
-                {cifra(revision.no_aparecen.length, 'ya no vienen', '#fff7ed', '#9a3412')}
+                {cifra(revision.no_aparecen.length, 'pasan a baja', '#fff7ed', '#9a3412')}
               </div>
 
               {lista('🆕 Nuevos en el centro', revision.nuevos, '#065f46', x => <><strong>{x.nombre}</strong> · {x.grupo}</>)}
               {lista('🔄 Cambian de grupo', revision.cambian, '#1e40af', x => <><strong>{x.nombre}</strong> · {x.de} → {x.a}</>)}
-              {lista('📤 Estaban cargados y ya no vienen en el fichero', revision.no_aparecen, '#9a3412', x => <><strong>{x.nombre}</strong> · {x.grupo}</>)}
+              {lista('📤 Ya no vienen en el fichero: pasan a baja', revision.no_aparecen, '#9a3412', x => <><strong>{x.nombre}</strong> · {x.grupo}</>)}
               {revision.no_aparecen.length > 0 && (
                 <div style={{ fontSize: 11.5, color: '#9a3412', margin: '-2px 0 10px' }}>
-                  No se borran: se quedan como están, con su seguro y sus autorizaciones. Revisa si son bajas o traslados.
+                  No se borran: dejan de salir en las listas de los tutores y conservan su seguro y sus
+                  autorizaciones. Si vuelven a venir en un fichero, se les quita la baja solos.
                 </div>
               )}
+              {lista('🗂️ Grupos que se quedan sin alumnos: se quitan de la lista de grupos', revision.grupos_vacios || [], '#64748b', x => x)}
               {lista('⚠️ Matrícula vigente sin grupo: no se cargan', d.sinGrupo || [], '#b45309', x => x)}
               {lista('ℹ️ Grupos modulares u otros que no se cargan', d.otrosGrupos || [], '#64748b', x => x)}
 
@@ -2008,6 +2018,7 @@ export default function GestionDatos() {
                   ? <> DNI: {revision.dni_nuevos} se añaden o corrigen.{revision.sinFicha ? ` ${revision.sinFicha} matrículas sin ficha en datAlumnos.` : ''}</>
                   : <> Sin datAlumnos: no se actualiza ningún DNI.</>}
                 {revision.adoptados ? ` ${revision.adoptados} reconocidos por DNI o nombre (no tenían número de Delphos).` : ''}
+                {revision.vuelven ? ` ${revision.vuelven} estaban de baja y vuelven.` : ''}
               </div>
 
               <div style={{ display: 'flex', gap: 10 }}>
