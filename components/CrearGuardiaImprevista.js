@@ -24,11 +24,16 @@ const ETQ = { libre: ['Libre', '#166534', '#f0fdf4'], ocupado: ['Ya cubriendo ot
   en_clase: ['Tiene clase', '#64748b', '#f8fafc'], ausente: ['Ausente hoy', '#b91c1c', '#fef2f2'],
   de_baja: ['De baja', '#b91c1c', '#fef2f2'], sin_identificar: ['Sin identificar', '#94a3b8', '#f8fafc'] };
 
-export default function CrearGuardiaImprevista({ fecha, onCreada }) {
+/**
+ * `inicial` (opcional) — cuando se abre desde el aviso rojo «Sin cubrir»
+ * de jefatura: trae la hora, el grupo, la tarea y quién falta, para que la
+ * guardia quede enlazada a esa ausencia y deje de salir en rojo.
+ */
+export default function CrearGuardiaImprevista({ fecha, onCreada, inicial = null, etiqueta = null }) {
   const [abierto, setAbierto] = useState(false);
-  const [hora, setHora] = useState('');
-  const [grupo, setGrupo] = useState('');
-  const [aula, setAula] = useState('');
+  const [hora, setHora] = useState(inicial?.hora || '');
+  const [grupo, setGrupo] = useState(inicial?.grupo || '');
+  const [aula, setAula] = useState(inicial?.aula || '');
   const [sector, setSector] = useState('');
   const [datos, setDatos] = useState(null);
   const [elegido, setElegido] = useState(null);
@@ -36,12 +41,12 @@ export default function CrearGuardiaImprevista({ fecha, onCreada }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!hora) { setDatos(null); return; }
+    if (!hora || !abierto) { setDatos(null); return; }
     setDatos(null); setElegido(null); setError('');
     fetch(`/api/guardias/libres?fecha=${fecha}&hora=${hora}`).then(r => r.json())
       .then(d => { if (!d.error) setDatos(d); else setError('No se ha podido consultar quién está libre.'); })
       .catch(() => setError('No se ha podido consultar quién está libre.'));
-  }, [hora, fecha]);
+  }, [hora, fecha, abierto]);
 
   async function crear() {
     if (!hora || !elegido) return;
@@ -50,14 +55,20 @@ export default function CrearGuardiaImprevista({ fecha, onCreada }) {
       const r = await fetch('/api/apoyos', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion: 'asignar', datos: {
           fecha, hora, profesor_id: elegido.profesorId, sector_apoyo: elegido.sector,
-          sector_destino: sector || elegido.sector, grupo: grupo.trim() || null, aula: aula.trim() || null,
+          sector_destino: inicial?.sectorDestino || sector || elegido.sector,
+          grupo: grupo.trim() || null, aula: aula.trim() || null,
           estado: 'pendiente', tipo_apoyo: 'imprevisto',
-          motivo_asignacion: 'Guardia creada sobre la marcha: el grupo se encontró sin profesor y no había generada ninguna guardia.',
+          ...(inicial?.profesorAusenteId ? { profesor_ausente_id: inicial.profesorAusenteId } : {}),
+          ...(inicial?.tarea ? { tarea: inicial.tarea } : {}),
+          motivo_asignacion: inicial
+            ? 'Asignada a mano por jefatura: a esta hora no quedaba nadie de guardia libre para este grupo.'
+            : 'Guardia creada sobre la marcha: el grupo se encontró sin profesor y no había generada ninguna guardia.',
         } }) });
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || 'No se ha podido crear');
       onCreada?.();
-      setAbierto(false); setHora(''); setGrupo(''); setAula(''); setSector(''); setDatos(null); setElegido(null);
+      setAbierto(false); setHora(inicial?.hora || ''); setGrupo(inicial?.grupo || ''); setAula(inicial?.aula || '');
+      setSector(''); setDatos(null); setElegido(null);
     } catch (e) { setError(e.message); }
     setGuardando(false);
   }
@@ -67,7 +78,7 @@ export default function CrearGuardiaImprevista({ fecha, onCreada }) {
       <button type="button" onClick={() => setAbierto(true)} style={{
         padding: '7px 14px', borderRadius: 8, border: '1.5px solid #fca5a5', backgroundColor: '#fef2f2',
         color: '#b91c1c', fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-      }}>🚨 Crear guardia ahora (grupo sin profesor)</button>
+      }}>{etiqueta || '🚨 Crear guardia ahora (grupo sin profesor)'}</button>
     );
   }
 

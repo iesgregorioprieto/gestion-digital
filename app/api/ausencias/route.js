@@ -144,11 +144,18 @@ export async function GET(request) {
   // que alguien esté de baja lo tiene que saber quien le cubre; por qué
   // lo está, no.
   if (cuadrante) {
-    const { data, error } = await supa()
+    // 'dias' trae las horas reales de cada día (calculadas contra el
+    // horario al registrar). Sin ellas, una ausencia de varios días solo
+    // dice «Ausencia larga» y jefatura no sabe a qué horas falta.
+    const leer = campos => supa()
       .from('ausencias')
-      .select('profesor_id, profesor_nombre, horas, fecha_inicio, fecha_fin')
+      .select(campos)
       .lte('fecha_inicio', cuadrante)
       .or(`fecha_fin.gte.${cuadrante},fecha_fin.is.null`);
+    let { data, error } = await leer('profesor_id, profesor_nombre, horas, dias, fecha_inicio, fecha_fin');
+    if (error && /dias/.test(error.message || '')) {
+      ({ data, error } = await leer('profesor_id, profesor_nombre, horas, fecha_inicio, fecha_fin'));
+    }
 
     if (error) return Response.json({ error: error.message, ausencias: [] }, { status: 500 });
     return Response.json({ ausencias: data || [] });

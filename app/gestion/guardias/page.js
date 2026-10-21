@@ -11,6 +11,9 @@ import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import RepartoGuardias from '@/components/RepartoGuardias';
+import { esHoraSinAlumnos } from '@/lib/asignacionGuardias';
+import { esGrupoCiclo } from '@/lib/grupos';
+import { esSectorFP } from '@/lib/sectores';
 
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
@@ -41,6 +44,14 @@ function horaCoincide(horaGuardada, horaId) {
 function diaSemanaEs(fecha) {
   const dias = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
   return dias[new Date(fecha+'T12:00:00').getDay()];
+}
+// Horas de una ausencia en una fecha: las de 'dias' si las tiene
+// calculadas para ese día; si no, las que marcó el profesor.
+function horasDelDia(falta, fecha) {
+  const dias = Array.isArray(falta?.dias) ? falta.dias : [];
+  const delDia = dias.find(d => d?.fecha === fecha);
+  if (delDia && Array.isArray(delDia.horas) && delDia.horas.length > 0) return delDia.horas;
+  return falta?.horas || [];
 }
 function sumarDias(fecha, n) {
   const d = new Date(fecha+'T12:00:00');
@@ -318,7 +329,10 @@ export default function GestionGuardias() {
         abrev: claveAbreviatura(prof.apellidos, prof.nombre),
         sector: sectorProf,
         tipo: falta.tipo_falta,
-        horas: falta.horas || [],
+        // Las horas de ESE día, si la ausencia las tiene calculadas. Una
+        // ausencia de varios días guarda en 'horas' solo «Ausencia larga»
+        // y no contaba en ninguna hora (Córdoba, 21/10/2026).
+        horas: horasDelDia(falta, f),
       });
     }
     setAusDia(resultado);
@@ -346,6 +360,54 @@ export default function GestionGuardias() {
       && String(a.profesor_ausente_id) === String(profesorId))
     && !apoyosVivos.some(a => horaCoincide(a.hora, horaId)
       && String(a.profesor_ausente_id) === String(profesorId));
+
+  /**
+   * LO QUE NO TIENE A NADIE A ESTA HORA.
+   *
+   * El reparto solo guarda las guardias que ha podido dar. Si a una hora
+   * faltan más de los que hay de guardia, lo que no cabe no se guardaba en
+   * ningún sitio, y esta pantalla —que pinta lo guardado— decía «Todas las
+   * clases cubiertas» con un grupo solo en el aula. Pasó el 21/10/2026 a
+   * 6ª: 4 ausentes en la pestaña, 2 en la lista (David Delgado, 4º ESO,
+   * sin nadie). Aquí se cruzan los ausentes de la hora con lo repartido:
+   *
+   *   rojos  · clase con alumnos y nadie asignado → hay que poner a alguien
+   *   grises · no hay grupo que cubrir (6ª de GM/GS, guardia, complementaria)
+   *   ids    · todos los ausentes de la hora, para que el número coincida
+   *            con el de la pestaña
+   */
+  const estadoHora = (hid) => {
+    const conApoyo = new Set(apoyosVivos
+      .filter(ap => horaCoincide(ap.hora, hid) && ap.profesor_ausente_id)
+      .map(ap => String(ap.profesor_ausente_id)));
+    const rojos = [], grises = [], ids = new Set();
+    ausenciasDia.forEach(a => {
+      const deHora = (a.horas || []).filter(hh => horaCoincide(hh.hora, hid));
+      if (deHora.length === 0 || anuladaA(a.profesorId, hid)) return;
+      ids.add(String(a.profesorId));
+      if (conApoyo.has(String(a.profesorId))) return;
+      const clases = deHora.filter(hh => {
+        const t = (hh.tipo || '').toLowerCase();
+        return (!t || t.includes('clase')) && !esHoraSinAlumnos(hh);
+      });
+      if (clases.length === 0) {
+        grises.push({ a, hh: deHora[0], motivo: 'Sin clase a esta hora (guardia u hora complementaria): no hay grupo que cubrir.' });
+        return;
+      }
+      clases.forEach(hh => {
+        const ciclo = esGrupoCiclo(hh.grupo);
+        const seVan = hid === '6' && (ciclo === null ? esSectorFP(a.sector) : ciclo);
+        if (seVan) grises.push({ a, hh, motivo: '6ª de Grado Medio o Superior: los alumnos se van a casa y no se cubre.' });
+        else rojos.push({ a, hh });
+      });
+    });
+    return { rojos, grises, ids };
+  };
+  const estadoActiva = estadoHora(horaActiva);
+  const recargarApoyos = async () => {
+    const r = await consulta('apoyos_asignados').select('*').eq('fecha', fecha).eq('curso_academico', await getCursoActual());
+    setApAsig(r.data || []);
+  };
 
   useEffect(() => {
     if (!fecha || !horaActiva) return;
@@ -798,7 +860,8 @@ export default function GestionGuardias() {
           <div style={{ backgroundColor:'white', borderRadius:12, padding:30, textAlign:'center', color:'#666' }}>
             🏖️ Fin de semana
           </div>
-        ) : apoyosVivos.filter(ap => horaCoincide(ap.hora, horaActiva)).length === 0 ? (
+        ) : apoyosVivos.filter(ap => horaCoincide(ap.hora, horaActiva)).length === 0
+            && estadoActiva.ids.size === 0 ? (
           errorCarga ? (
             <div style={{
               backgroundColor:'#fef2f2', border:'1.5px solid #fca5a5', borderRadius:12,
@@ -832,10 +895,23 @@ export default function GestionGuardias() {
             {(() => {
               const filasHoraReales = apoyosVivos.filter(ap =>
                 ap.hora === horaActiva && !(ap.sector_apoyo || '').toUpperCase().includes('RECREO'));
-              const ausentesReales = new Set(filasHoraReales.map(ap => ap.profesor_ausente_id || ap.id)).size;
+              // Los ausentes son los de la pestaña más los de las filas
+              // guardadas: así la cabecera y el número rojo dicen lo mismo.
+              const idsAusentes = new Set([
+                ...filasHoraReales.map(ap => String(ap.profesor_ausente_id || ap.id)),
+                ...estadoActiva.ids,
+              ]);
+              const ausentesReales = idsAusentes.size;
               const cubiertasPorApoyo = filasHoraReales.filter(ap => ap.tipo_apoyo === 'obligatorio').length;
+              const nRojos = estadoActiva.rojos.length;
 
-              if (ausentesReales === 0) {
+              if (nRojos > 0) {
+                return (
+                  <div style={{ fontWeight:800, fontSize:14, color:rojo, marginBottom:12 }}>
+                    🚨 {nRojos} CLASE{nRojos !== 1 ? 'S' : ''} SIN CUBRIR — {ausentesReales} ausente{ausentesReales !== 1 ? 's' : ''}
+                  </div>
+                );
+              } else if (ausentesReales === 0) {
                 return (
                   <div style={{ fontWeight:800, fontSize:14, color:verde, marginBottom:12 }}>
                     ✅ NO FALTA NADIE
@@ -855,6 +931,50 @@ export default function GestionGuardias() {
                 );
               }
             })()}
+
+            {estadoActiva.rojos.length > 0 && (
+              <div style={{ border:'2px solid #fca5a5', backgroundColor:'#fef2f2', borderRadius:12, padding:12, marginBottom:14 }}>
+                <div style={{ fontWeight:800, fontSize:13.5, color:rojo, marginBottom:4 }}>
+                  🚨 Sin cubrir — no queda nadie de guardia libre
+                </div>
+                <div style={{ fontSize:12, color:'#7f1d1d', marginBottom:10 }}>
+                  Hay que poner a alguien a mano. Si el grupo está fuera de actividad, no hace falta.
+                </div>
+                {estadoActiva.rojos.map(({ a, hh }, i) => (
+                  <div key={i} style={{ backgroundColor:'white', border:'1px solid #fecaca', borderRadius:10, padding:'10px 12px', marginBottom:8 }}>
+                    <div style={{ fontWeight:800, fontSize:14, color:'#1e293b' }}>{a.profesor}</div>
+                    {hh.grupo && <div style={{ fontSize:12.5, color:'#475569', marginTop:3 }}>👥 {hh.grupo}</div>}
+                    {hh.instrucciones && (
+                      <div style={{ fontSize:12.5, color:'#78350f', backgroundColor:'#fffbeb', border:'1px solid #fde68a', borderRadius:8, padding:'6px 8px', marginTop:6 }}>
+                        📝 <strong>Tarea:</strong> {hh.instrucciones}
+                      </div>
+                    )}
+                    <div style={{ marginTop:8 }}>
+                      <CrearGuardiaImprevista fecha={fecha} onCreada={recargarApoyos}
+                        etiqueta="👤 Poner a alguien"
+                        inicial={{ hora: horaActiva, grupo: hh.grupo || '', aula: hh.aula || '',
+                          sectorDestino: (a.sector || '').toUpperCase(), profesorAusenteId: a.profesorId,
+                          tarea: hh.instrucciones || '' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {estadoActiva.grises.length > 0 && (
+              <div style={{ border:'1px solid #e5e7eb', backgroundColor:'#f9fafb', borderRadius:12, padding:12, marginBottom:14 }}>
+                <div style={{ fontWeight:800, fontSize:13, color:'#475569', marginBottom:6 }}>
+                  Ausentes sin grupo que cubrir a esta hora
+                </div>
+                {estadoActiva.grises.map(({ a, hh, motivo }, i) => (
+                  <div key={i} style={{ fontSize:12.5, color:'#475569', padding:'6px 0', borderTop: i ? '1px solid #e5e7eb' : 'none' }}>
+                    <strong style={{ color:'#334155' }}>{a.profesor}</strong>
+                    {hh?.grupo ? <span> · {hh.grupo}</span> : null}
+                    <div style={{ fontSize:12, color:'#64748b' }}>{motivo}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {(() => {
               const gruposReales = {};
