@@ -23,11 +23,18 @@ import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
+  pesoFranja, claveFranja,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo } from '@/lib/grupos';
 
 const FICHADAS = ['confirmado', 'realizado'];
+
+// Para la ROTACIÓN cuentan todas las fichadas, también las antiguas que
+// quedaron en estado 'incidencia' (hoy la incidencia es una nota y la
+// guardia queda 'confirmado'). Mismo criterio que el contador que ve el
+// profesorado (lib/contadorGuardias.js). Decidido por Luis Javier, 22/10/2026.
+const CUENTAN_ROTACION = ['confirmado', 'realizado', 'incidencia'];
 
 // Tope de días por llamada. Una baja sin fecha de fin es infinita: se
 // preasignan los próximos días y el resto lo va añadiendo el día a día.
@@ -248,25 +255,40 @@ export async function POST(request) {
     // de las horas de clase, que sin ausencias no tienen nada que cubrir.
 
     // ─── Guardias ya registradas ───
-    const [{ data: yaEnRango }, { data: delCurso }] = await Promise.all([
-      cliente.from('apoyos_asignados').select('*')
-        .gte('fecha', fecha).lte('fecha', ultimo).eq('curso_academico', curso),
-      cliente.from('apoyos_asignados')
-        .select('sector_apoyo,sector_destino,profesor_id,estado')
-        .eq('curso_academico', curso),
-    ]);
+    const { data: yaEnRango } = await cliente.from('apoyos_asignados').select('*')
+      .gte('fecha', fecha).lte('fecha', ultimo).eq('curso_academico', curso);
+
+    // Todo el curso, por páginas: Supabase corta en 1000 filas por consulta
+    // y el curso las supera antes de Navidad. Sin paginar, el contador de
+    // la rotación se quedaría cortado en silencio.
+    let delCurso = [];
+    for (let offset = 0; ; offset += 1000) {
+      const { data } = await cliente.from('apoyos_asignados')
+        .select('id,sector_apoyo,sector_destino,profesor_id,estado,fecha,hora,cuenta_reparto')
+        .eq('curso_academico', curso)
+        .order('id')
+        .range(offset, offset + 999);
+      if (!data || data.length === 0) break;
+      delCurso = delCurso.concat(data);
+      if (data.length < 1000) break;
+    }
 
     // Rotación: SOLO las fichadas. Una guardia sin fichar no cuenta.
     const apoyosPorProfesor = {};
+    const apoyosPorFranja = {};        // "id|martes|3" → fichadas en esa franja
     const apoyosFueraPorSector = {};
     (delCurso || []).forEach(a => {
-      if (!FICHADAS.includes(a.estado)) return;
+      if (!CUENTAN_ROTACION.includes(a.estado) || a.cuenta_reparto === false) return;
       // El recreo no entra en la rotación: lo hacen siempre los mismos, los
       // del cuadrante de recreo, y nadie sustituye a nadie. Si contara, a
       // quien vigila el patio el reparto lo iría dejando atrás sin motivo.
       if (esSectorRecreo(a.sector_apoyo)) return;
       if (a.profesor_id) {
         apoyosPorProfesor[a.profesor_id] = (apoyosPorProfesor[a.profesor_id] || 0) + 1;
+        if (a.fecha && a.hora) {
+          const k = claveFranja(a.profesor_id, diaSemanaEs(a.fecha), a.hora);
+          apoyosPorFranja[k] = (apoyosPorFranja[k] || 0) + 1;
+        }
       }
       // Para la rotación entre departamentos solo cuentan las salidas
       // fuera del propio sector: lo que se reparte es bajar a cubrir a otros.
@@ -276,6 +298,26 @@ export async function POST(request) {
         apoyosFueraPorSector[suyo] = (apoyosFueraPorSector[suyo] || 0) + 1;
       }
     });
+
+    /**
+     * EL SUSTITUTO HEREDA LO QUE LLEVABA EL TITULAR
+     *
+     * Ocupa sus guardias, así que entra en la rotación con lo que el
+     * titular llevaba hecho, en total y en cada franja. Si empezara a cero,
+     * le caerían todas las guardias de sus franjas durante semanas.
+     */
+    for (const [titular, sustituto] of relevo) {
+      if (!titular || !sustituto || titular === sustituto) continue;
+      if (apoyosPorProfesor[titular]) {
+        apoyosPorProfesor[sustituto] = (apoyosPorProfesor[sustituto] || 0) + apoyosPorProfesor[titular];
+      }
+      const prefijo = `${titular}|`;
+      for (const [k, n] of Object.entries(apoyosPorFranja)) {
+        if (!k.startsWith(prefijo)) continue;
+        const kSust = sustituto + k.slice(titular.length);
+        apoyosPorFranja[kSust] = (apoyosPorFranja[kSust] || 0) + n;
+      }
+    }
 
     const { porSector: cuadranteBruto, sinResolver } =
       construirCuadrante(horarios, listaProfes, equivalencias || []);
@@ -510,6 +552,7 @@ export async function POST(request) {
           hora, dia: diaSemana, huecos, cuadrante, horarios,
           profesores: listaProfes,
           apoyosPorProfesor, apoyosFueraPorSector,
+          apoyosPorFranja, peso: pesoFranja(diaFecha),
           yaCubiertos, ocupadosIds: enClase,
           equivalencias: equivalencias || [],
         });
@@ -580,9 +623,8 @@ export async function POST(request) {
                     + `le apoya otra familia profesional. Te ha tocado por rotación `
                     + `entre las familias, repartiendo según el tamaño de cada una.`
                   : `A esta hora no quedaba nadie de guardia en ${suyo}, así que `
-                    + `se ha pedido a FP. Te ha tocado por rotación: de los `
-                    + `disponibles, eres quien menos guardias lleva hechas en proporción `
-                    + `a las que tienes en tu horario.`;
+                    + `se ha pedido a FP. Te ha tocado por rotación entre los `
+                    + `compañeros que están de guardia en esta misma franja.`;
               }
               return `A esta hora no quedaba nadie libre en ${suyo} ni en ninguna `
                 + `otra familia profesional. Para no dejar el grupo sin nadie, `
