@@ -114,12 +114,21 @@ export default function SalaProfesores() {
     // en el límite gratuito de Vercel: pasado ese límite, pausan la
     // aplicación entera.
     const VENTANAS = [[535,565],[590,620],[645,675],[675,705],[730,760],[785,815],[840,870]];
+    // Y una sola llamada por ventana: el servidor solo recalcula la primera
+    // vez, así que las otras 29 de cada media hora eran gasto de Vercel sin
+    // ningún efecto. Si la llamada falla, se reintenta al minuto siguiente.
+    const hechas = new Set();
     const alDia = () => {
       const d = new Date();
       const m = d.getHours() * 60 + d.getMinutes();
-      if (VENTANAS.some(([a, b]) => m >= a && m < b)) {
-        fetch('/api/guardias/al-dia', { method: 'POST' }).catch(() => {});
-      }
+      const v = VENTANAS.findIndex(([a, b]) => m >= a && m < b);
+      if (v < 0) return;
+      const clave = `${d.toDateString()}|${v}`;
+      if (hechas.has(clave)) return;
+      hechas.add(clave);
+      fetch('/api/guardias/al-dia', { method: 'POST' })
+        .then(r => { if (!r.ok) hechas.delete(clave); })
+        .catch(() => hechas.delete(clave));
     };
     alDia();
     const t = setInterval(alDia, 60000);

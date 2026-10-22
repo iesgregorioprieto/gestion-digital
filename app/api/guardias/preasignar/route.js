@@ -23,7 +23,7 @@ import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
-  pesoFranja, claveFranja,
+  pesoFranja, claveFranja, FRANJAS,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo } from '@/lib/grupos';
@@ -664,28 +664,57 @@ export async function POST(request) {
     if (error) return Response.json({ error: error.message }, { status: 500 });
 
     /**
-     * AVISAR A QUIEN LE ACABA DE TOCAR
+     * AVISAR A QUIEN LE TOCA — UNA SOLA VEZ Y EN EL ÚLTIMO MOMENTO ÚTIL
      *
      * El cuadrante se rehace durante la mañana: alguien se va a las once y
      * a las 11:35 el reparto cambia. Si no se avisa, el compañero se
      * entera cuando el grupo lleva diez minutos solo, o no se entera.
      *
-     * Solo se avisa de las guardias de HOY y que empiezan a partir de
-     * ahora: una de mañana no urge, y una cuya hora ya pasó solo serviría
-     * para quedar mal. Y nunca puede tumbar el reparto: si el aviso falla,
-     * la guardia está guardada igual.
+     * Pero cada recálculo borra lo no fichado y lo vuelve a crear, así que
+     * avisar de todo lo "nuevo" era avisar de lo mismo en cada recálculo:
+     * quien tenía guardia a 5ª recibía el aviso desde las diez de la
+     * mañana, cada vez que se recalculaba (queja del profesorado, 22/10/2026).
+     *
+     * Ahora:
+     *  · Solo se avisa de la guardia de la PRÓXIMA franja (o de la que está
+     *    en curso, si llega con la hora ya empezada). Entre ahora y el
+     *    inicio de esa guardia no puede empezar ninguna otra franja: es el
+     *    último recálculo antes de la guardia, cuando el reparto ya es firme.
+     *  · Y una sola vez al día por profesor y hora: la marca se guarda en
+     *    recalculos_guardias (clave única) antes de enviar; si ya existía,
+     *    no se repite.
+     *
+     * Nunca puede tumbar el reparto: si el aviso falla, la guardia está
+     * guardada igual.
      */
     const ahoraMadrid = ahoraEnCentro();
-    const aAvisar = nuevas.filter(n =>
+    const esProxima = f => {
+      const ini = aMin(f.inicio), fin = aMin(f.fin);
+      if (ahoraMadrid.minutos >= fin) return false;          // ya terminó
+      if (ahoraMadrid.minutos >= ini) return true;           // está en curso
+      // ¿Empieza otra franja antes que esta? Entonces aún no es la próxima.
+      return !FRANJAS.some(g => {
+        const gi = aMin(g.inicio);
+        return gi > ahoraMadrid.minutos && gi < ini;
+      });
+    };
+    const candidatos = nuevas.filter(n =>
       n.profesor_id
       && n.fecha === ahoraMadrid.fecha
       && !esSectorRecreo(n.sector_apoyo)
       && (() => {
         const f = franja(normHora(n.hora));
-        if (!f) return false;
-        const fin = Number(f.fin.slice(0, 2)) * 60 + Number(f.fin.slice(3, 5));
-        return ahoraMadrid.minutos < fin;      // aún no ha terminado
+        return !!f && esProxima(f);
       })());
+
+    // Una sola vez al día por profesor y hora.
+    const aAvisar = [];
+    for (const n of candidatos) {
+      const clave = `aviso|${n.fecha}|${normHora(n.hora)}|${n.profesor_id}`;
+      const { error: yaAvisado } = await cliente
+        .from('recalculos_guardias').insert({ clave });
+      if (!yaAvisado) aAvisar.push(n);
+    }
 
     const base = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
     await Promise.all(aAvisar.map(n => {
