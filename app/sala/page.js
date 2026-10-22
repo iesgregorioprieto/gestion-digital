@@ -273,9 +273,16 @@ export default function SalaProfesores() {
         <div onClick={() => setCartel(null)} style={{
           position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: '#000',
           display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+          overflow: 'hidden',
         }}>
+          {/* Fondo: la misma foto ampliada y desenfocada, para no dejar franjas negras */}
+          <div style={{
+            position: 'absolute', inset: '-40px', backgroundImage: `url(${cartel.imagen_url})`,
+            backgroundSize: 'cover', backgroundPosition: 'center',
+            filter: 'blur(30px) brightness(0.55)',
+          }} />
           <img src={cartel.imagen_url} alt={cartel.titulo || 'Cartel'}
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+            style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 0 40px rgba(0,0,0,0.6)' }} />
         </div>
       )}
       {/* Precarga de los carteles, para que salgan al instante */}
