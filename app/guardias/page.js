@@ -11,6 +11,7 @@ import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import AvisoCuadrante from '@/components/AvisoCuadrante';
+import AulaEdificio from '@/components/AulaEdificio';
 
 const azul = '#1e3a5f';
 const marron = '#7c2d12';
@@ -724,6 +725,7 @@ export default function Guardias() {
                       <div style={{ fontSize:15, fontWeight:700, color:'#1f2937', marginTop:6 }}>
                         {limpio.grupo || 'Grupo sin especificar'}
                         {aula ? <span style={{ color:'#6b7280', fontWeight:600 }}> · aula {aula}</span> : null}
+                        {aula ? <div style={{ marginTop:6 }}><AulaEdificio aula={aula} tamano={13} /></div> : null}
                       </div>
                     );
                   })()}
@@ -956,6 +958,7 @@ export default function Guardias() {
                                     aula {aula}
                                   </span>
                                 )}
+                                {aula && <AulaEdificio aula={aula} tamano={11.5} />}
                               </div>
 
                               {/* La tarea, si la dejó */}
