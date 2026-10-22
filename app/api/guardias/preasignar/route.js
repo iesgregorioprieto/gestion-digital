@@ -26,7 +26,7 @@ import {
   pesoFranja, claveFranja, FRANJAS,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
-import { normGrupo } from '@/lib/grupos';
+import { normGrupo, separarGrupoAula } from '@/lib/grupos';
 
 const FICHADAS = ['confirmado', 'realizado'];
 
@@ -720,7 +720,9 @@ export async function POST(request) {
     await Promise.all(aAvisar.map(n => {
       const f = franja(normHora(n.hora));
       const cuando = f ? `${f.label} (${f.inicio})` : `${n.hora}ª`;
-      const donde = (n.grupo || '').replace(/^[A-Z0-9-]+?(?=[A-Z]{2,})/, '').trim() || n.grupo || '';
+      const partes = separarGrupoAula(n.grupo);
+      const donde = partes.grupo;
+      const aulaAviso = n.aula || partes.aula;
       return fetch(`${base}/api/push`, {
         method: 'POST',
         headers: {
@@ -732,7 +734,7 @@ export async function POST(request) {
           accion: 'enviar',
           profesor_id: n.profesor_id,
           titulo: `🛡️ Guardia a ${cuando}`,
-          cuerpo: donde ? `Te toca cubrir ${donde}${n.aula ? ` · aula ${n.aula}` : ''}` : 'Tienes una guardia asignada',
+          cuerpo: donde ? `Te toca cubrir ${donde}${aulaAviso ? ` · aula ${aulaAviso}` : ''}` : 'Tienes una guardia asignada',
           url: '/guardias',
         }),
       }).catch(() => {});
