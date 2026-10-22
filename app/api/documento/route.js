@@ -22,7 +22,11 @@ import { claveServidor } from '@/lib/claveServidor';
 const BUCKETS_SUBIDA = [
   'ausencias-docs', 'dld-archivos', 'actividades-docs',
   'incidencias-docs', 'compras-docs', 'mantenimiento-fotos', 'calendario',
+  'carteles',
 ];
+
+// Almacenes en los que solo sube el equipo directivo
+const BUCKETS_DIRECTIVOS = ['carteles'];
 
 const MAX_BYTES = 10 * 1024 * 1024;   // 10 MB
 
@@ -177,6 +181,10 @@ export async function POST(request) {
   // cualquiera con sesión podría escribir en un almacén que no le toca.
   if (!BUCKETS_SUBIDA.includes(bucket)) {
     return Response.json({ error: 'Almacén no permitido' }, { status: 403 });
+  }
+
+  if (BUCKETS_DIRECTIVOS.includes(bucket) && !esDirectivo(sesion)) {
+    return Response.json({ error: 'sin_permisos' }, { status: 403 });
   }
 
   // La carpeta también viene del navegador y acaba en la ruta del

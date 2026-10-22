@@ -204,6 +204,14 @@ export async function POST(request) {
 
     // ─── Borrar ───
     if (accion === 'borrar') {
+      // Al borrar un aviso con cartel, el archivo se va con él: no tiene
+      // sentido ocupar espacio con carteles que ya no salen en ningún sitio.
+      if (tabla === 'avisos_sala' && id) {
+        const { data: filas } = await supa().from('avisos_sala').select('imagen_url').eq('id', id);
+        const m = (filas?.[0]?.imagen_url || '').match(/\/object\/public\/carteles\/(.+)$/);
+        if (m) await supa().storage.from('carteles').remove([decodeURIComponent(m[1])]);
+      }
+
       let consulta = supa().from(tabla).delete();
 
       if (id) {

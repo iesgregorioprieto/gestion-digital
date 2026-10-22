@@ -2,6 +2,8 @@
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { useState, useEffect } from "react";
 import { getSupabase } from "../../../lib/supabase";
+import { reducirImagen } from '@/lib/reducirImagen';
+import { hoyLocal } from '@/lib/fechas';
 
 export default function GestionSala() {
   const [avisos, setAvisos] = useState([]);
@@ -15,6 +17,11 @@ export default function GestionSala() {
   const [urgente, setUrgente] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(null);
+  // Cartel: foto que sale a pantalla completa en la tele
+  const [foto, setFoto] = useState(null);          // archivo nuevo elegido
+  const [imagenUrl, setImagenUrl] = useState('');  // la que ya tenía al editar
+  const [visibleHasta, setVisibleHasta] = useState('');
+  const hoy = hoyLocal();
 
   const azul = '#1e3a5f';
 
@@ -44,9 +51,40 @@ export default function GestionSala() {
     setTimeout(() => setMensaje(null), 4000);
   }
 
+  function limpiarFormulario() {
+    setTitulo(''); setTexto(''); setUrgente(false); setEditando(null);
+    setFoto(null); setImagenUrl(''); setVisibleHasta('');
+  }
+
+  async function subirCartel(archivo) {
+    const fd = new FormData();
+    fd.append('archivo', await reducirImagen(archivo));
+    fd.append('carpeta', 'sala');
+    fd.append('bucket', 'carteles');
+    try {
+      const r = await fetch('/api/documento', { method: 'POST', body: fd });
+      const d = await r.json();
+      return d.url || null;
+    } catch { return null; }
+  }
+
   async function guardarAviso() {
-    if (!titulo.trim() || !texto.trim()) { mostrarMsg('Rellena título y mensaje', 'error'); return; }
+    const conCartel = !!(foto || imagenUrl);
+    if (!titulo.trim()) { mostrarMsg('Pon un título', 'error'); return; }
+    if (!conCartel && !texto.trim()) { mostrarMsg('Escribe el mensaje o añade una foto', 'error'); return; }
+    if (visibleHasta && visibleHasta < hoy) { mostrarMsg('La fecha «visible hasta» ya ha pasado', 'error'); return; }
     setEnviando(true);
+
+    let imagen_url = imagenUrl || null;
+    if (foto) {
+      imagen_url = await subirCartel(foto);
+      if (!imagen_url) {
+        mostrarMsg('❌ No se pudo subir la foto. El aviso no se ha guardado.', 'error');
+        setEnviando(false);
+        return;
+      }
+    }
+    const extra = { imagen_url, visible_hasta: visibleHasta || null };
 
     if (editando) {
       const _re = await fetch('/api/centro', {
@@ -54,7 +92,7 @@ export default function GestionSala() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tabla: 'avisos_sala', accion: 'actualizar', id: editando,
-          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente },
+          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, ...extra },
         }),
       });
       if (_re.ok) mostrarMsg('✅ Aviso actualizado', 'ok');
@@ -65,14 +103,14 @@ export default function GestionSala() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tabla: 'avisos_sala', accion: 'crear',
-          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, autor: nombre, activo: true },
+          datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, autor: nombre, activo: true, ...extra },
         }),
       });
       if (_rp.ok) mostrarMsg('✅ Aviso publicado', 'ok');
       else mostrarMsg('❌ No se pudo publicar el aviso', 'error');
     }
 
-    setTitulo(''); setTexto(''); setUrgente(false); setEditando(null);
+    limpiarFormulario();
     setEnviando(false);
     cargarAvisos();
   }
@@ -102,6 +140,9 @@ export default function GestionSala() {
     setTitulo(a.titulo);
     setTexto(a.mensaje);
     setUrgente(a.urgente || false);
+    setFoto(null);
+    setImagenUrl(a.imagen_url || '');
+    setVisibleHasta(a.visible_hasta || '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -170,10 +211,37 @@ export default function GestionSala() {
           <textarea
             value={texto}
             onChange={e => setTexto(e.target.value)}
-            placeholder="Mensaje..."
+            placeholder={foto || imagenUrl ? 'Mensaje (opcional si lleva foto)...' : 'Mensaje...'}
             rows={3}
             style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, marginBottom: 10, boxSizing: 'border-box', resize: 'vertical' }}
           />
+
+          {/* CARTEL CON FOTO */}
+          <div style={{ border: '1.5px dashed #cbd5e1', borderRadius: 10, padding: 12, marginBottom: 10, backgroundColor: '#f8fafc' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: azul, marginBottom: 4 }}>🖼️ Cartel con foto (opcional)</div>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, lineHeight: 1.4 }}>
+              Sale en la tele a pantalla completa 10 segundos, una vez por minuto.
+            </div>
+            {(foto || imagenUrl) ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <img src={foto ? URL.createObjectURL(foto) : imagenUrl} alt=""
+                  style={{ height: 90, borderRadius: 6, border: '1px solid #e2e8f0' }} />
+                <button onClick={() => { setFoto(null); setImagenUrl(''); }}
+                  style={{ padding: '6px 10px', backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: 6, fontSize: 12, cursor: 'pointer' }}>
+                  Quitar foto
+                </button>
+              </div>
+            ) : (
+              <input type="file" accept="image/*" onChange={e => setFoto(e.target.files?.[0] || null)} style={{ fontSize: 13 }} />
+            )}
+          </div>
+
+          <label style={{ display: 'block', fontSize: 13, marginBottom: 10 }}>
+            📅 Visible hasta (incluido):{' '}
+            <input type="date" value={visibleHasta} min={hoy} onChange={e => setVisibleHasta(e.target.value)}
+              style={{ padding: '6px 8px', borderRadius: 6, border: '1.5px solid #ddd', fontSize: 13 }} />
+            <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>vacío = hasta que lo ocultes</span>
+          </label>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
@@ -196,7 +264,7 @@ export default function GestionSala() {
             </button>
             {editando && (
               <button
-                onClick={() => { setEditando(null); setTitulo(''); setTexto(''); setUrgente(false); }}
+                onClick={limpiarFormulario}
                 style={{ padding: '10px 16px', backgroundColor: '#e5e7eb', border: 'none', borderRadius: 8, fontSize: 14, cursor: 'pointer' }}
               >
                 Cancelar
@@ -228,7 +296,16 @@ export default function GestionSala() {
                         {a.urgente ? '🔴' : '📌'} {a.titulo}
                         {!a.activo && <span style={{ marginLeft: 8, fontSize: 11, color: '#9ca3af', fontWeight: 400 }}>(oculto)</span>}
                       </div>
-                      <div style={{ fontSize: 13, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>{a.mensaje}</div>
+                      {a.mensaje && <div style={{ fontSize: 13, color: '#4b5563', marginTop: 4, lineHeight: 1.4 }}>{a.mensaje}</div>}
+                      {a.imagen_url && (
+                        <img src={a.imagen_url} alt="" style={{ height: 70, marginTop: 6, borderRadius: 6, border: '1px solid #e2e8f0' }} />
+                      )}
+                      {a.visible_hasta && (
+                        <div style={{ fontSize: 12, marginTop: 4, fontWeight: 600, color: a.visible_hasta < hoy ? '#dc2626' : '#0369a1' }}>
+                          {a.visible_hasta < hoy ? '⏹️ Caducado el ' : '📅 En la tele hasta el '}
+                          {new Date(a.visible_hasta + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}
+                        </div>
+                      )}
                       <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
                         {a.autor || '—'} · {new Date(a.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       </div>

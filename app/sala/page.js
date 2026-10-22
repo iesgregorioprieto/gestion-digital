@@ -35,6 +35,11 @@ export default function SalaProfesores() {
   const [semana, setSemana] = useState(null);
   // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
   const [modoPanel, setModoPanel] = useState('avisos');
+  // Carteles (avisos con foto): salen a pantalla completa 10 segundos
+  // cada vez que la caja de la derecha cambia, uno cada vez, por turnos.
+  const [cartel, setCartel] = useState(null);
+  const cartelesRef = useRef([]);
+  const turnoCartelRef = useRef(0);
   const cajaAvisosRef = useRef(null);
   const cajaAusentesRef = useRef(null);
   const cajaGuardiasRef = useRef(null);
@@ -89,6 +94,7 @@ export default function SalaProfesores() {
       setDlds(d.dlds || []);
       setApoyos(d.apoyos || []);
       setAvisos(d.avisos || []);
+      cartelesRef.current = (d.avisos || []).filter(a => a.imagen_url);
       setActividades(d.actividades || []);
       setSemana(d.semana || null);
     } catch (e) {
@@ -147,6 +153,13 @@ export default function SalaProfesores() {
     const alternancia = setInterval(() => {
       setModoPanel(m => CICLO[(CICLO.indexOf(m) + 1) % CICLO.length]);
       if (cajaAvisosRef.current) cajaAvisosRef.current.scrollTop = 0;
+      const carteles = cartelesRef.current;
+      if (carteles.length > 0) {
+        const c = carteles[turnoCartelRef.current % carteles.length];
+        turnoCartelRef.current++;
+        setCartel(c);
+        setTimeout(() => setCartel(null), 10000);
+      }
     }, 60000);
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
 
@@ -254,6 +267,21 @@ export default function SalaProfesores() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
+
+      {/* CARTEL A PANTALLA COMPLETA (10 segundos) */}
+      {cartel && (
+        <div onClick={() => setCartel(null)} style={{
+          position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: '#000',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+        }}>
+          <img src={cartel.imagen_url} alt={cartel.titulo || 'Cartel'}
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+        </div>
+      )}
+      {/* Precarga de los carteles, para que salgan al instante */}
+      <div style={{ display: 'none' }}>
+        {avisos.filter(a => a.imagen_url).map(a => <img key={a.id} src={a.imagen_url} alt="" />)}
+      </div>
 
       {/* HEADER */}
       <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -453,13 +481,13 @@ export default function SalaProfesores() {
             {modoPanel === 'avisos' ? (
               <>
                 <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
-                {avisos.length === 0 ? (
+                {avisos.filter(a => !a.imagen_url).length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                     📌 Sin avisos
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {avisos.map((a, i) => (
+                    {avisos.filter(a => !a.imagen_url).map((a, i) => (
                       <div key={a.id || i} style={{
                         backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
                         borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
