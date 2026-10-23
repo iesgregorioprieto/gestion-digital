@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { useState, useEffect } from 'react';
 import BannerHoy from '@/components/BannerHoy';
-import { hoyLocal, sumarDias } from '@/lib/fechas';
+import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import AvisoNotificaciones from '@/components/AvisoNotificaciones';
 import { quitarSwViejos } from '@/lib/swAvisos';
@@ -75,17 +75,18 @@ export default function PanelProfesor() {
   }
   
   async function cargarApoyosPendientes(id) {
-    // Hoy y, como mucho, mañana. Nada más: el reparto se rehace cada vez
-    // que falta alguien, así que enseñar la semana sería enseñar algo que
-    // va a cambiar. Y lo de mañana va marcado como provisional, porque
-    // lo es: mañana por la mañana se vuelve a calcular.
+    // Solo las de HOY. El reparto se rehace cada vez que falta alguien,
+    // así que enseñar otros días es enseñar algo que va a cambiar, y mezclar
+    // fechas en el mismo aviso confunde: un viernes salía la guardia del
+    // lunes junto a la de hoy y parecía que tenía dos el mismo día
+    // (23/10/2026, decisión de Luis Javier). Lo de otros días se consulta
+    // en «Mis guardias».
     const hoy = hoyLocal();
     const { data } = await consulta('apoyos_asignados')
       .select('*')
       .eq('profesor_id', id)
       .eq('estado', 'pendiente')
-      .gte('fecha', hoy)
-      .lte('fecha', sumarDias(hoy, 3))
+      .eq('fecha', hoy)
       .order('fecha', { ascending: true })
       .order('hora', { ascending: true });
     setApoyosPendientes((data || []).slice(0, 8));
