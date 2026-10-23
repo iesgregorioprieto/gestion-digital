@@ -202,14 +202,15 @@ export default function GestionGuardias() {
 
     // Contador de apoyos por sector del curso
     const { data: apoyos } = await consulta('apoyos_asignados')
-      .select('sector_apoyo,profesor_id,estado')
+      .select('sector_apoyo,profesor_id,cuenta_para,estado')
       .eq('curso_academico', await getCursoActual());
     const cont = {};
     const contProf = {};
     (apoyos || []).forEach(a => {
       if (a.estado === 'confirmado' || a.estado === 'realizado') {
         cont[a.sector_apoyo] = (cont[a.sector_apoyo] || 0) + 1;
-        if (a.profesor_id) contProf[a.profesor_id] = (contProf[a.profesor_id] || 0) + 1;
+        const quien = a.cuenta_para || a.profesor_id;   // sustituto → su titular, ya de vuelta
+        if (quien) contProf[quien] = (contProf[quien] || 0) + 1;
       }
     });
     setContApoyos(cont);

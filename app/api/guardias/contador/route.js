@@ -63,7 +63,7 @@ export async function GET(request) {
       todas(() => cliente.from('profesores').select('id,nombre,apellidos,departamento,especialidad')),
       todas(() => cliente.from('equivalencias_horario').select('nombre_horario, profesor_id')),
       todas(() => cliente.from('apoyos_asignados')
-        .select('profesor_id,profesor_nombre_pdf,estado,fecha,sector_apoyo,sector_destino,cuenta_reparto')
+        .select('profesor_id,cuenta_para,profesor_nombre_pdf,estado,fecha,sector_apoyo,sector_destino,cuenta_reparto')
         .eq('curso_academico', curso)),
     ]);
 

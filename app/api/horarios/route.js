@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { indiceProfesores, buscaProfesor, nombreDe } from '@/lib/asignacionGuardias';
 import { getCursoActual } from '@/lib/curso';
+import { hoyLocal } from '@/lib/fechas';
 import { esSectorRecreo } from '@/lib/sectores';
 import { invalidarCacheNombres } from '@/lib/cacheNombres';
 
@@ -385,12 +386,22 @@ export async function POST(request) {
      * aunque ya se hubiera ido del centro.
      */
     if (accion === 'devolver_horario') {
-      const { titular_id } = datosExtra;
+      const { titular_id, sustituto_id } = datosExtra;
       if (!titular_id) return Response.json({ error: 'Falta el titular' }, { status: 400 });
+      // Primer día en que el titular vuelve a tener su horario. Por defecto, hoy.
+      const desde = /^\d{4}-\d{2}-\d{2}$/.test(datosExtra.fecha || '') ? datosExtra.fecha : hoyLocal();
 
       const cliente = supa();
       const { data: prestadas } = await cliente.from('horarios_profesores')
-        .select('id, nombre_original_pdf').eq('titular_original_id', titular_id);
+        .select('id, nombre_original_pdf, tipo, hora_id').eq('titular_original_id', titular_id);
+
+      // Cómo se llama el titular en el cuadrante de guardias (abreviatura de
+      // Peñalara): con ese nombre se le vuelven a poner las guardias que el
+      // reparto ya le había preparado al sustituto.
+      const cuenta = {};
+      (prestadas || []).filter(h => h.tipo === 'guardia' && h.nombre_original_pdf)
+        .forEach(h => { cuenta[h.nombre_original_pdf] = (cuenta[h.nombre_original_pdf] || 0) + 1; });
+      const nombreCuadrante = Object.entries(cuenta).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
 
       let devueltos = 0;
       for (const h of (prestadas || [])) {
@@ -406,7 +417,54 @@ export async function POST(request) {
         devueltos++;
       }
 
-      return Response.json({ ok: true, devueltos });
+      if (!sustituto_id || sustituto_id === titular_id) {
+        return Response.json({ ok: true, devueltos, guardiasDevueltas: 0, guardiasAcreditadas: 0 });
+      }
+
+      /**
+       * LAS GUARDIAS QUE EL SUSTITUTO TENÍA PREPARADAS, AL TITULAR
+       *
+       * El reparto deja preparadas las de los próximos días. Las de recreo
+       * no las vuelve a calcular nunca, así que se quedaban a nombre de
+       * alguien que ya no está en el centro. Desde el día del alta pasan
+       * al titular, que es quien vuelve a tener esas guardias.
+       */
+      const cambio = { profesor_id: titular_id };
+      if (nombreCuadrante) cambio.profesor_nombre_pdf = nombreCuadrante;
+      const { data: movidas, error: eMov } = await cliente.from('apoyos_asignados')
+        .update(cambio)
+        .eq('profesor_id', sustituto_id).eq('estado', 'pendiente').gte('fecha', desde)
+        .select('id');
+      if (eMov) return Response.json({ error: eMov.message }, { status: 500 });
+
+      /**
+       * EL CONTADOR DE GUARDIAS VUELVE CON EL TITULAR
+       *
+       * Mientras sustituía, el sustituto heredó lo que llevaba el titular.
+       * Al volver, el titular debe heredar lo que hizo el sustituto en su
+       * lugar: si no, vuelve con el contador de antes de la baja y la
+       * rotación le saca a él el primero (queja de Javier Sánchez Anegas,
+       * 23/10/2026). Se anota en cuenta_para: quien la hizo sigue siendo
+       * el sustituto (informes, Delegación); para la rotación cuenta el
+       * titular. Así sobrevive aunque luego se borre la ficha del sustituto.
+       */
+      const { data: tit } = await cliente.from('profesores').select('fecha_baja').eq('id', titular_id);
+      const inicioBaja = tit?.[0]?.fecha_baja || null;
+      let consultaCredito = cliente.from('apoyos_asignados')
+        .update({ cuenta_para: titular_id })
+        .eq('profesor_id', sustituto_id)
+        .in('estado', ['confirmado', 'realizado', 'incidencia'])
+        .is('cuenta_para', null)
+        .lt('fecha', desde);
+      if (inicioBaja) consultaCredito = consultaCredito.gte('fecha', inicioBaja);
+      const { data: acreditadas, error: eCred } = await consultaCredito.select('id');
+      if (eCred) return Response.json({ error: eCred.message }, { status: 500 });
+
+      return Response.json({
+        ok: true, devueltos,
+        guardiasDevueltas: (movidas || []).length,
+        guardiasAcreditadas: (acreditadas || []).length,
+      });
     }
 
 

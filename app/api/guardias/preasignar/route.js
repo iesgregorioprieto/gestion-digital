@@ -264,7 +264,7 @@ export async function POST(request) {
     let delCurso = [];
     for (let offset = 0; ; offset += 1000) {
       const { data } = await cliente.from('apoyos_asignados')
-        .select('id,sector_apoyo,sector_destino,profesor_id,estado,fecha,hora,cuenta_reparto')
+        .select('id,sector_apoyo,sector_destino,profesor_id,cuenta_para,estado,fecha,hora,cuenta_reparto')
         .eq('curso_academico', curso)
         .order('id')
         .range(offset, offset + 999);
@@ -283,10 +283,13 @@ export async function POST(request) {
       // del cuadrante de recreo, y nadie sustituye a nadie. Si contara, a
       // quien vigila el patio el reparto lo iría dejando atrás sin motivo.
       if (esSectorRecreo(a.sector_apoyo)) return;
-      if (a.profesor_id) {
-        apoyosPorProfesor[a.profesor_id] = (apoyosPorProfesor[a.profesor_id] || 0) + 1;
+      // cuenta_para: la hizo un sustituto en lugar de su titular, que ya
+      // ha vuelto. Para la rotación cuenta el titular.
+      const quien = a.cuenta_para || a.profesor_id;
+      if (quien) {
+        apoyosPorProfesor[quien] = (apoyosPorProfesor[quien] || 0) + 1;
         if (a.fecha && a.hora) {
-          const k = claveFranja(a.profesor_id, diaSemanaEs(a.fecha), a.hora);
+          const k = claveFranja(quien, diaSemanaEs(a.fecha), a.hora);
           apoyosPorFranja[k] = (apoyosPorFranja[k] || 0) + 1;
         }
       }

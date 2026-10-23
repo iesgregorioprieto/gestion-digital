@@ -18,6 +18,7 @@
  *     cuadrante de guardias
  */
 
+import { hoyLocal } from '@/lib/fechas';
 import { useState, useEffect } from 'react';
 import { consulta } from '@/lib/consulta';
 
@@ -31,7 +32,7 @@ function sinTildes(s) {
 }
 
 function hoyISO() {
-  return new Date().toISOString().slice(0, 10);
+  return hoyLocal();   // fecha de Madrid, no la UTC
 }
 
 function diasDesde(fecha) {
@@ -266,7 +267,8 @@ export default function PanelBajas() {
       //    enlace sigue en pie y no se pierde de quién era cada hora.
       const r = await fetch('/api/horarios', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id,
+          sustituto_id: sustituto.id, fecha: hoyISO() }),
       });
       const vuelta = await r.json();
       if (vuelta.error) throw new Error(vuelta.error);
@@ -354,7 +356,8 @@ export default function PanelBajas() {
         // Devolver al titular sus horas (no borrarlas: son SU horario)
         await fetch('/api/horarios', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+          body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id,
+            sustituto_id: sustituto.id, fecha: hoyISO() }),
         });
         await fetch('/api/profesores', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -393,6 +396,12 @@ export default function PanelBajas() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaAlta)) {
       alert('La fecha debe tener el formato AAAA-MM-DD.'); return;
     }
+    // El horario se devuelve en el momento: si se registrara por adelantado,
+    // el sustituto se quedaría sin horario los días que aún le quedan.
+    if (fechaAlta > hoyISO()) {
+      alert('La incorporación se registra el mismo día en que vuelve (o después), no por adelantado.');
+      return;
+    }
 
     if (!confirm(
       `¿${titular.nombre} ${titular.apellidos} se incorpora el ${fechaLarga(fechaAlta)}?\n\n` +
@@ -409,7 +418,10 @@ export default function PanelBajas() {
       //    tenía horario. Ahora no se borra nada: lo que era suyo vuelve a él.
       const rd = await fetch('/api/horarios', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id }),
+        // Con el sustituto: sus guardias preparadas desde el alta pasan al
+        // titular, y las que fichó en su lugar cuentan para el titular.
+        body: JSON.stringify({ accion: 'devolver_horario', titular_id: titular.id,
+          sustituto_id: sustituto?.id || null, fecha: fechaAlta }),
       });
       const dev = await rd.json().catch(() => ({}));
       if (!rd.ok) throw new Error(dev.error || 'No se pudo devolver el horario');
@@ -435,10 +447,14 @@ export default function PanelBajas() {
 
       // Cierra la ausencia abierta si quedaba alguna, y con ella se van
       // las guardias pendientes que ya no hacen falta.
+      // Hasta la víspera del alta: antes se cerraba con la fecha de hoy, y si
+      // el alta se registraba días después, esos días seguía «de baja».
+      const vispera = new Date(fechaAlta + 'T12:00:00');
+      vispera.setDate(vispera.getDate() - 1);
       await fetch('/api/ausencias', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion: 'cerrar_baja',
-          datos: { profesor_id: titular.id, fecha_fin: hoyISO() } }),
+          datos: { profesor_id: titular.id, fecha_fin: vispera.toISOString().slice(0, 10) } }),
       });
 
 
@@ -455,7 +471,8 @@ export default function PanelBajas() {
         body: JSON.stringify({ fecha: hoyISO() }),
       }).catch(() => {});
 
-      aviso(`Titular incorporado. Recupera su horario (${dev.devueltos || 0} horas).`);
+      aviso(`Titular incorporado. Recupera su horario (${dev.devueltos || 0} horas)` +
+        (sustituto ? ` y se le suman ${dev.guardiasAcreditadas || 0} guardias que fichó ${sustituto.nombre} en su lugar.` : '.'));
       cargar();
     } catch (e) {
       aviso('No se ha podido dar de alta: ' + e.message, 'error');

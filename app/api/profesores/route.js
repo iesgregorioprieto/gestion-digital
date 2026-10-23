@@ -323,6 +323,27 @@ export async function POST(request) {
         consulta = consulta.eq('estado', 'inactivo');
       }
 
+      /**
+       * ANTES DE BORRAR A UN SUSTITUTO, SU CONTADOR PASA AL TITULAR
+       *
+       * Las guardias que fichó en lugar de su titular cuentan para el
+       * titular (cuenta_para). Normalmente se anota al darle el alta; esto
+       * cubre el caso de borrar la ficha del sustituto antes. Sus guardias
+       * no se borran: se quedan en el histórico sin ficha.
+       */
+      let aBorrar = supa().from('profesores').select('id, titular_id').not('titular_id', 'is', null);
+      if (accion === 'eliminar') aBorrar = aBorrar.eq('id', id);
+      else if (accion === 'eliminar_interinos') aBorrar = aBorrar.like('tipo_contrato', 'Interino%');
+      else aBorrar = aBorrar.eq('estado', 'inactivo');
+      const { data: sustitutos } = await aBorrar;
+      for (const s of (sustitutos || [])) {
+        await supa().from('apoyos_asignados')
+          .update({ cuenta_para: s.titular_id })
+          .eq('profesor_id', s.id)
+          .in('estado', ['confirmado', 'realizado', 'incidencia'])
+          .is('cuenta_para', null);
+      }
+
       const { error } = await consulta;
       if (error) return Response.json({ error: error.message }, { status: 500 });
       return Response.json({ ok: true });
