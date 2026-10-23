@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
  * información y la votación dejaría de ser limpia.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -31,6 +31,7 @@ export default function GestionVotaciones() {
   const [mensaje, setMensaje] = useState(null);
   const [usuario, setUsuario] = useState('');
   const [ahora, setAhora] = useState(Date.now());
+  const hayAbiertaRef = useRef(false);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -41,10 +42,25 @@ export default function GestionVotaciones() {
     }
     setUsuario(sessionStorage.getItem('profesor_nombre') || '');
     cargar();
-    const t = setInterval(cargar, 10000);
+    // Refresco cada 10 s solo mientras haya una votación abierta y la
+    // pestaña esté visible; sin ninguna abierta, no hay refresco automático.
+    const t = setInterval(() => {
+      if (document.hidden || !hayAbiertaRef.current) return;
+      cargar();
+    }, 10000);
+    // Al volver a la pestaña, recarga en el acto.
+    function alVolver() { if (!document.hidden) cargar(); }
+    document.addEventListener('visibilitychange', alVolver);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { clearInterval(t); clearInterval(reloj); };
+    return () => {
+      clearInterval(t); clearInterval(reloj);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, []);
+
+  useEffect(() => {
+    hayAbiertaRef.current = votaciones.some(v => v.abierta);
+  }, [votaciones]);
 
   // Cuando a una votación abierta se le acaba el tiempo, se recarga
   // en el acto para que salgan los resultados sin esperar al refresco.

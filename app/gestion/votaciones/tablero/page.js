@@ -18,7 +18,7 @@ export const dynamic = 'force-dynamic';
  * si se mira, pero no se señala a nadie.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const VERDE = '#1e6b2e';
 const AZUL = '#1e3a5f';
@@ -69,6 +69,9 @@ export default function TableroVotacion() {
   const [id, setId] = useState(null);
 
   const [tipo, setTipo] = useState('suelta'); // suelta | convocatoria
+  // true cuando la votación está cerrada y ya tiene recuento: no hay
+  // nada más que consultar.
+  const terminadaRef = useRef(false);
 
   useEffect(() => {
     const q = new URL(window.location.href).searchParams;
@@ -99,9 +102,28 @@ export default function TableroVotacion() {
     }
 
     cargar();
-    const t = setInterval(cargar, 4000);
-    return () => { vivo = false; clearInterval(t); };
+    // Cada 4 s, salvo con la pestaña oculta; y se para del todo en
+    // cuanto la votación está cerrada y con recuento.
+    const t = setInterval(() => {
+      if (terminadaRef.current) { clearInterval(t); return; }
+      if (document.hidden) return;
+      cargar();
+    }, 4000);
+    function alVolver() {
+      if (!document.hidden && !terminadaRef.current) cargar();
+    }
+    document.addEventListener('visibilitychange', alVolver);
+    return () => {
+      vivo = false; clearInterval(t);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, [id]);
+
+  useEffect(() => {
+    if (!datos) return;
+    const abiertaAhora = tipo === 'convocatoria' ? datos.estado === 'abierta' : datos.abierta;
+    terminadaRef.current = !abiertaAhora && !!datos.recuento;
+  }, [datos, tipo]);
 
   if (error) {
     return (

@@ -9,7 +9,7 @@ export const dynamic = 'force-dynamic';
  * reloj, no el del móvil.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -22,16 +22,35 @@ export default function Votaciones() {
   const [mensaje, setMensaje] = useState(null);
   const [ahora, setAhora] = useState(Date.now());
   const [verComoFunciona, setVerComoFunciona] = useState(false);
+  const hayAbiertaRef = useRef(false);
+  const ultimaCargaRef = useRef(0);
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
     cargar();
     // Se refresca solo: durante un claustro la votación se abre y se
     // cierra mientras la gente tiene la pantalla delante.
-    const t = setInterval(cargar, 15000);
+    // Con alguna abierta, cada 15 s; sin ninguna, cada 60 s.
+    // Con la pestaña oculta no se consulta nada (ahorro en Vercel).
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      const espera = hayAbiertaRef.current ? 15000 : 60000;
+      if (Date.now() - ultimaCargaRef.current < espera - 1000) return;
+      cargar();
+    }, 15000);
+    // Al volver a la pestaña, recarga en el acto.
+    function alVolver() { if (!document.hidden) cargar(); }
+    document.addEventListener('visibilitychange', alVolver);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { clearInterval(t); clearInterval(reloj); };
+    return () => {
+      clearInterval(t); clearInterval(reloj);
+      document.removeEventListener('visibilitychange', alVolver);
+    };
   }, []);
+
+  useEffect(() => {
+    hayAbiertaRef.current = votaciones.some(v => v.abierta);
+  }, [votaciones]);
 
   // Cuando a una votación abierta se le acaba el tiempo, se recarga
   // en el acto para que salgan los resultados sin esperar al refresco.
@@ -50,6 +69,7 @@ export default function Votaciones() {
   }, [ahora, votaciones, yaRecargadas]);
 
   async function cargar() {
+    ultimaCargaRef.current = Date.now();
     try {
       const r = await fetch('/api/votaciones');
       const d = await r.json();
