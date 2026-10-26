@@ -232,6 +232,11 @@ export async function POST(request) {
                 <td style="padding:10px;font-weight:bold">Grupos</td>
                 <td style="padding:10px">${e(datos.grupos)}</td>
               </tr>
+              ${Array.isArray(datos.participantes) && datos.participantes.length ? `
+              <tr>
+                <td style="padding:10px;font-weight:bold;vertical-align:top">Profesorado participante (${datos.participantes.length})</td>
+                <td style="padding:10px;line-height:1.6">${datos.participantes.slice(0, 80).map(n => e(n)).join('<br>')}</td>
+              </tr>` : ''}
               <tr>
                 <td style="padding:10px;font-weight:bold">Lugar</td>
                 <td style="padding:10px">${e(datos.lugar)}</td>

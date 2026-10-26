@@ -79,9 +79,27 @@ export async function POST(request) {
       // esté o no en la PGA. Las que no figuran en ella se marcan aparte
       // en el correo, porque además necesitan autorización expresa.
       if (tabla === 'actividades') {
+        // Nombres del profesorado acompañante, para que dirección vea en el
+        // correo quién participa (petición de José María, oct. 2026).
+        const nombrePorId = {};
+        try {
+          const ids = [...new Set(conAutor.flatMap(f => Array.isArray(f.acompanantes) ? f.acompanantes : []))];
+          if (ids.length) {
+            const { data: ps } = await supa().from('profesores')
+              .select('id, nombre, apellidos').in('id', ids);
+            for (const p of ps || []) nombrePorId[p.id] = `${p.nombre || ''} ${p.apellidos || ''}`.trim();
+          }
+        } catch (err) {
+          console.error('nombres de acompañantes:', err?.message);
+        }
+
         for (const act of conAutor) {
+          const responsable = act.profesor_nombre || sesion.nombre || 'Un profesor/a';
+          const acomp = (Array.isArray(act.acompanantes) ? act.acompanantes : [])
+            .map(id => nombrePorId[id]).filter(Boolean);
           enviarAviso('actividad_sin_pga', AVISOS_ACTIVIDADES, {
-            profesor: act.profesor_nombre || sesion.nombre || 'Un profesor/a',
+            profesor: responsable,
+            participantes: [`${responsable} (responsable)`, ...acomp],
             titulo: act.titulo || '',
             fechas: act.fecha_inicio === act.fecha_fin || !act.fecha_fin
               ? (act.fecha_inicio || '')
@@ -105,7 +123,10 @@ export async function POST(request) {
             await enviarPushA(cliente, ids, {
               titulo: '🎒 Actividad por autorizar',
               cuerpo: `${primera.profesor_nombre || sesion.nombre || 'Un profesor/a'}: ${primera.titulo || 'actividad complementaria'}`
-                + (primera.fecha_inicio ? ` (${primera.fecha_inicio})` : ''),
+                + (primera.fecha_inicio ? ` (${primera.fecha_inicio})` : '')
+                + (Array.isArray(primera.acompanantes) && primera.acompanantes.length
+                  ? ` · ${primera.acompanantes.length + 1} profesores`
+                  : ''),
               url: '/gestion/actividades',
             });
           }

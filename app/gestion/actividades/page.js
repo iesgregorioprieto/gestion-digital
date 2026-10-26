@@ -51,6 +51,7 @@ export default function GestionActividades() {
   const [ausenciasPorFecha, setAusenciasPorFecha] = useState(null);
   const [editando, setEditando] = useState(null);   // actividad abierta en el editor
   const [esDirector, setEsDirector] = useState(false);
+  const [nombresProf, setNombresProf] = useState({});   // id -> nombre completo
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -70,6 +71,17 @@ export default function GestionActividades() {
       .select('*')
       .order('fecha_inicio', { ascending: true });
     setActividades(data || []);
+
+    // Nombres del profesorado, para enseñar quién participa en cada
+    // actividad. Los acompañantes se guardan por identificador.
+    try {
+      const { data: profs } = await consulta('profesores').select('id, nombre, apellidos');
+      const mapa = {};
+      for (const p of profs || []) mapa[p.id] = `${p.nombre || ''} ${p.apellidos || ''}`.trim();
+      setNombresProf(mapa);
+    } catch (e) {
+      setNombresProf({});
+    }
 
     // Ausencias registradas, para saber qué actividades aprobadas
     // todavía no tienen la suya. Sin ella, el cuadrante de guardias
@@ -436,7 +448,7 @@ export default function GestionActividades() {
                         </div>
                         <div style={{ fontSize: 12.5, color: '#777', marginTop: 3 }}>
                           {a.profesor_nombre}
-                          {nAcomp > 0 ? ` +${nAcomp}` : ''}
+                          {nAcomp > 0 ? ` + ${nAcomp} ${nAcomp === 1 ? 'acompañante' : 'acompañantes'}` : ''}
                           {grupos ? ` · ${grupos}` : ''}
                           {a.departamento ? ` · ${a.departamento}` : ''}
                         </div>
@@ -497,6 +509,30 @@ export default function GestionActividades() {
                             </div>
                           ))}
                         </div>
+
+                        {/* Profesorado que participa (petición de José María) */}
+                        {(() => {
+                          const acomp = (Array.isArray(a.acompanantes) ? a.acompanantes : [])
+                            .filter(id => id && id !== a.profesor_id);
+                          const total = 1 + acomp.length;
+                          return (
+                            <div style={{ marginBottom: 12, padding: '11px 13px', borderRadius: 9, backgroundColor: '#f5f3ff', border: '1px solid #ddd6fe' }}>
+                              <div style={{ fontWeight: 800, color: '#5b21b6', marginBottom: 7, fontSize: 13 }}>
+                                👩‍🏫 Profesorado que participa ({total})
+                              </div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                                <span style={{ fontSize: 12.5, fontWeight: 700, padding: '4px 10px', borderRadius: 20, backgroundColor: '#5b21b6', color: 'white' }}>
+                                  {a.profesor_nombre || nombresProf[a.profesor_id] || 'Responsable'} · responsable
+                                </span>
+                                {acomp.map(id => (
+                                  <span key={id} style={{ fontSize: 12.5, fontWeight: 600, padding: '4px 10px', borderRadius: 20, backgroundColor: 'white', color: '#4c1d95', border: '1px solid #c4b5fd' }}>
+                                    {nombresProf[id] || 'Profesor/a sin ficha'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                         {/* Alumnado que asiste */}
                         {a.alumnos_asistentes && (
