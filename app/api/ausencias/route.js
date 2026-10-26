@@ -332,7 +332,7 @@ export async function POST(request) {
     const sesion = await sesionDe(request);
     if (!sesion?.id) return Response.json({ error: 'sin_sesion' }, { status: 401 });
 
-    const { accion, id, datos } = await request.json();
+    const { accion, id, datos, sin_reparto } = await request.json();
     if (!accion) return Response.json({ error: 'Falta la acción' }, { status: 400 });
 
     /**
@@ -509,7 +509,9 @@ export async function POST(request) {
       // función se cerraba a veces antes de que saliera la petición).
       // Solo el día que se está viviendo y el siguiente: los demás se
       // recalculan esa misma mañana.
-      if (fila.fecha_inicio) await rehacerReparto(request);
+      // En lotes (pasar a ausencias los DLD ya concedidos) dirección pide
+      // no rehacerlo en cada una: se rehace una sola vez al final.
+      if (fila.fecha_inicio && !(sin_reparto && esDirectivo(sesion))) await rehacerReparto(request);
 
       // Permiso de formación: la aprobación (jefe de departamento y
       // director) se hace ANTES, en el módulo de Formación. Aquí ya no se

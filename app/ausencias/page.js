@@ -915,10 +915,24 @@ export default function Ausencias() {
               <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); setFormacionId(''); }}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? verdeClaro : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
                 <option value="">-- Selecciona el motivo --</option>
-                {MOTIVOS_AUSENCIA.filter(m => m.valor !== 'dld' || subtipo === 'dld').map(m => (
-                  <option key={m.valor} value={m.valor}>{m.emoji} {m.label}</option>
+                {MOTIVOS_AUSENCIA.map(m => (
+                  // El DLD no se registra aquí: se pide en el módulo DLD y,
+                  // al concederlo el director, la ausencia aparece sola. Se
+                  // deja a la vista pero en gris, para que se sepa por qué.
+                  m.valor === 'dld' && subtipo !== 'dld'
+                    ? <option key={m.valor} value={m.valor} disabled style={{ color: '#9ca3af' }}>
+                        {m.emoji} {m.label} — no se selecciona: lo concede el director
+                      </option>
+                    : <option key={m.valor} value={m.valor}>{m.emoji} {m.label}</option>
                 ))}
               </select>
+              {subtipo !== 'dld' && (
+                <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 8, backgroundColor: '#f3f4f6', border: '1px solid #d1d5db', fontSize: 12, color: '#6b7280', lineHeight: 1.5 }}>
+                  🗓️ <strong>Día de libre disposición:</strong> no se registra aquí. Se solicita en el módulo
+                  <strong> DLD</strong> y lo autoriza el director. Cuando te lo conceda, aparecerá solo en tus
+                  ausencias: entra entonces en ella y marca las actividades que deben hacer tus alumnos.
+                </div>
+              )}
               {subtipo && avisoDeMotivo(subtipo) && (
                 <div style={{ marginTop: 8, padding: '11px 13px', borderRadius: 8, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', fontSize: 12.5, color: '#78350f', lineHeight: 1.5 }}>
                   <div style={{ fontWeight: 800, marginBottom: 3 }}>{avisoDeMotivo(subtipo).titulo}</div>

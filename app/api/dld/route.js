@@ -23,7 +23,7 @@ import { enviarPushA } from '@/lib/pushServidor';
  *
  * Devuelve true si ha creado la ausencia (y con ella rehecho el reparto).
  */
-async function registrarAusenciaDelDld(request, dldId) {
+async function registrarAusenciaDelDld(request, dldId, { sinReparto = false } = {}) {
   try {
     const { data } = await supa().from('dld')
       .select('id, profesor_id, profesor_nombre, fecha_solicitada, horas')
@@ -37,6 +37,7 @@ async function registrarAusenciaDelDld(request, dldId) {
       headers: { 'Content-Type': 'application/json', 'Cookie': request.headers.get('cookie') || '' },
       body: JSON.stringify({
         accion: 'crear',
+        sin_reparto: sinReparto,
         datos: {
           profesor_id: d.profesor_id,
           profesor_nombre: d.profesor_nombre || null,
@@ -55,7 +56,9 @@ async function registrarAusenciaDelDld(request, dldId) {
       console.error('ausencia del DLD:', r.status, await r.text().catch(() => ''));
     }
 
-    // Aviso al profesor: tiene que revisar o completar sus tareas
+    // Aviso al profesor: tiene que revisar o completar sus tareas. Solo si
+    // se ha creado: si ya tenía otra ausencia ese día, no hay nada nuevo.
+    if (!creada) return false;
     const f = d.fecha_solicitada.split('-').reverse().join('/');
     await enviarPushA(supa(), [d.profesor_id], {
       titulo: '✅ DLD concedido',
@@ -409,6 +412,43 @@ export async function POST(request) {
         if (!creada) await rehacerReparto(request);
       }
       return Response.json({ ok: true });
+    }
+
+    // ─── Pasar a ausencias los DLD concedidos antes del 26/10/2026 ───
+    // Desde ese día, aprobar un DLD crea sola la ausencia. Los aprobados
+    // antes, de hoy en adelante, se pasan con esta acción (un botón en
+    // Gestión → DLD). Se puede repetir: los que ya la tienen se saltan.
+    if (accion === 'pasar_a_ausencias') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      const hoy = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+
+      const { data: dlds, error } = await supa().from('dld')
+        .select('id, profesor_id, fecha_solicitada')
+        .eq('estado', 'aprobada').gte('fecha_solicitada', hoy)
+        .not('profesor_id', 'is', null)
+        .order('fecha_solicitada');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      const { data: aus } = await supa().from('ausencias')
+        .select('profesor_id, fecha_inicio, fecha_fin')
+        .gte('fecha_fin', hoy);
+      const tiene = d => (aus || []).some(a => a.profesor_id === d.profesor_id
+        && a.fecha_inicio <= d.fecha_solicitada && (a.fecha_fin || a.fecha_inicio) >= d.fecha_solicitada);
+
+      const pendientes = (dlds || []).filter(d => !tiene(d));
+      const LOTE = 15;   // que la petición no se haga eterna
+      let creadas = 0;
+      for (const d of pendientes.slice(0, LOTE)) {
+        if (await registrarAusenciaDelDld(request, d.id, { sinReparto: true })) creadas++;
+      }
+      if (creadas > 0) await rehacerReparto(request);
+      return Response.json({
+        ok: true, creadas,
+        ya_tenian: (dlds || []).length - pendientes.length,
+        quedan: Math.max(0, pendientes.length - LOTE),
+      });
     }
 
     // ─── Revocar un permiso ya concedido ───

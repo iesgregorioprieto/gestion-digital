@@ -911,6 +911,23 @@ export default function PanelDirector() {
           <button onClick={() => setVista('escenario')} style={{ padding: '10px 20px', borderRadius: 10, border: `1.5px solid ${vista === 'escenario' ? verde : '#ddd'}`, backgroundColor: vista === 'escenario' ? verde : 'white', color: vista === 'escenario' ? 'white' : '#555', cursor: 'pointer', fontWeight: 600, fontSize: 14 }}>📅 Escenario del día</button>
         </div>
 
+        {/* Los DLD aprobados antes del 26/10/2026 no tienen su ausencia */}
+        <div style={{ marginTop: -8, marginBottom: 18 }}>
+          <button onClick={async () => {
+            if (!confirm('Se creará en «Mis ausencias» de cada profesor la ausencia de sus DLD ya concedidos de hoy en adelante, y se le avisará para que rellene las tareas.\n\nLos que ya la tienen no se tocan. ¿Seguir?')) return;
+            try {
+              const r = await fetch('/api/dld', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accion: 'pasar_a_ausencias' }) }).then(x => x.json());
+              if (r.error) throw new Error(r.error);
+              alert(`Ausencias creadas: ${r.creadas}.\nYa la tenían: ${r.ya_tenian}.` + (r.quedan ? `\n\nQuedan ${r.quedan}: vuelve a pulsar el botón.` : ''));
+            } catch (e) {
+              alert('No se ha podido: ' + (e.message || e));
+            }
+          }} style={{ padding: '7px 14px', borderRadius: 8, border: '1.5px dashed #94a3b8', backgroundColor: 'white', color: '#475569', cursor: 'pointer', fontWeight: 600, fontSize: 12.5 }}>
+            🔄 Pasar a ausencias los DLD ya concedidos
+          </button>
+        </div>
+
         {vista === 'registrar' && (
           <div style={{ backgroundColor: 'white', borderRadius: 12, padding: 20, border: '1px solid #e5e7eb', maxWidth: 620 }}>
             <h3 style={{ margin: '0 0 6px', fontSize: 16, color: azul }}>📝 Registrar una solicitud a mano</h3>
