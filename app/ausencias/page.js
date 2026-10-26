@@ -915,7 +915,7 @@ export default function Ausencias() {
               <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); setFormacionId(''); }}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? verdeClaro : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
                 <option value="">-- Selecciona el motivo --</option>
-                {MOTIVOS_AUSENCIA.map(m => (
+                {MOTIVOS_AUSENCIA.filter(m => m.valor !== 'dld' || subtipo === 'dld').map(m => (
                   <option key={m.valor} value={m.valor}>{m.emoji} {m.label}</option>
                 ))}
               </select>

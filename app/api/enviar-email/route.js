@@ -433,10 +433,15 @@ export async function POST(request) {
                 <td style="padding:10px">${e(datos.tipo_dld || 'DLD')}</td>
               </tr>
             </table>
+            <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:14px 16px;color:#78350f;line-height:1.5">
+              <strong>Importante:</strong> tu día libre ya figura en <strong>Mis ausencias</strong>.
+              Entra y rellena o revisa las tareas para tus grupos: son las que verán
+              los compañeros que te cubran en la guardia.
+            </div>
             <div style="text-align:center;margin:30px 0">
-              <a href="${BASE_URL}/dld"
+              <a href="${BASE_URL}/ausencias"
                  style="background:#1e3a5f;color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
-                Ver mis solicitudes
+                Ir a mis ausencias
               </a>
             </div>
           </div>

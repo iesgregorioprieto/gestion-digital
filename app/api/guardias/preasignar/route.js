@@ -233,16 +233,18 @@ export async function POST(request) {
       if (p.en_baja && p.sustituto_id && !relevo.has(p.id)) relevo.set(p.id, p.sustituto_id);
     });
 
-    // Un DLD puede estar a la vez en el módulo de DLD y registrado como
-    // ausencia «Día de libre disposición concedido». Es el mismo día: si
-    // está en el módulo, esa ausencia sobra; si no, se cubriría dos veces
-    // (Edith Sandor, 30/10/2026).
-    const dldDe = new Set((rDld.data || []).map(d => `${d.profesor_id}|${d.fecha_solicitada}`));
+    // Un DLD concedido tiene además su ausencia «Día de libre disposición
+    // concedido» (se crea al aprobarlo, o la registró alguien a mano).
+    // Es el mismo día: manda la ausencia, que es donde el profesor
+    // completa sus tareas, y el DLD sobra. Sin esto se cubría dos veces
+    // (Edith Sandor, 30/10/2026). Los DLD sin ausencia cuentan como antes.
+    const ausDld = new Set((rAus.data || []).filter(a => a.subtipo === 'dld')
+      .map(a => `${a.profesor_id}|${a.fecha_inicio}`));
     const faltas = [
-      ...(rAus.data || [])
-        .filter(a => !(a.subtipo === 'dld' && dldDe.has(`${a.profesor_id}|${a.fecha_inicio}`)))
-        .map(a => ({ ...a, origen: 'ausencia' })),
-      ...(rDld.data || []).map(d => ({ ...d, origen: 'dld' })),
+      ...(rAus.data || []).map(a => ({ ...a, origen: 'ausencia' })),
+      ...(rDld.data || [])
+        .filter(d => !ausDld.has(`${d.profesor_id}|${d.fecha_solicitada}`))
+        .map(d => ({ ...d, origen: 'dld' })),
     ];
 
     // Quien está de baja y NO tiene sustituto falta el día entero: sus

@@ -4,6 +4,82 @@ import { claveServidor } from '@/lib/claveServidor';
 import { getConfigCurso, calcularAntiguedad, calcularDiasDLD } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
 import { rehacerReparto } from '@/lib/rehacerReparto';
+import { enviarPushA } from '@/lib/pushServidor';
+
+/**
+ * DLD CONCEDIDO → AUSENCIA DEL PROFESOR (Luis Javier, 26/10/2026)
+ *
+ * Al aprobar José María un DLD se registra sola la ausencia del
+ * profesor, con las horas y tareas que dejó en la solicitud. Desde ahí
+ * el cuadrante de guardias la cubre como cualquier otra, sale en el
+ * escenario del día y el profesor puede completar o cambiar sus tareas
+ * en «Mis ausencias». Así nadie tiene que notificarla a mano: hacerlo
+ * duplicaba las guardias (Edith Sandor, 30/10/2026).
+ *
+ * Se crea a través de /api/ausencias, para que pase por las mismas
+ * reglas: horas día a día contra el horario, no dos ausencias el mismo
+ * día y reparto de guardias al momento. Si ya tenía una ausencia ese
+ * día, no se crea otra. Nunca lanza: el DLD ya está aprobado.
+ *
+ * Devuelve true si ha creado la ausencia (y con ella rehecho el reparto).
+ */
+async function registrarAusenciaDelDld(request, dldId) {
+  try {
+    const { data } = await supa().from('dld')
+      .select('id, profesor_id, profesor_nombre, fecha_solicitada, horas')
+      .eq('id', dldId);
+    const d = (data || [])[0];
+    if (!d?.profesor_id || !d.fecha_solicitada) return false;
+
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+    const r = await fetch(`${baseUrl}/api/ausencias`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Cookie': request.headers.get('cookie') || '' },
+      body: JSON.stringify({
+        accion: 'crear',
+        datos: {
+          profesor_id: d.profesor_id,
+          profesor_nombre: d.profesor_nombre || null,
+          fecha_inicio: d.fecha_solicitada,
+          fecha_fin: d.fecha_solicitada,
+          subtipo: 'dld',
+          tipo: 'prevista',
+          motivo: '🗓️ Día de libre disposición concedido',
+          horas: Array.isArray(d.horas) ? d.horas : [],
+          datos_extra: { dld_id: d.id },
+        },
+      }),
+    });
+    const creada = r.ok;
+    if (!creada && r.status !== 409) {
+      console.error('ausencia del DLD:', r.status, await r.text().catch(() => ''));
+    }
+
+    // Aviso al profesor: tiene que revisar o completar sus tareas
+    const f = d.fecha_solicitada.split('-').reverse().join('/');
+    await enviarPushA(supa(), [d.profesor_id], {
+      titulo: '✅ DLD concedido',
+      cuerpo: `Tu día libre del ${f} ya está en Mis ausencias. Entra y rellena o revisa las tareas para tus grupos.`,
+      url: '/ausencias',
+    }).catch(err => console.error('push DLD concedido:', err?.message));
+
+    return creada;
+  } catch (e) {
+    console.error('registrar ausencia del DLD:', e?.message);
+    return false;
+  }
+}
+
+/** Al revocar o borrar un DLD, su ausencia automática sobra. */
+async function borrarAusenciaDelDld(dldId) {
+  try {
+    const { error } = await supa().from('ausencias').delete()
+      .eq('subtipo', 'dld').eq('datos_extra->>dld_id', String(dldId));
+    if (error) console.error('borrar ausencia del DLD:', error.message);
+  } catch (e) {
+    console.error('borrar ausencia del DLD:', e?.message);
+  }
+}
 
 /**
  * SOLICITUDES DE DLD
@@ -326,7 +402,12 @@ export async function POST(request) {
       }
       // Un DLD aprobado para hoy o mañana tiene que salir ya en guardias,
       // no al día siguiente con el cron (#132).
-      if (datos.estado === 'aprobada') await rehacerReparto(request);
+      // Crear la ausencia ya rehace el reparto; si no se ha creado (ya
+      // tenía una ese día), se rehace aquí.
+      if (datos.estado === 'aprobada') {
+        const creada = await registrarAusenciaDelDld(request, id);
+        if (!creada) await rehacerReparto(request);
+      }
       return Response.json({ ok: true });
     }
 
@@ -344,7 +425,8 @@ export async function POST(request) {
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
       // Revocado: el profesor vuelve a estar en el centro y nadie tiene
-      // que cubrirle.
+      // que cubrirle. Su ausencia automática desaparece con él.
+      await borrarAusenciaDelDld(id);
       await rehacerReparto(request);
       return Response.json({ ok: true });
     }
@@ -381,6 +463,7 @@ export async function POST(request) {
 
       const { error } = await supa().from('dld').delete().eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
+      await borrarAusenciaDelDld(id);
       await rehacerReparto(request);
       return Response.json({ ok: true });
     }

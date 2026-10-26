@@ -413,6 +413,14 @@ export async function POST(request) {
 
       const fila = { ...datos, profesor_id: dueño };
 
+      // El DLD concedido se registra solo al aprobarlo dirección. Si el
+      // profesor lo notificaba además a mano, las guardias salían dobles.
+      // Jefatura sí puede (DLD que llegan en papel).
+      if (fila.subtipo === 'dld' && !esDirectivo(sesion)) {
+        const texto = 'No hace falta registrar el DLD: cuando dirección lo concede, aparece solo en tus ausencias. Entra en él para rellenar o revisar las tareas.';
+        return Response.json({ error: texto, message: texto }, { status: 400 });
+      }
+
       // Dos ausencias el mismo día = dos guardias por hora. No se permite.
       // fecha_fin null = baja abierta (igual que la lee el motor); vacía = un solo día.
       const finNueva = fila.fecha_fin === '' ? fila.fecha_inicio : (fila.fecha_fin ?? null);
