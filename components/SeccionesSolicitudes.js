@@ -372,8 +372,13 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
 
   async function cambiarEstado(id, estado) {
     setProcesando(true);
-    await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'compras', accion: 'resolver', id, datos: { estado, comentario_secretario: comentario || null } }) });
+    const r = await fetch('/api/solicitudes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tabla: 'compras', accion: 'resolver', id, datos: { estado, comentario_secretario: comentario || null } }) });
     setProcesando(false);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      mostrarMensaje(`❌ No se ha podido cambiar: ${j.error || r.status}`, 'error');
+      return;
+    }
     setCompraAbierta(null);
     setComentario('');
     mostrarMensaje(`✅ Solicitud marcada como "${estado}"`, 'ok');

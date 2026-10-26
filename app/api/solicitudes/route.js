@@ -154,9 +154,10 @@ export async function POST(request) {
       const { data, error } = await cliente.from(tabla).update({
         estado: datos.estado,
         comentario_secretario: datos.comentario_secretario ?? null,
-      }).eq('id', id).select('id, profesor_id, estancia, descripcion');
+      }).eq('id', id).select(tabla === 'mantenimiento' ? 'id, profesor_id, estancia, descripcion' : 'id');
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (!(data || []).length) return Response.json({ error: 'No se ha encontrado la solicitud' }, { status: 404 });
       if (tabla === 'mantenimiento' && datos.estado === 'resuelta') await avisarResueltas(cliente, data, sesion.id);
       return Response.json({ ok: true });
     }
@@ -173,7 +174,7 @@ export async function POST(request) {
       const { data, error } = await cliente.from(tabla)
         .update({ estado: 'resuelta' })
         .in('id', ids)
-        .select('id, profesor_id, estancia, descripcion');
+        .select(tabla === 'mantenimiento' ? 'id, profesor_id, estancia, descripcion' : 'id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
       if (tabla === 'mantenimiento') await avisarResueltas(cliente, data, sesion.id);
       return Response.json({ ok: true, n: (data || []).length });
