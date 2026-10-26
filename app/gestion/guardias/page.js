@@ -12,7 +12,7 @@ import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import RepartoGuardias from '@/components/RepartoGuardias';
 import { esHoraSinAlumnos } from '@/lib/asignacionGuardias';
-import { esGrupoCiclo } from '@/lib/grupos';
+import { esGrupoCiclo, normGrupo } from '@/lib/grupos';
 import { esSectorFP } from '@/lib/sectores';
 
 const azul = '#1e3a5f';
@@ -136,6 +136,8 @@ export default function GestionGuardias() {
   const [profesoresList, setProfsList] = useState([]);
   const [mapaProfesores, setMapaProf] = useState({});
   const [ausenciasDia, setAusDia] = useState([]);
+  // Grupos que ese día se van enteros de actividad: su clase no se cubre.
+  const [gruposFueraDia, setGruposFueraDia] = useState([]);   // [{ g, titulo }]
   const [apoyosAsignados, setApAsig] = useState([]);
   // El cuadrante real de la hora que se está mirando, calculado en el
   // servidor: quién está de guardia y en qué estado. Esta línea faltaba:
@@ -295,6 +297,29 @@ export default function GestionGuardias() {
       setErrorCarga('No se han podido cargar los permisos de libre disposición: ' + (e.message || e));
     }
 
+    // Mismo criterio que el motor del servidor (preasignar): si un grupo
+    // va entero a una actividad no rechazada, su clase no hay que
+    // cubrirla. Esta pantalla no lo miraba y pintaba en rojo como «sin
+    // cubrir» las clases de grupos que estaban en Halloween (30/10/2026).
+    try {
+      const { data: acts } = await consulta('actividades')
+        .select('titulo, grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado')
+        .lte('fecha_inicio', f);
+      const fuera = [];
+      (acts || [])
+        .filter(a => a.estado !== 'rechazada' && (a.fecha_fin || a.fecha_inicio) >= f)
+        .forEach(a => {
+          const asistentes = a.alumnos_asistentes || {};
+          (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
+            if (asistentes[g] === 'todos') fuera.push({ g: normGrupo(g), titulo: a.titulo || 'una actividad' });
+          });
+        });
+      setGruposFueraDia(fuera);
+    } catch (e) {
+      console.error('No se pudieron cargar las actividades del día:', e);
+      setGruposFueraDia([]);
+    }
+
     const todas = [
       ...aus.map(a => ({...a, tipo_falta:'ausencia'})),
       ...dlds.map(d => ({...d, tipo_falta:'dld'})),
@@ -396,6 +421,12 @@ export default function GestionGuardias() {
         return;
       }
       clases.forEach(hh => {
+        const t = normGrupo(hh.grupo);
+        const act = t && gruposFueraDia.find(x => x.g && t.includes(x.g));
+        if (act) {
+          grises.push({ a, hh, motivo: `El grupo está en la actividad «${act.titulo}»: no hay que cubrirlo.` });
+          return;
+        }
         const ciclo = esGrupoCiclo(hh.grupo);
         const seVan = hid === '6' && (ciclo === null ? esSectorFP(a.sector) : ciclo);
         if (seVan) grises.push({ a, hh, motivo: '6ª de Grado Medio o Superior: los alumnos se van a casa y no se cubre.' });
