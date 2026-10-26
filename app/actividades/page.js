@@ -6,6 +6,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { getConfigCurso, esDiaLectivo } from '@/lib/curso';
+import EditarActividad from '@/app/gestion/actividades/EditarActividad';
 
 const FAMILIAS = {
   'ESO':  'ESO',            'BTO':  'Bachillerato',
@@ -69,6 +70,7 @@ export default function Actividades() {
   const [cargando, setCargando]   = useState(true);
   const [vista, setVista]         = useState('lista'); // 'lista' | 'nueva'
   const [mensaje, setMensaje]     = useState(null);
+  const [editando, setEditando]   = useState(null);   // propuesta propia abierta en el editor
 
   const [actividades, setActividades] = useState([]);
   const [grupos, setGrupos]           = useState([]);
@@ -394,7 +396,7 @@ export default function Actividades() {
             ) : (
               <>
                 <Sub>Próximas actividades</Sub>
-                {proximas.map(a => <Tarjeta key={a.id} a={a} profesores={profesores} />)}
+                {proximas.map(a => <Tarjeta key={a.id} a={a} profesores={profesores} profId={profId} onEditar={setEditando} />)}
               </>
             )}
 
@@ -437,7 +439,7 @@ export default function Actividades() {
             {mias.length > 0 && (
               <>
                 <Sub>Mis propuestas</Sub>
-                {mias.map(a => <Tarjeta key={'m' + a.id} a={a} />)}
+                {mias.map(a => <Tarjeta key={'m' + a.id} a={a} profId={profId} onEditar={setEditando} />)}
               </>
             )}
           </div>
@@ -795,6 +797,21 @@ export default function Actividades() {
         )}
 
       </div>
+
+      {editando && (
+        <EditarActividad
+          actividad={editando}
+          deProfesor
+          onCerrar={() => setEditando(null)}
+          onGuardada={(_act, cambiaronHoras) => {
+            setEditando(null);
+            aviso(cambiaronHoras
+              ? 'Actividad corregida. Si ya habías registrado la ausencia, corrígela también con la nueva fecha u horas.'
+              : 'Actividad corregida.', 'ok');
+            cargar(profId);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -811,7 +828,7 @@ export default function Actividades() {
  * Solo se enseñan nombres y apellidos; el resto de la ficha del alumno
  * no se pinta. La lista se pide al desplegar, no antes.
  */
-function Tarjeta({ a, profesores = [] }) {
+function Tarjeta({ a, profesores = [], profId = '', onEditar }) {
   const est = ESTADOS[a.estado] || ESTADOS.pendiente;
   const tipo = TIPOS.find(t => t.valor === a.tipo) || TIPOS[0];
   const d = new Date(a.fecha_inicio + 'T12:00:00');
@@ -898,6 +915,12 @@ function Tarjeta({ a, profesores = [] }) {
             <span style={{ fontSize: 11.5, color: VERDE, fontWeight: 700 }}>
               {abierta ? '▲ Ocultar' : '▼ Ver grupos y alumnado'}
             </span>
+            {onEditar && a.profesor_id === profId && (a.estado || 'pendiente') === 'pendiente' && (
+              <button type="button" onClick={e => { e.stopPropagation(); onEditar(a); }} style={{
+                padding: '3px 11px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
+                border: '1.5px solid #1e3a5f', backgroundColor: 'white', color: '#1e3a5f',
+              }}>✏️ Editar</button>
+            )}
           </div>
           {a.estado === 'rechazada' && a.motivo_rechazo && (
             <div style={{ marginTop: 7, fontSize: 12, color: '#991b1b', backgroundColor: '#fef2f2', padding: '7px 11px', borderRadius: 7, lineHeight: 1.5 }}>

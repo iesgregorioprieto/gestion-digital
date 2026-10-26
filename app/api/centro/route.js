@@ -53,9 +53,12 @@ export async function POST(request) {
       return Response.json({ error: 'tabla_no_valida' }, { status: 400 });
     }
 
-    // Quien no es directivo solo puede crear en las tablas abiertas
+    // Quien no es directivo solo puede crear en las tablas abiertas.
+    // Además, quien propuso una actividad puede corregirla mientras siga
+    // pendiente de autorizar (se comprueba abajo, en «actualizar»).
     const puede = esDirectivo(sesion)
-      || ((accion === 'crear' || accion === 'insertar_lista') && ABIERTAS_A_PROFESORADO.includes(tabla));
+      || ((accion === 'crear' || accion === 'insertar_lista') && ABIERTAS_A_PROFESORADO.includes(tabla))
+      || (accion === 'actualizar' && tabla === 'actividades');
     if (!puede) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
     // ─── Crear (uno o varios) ───
@@ -122,6 +125,34 @@ export async function POST(request) {
       // solo del director. Jefatura puede editarla, pero no resolverla.
       if (tabla === 'actividades' && 'estado' in datos && sesion.rol !== 'director') {
         return Response.json({ error: 'Solo el director puede autorizar o rechazar una actividad' }, { status: 403 });
+      }
+
+      // El profesorado solo edita su propia propuesta y solo mientras
+      // no esté autorizada ni rechazada. Una vez resuelta, se pide a
+      // jefatura. Nunca puede tocar el estado ni el autor.
+      if (tabla === 'actividades' && !esDirectivo(sesion)) {
+        const { data: filas } = await supa().from('actividades')
+          .select('profesor_id, estado').eq('id', id);
+        const act = (filas || [])[0];
+        if (!act || act.profesor_id !== sesion.id) {
+          return Response.json({ error: 'Solo puedes editar las actividades que has propuesto tú' }, { status: 403 });
+        }
+        if ((act.estado || 'pendiente') !== 'pendiente') {
+          return Response.json({ error: 'La actividad ya está resuelta: pide el cambio a jefatura' }, { status: 409 });
+        }
+        const PERMITIDOS = ['titulo', 'en_pga', 'fecha_inicio', 'fecha_fin', 'hora_salida', 'hora_regreso',
+          'lugar', 'transporte', 'financiacion', 'coste_alumno', 'relacion_curricular', 'descripcion',
+          'grupos', 'acompanantes', 'alumnos_asistentes', 'necesita_guardia', 'profesor_guardia'];
+        const limpios = Object.fromEntries(Object.entries(datos).filter(([k]) => PERMITIDOS.includes(k)));
+        // Se vuelve a exigir «pendiente» en la propia escritura, por si el
+        // director la resuelve justo mientras el profesor la está editando.
+        const { data: hechas, error } = await supa().from('actividades').update(limpios)
+          .eq('id', id).eq('profesor_id', sesion.id).or('estado.is.null,estado.eq.pendiente').select('id');
+        if (error) return Response.json({ error: error.message }, { status: 500 });
+        if (!hechas?.length) {
+          return Response.json({ error: 'La actividad acaba de resolverse: pide el cambio a jefatura' }, { status: 409 });
+        }
+        return Response.json({ ok: true });
       }
 
       const { error } = await supa().from(tabla).update(datos).eq('id', id);

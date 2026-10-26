@@ -7,8 +7,9 @@
  * grupos, acompañantes, lugar…) sin tener que borrarla y pedir al
  * profesor que la vuelva a enviar.
  *
- * Solo lo usa el equipo directivo; el servidor (/api/centro, acción
- * «actualizar») ya rechaza a cualquier otro.
+ * Lo usa el equipo directivo y, con `deProfesor`, el propio profesor
+ * que la propuso mientras siga pendiente de autorizar (/actividades).
+ * El servidor (/api/centro, acción «actualizar») comprueba ambas cosas.
  *
  * Lo que NO hace: tocar las ausencias ya registradas por esa actividad.
  * Si cambian la fecha o las horas, se avisa para que se corrija la
@@ -49,7 +50,7 @@ function Chip({ activo, onClick, children }) {
 const hhmm = t => (t ? String(t).slice(0, 5) : '');
 const nombreProf = p => `${p.apellidos || ''}, ${p.nombre || ''}`.trim();
 
-export default function EditarActividad({ actividad, onCerrar, onGuardada }) {
+export default function EditarActividad({ actividad, onCerrar, onGuardada, deProfesor = false }) {
   const a = actividad;
   const [form, setForm] = useState({
     titulo: a.titulo || '',
@@ -174,7 +175,9 @@ export default function EditarActividad({ actividad, onCerrar, onGuardada }) {
           <button onClick={onCerrar} style={{ border: 'none', background: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>×</button>
         </div>
         <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
-          Propuesta por <strong>{a.profesor_nombre || '—'}</strong>
+          {deProfesor
+            ? 'Puedes corregirla mientras esté pendiente de autorizar. Una vez autorizada, los cambios se piden a jefatura.'
+            : <>Propuesta por <strong>{a.profesor_nombre || '—'}</strong></>}
         </div>
 
         <Campo label="Título *">
@@ -232,7 +235,9 @@ export default function EditarActividad({ actividad, onCerrar, onGuardada }) {
             ))}
           </div>
           <div style={{ fontSize: 11.5, color: '#777', marginTop: 5 }}>
-            Un grupo que añadas aquí va entero. Los que ya estaban conservan el alumnado que eligió el profesor.
+            {deProfesor
+              ? 'Un grupo que añadas aquí va entero. Los que ya estaban conservan el alumnado que elegiste.'
+              : 'Un grupo que añadas aquí va entero. Los que ya estaban conservan el alumnado que eligió el profesor.'}
           </div>
         </Campo>
 
