@@ -79,7 +79,8 @@ function GuardiasHorario({ guardias }) {
 }
 
 function HorarioCompleto({ grupos, guardias }) {
-  const HORAS = ['1ª hora','2ª hora','3ª hora','Recreo','4ª hora','5ª hora','6ª hora'];
+  const BASE = ['1ª hora','2ª hora','3ª hora','Recreo','4ª hora','5ª hora','6ª hora'];
+  const EXTRAS = ['7ª hora','Tarde 16:00','Tarde 16:55','Tarde 17:50','Tarde 19:00','Tarde 19:55','Tarde 20:50'];
   const mapaClases = {};
   if (Array.isArray(grupos)) {
     grupos.forEach(g => {
@@ -92,6 +93,8 @@ function HorarioCompleto({ grupos, guardias }) {
   if (Array.isArray(guardias)) {
     guardias.forEach(g => { mapaGuardias[g.hora] = g.tipo_guardia; });
   }
+  // 7ª y tarde solo si el profesor tiene algo en ellas
+  const HORAS = [...BASE, ...EXTRAS.filter(h => mapaClases[h] || mapaGuardias[h])];
   const tieneAlgo = HORAS.some(h => mapaClases[h] || mapaGuardias[h]);
   if (!tieneAlgo) return null;
   return (

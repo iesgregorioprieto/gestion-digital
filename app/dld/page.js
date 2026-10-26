@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getConfigCurso, esDiaLectivo, limiteDLD, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
+import { HORAS_EXTRA } from '@/lib/horasExtra';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -13,6 +14,8 @@ const HORAS = [
   { id: '5', label: '5ª hora', emoji: '🕐' },
   { id: '6', label: '6ª hora', emoji: '🕑' },
 ];
+// 7ª y tarde: solo se pintan si ese día la persona tiene algo en ellas.
+const TODAS_HORAS = [...HORAS, ...HORAS_EXTRA.map(x => ({ id: x.id, label: x.label, emoji: '🌆', extra: true }))];
 
 const GRUPOS_POR_ETAPA = {
   'ESO': {
@@ -224,7 +227,7 @@ export default function DLD() {
     Object.entries(h).forEach(([horaId, val]) => {
       if (val.tipo === 'clase' && val.grupo) {
         if (!grupos[val.grupo]) grupos[val.grupo] = [];
-        const hora = HORAS.find(hr => hr.id === horaId);
+        const hora = TODAS_HORAS.find(hr => hr.id === horaId);
         if (hora) grupos[val.grupo].push({ hora: hora.label, instrucciones: val.instrucciones || '', archivoUrl: val.archivoUrl || '', archivoNombre: val.archivoNombre || '' });
       }
     });
@@ -238,7 +241,7 @@ export default function DLD() {
     const filas = [];
     Object.entries(h).forEach(([horaId, val]) => {
       if (!val || !val.tipo) return;
-      const hora = HORAS.find(x => x.id === horaId);
+      const hora = TODAS_HORAS.find(x => x.id === horaId);
       if (!hora) return;
       filas.push({
         hora: hora.label,
@@ -259,7 +262,7 @@ export default function DLD() {
     const guardias = [];
     Object.entries(h).forEach(([horaId, val]) => {
       if (val.tipo === 'guardia') {
-        const hora = HORAS.find(h => h.id === horaId);
+        const hora = TODAS_HORAS.find(h => h.id === horaId);
         if (hora) guardias.push({ hora: hora.label, tipo_guardia: val.grupo || 'Sin especificar' });
       }
     });
@@ -290,7 +293,7 @@ export default function DLD() {
     const horasClaseSinTarea = !infoDia.lectivo ? [] : Object.entries(horario)
       .filter(([_, v]) => v.tipo === 'clase' && v.grupo && !v.instrucciones?.trim() && !v.archivoNombre);
     if (horasClaseSinTarea.length > 0) {
-      const labels = horasClaseSinTarea.map(([id]) => HORAS.find(h => h.id === id)?.label || id).join(', ');
+      const labels = horasClaseSinTarea.map(([id]) => TODAS_HORAS.find(h => h.id === id)?.label || id).join(', ');
       setError(`⚠️ Faltan tareas en: ${labels}. Es obligatorio dejar tarea para cada grupo (normativa DLD).`);
       return;
     }
@@ -719,7 +722,7 @@ export default function DLD() {
 
               <div style={{ fontSize: 13, color: '#888', marginBottom: 12 }}>Indica para cada hora si tienes clase, guardia o estás libre</div>
 
-              {HORAS.map(hora => {
+              {[...HORAS, ...TODAS_HORAS.filter(x => x.extra && horario[x.id])].map(hora => {
                 const asignacion = horario[hora.id];
                 const esRecreo = hora.id === 'recreo';
                 return (
