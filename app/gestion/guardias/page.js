@@ -320,6 +320,13 @@ export default function GestionGuardias() {
       setGruposFueraDia([]);
     }
 
+    // Un DLD puede estar a la vez en el módulo de DLD y como ausencia
+    // «Día de libre disposición concedido». Son el mismo día libre: si
+    // está en el módulo, la ausencia sobra (Edith Sandor salía dos veces
+    // a cada hora el 30/10/2026).
+    const conDld = new Set(dlds.map(d => d.profesor_id));
+    aus = aus.filter(a => !(a.subtipo === 'dld' && conDld.has(a.profesor_id)));
+
     const todas = [
       ...aus.map(a => ({...a, tipo_falta:'ausencia'})),
       ...dlds.map(d => ({...d, tipo_falta:'dld'})),

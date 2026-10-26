@@ -193,7 +193,7 @@ export async function POST(request) {
     const ultimo = dias[dias.length - 1].fecha;   // hoy y, como mucho, mañana
     const [rAus, rAct, rDld] = await Promise.all([
       cliente.from('ausencias')
-        .select('id, profesor_id, horas, fecha_inicio, fecha_fin')
+        .select('id, profesor_id, subtipo, horas, fecha_inicio, fecha_fin')
         .lte('fecha_inicio', ultimo)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('actividades')
@@ -233,8 +233,15 @@ export async function POST(request) {
       if (p.en_baja && p.sustituto_id && !relevo.has(p.id)) relevo.set(p.id, p.sustituto_id);
     });
 
+    // Un DLD puede estar a la vez en el módulo de DLD y registrado como
+    // ausencia «Día de libre disposición concedido». Es el mismo día: si
+    // está en el módulo, esa ausencia sobra; si no, se cubriría dos veces
+    // (Edith Sandor, 30/10/2026).
+    const dldDe = new Set((rDld.data || []).map(d => `${d.profesor_id}|${d.fecha_solicitada}`));
     const faltas = [
-      ...(rAus.data || []).map(a => ({ ...a, origen: 'ausencia' })),
+      ...(rAus.data || [])
+        .filter(a => !(a.subtipo === 'dld' && dldDe.has(`${a.profesor_id}|${a.fecha_inicio}`)))
+        .map(a => ({ ...a, origen: 'ausencia' })),
       ...(rDld.data || []).map(d => ({ ...d, origen: 'dld' })),
     ];
 

@@ -152,9 +152,9 @@ export async function GET(request) {
       .select(campos)
       .lte('fecha_inicio', cuadrante)
       .or(`fecha_fin.gte.${cuadrante},fecha_fin.is.null`);
-    let { data, error } = await leer('profesor_id, profesor_nombre, horas, dias, fecha_inicio, fecha_fin');
+    let { data, error } = await leer('profesor_id, profesor_nombre, subtipo, horas, dias, fecha_inicio, fecha_fin');
     if (error && /dias/.test(error.message || '')) {
-      ({ data, error } = await leer('profesor_id, profesor_nombre, horas, fecha_inicio, fecha_fin'));
+      ({ data, error } = await leer('profesor_id, profesor_nombre, subtipo, horas, fecha_inicio, fecha_fin'));
     }
 
     if (error) return Response.json({ error: error.message, ausencias: [] }, { status: 500 });
