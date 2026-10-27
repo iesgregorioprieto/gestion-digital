@@ -8,6 +8,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import { cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
 import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
+import { problemaFechas } from '@/lib/validarFechas';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -445,6 +446,8 @@ export default function Ausencias() {
   async function enviar() {
     if (!fechaInicio) { mostrarMensaje('Indica la fecha de inicio.', 'error'); return; }
     if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
+    const malFechas = problemaFechas(fechaInicio, fechaFin);
+    if (malFechas) { mostrarMensaje(malFechas, 'error'); return; }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
     if (formacionBloqueada && !formacionId) {
@@ -891,10 +894,13 @@ export default function Ausencias() {
                 }
                 setFechaInicio(nuevaFechaInicio);
                 setModoManual(false);
-                if (!fechaFin) setFechaFin(nuevaFechaInicio);
+                // Si el fin queda vacío o por delante del inicio, se iguala:
+                // así una ausencia de un día no pasa nunca por un fin roto.
+                const finAjustado = (!fechaFin || fechaFin < nuevaFechaInicio) ? nuevaFechaInicio : fechaFin;
+                if (finAjustado !== fechaFin) setFechaFin(finAjustado);
                 setHorario({});
                 setGruposUnicos([]);
-                cargarHorarioDelDia(nuevaFechaInicio, nuevaFechaInicio, fechaFin || nuevaFechaInicio);
+                cargarHorarioDelDia(nuevaFechaInicio, nuevaFechaInicio, finAjustado);
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
               <div>
@@ -908,6 +914,21 @@ export default function Ausencias() {
               }} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid #ddd', fontSize: 14, boxSizing: 'border-box' }} />
               </div>
             </div>
+            {fechaInicio && problemaFechas(fechaInicio, fechaFin) && (
+              <div style={{ marginTop: -6, marginBottom: 16, padding: '10px 13px', borderRadius: 8, backgroundColor: '#fef2f2', border: '2px solid #fca5a5', color: '#991b1b', fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
+                ⚠️ {problemaFechas(fechaInicio, fechaFin)}
+                {fechaFin && fechaFin !== fechaInicio && (
+                  <button type="button" onClick={() => {
+                    setFechaFin(fechaInicio);
+                    setHorario({});
+                    setGruposUnicos([]);
+                    cargarHorarioDelDia(fechaInicio, fechaInicio, fechaInicio);
+                  }} style={{ display: 'block', marginTop: 8, padding: '7px 12px', borderRadius: 7, border: '1.5px solid #991b1b', backgroundColor: 'white', color: '#991b1b', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Es un solo día: poner fin = inicio
+                  </button>
+                )}
+              </div>
+            )}
 
             {/* MOTIVO (lista unica Delphos) */}
             <div style={{ marginBottom: 16 }}>

@@ -10,6 +10,7 @@ import { normClave, normHora, ahoraEnCentro } from '@/lib/asignacionGuardias';
 import { adjuntosDe, MAX_ADJUNTOS } from '@/lib/adjuntos';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { rehacerReparto } from '@/lib/rehacerReparto';
+import { problemaFechas } from '@/lib/validarFechas';
 
 /**
  * LECTURA DE AUSENCIAS
@@ -424,6 +425,10 @@ export async function POST(request) {
       // Dos ausencias el mismo día = dos guardias por hora. No se permite.
       // fecha_fin null = baja abierta (igual que la lee el motor); vacía = un solo día.
       const finNueva = fila.fecha_fin === '' ? fila.fecha_inicio : (fila.fecha_fin ?? null);
+      // Año a medias tecleado en el móvil (0002-09-16) o fin antes que
+      // inicio: sin esto la ausencia se guarda y no genera ninguna guardia.
+      const malCrear = problemaFechas(fila.fecha_inicio, finNueva);
+      if (malCrear) return Response.json({ error: malCrear, message: malCrear }, { status: 400 });
       const pisada = await ausenciaQueSePisa(dueño, fila.fecha_inicio, finNueva);
       if (pisada) {
         const texto = textoSolape(pisada);
@@ -569,6 +574,8 @@ export async function POST(request) {
           const ini = cambios.fecha_inicio ?? a.fecha_inicio;
           const finRaw = 'fecha_fin' in cambios ? cambios.fecha_fin : a.fecha_fin;
           const fin = finRaw === '' ? ini : (finRaw ?? null);
+          const malEditar = problemaFechas(ini, fin);
+          if (malEditar) return Response.json({ error: malEditar, message: malEditar }, { status: 400 });
           const pisada = await ausenciaQueSePisa(cambios.profesor_id || a.profesor_id, ini, fin, id);
           if (pisada) {
             const texto = textoSolape(pisada);
@@ -834,6 +841,11 @@ export async function POST(request) {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
       if (!datos?.profesor_id || !datos?.fecha_fin) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+      const malCierre = problemaFechas(datos.fecha_fin, null);
+      if (malCierre) {
+        const texto = malCierre.replace('de inicio', 'de cierre');
+        return Response.json({ error: texto, message: texto }, { status: 400 });
       }
 
       const { error } = await supa().from('ausencias')

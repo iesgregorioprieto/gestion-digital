@@ -10,6 +10,7 @@ import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaCom
 import EscenarioDia from '@/components/EscenarioDia';
 import { consulta } from '@/lib/consulta';
 import PanelBajas from './PanelBajas';
+import { problemaFechas } from '@/lib/validarFechas';
 const verde = '#1e6b2e';
 const azul = '#1e3a5f';
 const rojo = '#991b1b';
@@ -94,6 +95,8 @@ export default function GestionAusencias() {
   const [profesorSeleccionado, setProfesorSeleccionado] = useState('');
   const [fechaInicio, setFechaInicio] = useState('');
   const [fechaFin, setFechaFin] = useState('');
+  // Corregir en el sitio las fechas rotas de una ausencia ya guardada
+  const [corrigiendo, setCorrigiendo] = useState(null);   // { id, ini, fin }
   const [motivo, setMotivo] = useState('');
   const [, setTipo] = useState('imprevista');
   const [subtipo, setSubtipo] = useState('');
@@ -717,6 +720,10 @@ function descargarInforme() {
   async function enviarManual() {
     if (!profesorSeleccionado) { mostrarMensaje('Selecciona el profesor.', 'error'); return; }
     if (!fechaInicio) { mostrarMensaje('Indica la fecha.', 'error'); return; }
+    {
+      const malFechas = problemaFechas(fechaInicio, bajaProlongada ? null : (fechaFin || fechaInicio));
+      if (malFechas) { mostrarMensaje(malFechas, 'error'); return; }
+    }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
 
@@ -1215,8 +1222,38 @@ ${a.observaciones_directivo ? `
                         {a.subtipo ? etiquetaMotivo(a.subtipo) : (a.tipo === 'prevista' ? '📆 Prevista' : '🚨 Imprevista')} ·
                         {a.fecha_inicio === a.fecha_fin
                           ? ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric', month: 'short' })}`
-                          : ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`}
+                          : !a.fecha_fin
+                            ? ` desde ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} (abierta)`
+                            : ` ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                       </div>
+                      {problemaFechas(a.fecha_inicio, a.fecha_fin) && (
+                        <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, backgroundColor: '#fee2e2', border: '1px solid #fca5a5', fontSize: 12, fontWeight: 700, color: '#b91c1c' }}>
+                          ⚠️ Fechas erróneas: no genera guardias. {problemaFechas(a.fecha_inicio, a.fecha_fin)}
+                          {corrigiendo?.id === a.id ? (
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+                              <input type="date" value={corrigiendo.ini} onChange={e => setCorrigiendo(c => ({ ...c, ini: e.target.value }))} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #fca5a5', fontSize: 13 }} />
+                              <span>→</span>
+                              <input type="date" value={corrigiendo.fin} min={corrigiendo.ini} onChange={e => setCorrigiendo(c => ({ ...c, fin: e.target.value }))} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #fca5a5', fontSize: 13 }} />
+                              <button type="button" onClick={async () => {
+                                const mal = problemaFechas(corrigiendo.ini, corrigiendo.fin || corrigiendo.ini);
+                                if (mal) { mostrarMensaje(mal, 'error'); return; }
+                                const r = await fetch('/api/ausencias', {
+                                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ accion: 'editar', id: a.id, datos: { fecha_inicio: corrigiendo.ini, fecha_fin: corrigiendo.fin || corrigiendo.ini } }),
+                                });
+                                const j = await r.json().catch(() => ({}));
+                                if (!r.ok) { mostrarMensaje('Error: ' + (j.message || j.error || r.status), 'error'); return; }
+                                setCorrigiendo(null);
+                                mostrarMensaje('✅ Fechas corregidas. Se han recalculado sus horas y las guardias.', 'ok');
+                                cargarTodo();
+                              }} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', backgroundColor: '#b91c1c', color: 'white', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>Guardar</button>
+                              <button type="button" onClick={() => setCorrigiendo(null)} style={{ padding: '5px 10px', borderRadius: 6, border: '1px solid #fca5a5', backgroundColor: 'white', color: '#b91c1c', fontSize: 12.5, cursor: 'pointer' }}>Cancelar</button>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => setCorrigiendo({ id: a.id, ini: a.fecha_inicio, fin: a.fecha_inicio })} style={{ display: 'block', marginTop: 6, padding: '5px 12px', borderRadius: 6, border: '1.5px solid #b91c1c', backgroundColor: 'white', color: '#b91c1c', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }}>✏️ Corregir fechas</button>
+                          )}
+                        </div>
+                      )}
                       <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
                         {a.subtipo && SUBTIPOS[a.subtipo] && (
                           <span style={{ display:'inline-block', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700, backgroundColor:'#eff6ff', color:'#1e40af', border:'1px solid #bfdbfe', marginRight:6 }}>
