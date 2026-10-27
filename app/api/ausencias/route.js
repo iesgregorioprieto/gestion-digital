@@ -428,7 +428,10 @@ export async function POST(request) {
       // Año a medias tecleado en el móvil (0002-09-16) o fin antes que
       // inicio: sin esto la ausencia se guarda y no genera ninguna guardia.
       const malCrear = problemaFechas(fila.fecha_inicio, finNueva);
-      if (malCrear) return Response.json({ error: malCrear, message: malCrear }, { status: 400 });
+      if (malCrear) {
+        const texto = `No se puede crear esta ausencia. ${malCrear}`;
+        return Response.json({ error: texto, message: texto }, { status: 400 });
+      }
       const pisada = await ausenciaQueSePisa(dueño, fila.fecha_inicio, finNueva);
       if (pisada) {
         const texto = textoSolape(pisada);
@@ -575,7 +578,10 @@ export async function POST(request) {
           const finRaw = 'fecha_fin' in cambios ? cambios.fecha_fin : a.fecha_fin;
           const fin = finRaw === '' ? ini : (finRaw ?? null);
           const malEditar = problemaFechas(ini, fin);
-          if (malEditar) return Response.json({ error: malEditar, message: malEditar }, { status: 400 });
+          if (malEditar) {
+            const texto = `No se puede guardar el cambio. ${malEditar}`;
+            return Response.json({ error: texto, message: texto }, { status: 400 });
+          }
           const pisada = await ausenciaQueSePisa(cambios.profesor_id || a.profesor_id, ini, fin, id);
           if (pisada) {
             const texto = textoSolape(pisada);

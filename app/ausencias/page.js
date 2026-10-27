@@ -447,7 +447,7 @@ export default function Ausencias() {
     if (!fechaInicio) { mostrarMensaje('Indica la fecha de inicio.', 'error'); return; }
     if (!fechaFin) { mostrarMensaje('Indica la fecha de fin.', 'error'); return; }
     const malFechas = problemaFechas(fechaInicio, fechaFin);
-    if (malFechas) { mostrarMensaje(malFechas, 'error'); return; }
+    if (malFechas) { mostrarMensaje(`No se puede crear esta ausencia. ${malFechas}`, 'error'); return; }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
     if (formacionBloqueada && !formacionId) {
@@ -916,7 +916,8 @@ export default function Ausencias() {
             </div>
             {fechaInicio && problemaFechas(fechaInicio, fechaFin) && (
               <div style={{ marginTop: -6, marginBottom: 16, padding: '10px 13px', borderRadius: 8, backgroundColor: '#fef2f2', border: '2px solid #fca5a5', color: '#991b1b', fontSize: 13, fontWeight: 600, lineHeight: 1.45 }}>
-                ⚠️ {problemaFechas(fechaInicio, fechaFin)}
+                <div style={{ fontWeight: 800, marginBottom: 3 }}>⛔ No se puede crear esta ausencia</div>
+                {problemaFechas(fechaInicio, fechaFin)} Corrige la fecha para poder enviarla.
                 {fechaFin && fechaFin !== fechaInicio && (
                   <button type="button" onClick={() => {
                     setFechaFin(fechaInicio);
@@ -1427,7 +1428,7 @@ export default function Ausencias() {
             )}
 
             {/* BOTÓN ENVIAR */}
-            <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: editandoId ? '#1e40af' : '#7c2d12', color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
+            <button onClick={enviar} disabled={enviando || !!(fechaInicio && problemaFechas(fechaInicio, fechaFin))} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: (fechaInicio && problemaFechas(fechaInicio, fechaFin)) ? '#9ca3af' : (editandoId ? '#1e40af' : '#7c2d12'), color: 'white', fontWeight: 800, fontSize: 15, cursor: (enviando || (fechaInicio && problemaFechas(fechaInicio, fechaFin))) ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
               {enviando ? '⏳ Guardando...' : (editandoId ? '💾 Guardar cambios' : '🏥 Notificar ausencia')}
             </button>
           </div>

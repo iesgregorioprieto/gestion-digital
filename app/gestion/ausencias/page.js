@@ -722,7 +722,7 @@ function descargarInforme() {
     if (!fechaInicio) { mostrarMensaje('Indica la fecha.', 'error'); return; }
     {
       const malFechas = problemaFechas(fechaInicio, bajaProlongada ? null : (fechaFin || fechaInicio));
-      if (malFechas) { mostrarMensaje(malFechas, 'error'); return; }
+      if (malFechas) { mostrarMensaje(`No se puede crear esta ausencia. ${malFechas}`, 'error'); return; }
     }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
