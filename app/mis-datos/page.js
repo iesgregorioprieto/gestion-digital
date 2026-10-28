@@ -13,7 +13,7 @@ const VERDE = '#1e6b2e';
 
 const ESPECIALIDADES = [
   { valor: 'TMV', emoji: '🚗' }, { valor: 'COMERCIO', emoji: '🛍️' },
-  { valor: 'ELECTRICIDAD', emoji: '⚡' }, { valor: 'INFORMÁTICA', emoji: '💻' },
+  { valor: 'E.E.', emoji: '⚡' }, { valor: 'INFORMÁTICA', emoji: '💻' },
   { valor: 'HOSTELERÍA', emoji: '🍽️' }, { valor: 'INDUSTRIAS ALIMENTARIAS', emoji: '🥖' },
   { valor: 'ADMINISTRACIÓN', emoji: '🏢' }, { valor: 'ESO/BACHILLERATO', emoji: '🎓' },
 ];

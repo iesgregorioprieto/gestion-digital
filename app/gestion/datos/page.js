@@ -10,7 +10,9 @@ import { leerTextoDelphos, parsearCsvDelphos, tipoFicheroDelphos, cruzarFicheros
 import { indiceProfesores, buscaProfesor } from '@/lib/asignacionGuardias';
 // Nombre de sector comparable: sin tildes ni mayúsculas («HOSTELERÍA» = «Hosteleria»)
 function claveSector(s) {
-  return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  const n = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  // «E. E.», «EE», «Electricidad»… son el mismo sector: E.E.
+  return n.replace(/[\s.]/g, '') === 'EE' || n.startsWith('ELECTR') ? 'E.E.' : n;
 }
 
 const azul = '#1e3a5f';
@@ -1068,6 +1070,8 @@ export default function GestionDatos() {
           if (txt && txt.length > 0) { sector = txt; break; }
         }
       }
+      // Peñalara escribe «E. E.»: se guarda siempre como «E.E.».
+      if (claveSector(sector) === 'E.E.') sector = 'E.E.';
 
       // Construir matriz de celdas con rowspan resuelto
       // Usamos un enfoque de "grid virtual" para evitar bugs con rowspan
