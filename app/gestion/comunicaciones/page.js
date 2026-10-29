@@ -268,9 +268,10 @@ export default function GestionComunicaciones() {
       const e = await r.json().catch(() => ({}));
       aviso(e.error || 'No se ha podido publicar', 'error');
     } else {
+      const d = await r.json().catch(() => ({}));
       aviso(enBanner
         ? `📌 Publicado en el banner de sus destinatarios hasta el ${hastaBanner.split('-').reverse().join('/')}.`
-        : '📢 Aviso publicado. Ya le ha saltado a quien corresponde.', 'ok');
+        : `📢 Aviso publicado. Notificación enviada a ${d.enviados || 0} móviles; al resto le saltará al volver a la app.`, 'ok');
       setTitulo(''); setTexto(''); setModoAviso('ventana'); setHastaBanner('');
       setElegidos([]); setAmbitos(['claustro']); setDptos([]); setEquiposElegidos([]);
       setVista('lista');

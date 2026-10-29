@@ -82,9 +82,28 @@ export default function AvisoComunicacion() {
     // páginas y para todo el profesorado, gastaba peticiones sin sentido.
     // Si hay una abierta, aparece al entrar; el reloj de la cuenta atrás
     // es local y no hace ninguna petición.
-    mirar();
+    //
+    // Pero en el móvil la aplicación casi nunca se «abre»: se queda viva
+    // en segundo plano y al volver a ella no se recarga nada. Por eso se
+    // vuelve a mirar cada vez que la aplicación pasa a primer plano, con
+    // un mínimo de un minuto entre consultas para no gastar de más.
+    let ultima = 0;
+    const mirarSiToca = () => {
+      if (Date.now() - ultima < 60000) return;
+      ultima = Date.now();
+      mirar();
+    };
+    mirarSiToca();
+    const alVolver = () => { if (document.visibilityState === 'visible') mirarSiToca(); };
+    document.addEventListener('visibilitychange', alVolver);
+    window.addEventListener('focus', alVolver);
     const reloj = setInterval(() => setAhora(Date.now()), 1000);
-    return () => { vivo = false; clearInterval(reloj); };
+    return () => {
+      vivo = false;
+      clearInterval(reloj);
+      document.removeEventListener('visibilitychange', alVolver);
+      window.removeEventListener('focus', alVolver);
+    };
   }, []);
 
   if (fuera || !pendiente) return null;

@@ -16,6 +16,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
+import { enviarPushA } from '@/lib/pushServidor';
 
 let _cliente = null;
 function supa() {
@@ -263,7 +264,26 @@ export async function POST(request) {
         const falta = tipo === 'banner' && /tipo_check/.test(error.message || '');
         return Response.json({ error: falta ? 'Falta ejecutar supabase/avisos_banner.sql en Supabase.' : error.message }, { status: 500 });
       }
-      return Response.json({ ok: true, id: (data || [])[0]?.id });
+      // Notificación al móvil de cada destinatario, para que se entere
+      // aunque no tenga la aplicación abierta. Una sola, al publicar.
+      // Los de «solo banner» no la llevan: son una línea discreta.
+      let enviados = 0;
+      if (tipo === 'aviso') {
+        const { data: profes } = await cliente
+          .from('profesores')
+          .select('id, departamento, rol, rol_gestion, tipo_contrato');
+        const ids = (profes || [])
+          .filter(p => p.tipo_contrato !== 'Plaza vacante' && esDestinatario(fila, p))
+          .map(p => p.id)
+          .filter(pid => pid !== sesion.id);
+        const r = await enviarPushA(cliente, ids, {
+          titulo: `📢 ${fila.titulo}`,
+          cuerpo: fila.mensaje,
+          url: '/profesor',
+        });
+        enviados = r.enviados || 0;
+      }
+      return Response.json({ ok: true, id: (data || [])[0]?.id, enviados });
     }
 
     if (accion === 'abrir_fichaje') {
