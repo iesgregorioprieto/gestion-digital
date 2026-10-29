@@ -23,7 +23,7 @@ import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
-  pesoFranja, claveFranja, FRANJAS,
+  pesoFranja, claveFranja, FRANJAS, actividadOcupaHora,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo, separarGrupoAula } from '@/lib/grupos';
@@ -197,7 +197,7 @@ export async function POST(request) {
         .lte('fecha_inicio', ultimo)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('actividades')
-        .select('grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado')
+        .select('grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado, horas, hora_salida, hora_regreso')
         .lte('fecha_inicio', ultimo)
         .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
       cliente.from('dld')
@@ -513,20 +513,23 @@ export async function POST(request) {
         .forEach(a => {
           const asistentes = a.alumnos_asistentes || {};
           (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
-            if (asistentes[g] === 'todos') gruposFuera.push(normGrupo(g));
+            // Con la actividad, para saber A QUÉ HORAS está fuera el grupo.
+            if (asistentes[g] === 'todos') gruposFuera.push({ g: normGrupo(g), act: a });
           });
         });
 
       // El grupo de una clase viene dentro de un código largo de Delphos
       // ("IPCG-3095215GS-1GVEC(6 F109 COM)"), así que se busca dentro.
-      const grupoSeHaIdo = texto => {
+      // Solo a las horas que dura la actividad (queja #230: un taller de
+      // 2ª y 4ª dejaba sin cubrir la 5ª de ese grupo).
+      const grupoSeHaIdo = (texto, hora) => {
         if (!texto || gruposFuera.length === 0) return false;
         const t = normGrupo(texto);
-        return gruposFuera.some(g => g && t.includes(g));
+        return gruposFuera.some(({ g, act }) => g && t.includes(g) && actividadOcupaHora(act, hora));
       };
 
       const huecos = huecosBrutos
-        .map(h => ({ ...h, horas: (h.horas || []).filter(x => !grupoSeHaIdo(x.grupo)) }))
+        .map(h => ({ ...h, horas: (h.horas || []).filter(x => !grupoSeHaIdo(x.grupo, x.hora)) }))
         // Quien solo falta a horas de guardia o complementarias no deja nada
         // que cubrir, pero el motor tiene que saber que no está: si no, se le
         // pone a cubrir a esa misma hora (Beatriz Pavón, 05/10/2026, 4ª).

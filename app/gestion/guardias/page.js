@@ -11,7 +11,7 @@ import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import RepartoGuardias from '@/components/RepartoGuardias';
-import { esHoraSinAlumnos } from '@/lib/asignacionGuardias';
+import { esHoraSinAlumnos, actividadOcupaHora } from '@/lib/asignacionGuardias';
 import { esGrupoCiclo, normGrupo } from '@/lib/grupos';
 import { esSectorFP } from '@/lib/sectores';
 
@@ -303,7 +303,7 @@ export default function GestionGuardias() {
     // cubrir» las clases de grupos que estaban en Halloween (30/10/2026).
     try {
       const { data: acts } = await consulta('actividades')
-        .select('titulo, grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado')
+        .select('titulo, grupos, alumnos_asistentes, fecha_inicio, fecha_fin, estado, horas, hora_salida, hora_regreso')
         .lte('fecha_inicio', f);
       const fuera = [];
       (acts || [])
@@ -311,7 +311,7 @@ export default function GestionGuardias() {
         .forEach(a => {
           const asistentes = a.alumnos_asistentes || {};
           (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
-            if (asistentes[g] === 'todos') fuera.push({ g: normGrupo(g), titulo: a.titulo || 'una actividad' });
+            if (asistentes[g] === 'todos') fuera.push({ g: normGrupo(g), titulo: a.titulo || 'una actividad', act: a });
           });
         });
       setGruposFueraDia(fuera);
@@ -429,7 +429,8 @@ export default function GestionGuardias() {
       }
       clases.forEach(hh => {
         const t = normGrupo(hh.grupo);
-        const act = t && gruposFueraDia.find(x => x.g && t.includes(x.g));
+        // Solo a las horas que dura la actividad (queja #230).
+        const act = t && gruposFueraDia.find(x => x.g && t.includes(x.g) && actividadOcupaHora(x.act, hid));
         if (act) {
           grises.push({ a, hh, motivo: `El grupo está en la actividad «${act.titulo}»: no hay que cubrirlo.` });
           return;
