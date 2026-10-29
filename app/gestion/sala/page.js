@@ -48,7 +48,7 @@ export default function GestionSala() {
 
   function mostrarMsg(texto, tipo) {
     setMensaje({ texto, tipo });
-    setTimeout(() => setMensaje(null), 4000);
+    setTimeout(() => setMensaje(null), tipo === 'error' ? 12000 : 4000);
   }
 
   function limpiarFormulario() {
@@ -61,11 +61,27 @@ export default function GestionSala() {
     fd.append('archivo', await reducirImagen(archivo));
     fd.append('carpeta', 'sala');
     fd.append('bucket', 'carteles');
+    // Devuelve { url } o { error } con el motivo real, para que quien
+    // publica sepa qué ha pasado en vez de un «no se pudo» sin más.
     try {
       const r = await fetch('/api/documento', { method: 'POST', body: fd });
-      const d = await r.json();
-      return d.url || null;
-    } catch { return null; }
+      if (r.status === 413) return { error: 'la foto pesa demasiado. Prueba con una captura o una imagen más pequeña' };
+      const d = await r.json().catch(() => ({}));
+      if (d.url) return { url: d.url };
+      if (d.error === 'sin_permisos') return { error: 'solo el equipo directivo puede subir carteles' };
+      if (d.error === 'sin_sesion') return { error: 'la sesión ha caducado. Sal y vuelve a entrar' };
+      return { error: d.error || `error del servidor (${r.status})` };
+    } catch {
+      return { error: 'sin conexión con el servidor' };
+    }
+  }
+
+  // Motivo legible a partir de la respuesta de /api/centro
+  async function motivoDe(r) {
+    const d = await r.json().catch(() => ({}));
+    if (d.error === 'sin_permisos') return 'solo el equipo directivo puede publicar avisos';
+    if (d.error === 'sin_sesion') return 'la sesión ha caducado. Sal y vuelve a entrar';
+    return d.error || `error del servidor (${r.status})`;
   }
 
   async function guardarAviso() {
@@ -77,12 +93,13 @@ export default function GestionSala() {
 
     let imagen_url = imagenUrl || null;
     if (foto) {
-      imagen_url = await subirCartel(foto);
-      if (!imagen_url) {
-        mostrarMsg('❌ No se pudo subir la foto. El aviso no se ha guardado.', 'error');
+      const subida = await subirCartel(foto);
+      if (!subida.url) {
+        mostrarMsg(`❌ No se pudo subir la foto: ${subida.error}. El aviso no se ha guardado.`, 'error');
         setEnviando(false);
         return;
       }
+      imagen_url = subida.url;
     }
     const extra = { imagen_url, visible_hasta: visibleHasta || null };
 
@@ -95,8 +112,12 @@ export default function GestionSala() {
           datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, ...extra },
         }),
       });
-      if (_re.ok) mostrarMsg('✅ Aviso actualizado', 'ok');
-      else mostrarMsg('❌ No se pudo actualizar el aviso', 'error');
+      if (!_re.ok) {
+        mostrarMsg(`❌ No se pudo actualizar el aviso: ${await motivoDe(_re)}`, 'error');
+        setEnviando(false);
+        return;   // se deja el formulario como está para no perder lo escrito
+      }
+      mostrarMsg('✅ Aviso actualizado', 'ok');
     } else {
       const _rp = await fetch('/api/centro', {
         method: 'POST',
@@ -106,8 +127,12 @@ export default function GestionSala() {
           datos: { titulo: titulo.trim(), mensaje: texto.trim(), urgente, autor: nombre, activo: true, ...extra },
         }),
       });
-      if (_rp.ok) mostrarMsg('✅ Aviso publicado', 'ok');
-      else mostrarMsg('❌ No se pudo publicar el aviso', 'error');
+      if (!_rp.ok) {
+        mostrarMsg(`❌ No se pudo publicar el aviso: ${await motivoDe(_rp)}`, 'error');
+        setEnviando(false);
+        return;   // se deja el formulario como está para no perder lo escrito
+      }
+      mostrarMsg('✅ Aviso publicado', 'ok');
     }
 
     limpiarFormulario();
