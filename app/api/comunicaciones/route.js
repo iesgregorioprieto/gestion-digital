@@ -58,13 +58,32 @@ function cargoDe(ficha) {
   return null;
 }
 
+/** Convierte lo que venga (lista, texto JSON, lista de Postgres o texto suelto) en lista */
+function aLista(v) {
+  if (v == null || v === '') return [];
+  if (Array.isArray(v)) return v.map(x => String(x).trim()).filter(Boolean);
+  const t = String(v).trim();
+  if (t.startsWith('[')) {
+    try { const j = JSON.parse(t); if (Array.isArray(j)) return j.map(x => String(x).trim()).filter(Boolean); } catch {}
+  }
+  if (t.startsWith('{') && t.endsWith('}')) {
+    return t.slice(1, -1).split(',').map(x => x.replace(/^"|"$/g, '').trim()).filter(Boolean);
+  }
+  return [t];
+}
+
 /** ¿Le toca a esta persona? Acepta ambito como string (antiguo) o array (nuevo) */
 export function esDestinatario(c, ficha) {
   if (!ficha) return false;
 
-  // Si el ámbito es un array, basta con encajar en cualquiera de ellos
-  const lista = Array.isArray(c.ambito) ? c.ambito : [c.ambito];
-  const dptos = Array.isArray(c.departamento) ? c.departamento : (c.departamento ? [c.departamento] : []);
+  // Si el ámbito es un array, basta con encajar en cualquiera de ellos.
+  // Según cómo esté definida la columna, la base de datos puede devolver
+  // la lista como texto ('["claustro"]' o '{claustro}') en vez de como
+  // lista. Sin convertirlo, ningún ámbito casaba y el aviso no le
+  // llegaba a nadie (0/0).
+  const lista = aLista(c.ambito);
+  const dptos = aLista(c.departamento);
+  const destinatariosLista = aLista(c.destinatarios);
 
   const roles = Array.isArray(ficha.rol) ? ficha.rol : [];
   const cargo = cargoDe(ficha);
@@ -91,7 +110,7 @@ export function esDestinatario(c, ficha) {
         // una referencia al equipo. Así, si mañana se quita a alguien del
         // equipo, la convocatoria de la semana pasada -- y su acta -- no
         // cambian solas.
-        if (Array.isArray(c.destinatarios) && c.destinatarios.includes(ficha.id)) return true;
+        if (destinatariosLista.includes(ficha.id)) return true;
         break;
     }
   }
@@ -268,14 +287,15 @@ export async function POST(request) {
       // aunque no tenga la aplicación abierta. Una sola, al publicar.
       // Los de «solo banner» no la llevan: son una línea discreta.
       let enviados = 0;
+      const { data: profes } = await cliente
+        .from('profesores')
+        .select('id, departamento, rol, rol_gestion, tipo_contrato')
+        .eq('estado', 'activo');
+      const todosIds = (profes || [])
+        .filter(p => p.tipo_contrato !== 'Plaza vacante' && esDestinatario(fila, p))
+        .map(p => p.id);
       if (tipo === 'aviso') {
-        const { data: profes } = await cliente
-          .from('profesores')
-          .select('id, departamento, rol, rol_gestion, tipo_contrato');
-        const ids = (profes || [])
-          .filter(p => p.tipo_contrato !== 'Plaza vacante' && esDestinatario(fila, p))
-          .map(p => p.id)
-          .filter(pid => pid !== sesion.id);
+        const ids = todosIds.filter(pid => pid !== sesion.id);
         const r = await enviarPushA(cliente, ids, {
           titulo: `📢 ${fila.titulo}`,
           cuerpo: fila.mensaje,
@@ -283,7 +303,7 @@ export async function POST(request) {
         });
         enviados = r.enviados || 0;
       }
-      return Response.json({ ok: true, id: (data || [])[0]?.id, enviados });
+      return Response.json({ ok: true, id: (data || [])[0]?.id, enviados, destinatarios: todosIds.length });
     }
 
     if (accion === 'abrir_fichaje') {

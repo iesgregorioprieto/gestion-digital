@@ -271,7 +271,8 @@ export default function GestionComunicaciones() {
       const d = await r.json().catch(() => ({}));
       aviso(enBanner
         ? `📌 Publicado en el banner de sus destinatarios hasta el ${hastaBanner.split('-').reverse().join('/')}.`
-        : `📢 Aviso publicado. Notificación enviada a ${d.enviados || 0} móviles; al resto le saltará al volver a la app.`, 'ok');
+        : `📢 Aviso publicado para ${d.destinatarios ?? '?'} profesores. Notificación enviada a ${d.enviados || 0} móviles; al resto le saltará al volver a la app.`,
+        d.destinatarios === 0 ? 'error' : 'ok');
       setTitulo(''); setTexto(''); setModoAviso('ventana'); setHastaBanner('');
       setElegidos([]); setAmbitos(['claustro']); setDptos([]); setEquiposElegidos([]);
       setVista('lista');
