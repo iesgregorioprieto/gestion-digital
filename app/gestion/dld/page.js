@@ -221,6 +221,8 @@ export default function PanelDirector() {
   const [mensaje, setMensaje] = useState(null);
   const [solicitudAbierta, setSolicitudAbierta] = useState(null);
   const [plazoAbierta, setPlazoAbierta] = useState(null);
+  // Análisis de grupos del día con el horario real (#231): null = cargando
+  const [analisisGrupos, setAnalisisGrupos] = useState(null);
 
   // Al abrir una solicitud se comprueba con cuánta antelación se pidió,
   // contando días hábiles y descontando vacaciones.
@@ -228,12 +230,60 @@ export default function PanelDirector() {
     setSolicitudAbierta(s);
     setMotivoRechazo('');
     setPlazoAbierta(null);
+    cargarAnalisisGrupos(s);
     try {
       const cfg = await getConfigCurso();
       const base = (s.created_at || '').slice(0, 10) || undefined;
       setPlazoAbierta(plazoSolicitudDLD(s.fecha_solicitada, cfg, base));
     } catch (e) { /* sin configuración no se puede calcular: no se avisa */ }
   }
+  /**
+   * ¿Algún grupo se queda sin su profesor en más de 2 periodos lectivos?
+   * (#231, José María). Se mira el día entero con el horario real:
+   * ausencias, bajas y DLD concedidos, más esta solicitud como si se
+   * concediera. Lo calcula el servidor (/api/escenario).
+   */
+  async function cargarAnalisisGrupos(s) {
+    setAnalisisGrupos(null);
+    try {
+      const r = await fetch(`/api/escenario?fecha=${s.fecha_solicitada}&dld=${encodeURIComponent(s.id)}`);
+      const d = await r.json();
+      if (!r.ok || d.error || d.analisisError || !Array.isArray(d.grupos)) {
+        setAnalisisGrupos({ error: d.analisisError || d.error || 'No se ha podido comprobar' , id: s.id });
+      } else {
+        setAnalisisGrupos({ grupos: d.grupos, umbral: d.umbral || 2, id: s.id });
+      }
+    } catch (e) {
+      setAnalisisGrupos({ error: 'No se ha podido comprobar', id: s.id });
+    }
+  }
+
+  function alertasGruposDia(solicitud) {
+    const a = analisisGrupos;
+    if (!a || a.id !== solicitud.id) {
+      return [{ tipo: 'info', texto: '⏳ Comprobando si algún grupo pierde más de 2 periodos lectivos ese día…' }];
+    }
+    if (a.error) {
+      return [{ tipo: 'amarillo', texto: `🟡 No se ha podido comprobar los periodos que pierde cada grupo ese día (${a.error}).` }];
+    }
+    const graves = a.grupos.filter(g => g.periodos.length > a.umbral);
+    if (graves.length === 0) {
+      return [{ tipo: 'verde', texto: `✅ Ningún grupo se queda sin su profesor en más de ${a.umbral} periodos lectivos ese día, contando esta solicitud, las ausencias y los DLD ya concedidos. No existe ese problema.` }];
+    }
+    const detalle = g => g.periodos
+      .map(p => `${p.hora}ª ${p.quien.map(q => q.esEsteDld ? `${q.profesor} (este DLD)` : `${q.profesor}${q.origen === 'DLD' ? ' (DLD)' : q.origen === 'baja' ? ' (baja)' : ''}`).join(' / ')}`)
+      .join(' · ');
+    return graves.map(g => g.tocaEsteDld
+      ? {
+          tipo: 'rojo',
+          texto: `🔴 GRUPO ${g.grupo}: con esta solicitud se queda sin su profesor en ${g.periodos.length} periodos lectivos (sin ella, ${g.sinEsteDld}). ${detalle(g)}`,
+        }
+      : {
+          tipo: 'amarillo',
+          texto: `🟡 GRUPO ${g.grupo}: ya pierde ${g.periodos.length} periodos lectivos ese día por otras ausencias (esta solicitud no le afecta). ${detalle(g)}`,
+        });
+  }
+
   const [motivoRechazo, setMotivoRechazo] = useState('');
   const [procesando, setProcesando] = useState(false);
   const [diasVistos, setDiasVistos] = useState(new Set());
@@ -1251,7 +1301,7 @@ export default function PanelDirector() {
               </>
             )}
 
-            <AlertasPanel alertas={calcularAlertas(solicitudAbierta)} prelacion={calcularPrelacion(solicitudAbierta)} />
+            <AlertasPanel alertas={[...alertasGruposDia(solicitudAbierta), ...calcularAlertas(solicitudAbierta)]} prelacion={calcularPrelacion(solicitudAbierta)} />
             
             <details style={{ marginBottom: 20 }}>
               <summary style={{ fontSize: 14, color: '#3b82f6', cursor: 'pointer' }}>Ver detalles</summary>

@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { etiquetaMotivo } from '@/lib/motivosAusencia';
+import { analizarDia, UMBRAL_PERIODOS } from '@/lib/analisisDia';
 
 export const dynamic = 'force-dynamic';
 
@@ -56,7 +57,11 @@ export async function GET(request) {
     return Response.json({ error: 'solo_equipo_directivo' }, { status: 403 });
   }
 
-  const fecha = new URL(request.url).searchParams.get('fecha');
+  const params = new URL(request.url).searchParams;
+  const fecha = params.get('fecha');
+  // DLD que se está revisando: se suma al análisis de grupos como si se
+  // concediera (petición #231 de José María).
+  const dldId = params.get('dld');
   if (!fecha || !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
     return Response.json({ error: 'fecha_invalida' }, { status: 400 });
   }
@@ -78,7 +83,7 @@ export async function GET(request) {
       .lte('fecha_inicio', fecha)
       .or(`fecha_fin.gte.${fecha},fecha_fin.is.null`),
     sb.from('dld')
-      .select('id, profesor_nombre, tipo_dld, fecha_solicitada, horas, estado')
+      .select('id, profesor_id, profesor_nombre, tipo_dld, fecha_solicitada, horas, estado')
       .eq('fecha_solicitada', fecha),
   ]);
 
@@ -101,6 +106,7 @@ export async function GET(request) {
     if (a.subtipo === 'dld') {
       items.push({
         bloque: 'dld',
+        profesorId: a.profesor_id,
         profesor: a.profesor_nombre || '—',
         detalle: 'DLD (registrado como ausencia)',
         nHoras: Array.isArray(a.horas) ? a.horas.length : 0,
@@ -115,6 +121,7 @@ export async function GET(request) {
     const detalleFormacion = [ex.curso, ex.entidad, ex.horario].filter(Boolean).join(' · ');
     items.push({
       bloque: esFormacion ? 'formacion' : 'ausencias',
+      profesorId: a.profesor_id,
       profesor: a.profesor_nombre || '—',
       detalle: (esFormacion && detalleFormacion)
         ? detalleFormacion
@@ -166,6 +173,7 @@ export async function GET(request) {
     }
     items.push({
       bloque: 'dld',
+      profesorId: d.profesor_id,
       profesor: d.profesor_nombre || '—',
       detalle: TIPOS_DLD[d.tipo_dld] || d.tipo_dld || 'DLD',
       nHoras: Array.isArray(d.horas) ? d.horas.length : 0,
@@ -173,5 +181,44 @@ export async function GET(request) {
     });
   });
 
-  return Response.json({ items });
+  /**
+   * HORAS DE CLASE QUE PIERDE CADA UNO Y GRUPOS AFECTADOS (#231)
+   *
+   * Con el horario real de ese día. Si falla, el escenario sale igual que
+   * antes, sin este análisis: no se deja la pantalla en blanco por esto.
+   */
+  let grupos = null;
+  let analisisError = null;
+  try {
+    const analisis = await analizarDia(sb, fecha, { dldId });
+    items.forEach(i => {
+      if (!i.profesorId || !analisis.porProfesor.has(i.profesorId)) return;
+      i.clases = analisis.porProfesor.get(i.profesorId).map(c => ({
+        hora: c.hora, grupo: c.grupo, grupoFuera: c.grupoFuera,
+      }));
+      i.nHoras = i.clases.filter(c => !c.grupoFuera).length;
+    });
+    // Bajas marcadas en la ficha sin ausencia registrada: también faltan.
+    const yaSalen = new Set(items.map(i => i.profesorId).filter(Boolean));
+    for (const [id, clases] of analisis.porProfesor) {
+      if (yaSalen.has(id) || String(id).startsWith('dld-')) continue;
+      const p = (rProf.data || []).find(x => x.id === id);
+      if (!p) continue;
+      items.push({
+        bloque: 'ausencias',
+        profesorId: id,
+        profesor: `${p.nombre} ${p.apellidos}`.trim(),
+        detalle: 'De baja (marcada en su ficha) — sin sustituto',
+        clases: clases.map(c => ({ hora: c.hora, grupo: c.grupo, grupoFuera: c.grupoFuera })),
+        nHoras: clases.filter(c => !c.grupoFuera).length,
+        estado: null,
+      });
+    }
+    grupos = analisis.grupos;
+  } catch (e) {
+    console.error('escenario: análisis de grupos:', e?.message);
+    analisisError = 'No se ha podido calcular el análisis de grupos.';
+  }
+
+  return Response.json({ items, grupos, umbral: UMBRAL_PERIODOS, analisisError });
 }

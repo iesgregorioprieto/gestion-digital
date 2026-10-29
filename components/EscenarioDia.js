@@ -27,6 +27,8 @@ export default function EscenarioDia({ fecha, compacto = false }) {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState('');
   const [items, setItems] = useState([]);
+  const [grupos, setGrupos] = useState(null);
+  const [umbral, setUmbral] = useState(2);
 
   const [actualizado, setActualizado] = useState(null);
 
@@ -42,7 +44,7 @@ export default function EscenarioDia({ fecha, compacto = false }) {
    * detrás, sin parpadeo, para no molestar a quien esté leyendo.
    */
   useEffect(() => {
-    if (!fecha) { setItems([]); setCargando(false); return; }
+    if (!fecha) { setItems([]); setGrupos(null); setCargando(false); return; }
     let cancelado = false;
     let primera = true;
 
@@ -63,6 +65,8 @@ export default function EscenarioDia({ fecha, compacto = false }) {
         }
 
         setItems(d.items || []);
+        setGrupos(Array.isArray(d.grupos) ? d.grupos : null);
+        if (d.umbral) setUmbral(d.umbral);
         setActualizado(new Date());
       } catch (e) {
         if (!cancelado) setError('No se ha podido cargar el escenario del día.');
@@ -130,6 +134,36 @@ export default function EscenarioDia({ fecha, compacto = false }) {
         )}
       </div>
 
+      {/* GRUPOS QUE PIERDEN MÁS DE 2 PERIODOS (#231) */}
+      {grupos && totalProfes > 0 && (() => {
+        const graves = grupos.filter(g => g.periodos.length > umbral);
+        const ok = graves.length === 0;
+        return (
+          <div style={{
+            marginBottom: 12, borderRadius: 10, padding: '9px 12px', fontSize: 12.5,
+            backgroundColor: ok ? '#f0fdf4' : '#fef2f2',
+            border: `1.5px solid ${ok ? '#bbf7d0' : '#fecaca'}`,
+            color: ok ? '#166534' : '#991b1b',
+          }}>
+            {ok ? (
+              <span>✅ Ningún grupo se queda sin su profesor en más de {umbral} periodos lectivos este día.</span>
+            ) : (
+              <>
+                <div style={{ fontWeight: 800, marginBottom: 4 }}>
+                  🔴 {graves.length === 1 ? 'Un grupo pierde' : `${graves.length} grupos pierden`} más de {umbral} periodos lectivos:
+                </div>
+                {graves.map(g => (
+                  <div key={g.grupo} style={{ marginTop: 3, lineHeight: 1.45 }}>
+                    <strong>{g.grupo}</strong> — {g.periodos.length} periodos:{' '}
+                    {g.periodos.map(p => `${p.hora}ª ${p.quien.map(q => q.profesor).join(' / ')}`).join(' · ')}
+                  </div>
+                ))}
+              </>
+            )}
+          </div>
+        );
+      })()}
+
       {/* BLOQUES POR PRIORIDAD */}
       {BLOQUES.map(b => {
         const propios = items.filter(i => i.bloque === b.id);
@@ -163,13 +197,32 @@ export default function EscenarioDia({ fecha, compacto = false }) {
                   <span style={{ color: '#666' }}>{p.detalle}</span>
                   {!compacto && p.nHoras > 0 && (
                     <span style={{ marginLeft: 'auto', fontSize: 11, color: '#888', whiteSpace: 'nowrap' }}>
-                      {p.nHoras} {p.nHoras === 1 ? 'hora' : 'horas'}
+                      {p.nHoras} {p.nHoras === 1 ? 'hora' : 'horas'}{Array.isArray(p.clases) ? ' de clase' : ''}
                     </span>
                   )}
                   {p.estado === 'pendiente' && (
                     <span style={{ fontSize: 10.5, fontWeight: 700, color: '#92400e', backgroundColor: '#fef3c7', padding: '1px 7px', borderRadius: 20 }}>
                       pendiente
                     </span>
+                  )}
+                  {Array.isArray(p.clases) && (
+                    <div style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                      {p.clases.length === 0 ? (
+                        <span style={{ fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>Sin horas de clase con alumnos este día</span>
+                      ) : p.clases.map((c, k) => (
+                        <span key={k}
+                          title={c.grupoFuera ? 'El grupo está fuera en una actividad a esa hora' : undefined}
+                          style={{
+                            fontSize: 11, padding: '1px 7px', borderRadius: 6,
+                            backgroundColor: c.grupoFuera ? '#f3f4f6' : '#eef2ff',
+                            color: c.grupoFuera ? '#9ca3af' : '#3730a3',
+                            textDecoration: c.grupoFuera ? 'line-through' : 'none',
+                            whiteSpace: 'nowrap',
+                          }}>
+                          {c.hora}ª {c.grupo || '—'}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
               ))}
