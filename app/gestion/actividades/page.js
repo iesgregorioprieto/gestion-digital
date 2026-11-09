@@ -19,6 +19,7 @@ import { hoyLocal } from '@/lib/fechas';
 import { FRANJAS } from '@/lib/asignacionGuardias';
 import EscenarioDia from '@/components/EscenarioDia';
 import EditarActividad from './EditarActividad';
+import { eventosCoincidentes, horarioActividad, textoEvento } from '@/lib/coincidenciasEventos';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
@@ -52,6 +53,7 @@ export default function GestionActividades() {
   const [editando, setEditando] = useState(null);   // actividad abierta en el editor
   const [esDirector, setEsDirector] = useState(false);
   const [nombresProf, setNombresProf] = useState({});   // id -> nombre completo
+  const [eventosCal, setEventosCal] = useState([]);     // eventos del calendario, para avisar de coincidencias (#237)
 
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
@@ -71,6 +73,21 @@ export default function GestionActividades() {
       .select('*')
       .order('fecha_inicio', { ascending: true });
     setActividades(data || []);
+
+    // Eventos del calendario en las fechas de las actividades pendientes,
+    // para avisar si alguna coincide con una evaluación, un claustro…
+    // (incidencia #237). Si falla, la pantalla funciona igual sin el aviso.
+    try {
+      const pend = (data || []).filter(a => (a.estado || 'pendiente') === 'pendiente' && a.fecha_inicio);
+      if (pend.length) {
+        const desde = pend.map(a => a.fecha_inicio).sort()[0];
+        const hasta = pend.map(a => a.fecha_fin || a.fecha_inicio).sort().slice(-1)[0];
+        const r = await fetch(`/api/eventos?desde=${desde}&hasta=${hasta}`).then(x => x.json());
+        setEventosCal(r.eventos || []);
+      } else setEventosCal([]);
+    } catch (e) {
+      setEventosCal([]);
+    }
 
     // Nombres del profesorado, para enseñar quién participa en cada
     // actividad. Los acompañantes se guardan por identificador.
@@ -428,6 +445,9 @@ export default function GestionActividades() {
               const nAcomp = Array.isArray(a.acompanantes) ? a.acompanantes.length : 0;
               const grupos = Array.isArray(a.grupos) ? a.grupos.join(', ') : '';
               const abiertaEsta = abierta === a.id;
+              const coinciden = (a.estado || 'pendiente') === 'pendiente'
+                ? eventosCoincidentes({ fecha_inicio: a.fecha_inicio, fecha_fin: a.fecha_fin, ...horarioActividad(a) }, eventosCal)
+                : [];
 
               return (
                 <div key={a.id} style={{
@@ -452,6 +472,12 @@ export default function GestionActividades() {
                           {grupos ? ` · ${grupos}` : ''}
                           {a.departamento ? ` · ${a.departamento}` : ''}
                         </div>
+                        {coinciden.length > 0 && (
+                          <div style={{ marginTop: 7, fontSize: 12.5, color: '#9a3412', backgroundColor: '#fff7ed',
+                            border: '1px solid #fed7aa', borderRadius: 8, padding: '6px 9px', lineHeight: 1.45 }}>
+                            ⚠️ <strong>Coincide con el calendario:</strong> {coinciden.map(textoEvento).join(' · ')}
+                          </div>
+                        )}
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
                         <span style={{ fontSize: 11.5, fontWeight: 800, color: est.color, backgroundColor: est.bg, padding: '3px 10px', borderRadius: 20, whiteSpace: 'nowrap' }}>

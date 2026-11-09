@@ -50,6 +50,18 @@ const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
 
+/**
+ * Aviso de coincidencia con eventos del calendario (incidencia #237).
+ * Recibe los textos ya preparados («Evaluación 1ª ESO — 12/12/2026 · 16:00»).
+ */
+function bloqueCoincidencias(lista) {
+  if (!Array.isArray(lista) || lista.length === 0) return '';
+  return `<div style="background:#fff7ed;border-left:4px solid #ea580c;border-radius:8px;padding:14px;margin:16px 0">
+    <div style="font-weight:bold;color:#9a3412;margin-bottom:6px">⚠️ Coincide con ${lista.length === 1 ? 'un evento' : lista.length + ' eventos'} del calendario</div>
+    <div style="line-height:1.6">${lista.slice(0, 10).map(t => e(t)).join('<br>')}</div>
+  </div>`;
+}
+
 /** Escapa el texto para que nadie pueda colar HTML dentro del correo */
 function e(valor) {
   if (valor === null || valor === undefined) return '';
@@ -199,6 +211,7 @@ export async function POST(request) {
       subject = datos.enPga
         ? `🏒 Nueva actividad complementaria — ${e(datos.titulo)}`
         : `⚠️ Actividad fuera de la PGA — ${e(datos.titulo)}`;
+      if (datos.coincidencias?.length) subject += ' · ⚠️ coincide con el calendario';
       html = `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
           <div style="background:#1e3a5f;padding:20px;text-align:center">
@@ -246,6 +259,7 @@ export async function POST(request) {
                 <td style="padding:10px">${e(datos.curriculo)}</td>
               </tr>
             </table>
+            ${bloqueCoincidencias(datos.coincidencias)}
             <div style="text-align:center;margin:30px 0">
               <a href="${BASE_URL}/gestion/actividades"
                  style="background:${datos.enPga ? '#1e6b2e' : '#b45309'};color:white;padding:12px 30px;border-radius:6px;text-decoration:none;font-size:16px">
@@ -851,6 +865,7 @@ export async function POST(request) {
         subject = dj === 'denegada'
           ? `🎓 Formación denegada por el jefe de dpto. — ${e(datos.nombre)}`
           : `🎓 Formación pendiente de tu autorización — ${e(datos.nombre)}`;
+        if (datos.coincidencias?.length) subject = '⚠️ ' + subject + ' · coincide con el calendario';
         const intro = dj === 'aprobada'
           ? `<p><strong>${e(datos.nombre_jefe)}</strong>, jefe de departamento, ha <strong>aprobado</strong> la formación de <strong>${e(datos.nombre)}</strong>. Queda pendiente de tu autorización.</p>`
           : dj === 'denegada'
@@ -860,6 +875,7 @@ export async function POST(request) {
           : `<p><strong>${e(datos.nombre)}</strong> pide autorización para esta formación.${datos.nota ? ' ' + e(datos.nota) : ''}</p>`;
         cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de formación</h2>${intro}
           ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
+          ${bloqueCoincidencias(datos.coincidencias)}
           ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/formacion?vista=direccion', color)}`;
       } else if (tipo === 'fc_anulada') {
         color = '#4b5563';

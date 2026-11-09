@@ -2,6 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { enviarAviso, correosDe } from '@/lib/notificaciones';
+import { coincidenciasEnServidor } from '@/lib/coincidenciasEventos';
 import { cursoPorFecha } from '@/lib/curso';
 import { departamentoASector, esSectorFP } from '@/lib/sectores';
 
@@ -118,7 +119,9 @@ async function avisarDirector(sb, s, prof, extra = {}) {
     console.error('[formacion] sin director con correo: el aviso no sale');
     return;
   }
-  await enviarAviso('fc_director', destinos, { ...datosCorreo(s, prof), ...extra });
+  // ¿Coincide con algún evento del calendario? (incidencia #237)
+  const coincidencias = await coincidenciasEnServidor(sb, s);
+  await enviarAviso('fc_director', destinos, { ...datosCorreo(s, prof), ...extra, coincidencias });
 }
 
 // ─────────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { hoyLocal } from '@/lib/fechas';
 import { departamentoASector, esSectorFP } from '@/lib/sectores';
 import CambiarEstadoFormacion from '@/components/CambiarEstadoFormacion';
+import { eventosCoincidentes, textoEvento } from '@/lib/coincidenciasEventos';
 
 /**
  * FORMACIÓN — solicitudes de cursos y jornadas (sugerencia #93)
@@ -397,6 +398,21 @@ function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
   const resto   = todas.filter(s => ['autorizada', 'denegada_director', 'retirada'].includes(s.estado))
     .filter(s => filtro === 'todas' || s.estado === filtro);
 
+  // Eventos del calendario en las fechas de lo que falta por resolver,
+  // para avisar si una formación coincide con una evaluación, un claustro…
+  // (incidencia #237). Si falla, el panel funciona igual sin el aviso.
+  const porResolver = [...pendDir, ...enJefe, ...denJefe];
+  const [eventosCal, setEventosCal] = useState([]);
+  const desde = porResolver.map(s => s.fecha_inicio).filter(Boolean).sort()[0] || '';
+  const hasta = porResolver.map(s => s.fecha_fin || s.fecha_inicio).filter(Boolean).sort().slice(-1)[0] || '';
+  useEffect(() => {
+    if (!desde || !hasta) { setEventosCal([]); return; }
+    fetch(`/api/eventos?desde=${desde}&hasta=${hasta}`)
+      .then(r => r.json()).then(d => setEventosCal(d.eventos || []))
+      .catch(() => setEventosCal([]));
+  }, [desde, hasta]);
+  const coinciden = s => eventosCoincidentes(s, eventosCal);
+
   const opcionesDir = [
     { valor: 'autorizada', label: '✅ Autorizar', color: VERDE },
     { valor: 'denegada', label: '❌ Denegar', color: ROJO },
@@ -414,7 +430,7 @@ function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
       {pendDir.length === 0
         ? <Vacio texto="No hay solicitudes pendientes de dirección." />
         : pendDir.map(s => (
-          <Tarjeta key={s.id} s={s} verNombre>
+          <Tarjeta key={s.id} s={s} verNombre coinciden={coinciden(s)}>
             {puedeResolver && <Resolver opciones={opcionesDir} onResolver={(dec, mot) => resolver('resolver_director', s, dec, mot)} />}
             {puedeResolver && <CambiarEstadoFormacion solicitud={s} onHecho={alCambiar} />}
           </Tarjeta>
@@ -424,7 +440,7 @@ function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
         <>
           <Sub>Denegadas por el jefe de departamento ({denJefe.length})</Sub>
           {denJefe.map(s => (
-            <Tarjeta key={s.id} s={s} verNombre>
+            <Tarjeta key={s.id} s={s} verNombre coinciden={coinciden(s)}>
               {puedeResolver && (
                 <Resolver textoAbrir="Revisar decisión" opciones={[opcionesDir[0]]}
                   onResolver={(dec, mot) => resolver('resolver_director', s, dec, mot)} />
@@ -439,7 +455,7 @@ function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
         <>
           <Sub>En manos del jefe de departamento ({enJefe.length})</Sub>
           {enJefe.map(s => (
-            <Tarjeta key={s.id} s={s} verNombre>
+            <Tarjeta key={s.id} s={s} verNombre coinciden={coinciden(s)}>
               <div style={{ fontSize: 12, color: '#6b7280', marginTop: 6 }}>
                 Pasa a dirección el {fmtFecha(s.jefe_limite)} si el jefe no contesta.
               </div>
@@ -475,7 +491,7 @@ function PanelDireccion({ todas, puedeResolver, resolver, alCambiar }) {
 
 // ── Componentes ──
 
-function Tarjeta({ s, verNombre = false, children }) {
+function Tarjeta({ s, verNombre = false, coinciden = [], children }) {
   const est = ESTADOS[s.estado] || ESTADOS.pendiente_jefe;
   const d = new Date(s.fecha_inicio + 'T12:00:00');
   const modalidad = MODALIDADES.find(m => m.valor === s.modalidad);
@@ -508,6 +524,12 @@ function Tarjeta({ s, verNombre = false, children }) {
         </div>
         {s.observaciones && (
           <div style={{ fontSize: 12, color: '#4b5563', marginTop: 5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{s.observaciones}</div>
+        )}
+        {coinciden.length > 0 && (
+          <div style={{ marginTop: 7, fontSize: 12.5, color: '#9a3412', backgroundColor: '#fff7ed',
+            border: '1px solid #fed7aa', borderRadius: 8, padding: '6px 9px', lineHeight: 1.45 }}>
+            ⚠️ <strong>Coincide con el calendario:</strong> {coinciden.map(textoEvento).join(' · ')}
+          </div>
         )}
 
         <div style={{ marginTop: 7 }}>

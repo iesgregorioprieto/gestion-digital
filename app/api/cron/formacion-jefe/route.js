@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { claveServidor } from '@/lib/claveServidor';
 import { avisarDireccion, enviarAviso } from '@/lib/notificaciones';
+import { coincidenciasEnServidor } from '@/lib/coincidenciasEventos';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +73,7 @@ export async function GET(request) {
         lugar: s.lugar || '',
         fecha: s.fecha_inicio || '',
         fecha_fin: s.fecha_fin && s.fecha_fin !== s.fecha_inicio ? s.fecha_fin : '',
+        coincidencias: await coincidenciasEnServidor(sb, s),
       });
       escaladasNuevas++;
     }

@@ -19,6 +19,7 @@ import { claveServidor } from '@/lib/claveServidor';
 
 import { enviarAviso, AVISOS_ACTIVIDADES } from '@/lib/notificaciones';
 import { enviarPushA } from '@/lib/pushServidor';
+import { coincidenciasEnServidor, horarioActividad } from '@/lib/coincidenciasEventos';
 
 const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
 
@@ -93,7 +94,14 @@ export async function POST(request) {
           console.error('nombres de acompañantes:', err?.message);
         }
 
-        for (const act of conAutor) {
+        // ¿Coincide con algún evento del calendario? (incidencia #237)
+        const coincidenDe = [];
+        for (const act of conAutor.slice(0, 50)) {
+          coincidenDe.push(await coincidenciasEnServidor(supa(),
+            { fecha_inicio: act.fecha_inicio, fecha_fin: act.fecha_fin, ...horarioActividad(act) }));
+        }
+
+        for (const [n, act] of conAutor.entries()) {
           const responsable = act.profesor_nombre || sesion.nombre || 'Un profesor/a';
           const acomp = (Array.isArray(act.acompanantes) ? act.acompanantes : [])
             .map(id => nombrePorId[id]).filter(Boolean);
@@ -108,6 +116,7 @@ export async function POST(request) {
             lugar: act.lugar || '',
             curriculo: act.relacion_curricular || 'No indicada',
             enPga: act.en_pga === true,
+            coincidencias: coincidenDe[n],
           }).catch(err => console.error('aviso de actividad:', err?.message));
         }
 
@@ -126,7 +135,8 @@ export async function POST(request) {
                 + (primera.fecha_inicio ? ` (${primera.fecha_inicio})` : '')
                 + (Array.isArray(primera.acompanantes) && primera.acompanantes.length
                   ? ` · ${primera.acompanantes.length + 1} profesores`
-                  : ''),
+                  : '')
+                + (coincidenDe[0]?.length ? ` · ⚠️ Coincide con: ${coincidenDe[0].join('; ')}` : ''),
               url: '/gestion/actividades',
             });
           }
