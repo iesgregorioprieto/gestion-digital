@@ -213,6 +213,60 @@ export async function GET(request) {
       });
     }),
 
+    // ── TODOS: comisión de servicio autorizada sin ausencia ──────────
+    bloque('comision_mia', async () => {
+      const { data } = await c.from('comisiones_servicio')
+        .select('id, motivo, fecha_inicio, fecha_fin')
+        .eq('profesor_id', sesion.id).eq('estado', 'autorizada')
+        .is('ausencia_id', null).gte('fecha_fin', hoy)
+        .order('fecha_inicio', { ascending: true });
+      for (const s of (data || [])) {
+        const quedan = diasEntre(hoy, s.fecha_inicio);
+        tareas.push({
+          id: `com-${s.id}`, icono: '🚐',
+          texto: `Registrar la ausencia de tu comisión de servicio del ${fechaCorta(s.fecha_inicio)}`,
+          detalle: `${s.motivo} · Autorizada: registra la ausencia para que se cubran tus grupos`,
+          enlace: `/ausencias?comision=${s.id}&fecha=${s.fecha_inicio}`, urgente: quedan <= 2,
+        });
+      }
+    }),
+
+    // ── JEFE DE DEPARTAMENTO: comisiones por aprobar ────────────────
+    bloque('comision_jefe', async () => {
+      const { data: fichas } = await c.from('profesores').select('departamento, rol').eq('id', sesion.id);
+      const yo = (fichas || [])[0];
+      if (!yo?.departamento || !Array.isArray(yo.rol) || !yo.rol.includes('jefe_departamento')) return;
+      const { data } = await c.from('comisiones_servicio')
+        .select('id, fecha_inicio, jefe_limite')
+        .eq('estado', 'pendiente_jefe').eq('departamento', yo.departamento).neq('profesor_id', sesion.id)
+        .order('jefe_limite', { ascending: true });
+      const lista = data || [];
+      if (!lista.length) return;
+      const limite = lista[0].jefe_limite;
+      tareas.push({
+        id: 'comision_jefe', icono: '🚐',
+        texto: `${lista.length} comisi${lista.length !== 1 ? 'ones' : 'ón'} de servicio de tu departamento por aprobar`,
+        detalle: limite ? `Plazo hasta el ${fechaCorta(limite)}; si no contestas, pasa sola al director` : '',
+        enlace: '/comisiones?vista=jefe', urgente: !!limite && diasEntre(hoy, limite) <= 1,
+      });
+    }),
+
+    // ── DIRECTOR: comisiones por autorizar ──────────────────────────
+    esDirector && bloque('comision_dir', async () => {
+      const { data } = await c.from('comisiones_servicio')
+        .select('id, fecha_inicio').eq('estado', 'pendiente_director')
+        .order('fecha_inicio', { ascending: true });
+      const lista = data || [];
+      if (!lista.length) return;
+      const cerca = lista.filter(s => diasEntre(hoy, s.fecha_inicio) <= 3).length;
+      tareas.push({
+        id: 'comision_dir', icono: '🚐',
+        texto: `${lista.length} comisi${lista.length !== 1 ? 'ones' : 'ón'} de servicio por autorizar`,
+        detalle: cerca ? `${cerca} en los próximos 3 días` : `La más próxima, ${fechaCorta(lista[0].fecha_inicio)}`,
+        enlace: '/comisiones?vista=direccion', urgente: cerca > 0,
+      });
+    }),
+
     // ── DIRECTOR: DLD sin resolver ──────────────────────────────────
     esDirector && bloque('dld', async () => {
       const { data } = await c.from('dld')

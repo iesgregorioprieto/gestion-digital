@@ -210,6 +210,18 @@ export default function PanelProfesor() {
       color: '#a21caf', bg: '#fdf4ff', border: '#f0abfc',
     },
     {
+      id: 'comisiones',
+      emoji: '🚐',
+      titulo: 'Comisiones de servicio',
+      descripcion: 'Pide la comisión para salidas extraescolares y seguimiento de la FCT',
+      href: '/comisiones',
+      disponible: true,
+      // En prueba: de momento solo la ve el equipo directivo. Para abrirla
+      // a todo el claustro, cambiar a ['todos'].
+      roles: ['director', 'secretario', 'jefe_estudios'],
+      color: '#0e7490', bg: '#ecfeff', border: '#67e8f9',
+    },
+    {
       id: 'eventos',
       emoji: '🗓️',
       titulo: 'Calendario',

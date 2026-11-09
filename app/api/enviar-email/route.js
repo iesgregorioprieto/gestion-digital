@@ -45,7 +45,7 @@ function getResend() {
 
 // ── Clasificación de los tipos de correo ────────────────────────────
 const GESTION = ['activacion_cuenta', 'dld_aprobada', 'dld_rechazada', 'guardia_asignada'];
-const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta', 'fc_cambio', 'fc_anulada'];
+const INTERNO = ['recuperar_password', 'justificacion_pendiente', 'nueva_solicitud_secretario', 'sugerencias_del_dia', 'formacion_solicitada', 'formacion_jefe_pendiente', 'formacion_resuelta_jefe', 'formacion_denegada_profesor', 'formacion_auto_escalada', 'actividad_sin_pga', 'fc_jefe', 'fc_director', 'fc_resuelta', 'fc_cambio', 'fc_anulada', 'cs_jefe', 'cs_director', 'cs_resuelta', 'cs_cambio', 'cs_anulada', 'cs_secretaria'];
 const REGISTRO = ['registro_pendiente'];
 
 // ── Utilidades ──────────────────────────────────────────────────────
@@ -907,6 +907,102 @@ export async function POST(request) {
              </div>
              ${boton('1. Registrar la ausencia', `/ausencias?formacion=${encodeURIComponent(datos.id_solicitud || '')}`, color)}`
           : `<h2 style="color:${color};margin:0 0 12px">Formación denegada</h2>
+             <p>${e(datos.quien)} ha denegado tu solicitud.</p>${caja('Motivo:', datos.motivo, false)}${tabla}
+             <p style="font-size:13px;color:#666">Si no estás de acuerdo, habla directamente con la dirección del centro.</p>`;
+      }
+
+      html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+          <div style="background:${color};padding:20px;text-align:center">
+            <h1 style="color:white;margin:0">APrieto</h1>
+            <p style="color:#e5e7eb;margin:5px 0">IES Gregorio Prieto</p>
+          </div>
+          <div style="padding:28px;background:#f9f9f9">${cuerpo}</div>
+        </div>`;
+
+    // ── Comisiones de servicio (comisiones_servicio) ─────────────────
+    } else if (['cs_jefe', 'cs_director', 'cs_resuelta', 'cs_cambio', 'cs_anulada', 'cs_secretaria'].includes(tipo)) {
+      const filasCs = [
+        ['Motivo', datos.motivo_desplazamiento],
+        ['Ámbito', datos.ambito],
+        ['Destino', datos.destino],
+        ['Fecha', `${e(datos.fecha)}${datos.fecha_fin ? ' — ' + e(datos.fecha_fin) : ''}`, true],
+        ['Horario', datos.horario],
+        ['Medio de transporte', datos.transporte],
+        ['Importe estimado en dietas y gastos', datos.importe],
+        ['Departamento', datos.departamento],
+      ].filter(([, v]) => v).map(([k, v, crudo], i) =>
+        `<tr style="background:${i % 2 ? '#fff' : '#ecfeff'}"><td style="padding:10px;font-weight:bold;width:38%">${k}</td><td style="padding:10px">${crudo ? v : e(v)}</td></tr>`
+      ).join('');
+      const tabla = `<table style="width:100%;border-collapse:collapse;margin:16px 0">${filasCs}</table>`;
+      const boton = (texto, ruta, color) => `<div style="text-align:center;margin:24px 0"><a href="${BASE_URL}${ruta}" style="background:${color};color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">${texto}</a></div>`;
+      const caja = (titulo, texto, ok) => texto ? `<div style="background:${ok ? '#f0fdf4' : '#fef2f2'};border-left:4px solid ${ok ? '#16a34a' : '#dc2626'};border-radius:8px;padding:14px;margin:16px 0"><div style="font-weight:bold;margin-bottom:6px">${titulo}</div><div>${e(texto)}</div></div>` : '';
+      let color = '#0e7490', cuerpo = '';
+
+      if (tipo === 'cs_jefe') {
+        color = '#b45309';
+        subject = `🚐 Comisión de servicio pendiente de tu aprobación — ${e(datos.nombre)}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de comisión de servicio</h2>
+          <p><strong>${e(datos.nombre)}</strong>, de tu departamento, pide una comisión de servicio.</p>${tabla}
+          <p style="font-size:14px;color:#78350f;font-weight:bold">Tienes hasta el ${e(datos.limite)} para aprobarla o denegarla. Si no contestas, pasará sola al director.</p>
+          ${boton('Resolver en APrieto', '/comisiones?vista=jefe', color)}`;
+      } else if (tipo === 'cs_director') {
+        const dj = datos.decision_jefe;
+        color = dj === 'denegada' ? '#991b1b' : '#0e7490';
+        subject = dj === 'denegada'
+          ? `🚐 Comisión de servicio denegada por el jefe de dpto. — ${e(datos.nombre)}`
+          : `🚐 Comisión de servicio pendiente de tu autorización — ${e(datos.nombre)}`;
+        if (datos.coincidencias?.length) subject = '⚠️ ' + subject + ' · coincide con el calendario';
+        const intro = dj === 'aprobada'
+          ? `<p><strong>${e(datos.nombre_jefe)}</strong>, jefe de departamento, ha <strong>aprobado</strong> la comisión de servicio de <strong>${e(datos.nombre)}</strong>. Queda pendiente de tu autorización.</p>`
+          : dj === 'denegada'
+          ? `<p><strong>${e(datos.nombre_jefe)}</strong>, jefe de departamento, ha <strong>denegado</strong> la comisión de servicio de <strong>${e(datos.nombre)}</strong>. Te llega para que lo sepas; si lo consideras, puedes autorizarla igualmente.</p>`
+          : dj === 'escalada'
+          ? `<p>El jefe de departamento no ha contestado en 3 días laborables. La comisión de servicio de <strong>${e(datos.nombre)}</strong> queda pendiente de tu autorización.</p>`
+          : `<p><strong>${e(datos.nombre)}</strong> pide una comisión de servicio.${datos.nota ? ' ' + e(datos.nota) : ''}</p>`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Solicitud de comisión de servicio</h2>${intro}
+          ${caja('Justificación del jefe de departamento:', datos.motivo_jefe, dj === 'aprobada')}${tabla}
+          ${bloqueCoincidencias(datos.coincidencias)}
+          ${boton(dj === 'denegada' ? 'Ver en APrieto' : 'Autorizar o denegar', '/comisiones?vista=direccion', color)}`;
+      } else if (tipo === 'cs_anulada') {
+        color = '#4b5563';
+        subject = `🚐 Comisión de servicio anulada por el profesor — ${e(datos.nombre)}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Comisión de servicio anulada</h2>
+          <p><strong>${e(datos.nombre)}</strong> ha anulado su comisión de servicio${datos.estado_antes === 'autorizada' ? ', que ya estaba <strong>autorizada</strong>' : ', que estaba pendiente de autorizar'}. No hay que hacer nada.</p>
+          ${caja('Motivo:', datos.motivo, false)}${tabla}`;
+      } else if (tipo === 'cs_cambio') {
+        const NOMBRE_EST = { pendiente_jefe: 'pendiente del jefe de departamento', pendiente_director: 'pendiente de dirección', autorizada: 'autorizada', denegada_jefe: 'denegada por el jefe de departamento', denegada_director: 'denegada por dirección', retirada: 'anulada' };
+        color = '#0e7490';
+        subject = datos.para_secretaria
+          ? `🚐 Comisión de servicio de ${e(datos.nombre)}: ya no está autorizada`
+          : `🚐 Cambio en tu comisión de servicio: ${NOMBRE_EST[datos.estado_ahora] || datos.estado_ahora}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Cambio en una comisión de servicio</h2>
+          <p>La dirección del centro ha cambiado el estado ${datos.para_secretaria ? `de la comisión de <strong>${e(datos.nombre)}</strong>` : 'de tu solicitud'} de <strong>${e(NOMBRE_EST[datos.estado_antes] || datos.estado_antes)}</strong> a <strong>${e(NOMBRE_EST[datos.estado_ahora] || datos.estado_ahora)}</strong>.</p>
+          ${caja('Motivo:', datos.motivo, false)}${tabla}
+          ${!datos.para_secretaria && datos.estado_antes === 'autorizada' ? '<p style="font-size:14px;color:#991b1b;font-weight:bold">Si ya habías registrado la ausencia, revísala o habla con la dirección.</p>' : ''}
+          ${boton('Ver en APrieto', datos.para_secretaria ? '/gestion/comisiones' : '/comisiones', color)}`;
+      } else if (tipo === 'cs_secretaria') {
+        color = '#0e7490';
+        subject = `🚐 Comisión de servicio autorizada — ${e(datos.nombre)}${datos.importe ? ' · ' + e(datos.importe) : ''}`;
+        cuerpo = `<h2 style="color:${color};margin:0 0 12px">Comisión de servicio autorizada</h2>
+          <p>La dirección ha autorizado la comisión de servicio de <strong>${e(datos.nombre)}</strong>. Te llega para la gestión de las indemnizaciones por dietas y gastos de viaje.</p>${tabla}
+          ${datos.importe ? '' : '<p style="font-size:14px;color:#78350f">No ha indicado importe estimado.</p>'}
+          ${boton('Ver el registro', '/gestion/comisiones', color)}`;
+      } else {
+        const ok = datos.resultado === 'autorizada';
+        color = ok ? '#166534' : '#991b1b';
+        subject = ok ? '✅ Comisión de servicio autorizada: registra la ausencia' : '❌ Tu comisión de servicio ha sido denegada';
+        cuerpo = ok
+          ? `<h2 style="color:${color};margin:0 0 12px">Comisión de servicio autorizada</h2>
+             <p>La dirección del centro ha <strong>autorizado</strong> tu comisión de servicio.</p>${tabla}
+             ${caja('Observaciones de la dirección:', datos.motivo, true)}
+             <div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:8px;padding:16px;margin:18px 0">
+               <div style="font-weight:bold;font-size:15px;color:#78350f;margin-bottom:10px">Ahora tienes que hacer dos cosas:</div>
+               <div style="margin-bottom:8px"><strong>1. Registrar la ausencia en APrieto</strong>, para que se cubran tus clases y dejes las tareas a tus grupos. Con el botón de abajo el formulario sale ya rellenado.</div>
+               <div><strong>2. Descargar el impreso</strong> con la autorización desde el módulo de Comisiones de servicio, para firmarlo y entregarlo en Secretaría.</div>
+             </div>
+             ${boton('1. Registrar la ausencia', `/ausencias?comision=${encodeURIComponent(datos.id_solicitud || '')}`, color)}
+             ${boton('2. Ver el impreso', `/comisiones/impreso?id=${encodeURIComponent(datos.id_solicitud || '')}`, '#0e7490')}`
+          : `<h2 style="color:${color};margin:0 0 12px">Comisión de servicio denegada</h2>
              <p>${e(datos.quien)} ha denegado tu solicitud.</p>${caja('Motivo:', datos.motivo, false)}${tabla}
              <p style="font-size:13px;color:#666">Si no estás de acuerdo, habla directamente con la dirección del centro.</p>`;
       }

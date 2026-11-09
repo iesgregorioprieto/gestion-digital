@@ -449,6 +449,9 @@ export async function POST(request) {
        */
       const formacionId = fila.formacion_id || null;
       delete fila.formacion_id;   // no es columna de ausencias
+      // Comisión de servicio autorizada que origina esta ausencia (no es columna)
+      const comisionId = fila.comision_id || null;
+      delete fila.comision_id;
       let solicitudFormacion = null;
       if (['permiso_formacion', 'act_formacion'].includes(fila.subtipo) && !esDirectivo(sesion)) {
         const { data: autorizadas } = await supa().from('solicitudes_formacion')
@@ -507,6 +510,15 @@ export async function POST(request) {
         await supa().from('solicitudes_formacion')
           .update({ ausencia_id: data[0].id }).eq('id', solicitudFormacion.id)
           .then(() => {}, err => console.error('vincular formacion:', err?.message));
+      }
+
+      // Dejar enlazada la comisión de servicio con su ausencia. Solo si es
+      // de la misma persona y está autorizada.
+      if (comisionId && (data || [])[0]?.id) {
+        await supa().from('comisiones_servicio')
+          .update({ ausencia_id: String(data[0].id) })
+          .eq('id', comisionId).eq('profesor_id', dueño).eq('estado', 'autorizada')
+          .then(() => {}, err => console.error('vincular comision:', err?.message));
       }
 
       // Preasignación automática de guardias: en cuanto se registra una

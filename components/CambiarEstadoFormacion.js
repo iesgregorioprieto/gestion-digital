@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { departamentoASector, esSectorFP } from '@/lib/sectores';
 
 /**
- * Botón «Cambiar estado» de una solicitud de formación (solo director).
+ * Botón «Cambiar estado» de una solicitud de formación o de comisión de
+ * servicio (solo director). Por defecto habla con /api/formacion; Comisiones
+ * le pasa api="/api/comisiones".
  * Sirve para corregir, revocar una concesión, reabrir o devolver al jefe.
  * El motivo es obligatorio y se avisa al profesor por correo.
  */
@@ -16,7 +18,7 @@ const OPCIONES = [
   { valor: 'retirada',           label: '🚫 Anulada' },
 ];
 
-export default function CambiarEstadoFormacion({ solicitud, onHecho }) {
+export default function CambiarEstadoFormacion({ solicitud, onHecho, api = '/api/formacion' }) {
   const [abierto, setAbierto] = useState(false);
   const [estado, setEstado]   = useState('');
   const [motivo, setMotivo]   = useState('');
@@ -32,10 +34,10 @@ export default function CambiarEstadoFormacion({ solicitud, onHecho }) {
     if (!estado) { setError('Elige el nuevo estado.'); return; }
     if (!motivo.trim()) { setError('Escribe el motivo del cambio. Le llegará al profesor.'); return; }
     if (solicitud.estado === 'autorizada' && solicitud.ausencia_id &&
-        !confirm('Esta formación ya tiene una ausencia registrada. El cambio no la borra: tendrás que revisarla en Gestión de ausencias.\n\n¿Seguir?')) return;
+        !confirm('Esta solicitud ya tiene una ausencia registrada. El cambio no la borra: tendrás que revisarla en Gestión de ausencias.\n\n¿Seguir?')) return;
     setEnviando(true);
     try {
-      const r = await fetch('/api/formacion', {
+      const r = await fetch(api, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ accion: 'cambiar_estado', id: solicitud.id, datos: { estado, motivo: motivo.trim() } }),

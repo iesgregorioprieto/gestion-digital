@@ -81,6 +81,46 @@ export async function GET(request) {
     console.error('[cron formacion] solicitudes_formacion:', e?.message);
   }
 
+  // ── Comisiones de servicio: mismo plazo de 3 días laborables ──
+  let comisionesEscaladas = 0;
+  try {
+    const { data: sinJefe } = await sb.from('comisiones_servicio')
+      .select('*')
+      .eq('estado', 'pendiente_jefe')
+      .lte('jefe_limite', hoy);
+
+    for (const s of (sinJefe || [])) {
+      const { data: act } = await sb.from('comisiones_servicio').update({
+        estado: 'pendiente_director',
+        jefe_decision: 'escalada',
+        jefe_fecha: new Date().toISOString(),
+        jefe_motivo: 'Sin respuesta en el plazo de 3 días laborables.',
+      }).eq('id', s.id).eq('estado', 'pendiente_jefe').select('id');
+      if (!act?.length) continue;
+
+      const { data: profs } = await sb.from('profesores')
+        .select('nombre, apellidos, departamento').eq('id', s.profesor_id);
+      const prof = (profs || [])[0];
+      const hh = h => h ? String(h).slice(0, 5) : '';
+      await avisarDireccion(sb, 'cs_director', {
+        decision_jefe: 'escalada',
+        nombre: prof ? `${prof.nombre || ''} ${prof.apellidos || ''}`.trim() : '',
+        departamento: s.departamento || prof?.departamento || '',
+        motivo_desplazamiento: s.motivo || '',
+        destino: s.destino || '',
+        fecha: s.fecha_inicio || '',
+        fecha_fin: s.fecha_fin && s.fecha_fin !== s.fecha_inicio ? s.fecha_fin : '',
+        horario: s.hora_inicio || s.hora_fin ? `${hh(s.hora_inicio) || '—'} a ${hh(s.hora_fin) || '—'}` : '',
+        transporte: s.transporte || '',
+        importe: s.importe_estimado != null ? `${Number(s.importe_estimado).toFixed(2).replace('.', ',')} €` : '',
+        coincidencias: await coincidenciasEnServidor(sb, s),
+      });
+      comisionesEscaladas++;
+    }
+  } catch (e) {
+    console.error('[cron formacion] comisiones_servicio:', e?.message);
+  }
+
   const { data: pendientes, error } = await sb
     .from('ausencias')
     .select('id, profesor_id, fecha_inicio, fecha_fin, datos_extra, aprobacion_jefe_limite')
@@ -94,7 +134,7 @@ export async function GET(request) {
   }
 
   if (!pendientes || pendientes.length === 0) {
-    return Response.json({ ok: true, escaladas: 0, escaladasNuevas });
+    return Response.json({ ok: true, escaladas: 0, escaladasNuevas, comisionesEscaladas });
   }
 
   let escaladas = 0;
@@ -126,5 +166,5 @@ export async function GET(request) {
     escaladas++;
   }
 
-  return Response.json({ ok: true, escaladas, escaladasNuevas });
+  return Response.json({ ok: true, escaladas, escaladasNuevas, comisionesEscaladas });
 }

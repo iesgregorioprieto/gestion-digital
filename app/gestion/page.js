@@ -100,6 +100,16 @@ export default function PanelGestion() {
       color: '#5b21b6',
     },
     {
+      id: 'comisiones',
+      emoji: '🚐',
+      titulo: 'Comisiones de servicio',
+      descripcion: 'Autoriza salidas y visitas FCT, consulta dietas estimadas y descarga informes',
+      href: '/gestion/comisiones',
+      bg: '#ecfeff',
+      border: '#67e8f9',
+      color: '#0e7490',
+    },
+    {
       id: 'autorizaciones',
       emoji: '📋',
       titulo: 'Autorizaciones del Alumnado',

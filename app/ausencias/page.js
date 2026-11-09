@@ -118,6 +118,8 @@ export default function Ausencias() {
   // Formación: solo con solicitud autorizada en el módulo de Formación
   const [formacionesAut, setFormacionesAut] = useState([]);
   const [formacionId, setFormacionId] = useState('');
+  // Comisión de servicio autorizada (?comision=<id>): se enlaza al guardar
+  const [comisionId, setComisionId] = useState('');
   const [horarioPendiente, setHorarioPendiente] = useState(null); // {inicio, fin}
   // Configuración del curso, para saber si el día elegido tiene clases
   const [configCurso, setConfigCurso] = useState(null);
@@ -184,6 +186,35 @@ export default function Ausencias() {
         elegirFormacion(f);
         setVista('formulario');
       }
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
+  // Comisión de servicio autorizada: si se llega con ?comision=<id>
+  // (desde el correo, las tareas pendientes o el módulo), el formulario
+  // sale con el motivo «Actividad complementaria o extraescolar», las
+  // fechas y el horario de esos días.
+  useEffect(() => {
+    const pedida = new URLSearchParams(window.location.search).get('comision');
+    if (!pedida) return;
+    let vivo = true;
+    fetch('/api/comisiones?vista=mias').then(r => r.ok ? r.json() : { solicitudes: [] }).then(d => {
+      if (!vivo) return;
+      const c = (d.solicitudes || []).find(x => x.id === pedida && x.estado === 'autorizada');
+      if (!c) return;
+      const fin = c.fecha_fin || c.fecha_inicio;
+      setComisionId(c.id);
+      setSubtipo('act_complementarias');
+      setTipo(tipoDeMotivo('act_complementarias'));
+      setDatosExtra({});
+      setFechaInicio(c.fecha_inicio);
+      setFechaFin(fin);
+      setModoManual(false);
+      setHorario({});
+      setGruposUnicos([]);
+      setMotivo(`Comisión de servicio: ${c.motivo}${c.destino ? ' (' + c.destino + ')' : ''}`);
+      setHorarioPendiente({ inicio: c.fecha_inicio, fin });
+      setVista('formulario');
     }).catch(() => {});
     return () => { vivo = false; };
   }, []);
@@ -569,7 +600,11 @@ export default function Ausencias() {
       const r = await fetch('/api/ausencias', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'crear', datos: formacionId && esMotivoFormacion ? { ...datosAusencia, formacion_id: formacionId } : datosAusencia }),
+        body: JSON.stringify({ accion: 'crear', datos: {
+          ...datosAusencia,
+          ...(formacionId && esMotivoFormacion ? { formacion_id: formacionId } : {}),
+          ...(comisionId && subtipo === 'act_complementarias' ? { comision_id: comisionId } : {}),
+        } }),
       });
       error = r.ok ? null : await r.json();
     }
@@ -589,7 +624,7 @@ export default function Ausencias() {
     );
     setEditandoId(null);
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false); setDiaCompleto(true);
-    setFormacionId('');
+    setFormacionId(''); setComisionId('');
     setGruposUnicos([]); setTareasBloque({});
     cargarHistorial(profesorId);
     setTimeout(() => setVista('historial'), 2000);
@@ -660,7 +695,7 @@ export default function Ausencias() {
 
   function cancelarEdicion() {
     setEditandoId(null);
-    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setFormacionId('');
+    setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setFormacionId(''); setComisionId('');
     setHorario({}); setModoManual(false); setGruposUnicos([]); setTareasBloque({});
     setVista('historial');
   }
@@ -934,7 +969,7 @@ export default function Ausencias() {
             {/* MOTIVO (lista unica Delphos) */}
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 8 }}>📋 Motivo de la ausencia *</label>
-              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); setFormacionId(''); }}
+              <select value={subtipo} onChange={e => { const v = e.target.value; setSubtipo(v); setTipo(v ? tipoDeMotivo(v) : ''); setDatosExtra({}); setFormacionId(''); setComisionId(''); }}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: `1.5px solid ${subtipo ? verde : '#ddd'}`, fontSize: 14, boxSizing: 'border-box', backgroundColor: subtipo ? verdeClaro : 'white', fontWeight: subtipo ? 600 : 400, color: subtipo ? verde : '#666', cursor: 'pointer' }}>
                 <option value="">-- Selecciona el motivo --</option>
                 {MOTIVOS_AUSENCIA.map(m => (
