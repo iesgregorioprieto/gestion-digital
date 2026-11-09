@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
-import { getConfigCurso, calcularAntiguedad, calcularDiasDLD } from '@/lib/curso';
+import { getConfigCurso, calcularAntiguedad, calcularDiasDLD, plazoSolicitudDLD } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
 import { rehacerReparto } from '@/lib/rehacerReparto';
 import { enviarPushA } from '@/lib/pushServidor';
@@ -261,6 +261,22 @@ export async function POST(request) {
         }
         if (datos.tipo_dld === '2_lectivo' && moscosos < 2) {
           return Response.json({ error: 'Con tu tipo de nombramiento no te corresponde un segundo día lectivo.' }, { status: 400 });
+        }
+      }
+
+      /**
+       * Plazos de la Resolución de 18/07/2024 (apartado 7): máximo 30 días
+       * hábiles y mínimo 2. El formulario ya lo comprueba, pero una pantalla
+       * abierta desde hace días o una versión antigua en caché lo saltaba:
+       * el servidor no miraba la fecha (incidencia #229).
+       */
+      {
+        const plazo = plazoSolicitudDLD(datos.fecha_solicitada, await getConfigCurso());
+        if (plazo.estado === 'muy_pronto') {
+          return Response.json({ error: '⛔ ' + plazo.mensaje }, { status: 400 });
+        }
+        if (plazo.estado === 'muy_tarde' && !datos.causa_sobrevenida) {
+          return Response.json({ error: '⚠️ ' + plazo.mensaje + ' Si es tu caso, marca la casilla de causa sobrevenida y explica el motivo.' }, { status: 400 });
         }
       }
 
