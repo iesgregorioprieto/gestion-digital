@@ -12,14 +12,21 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { reducirImagen } from '@/lib/reducirImagen';
 import { getSupabase } from '@/lib/supabase';
+import { MODULOS_VALORACION } from '@/lib/modulosValoracion';
 
 const VERDE = '#1e6b2e';
 const AZUL  = '#1e3a5f';
 
+/**
+ * Los módulos salen de la misma lista que la valoración de módulos
+ * (lib/modulosValoracion.js), que es la del panel del profesorado. Antes
+ * era una lista escrita aquí y los módulos nuevos (Formación, Calendario,
+ * Convocatorias…) no aparecían en el desplegable (incidencia #238).
+ * Al añadir un módulo a esa lista, sale aquí solo.
+ */
 const MODULOS = [
-  'Ausencias', 'Guardias', 'Días de libre disposición',
-  'Actividades complementarias', 'Autorizaciones', 'Horarios',
-  'Compras', 'Incidencias de mantenimiento', 'Panel de la sala', 'Mis datos',
+  ...MODULOS_VALORACION.filter(m => m.id !== 'general').map(m => m.texto),
+  'Panel de la sala', 'Panel de gestión', 'Mis datos',
   'Otro / no sabría decir',
 ];
 
