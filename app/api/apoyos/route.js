@@ -35,6 +35,28 @@ async function sesionDe(request) {
   return verificarSesion(m[1], secreto);
 }
 
+/**
+ * La guardia que el profesor tiene en pantalla, aunque haya cambiado de id.
+ *
+ * Cada recálculo borra las guardias aún no empezadas y sin fichar y las
+ * vuelve a crear: el mismo compañero, la misma hora, pero otra fila. Quien
+ * tenía la pantalla abierta desde antes pulsaba el check con el id viejo y
+ * el servidor respondía «apoyo_ajeno», cambiara de red o no (Manuel
+ * Abaldea, 26/10/2026, incidencia #228). Si el id ya no existe, se busca
+ * su guardia de esa fecha y hora; mejor la del mismo grupo si hay varias.
+ */
+async function guardiaPropia(id, datos, sesionId, columnas) {
+  const { data: fila } = await supa().from('apoyos_asignados')
+    .select(columnas).eq('id', id).eq('profesor_id', sesionId);
+  if ((fila || [])[0]) return (fila || [])[0];
+  if (!datos?.fecha || !datos?.hora) return null;
+  const { data: otras } = await supa().from('apoyos_asignados')
+    .select(columnas + ', grupo').eq('profesor_id', sesionId)
+    .eq('fecha', datos.fecha).eq('hora', datos.hora);
+  const lista = otras || [];
+  return lista.find(g => datos.grupo && g.grupo === datos.grupo) || lista[0] || null;
+}
+
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
@@ -72,10 +94,8 @@ export async function POST(request) {
       const texto = (datos?.texto || '').trim();
       if (!texto) return Response.json({ error: 'Falta el texto' }, { status: 400 });
 
-      const { data: fila } = await supa().from('apoyos_asignados')
-        .select('id, fecha, hora, incidencia, created_at').eq('id', id).eq('profesor_id', sesion.id);
-      const guardia = (fila || [])[0];
-      if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
+      const guardia = await guardiaPropia(id, datos, sesion.id, 'id, fecha, hora, incidencia, created_at');
+      if (!guardia) return Response.json({ error: 'guardia_cambiada' }, { status: 409 });
 
       if (!fichajeAbierto(guardia.hora, guardia.fecha, guardia.created_at)) {
         return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
@@ -89,19 +109,17 @@ export async function POST(request) {
         : `${ahora} · ${texto}`;
 
       const { error } = await supa().from('apoyos_asignados')
-        .update({ incidencia: anotado }).eq('id', id);
+        .update({ incidencia: anotado }).eq('id', guardia.id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
-      return Response.json({ ok: true, incidencia: anotado });
+      return Response.json({ ok: true, id: guardia.id, incidencia: anotado });
     }
 
     if (accion === 'fichar') {
       if (!id) return Response.json({ error: 'Falta el identificador' }, { status: 400 });
 
-      const { data: fila } = await supa().from('apoyos_asignados')
-        .select('id, fecha, hora, profesor_id, created_at').eq('id', id).eq('profesor_id', sesion.id);
-      const guardia = (fila || [])[0];
-      if (!guardia) return Response.json({ error: 'apoyo_ajeno' }, { status: 403 });
+      const guardia = await guardiaPropia(id, datos, sesion.id, 'id, fecha, hora, profesor_id, created_at');
+      if (!guardia) return Response.json({ error: 'guardia_cambiada' }, { status: 409 });
 
       if (!fichajeAbierto(guardia.hora, guardia.fecha, guardia.created_at)) {
         return Response.json({ error: 'fuera_de_franja' }, { status: 409 });
@@ -115,10 +133,10 @@ export async function POST(request) {
           incidencia: observaciones || null,
           cuenta_reparto: true,                      // fichada: cuenta para el reparto
         })
-        .eq('id', id).eq('profesor_id', sesion.id);
+        .eq('id', guardia.id).eq('profesor_id', sesion.id);
 
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, id: guardia.id });
     }
 
     // Las acciones 'confirmar' y 'confirmar_con_incidencia' del modelo

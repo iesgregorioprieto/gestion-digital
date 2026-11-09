@@ -399,23 +399,31 @@ export default function Guardias() {
    */
   async function ficharGuardia() {
     if (!fichandoId) return;
+    const gFichando = apoyosAsignados.find(a => a.id === fichandoId);
     setFichando(true);
     try {
       const r = await fetch('/api/apoyos', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // Fecha, hora y grupo van también: si un recálculo ha rehecho la
+        // guardia, el servidor la encuentra por ellos aunque el id sea otro.
         body: JSON.stringify({ accion: 'fichar', id: fichandoId,
-          datos: { observaciones: observaciones.trim() } }),
+          datos: { observaciones: observaciones.trim(),
+                   fecha: gFichando?.fecha, hora: gFichando?.hora, grupo: gFichando?.grupo } }),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         setApAsig(prev => prev.map(a => a.id === fichandoId
-          ? { ...a, estado: 'confirmado', confirmado_at: new Date().toISOString(),
+          ? { ...a, id: d.id || a.id, estado: 'confirmado', confirmado_at: new Date().toISOString(),
               incidencia: observaciones.trim() || null }
           : a));
         setFichandoId(null);
         setObservaciones('');
       } else if (d.error === 'fuera_de_franja') {
         alert('El check solo está activo durante la hora de la guardia.');
+      } else if (d.error === 'guardia_cambiada') {
+        alert('El reparto de esta hora ha cambiado y esta guardia ya no está a tu nombre. Se actualiza la pantalla.');
+        setFichandoId(null);
+        cargarAusencias(fecha);
       } else {
         alert(d.error || 'No se ha podido fichar.');
       }
@@ -464,20 +472,25 @@ export default function Guardias() {
   async function anotarIncidencia() {
     const texto = textoIncidencia.trim();
     if (!texto) return;
+    const gAnotando = apoyosAsignados.find(x => x.id === anotandoId);
     setAnotando(true);
     try {
       const r = await fetch('/api/apoyos', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accion: 'anotar_incidencia', id: anotandoId, datos: { texto } }),
+        body: JSON.stringify({ accion: 'anotar_incidencia', id: anotandoId,
+          datos: { texto, fecha: gAnotando?.fecha, hora: gAnotando?.hora, grupo: gAnotando?.grupo } }),
       });
       const d = await r.json();
       if (!r.ok) {
         alert(d.error === 'fuera_de_franja'
           ? 'Solo se pueden anotar incidencias mientras dura la guardia.'
-          : 'No se ha podido anotar. Inténtalo de nuevo.');
+          : d.error === 'guardia_cambiada'
+            ? 'El reparto de esta hora ha cambiado y esta guardia ya no está a tu nombre. Se actualiza la pantalla.'
+            : 'No se ha podido anotar. Inténtalo de nuevo.');
+        if (d.error === 'guardia_cambiada') { setAnotandoId(null); cargarAusencias(fecha); }
       } else {
         setApAsig(prev => prev.map(x =>
-          x.id === anotandoId ? { ...x, incidencia: d.incidencia } : x));
+          x.id === anotandoId ? { ...x, id: d.id || x.id, incidencia: d.incidencia } : x));
         setAnotandoId(null);
         setTextoIncidencia('');
       }
