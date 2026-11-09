@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
+import { ivaDe } from '@/lib/iva';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -116,7 +117,7 @@ export default function Compras() {
         descripcion: a.descripcion?.trim() || null,
         cantidad: Number(a.cantidad) || 1,
         precio: a.precio ? parseFloat(a.precio) : null,
-        iva: a.iva ? parseFloat(a.iva) : 21,
+        iva: ivaDe(a.iva),
         enlace: a.enlace.trim() || null,
         archivo_url: urlArchivo,
         archivo_nombre: a.archivoNombre || null,
@@ -125,7 +126,7 @@ export default function Compras() {
 
     const total = articulosConUrl.reduce((sum, a) => {
       const base = (a.precio || 0) * a.cantidad;
-      const conIva = base * (1 + (a.iva || 21) / 100);
+      const conIva = base * (1 + ivaDe(a.iva) / 100);
       return sum + conIva;
     }, 0);
 
@@ -165,7 +166,7 @@ export default function Compras() {
   const totalEstimado = articulos.reduce((sum, a) => {
     const p = parseFloat(a.precio) || 0;
     const q = parseInt(a.cantidad) || 1;
-    const iv = parseFloat(a.iva) || 21;
+    const iv = ivaDe(a.iva);
     return sum + p * q * (1 + iv / 100);
   }, 0);
 
@@ -325,7 +326,7 @@ export default function Compras() {
                       {/* Subtotal */}
                       {a.precio && (() => {
                         const base = parseFloat(a.precio) * (parseInt(a.cantidad) || 1);
-                        const iv = parseFloat(a.iva) || 21;
+                        const iv = ivaDe(a.iva);
                         const ivaImporte = base * iv / 100;
                         return (
                           <div style={{ marginTop: 8, backgroundColor: '#f0f4f0', borderRadius: 6, padding: '6px 10px', fontSize: 12 }}>

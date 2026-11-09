@@ -16,6 +16,7 @@ import { consulta, consultaRpc } from '@/lib/consulta';
 import { DEPARTAMENTOS } from '@/lib/sectores';
 import { SECCIONES, tipoDeIncidencia, deducirSeccion } from '@/lib/tiposMantenimiento';
 import InformeConserjes from '@/components/InformeConserjes';
+import { ivaDe } from '@/lib/iva';
 
 
 export { DEPARTAMENTOS };
@@ -393,9 +394,9 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
       nombre: a.nombre.trim(),
       cantidad: Number(a.cantidad) || 1,
       precio: a.precio ? parseFloat(a.precio) : null,
-      iva: parseFloat(a.iva) || 21,
+      iva: ivaDe(a.iva),
     }));
-    const total = articulosConIva.reduce((sum, a) => sum + (a.precio || 0) * a.cantidad * (1 + (a.iva || 21) / 100), 0);
+    const total = articulosConIva.reduce((sum, a) => sum + (a.precio || 0) * a.cantidad * (1 + ivaDe(a.iva) / 100), 0);
     const nombreSecretario = typeof window !== 'undefined' ? (sessionStorage.getItem('profesor_nombre') || 'Secretaría') : 'Secretaría';
     const _rc = await fetch('/api/solicitudes', {
       method: 'POST',
@@ -433,7 +434,7 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
   }
 
   const totalRegistro = registro.articulos.reduce((sum, a) => {
-    return sum + (parseFloat(a.precio) || 0) * (parseInt(a.cantidad) || 1) * (1 + (parseFloat(a.iva) || 21) / 100);
+    return sum + (parseFloat(a.precio) || 0) * (parseInt(a.cantidad) || 1) * (1 + ivaDe(a.iva) / 100);
   }, 0);
 
   function mostrarMensaje(texto, tipo) {
@@ -530,7 +531,7 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     {a.precio && (
                       <span style={{ color: '#888', fontSize: 12 }}>
-                        {(a.precio * a.cantidad).toFixed(2)} € + IVA {a.iva || 21}% = <strong style={{ color: verde }}>{(a.precio * a.cantidad * (1 + (a.iva || 21) / 100)).toFixed(2)} €</strong>
+                        {(a.precio * a.cantidad).toFixed(2)} € + IVA {ivaDe(a.iva)}% = <strong style={{ color: verde }}>{(a.precio * a.cantidad * (1 + ivaDe(a.iva) / 100)).toFixed(2)} €</strong>
                       </span>
                     )}
                     {a.enlace && <a href={a.enlace} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontSize: 12, fontWeight: 600 }}>🔗 Ver</a>}
