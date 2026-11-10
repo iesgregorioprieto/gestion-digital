@@ -147,12 +147,13 @@ export default function Compras() {
         },
       }),
     });
-    const error = _r.ok ? null : await _r.json();
+    const _cuerpo = await _r.json().catch(() => ({}));
+    const error = _r.ok ? null : _cuerpo;
 
     setEnviando(false);
     if (error) { mostrarMensaje(`Error: ${error.error || 'no se pudo enviar'}`, 'error'); return; }
 
-    mostrarMensaje('✅ Solicitud enviada correctamente.', 'ok');
+    mostrarMensaje(_cuerpo.numero ? `✅ Solicitud nº ${_cuerpo.numero} enviada correctamente.` : '✅ Solicitud enviada correctamente.', 'ok');
     // Resetear formulario
     setTipo('');
     setProveedor('');
@@ -430,6 +431,7 @@ export default function Compras() {
                 <div key={s.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div>
+                      {s.numero && <span style={{ fontSize: 12, fontWeight: 800, color: azul, marginRight: 8 }}>Nº {s.numero}</span>}
                       <span style={{ fontSize: 12, color: '#888' }}>{new Date(s.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
                       {esDirectivo && s.profesor_nombre && (
                         <div style={{ fontSize: 12, color: '#1e3a5f', fontWeight: 700, marginTop: 2 }}>

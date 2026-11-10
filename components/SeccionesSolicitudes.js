@@ -454,7 +454,7 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
   const comprasFiltradas = compras.filter(c => {
     if (filtroEstado !== 'todos' && c.estado !== filtroEstado) return false;
     if (filtroDpto && !c.departamento?.toLowerCase().includes(filtroDpto.toLowerCase())) return false;
-    if (filtroProveedor && !c.proveedor?.toLowerCase().includes(filtroProveedor.toLowerCase())) return false;
+    if (filtroProveedor && !c.proveedor?.toLowerCase().includes(filtroProveedor.toLowerCase()) && !String(c.numero || '').includes(filtroProveedor)) return false;
     if (filtroDesde && c.created_at < filtroDesde) return false;
     if (filtroHasta && c.created_at.slice(0,10) > filtroHasta) return false;
     return true;
@@ -481,8 +481,8 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
             <input value={filtroDpto} onChange={e => setFiltroDpto(e.target.value)} placeholder="Todos..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
           </div>
           <div>
-            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Proveedor</label>
-            <input value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)} placeholder="Amazon, Leroy..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
+            <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Proveedor o nº</label>
+            <input value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)} placeholder="Amazon, Leroy, nº..." style={{ width: '100%', padding: '8px 10px', borderRadius: 7, border: '1.5px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} />
           </div>
           <div>
             <label style={{ fontSize: 11, color: '#888', display: 'block', marginBottom: 4 }}>Desde</label>
@@ -514,7 +514,7 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
           <div key={c.id} style={{ backgroundColor: 'white', borderRadius: 12, padding: 16, marginBottom: 10, boxShadow: '0 2px 8px rgba(0,0,0,0.06)', borderLeft: `4px solid ${est.color}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
               <div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{c.profesor_nombre}</div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>{c.numero && <span style={{ marginRight: 8 }}>Nº {c.numero}</span>}{c.profesor_nombre}</div>
                 <div style={{ fontSize: 12, color: '#888' }}>{c.departamento} · {new Date(c.created_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
                 <div style={{ fontSize: 13, color: '#555', marginTop: 4 }}>
                   {c.tipo === 'ya_comprado' ? '🧾 Ya comprado' : '🛍️ Solicitud de pedido'}

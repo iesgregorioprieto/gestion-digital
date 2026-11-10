@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { enviarPushA } from '@/lib/pushServidor';
 import { SECCIONES, tipoDeIncidencia } from '@/lib/tiposMantenimiento';
+import { cursoPorFecha } from '@/lib/curso';
 
 const IDS_SECCION = SECCIONES.map(s => s.id);
 
@@ -92,6 +93,27 @@ export async function GET(request) {
 
 const TABLAS = ['mantenimiento', 'compras'];
 
+/**
+ * NÚMERO DE LA PETICIÓN DE COMPRA (#216): «2026-27/001», correlativo por
+ * curso para todo el centro. Se calcula en el servidor al crearla.
+ */
+function prefijoCompra(fecha = new Date()) {
+  const [a, b] = cursoPorFecha(fecha).split('-');
+  return `${a}-${String(b).slice(-2)}/`;
+}
+async function siguienteNumeroCompra(cliente) {
+  const prefijo = prefijoCompra();
+  const { data, error } = await cliente.from('compras')
+    .select('numero').like('numero', prefijo + '%');
+  if (error) return null;               // columna aún sin crear
+  const max = (data || []).reduce((m, r) => {
+    const n = parseInt(String(r.numero || '').slice(prefijo.length), 10);
+    return Number.isFinite(n) && n > m ? n : m;
+  }, 0);
+  return prefijo + String(max + 1).padStart(3, '0');
+}
+
+
 function supa() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -135,14 +157,27 @@ export async function POST(request) {
         delete fila.comentario_secretario;
       }
 
-      let { data, error } = await supa().from(tabla).insert([fila]).select('id');
+      // El número lo pone siempre el servidor, nunca quien solicita.
+      delete fila.numero;
+      const cliente = supa();
+      let data, error;
+      for (let intento = 0; intento < 3; intento++) {
+        if (tabla === 'compras') {
+          const numero = await siguienteNumeroCompra(cliente);
+          if (numero) fila.numero = numero; else delete fila.numero;
+        }
+        ({ data, error } = await cliente.from(tabla).insert([fila]).select('id'));
+        // Dos peticiones a la vez con el mismo número: se recalcula.
+        if (error && fila.numero && /duplicate|unique/i.test(error.message || '')) continue;
+        break;
+      }
       // Si la columna «seccion» aún no existe en la tabla, se guarda sin ella
       if (error && fila.seccion && /seccion/i.test(error.message || '')) {
         delete fila.seccion;
-        ({ data, error } = await supa().from(tabla).insert([fila]).select('id'));
+        ({ data, error } = await cliente.from(tabla).insert([fila]).select('id'));
       }
       if (error) return Response.json({ error: error.message }, { status: 500 });
-      return Response.json({ ok: true, id: (data || [])[0]?.id });
+      return Response.json({ ok: true, id: (data || [])[0]?.id, numero: fila.numero || null });
     }
 
     // ─── Resolver: cambiar estado y dejar comentario ───
