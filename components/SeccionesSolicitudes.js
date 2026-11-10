@@ -17,6 +17,7 @@ import { DEPARTAMENTOS } from '@/lib/sectores';
 import { SECCIONES, tipoDeIncidencia, deducirSeccion } from '@/lib/tiposMantenimiento';
 import InformeConserjes from '@/components/InformeConserjes';
 import { ivaDe } from '@/lib/iva';
+import AdjuntosCompra, { faltaFactura } from '@/components/AdjuntosCompra';
 
 
 export { DEPARTAMENTOS };
@@ -521,7 +522,10 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
                   {c.proveedor ? ` · ${c.proveedor}` : ''}
                 </div>
               </div>
-              <span style={{ padding: '4px 12px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                <span style={{ padding: '4px 12px', borderRadius: 20, backgroundColor: est.bg, color: est.color, fontWeight: 700, fontSize: 12 }}>{est.emoji} {est.label}</span>
+                {faltaFactura(c) && <span style={{ padding: '3px 10px', borderRadius: 20, backgroundColor: '#fff7ed', color: '#c2410c', fontWeight: 700, fontSize: 11 }}>⚠️ Sin factura</span>}
+              </div>
             </div>
 
             <div style={{ marginTop: 10, borderTop: '1px solid #f0f0f0', paddingTop: 10 }}>
@@ -555,13 +559,11 @@ export function SeccionCompras({ compras, setCompras, cargando, setCargando, fil
                   </div>
                 </div>
               )}
-              {c.albaran_url && (
-                <div style={{ marginTop: 8 }}>
-                  <a href={c.albaran_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 8, color: '#92400e', fontSize: 13, fontWeight: 700, textDecoration: 'none' }}>
-                    🧾 Ver albarán adjunto
-                  </a>
-                </div>
-              )}
+              <AdjuntosCompra
+                compra={c}
+                puedeAdjuntar
+                onCambio={(campo, url) => setCompras(prev => prev.map(x => x.id === c.id ? { ...x, [campo]: url } : x))}
+              />
             </div>
 
             {c.comentario_secretario && (

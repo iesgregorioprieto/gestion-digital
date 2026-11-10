@@ -131,6 +131,12 @@ export async function GET(request) {
       .select('profesor_id')
       .or(`archivo_url.ilike.%${ruta}%,albaran_url.ilike.%${ruta}%`);
     autorizado = (data || []).some(c => c.profesor_id === sesion.id);
+    // La factura, aparte: si la columna aún no existe, no rompe lo anterior.
+    if (!autorizado) {
+      const { data: conFactura } = await supa()
+        .from('compras').select('profesor_id').ilike('factura_url', `%${ruta}%`);
+      autorizado = (conFactura || []).some(c => c.profesor_id === sesion.id);
+    }
   }
 
   if (!autorizado && bucket === 'mantenimiento-fotos') {

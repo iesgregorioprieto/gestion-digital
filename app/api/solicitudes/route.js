@@ -197,13 +197,35 @@ export async function POST(request) {
         return Response.json({ error: 'Ya está resuelta: los cambios hay que pedírselos a secretaría' }, { status: 409 });
       }
       const cambios = {};
-      for (const k of ['tipo', 'proveedor', 'articulos', 'albaran_url', 'total_estimado']) {
+      for (const k of ['tipo', 'proveedor', 'articulos', 'albaran_url', 'factura_url', 'total_estimado']) {
         if (k in datos) cambios[k] = datos[k];
       }
       const { data, error } = await cliente.from('compras').update(cambios)
         .eq('id', id).eq('estado', 'pendiente').select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
       if (!(data || []).length) return Response.json({ error: 'Ya está resuelta: los cambios hay que pedírselos a secretaría' }, { status: 409 });
+      return Response.json({ ok: true });
+    }
+
+    // ─── Añadir o cambiar el albarán o la factura después (#216) ───
+    // La factura suele llegar más tarde que la petición. Lo puede hacer
+    // quien la pidió (si no está rechazada) y el equipo directivo.
+    if (accion === 'adjuntar') {
+      if (tabla !== 'compras') return Response.json({ error: 'tabla_no_valida' }, { status: 400 });
+      const campo = datos?.campo;
+      if (!id || !['albaran_url', 'factura_url'].includes(campo) || !datos?.url) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+      const cliente = supa();
+      const { data: filas } = await cliente.from('compras').select('id, profesor_id, estado').eq('id', id);
+      const actual = (filas || [])[0];
+      if (!actual) return Response.json({ error: 'No se ha encontrado la solicitud' }, { status: 404 });
+      if (!esDirectivo(sesion)) {
+        if (actual.profesor_id !== sesion.id) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+        if (actual.estado === 'rechazada') return Response.json({ error: 'La solicitud está rechazada' }, { status: 409 });
+      }
+      const { error } = await cliente.from('compras').update({ [campo]: datos.url }).eq('id', id);
+      if (error) return Response.json({ error: /factura_url/.test(error.message || '') ? 'Falta crear la columna factura_url en Supabase' : error.message }, { status: 500 });
       return Response.json({ ok: true });
     }
 

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
 import { ivaDe } from '@/lib/iva';
+import AdjuntosCompra from '@/components/AdjuntosCompra';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
 const azul = '#1e3a5f';
@@ -33,6 +34,9 @@ export default function Compras() {
   const [albaran, setAlbaran] = useState(null);
   const [albaranNombre, setAlbaranNombre] = useState('');
   const [albaranUrlPrevio, setAlbaranUrlPrevio] = useState(null); // al editar, el que ya tenía
+  const [factura, setFactura] = useState(null);
+  const [facturaNombre, setFacturaNombre] = useState('');
+  const [facturaUrlPrevio, setFacturaUrlPrevio] = useState(null);
   const [editando, setEditando] = useState(null); // la solicitud pendiente que se está modificando
   const [sinAcceso, setSinAcceso] = useState(false);
   const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
@@ -111,6 +115,12 @@ export default function Compras() {
     } else if (tipo === 'ya_comprado' && albaranNombre && albaranUrlPrevio) {
       albaranUrl = albaranUrlPrevio;   // al editar, se conserva el que había
     }
+    let facturaUrl = null;
+    if (tipo === 'ya_comprado' && factura) {
+      facturaUrl = await subirArchivo(factura, 'facturas');
+    } else if (tipo === 'ya_comprado' && facturaNombre && facturaUrlPrevio) {
+      facturaUrl = facturaUrlPrevio;
+    }
 
     // Subir archivos de cada artículo (presupuestos para tipo=pedir)
     const articulosConUrl = await Promise.all(articulosValidos.map(async (a) => {
@@ -149,6 +159,7 @@ export default function Compras() {
           proveedor: proveedor.trim() || null,
           articulos: articulosConUrl,
           albaran_url: albaranUrl,
+          factura_url: facturaUrl,
           total_estimado: total > 0 ? total : null,
         },
       }),
@@ -164,6 +175,7 @@ export default function Compras() {
       : (_cuerpo.numero ? `✅ Solicitud nº ${_cuerpo.numero} enviada correctamente.` : '✅ Solicitud enviada correctamente.'), 'ok');
     setEditando(null);
     setAlbaranUrlPrevio(null);
+    setFactura(null); setFacturaNombre(''); setFacturaUrlPrevio(null);
     // Resetear formulario
     setTipo('');
     setProveedor('');
@@ -182,6 +194,9 @@ export default function Compras() {
     setAlbaran(null);
     setAlbaranUrlPrevio(s.albaran_url || null);
     setAlbaranNombre(s.albaran_url ? 'Albarán ya adjunto' : '');
+    setFactura(null);
+    setFacturaUrlPrevio(s.factura_url || null);
+    setFacturaNombre(s.factura_url ? 'Factura ya adjunta' : '');
     const arts = Array.isArray(s.articulos) && s.articulos.length ? s.articulos : [{}];
     setArticulos(arts.map(a => ({
       nombre: a.nombre || '', descripcion: a.descripcion || '', cantidad: a.cantidad || 1,
@@ -197,6 +212,7 @@ export default function Compras() {
     setEditando(null);
     setTipo(''); setProveedor('');
     setAlbaran(null); setAlbaranNombre(''); setAlbaranUrlPrevio(null);
+    setFactura(null); setFacturaNombre(''); setFacturaUrlPrevio(null);
     setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
     setVista('historial');
   }
@@ -407,7 +423,7 @@ export default function Compras() {
                   <div style={{ marginBottom: 20, backgroundColor: '#fffbeb', borderRadius: 12, padding: 16, border: '2px solid #fcd34d' }}>
                     <label style={{ fontWeight: 800, fontSize: 14, color: '#92400e', display: 'block', marginBottom: 4 }}>🧾 Albarán de la compra</label>
                     <div style={{ fontSize: 12, color: '#92400e', marginBottom: 12, opacity: 0.85 }}>
-                      Adjunta la foto o PDF del albarán. El secretario lo usará para cotejar la factura cuando llegue.
+                      Lo que te entregaron con el material. Si también tienes la factura, adjúntala abajo; si te llega más tarde, podrás añadirla después desde «Mis solicitudes».
                     </div>
 
                     {!albaranNombre ? (
@@ -430,6 +446,38 @@ export default function Compras() {
                           <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>📎 {albaranNombre}</div>
                         </div>
                         <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); setAlbaranUrlPrevio(null); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 6, color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ Quitar</button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* FACTURA (solo para ya_comprado) — aparte del albarán (#216) */}
+                {tipo === 'ya_comprado' && (
+                  <div style={{ marginBottom: 20, backgroundColor: '#eff6ff', borderRadius: 12, padding: 16, border: '2px solid #93c5fd' }}>
+                    <label style={{ fontWeight: 800, fontSize: 14, color: '#1e40af', display: 'block', marginBottom: 4 }}>📄 Factura</label>
+                    <div style={{ fontSize: 12, color: '#1e40af', marginBottom: 12, opacity: 0.85 }}>
+                      La que hay que pagar. Opcional ahora: se puede añadir más tarde.
+                    </div>
+                    {!facturaNombre ? (
+                      <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '14px 20px', borderRadius: 10, border: '2.5px dashed #60a5fa', backgroundColor: 'white', color: '#1e40af', fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>
+                        <span style={{ fontSize: 28 }}>📎</span>
+                        <div>
+                          <div>Toca aquí para adjuntar la factura</div>
+                          <div style={{ fontSize: 11, fontWeight: 400, opacity: 0.7, marginTop: 2 }}>Foto de la cámara, galería o PDF</div>
+                        </div>
+                        <input type="file" accept="image/*,application/pdf" capture="environment" onChange={e => {
+                          const f = e.target.files[0];
+                          if (f) { setFactura(f); setFacturaNombre(f.name); }
+                        }} style={{ display: 'none' }} />
+                      </label>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', backgroundColor: '#d1fae5', borderRadius: 10, border: '1.5px solid #6ee7b7' }}>
+                        <span style={{ fontSize: 24 }}>✅</span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: verde }}>Factura adjunta</div>
+                          <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>📎 {facturaNombre}</div>
+                        </div>
+                        <button onClick={() => { setFactura(null); setFacturaNombre(''); setFacturaUrlPrevio(null); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 6, color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ Quitar</button>
                       </div>
                     )}
                   </div>
@@ -503,13 +551,11 @@ export default function Compras() {
                     <div style={{ marginTop: 8, textAlign: 'right', fontWeight: 700, color: azul, fontSize: 14 }}>Total: {parseFloat(s.total_estimado).toFixed(2)} €</div>
                   )}
 
-                  {s.albaran_url && (
-                    <div style={{ marginTop: 8 }}>
-                      <a href={s.albaran_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 7, color: '#92400e', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
-                        🧾 Ver albarán adjunto
-                      </a>
-                    </div>
-                  )}
+                  <AdjuntosCompra
+                    compra={s}
+                    puedeAdjuntar={s.profesor_id === profesorId && s.estado !== 'rechazada' && s.estado !== 'pendiente'}
+                    onCambio={(campo, url) => setHistorial(prev => prev.map(x => x.id === s.id ? { ...x, [campo]: url } : x))}
+                  />
 
                   {s.estado === 'pendiente' && s.profesor_id === profesorId && (
                     <div style={{ marginTop: 10 }}>
