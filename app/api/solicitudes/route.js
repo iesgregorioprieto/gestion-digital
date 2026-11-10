@@ -180,6 +180,33 @@ export async function POST(request) {
       return Response.json({ ok: true, id: (data || [])[0]?.id, numero: fila.numero || null });
     }
 
+    // ─── Editar una petición de compra mientras esté pendiente (#216) ───
+    // Solo quien la pidió (o el equipo directivo). Una vez aprobada o
+    // rechazada ya no se toca: los cambios se piden a secretaría.
+    if (accion === 'editar') {
+      if (tabla !== 'compras') return Response.json({ error: 'tabla_no_valida' }, { status: 400 });
+      if (!id || !datos) return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      const cliente = supa();
+      const { data: filas } = await cliente.from('compras').select('id, profesor_id, estado').eq('id', id);
+      const actual = (filas || [])[0];
+      if (!actual) return Response.json({ error: 'No se ha encontrado la solicitud' }, { status: 404 });
+      if (actual.profesor_id !== sesion.id && !esDirectivo(sesion)) {
+        return Response.json({ error: 'Solo quien la pidió puede modificarla' }, { status: 403 });
+      }
+      if (actual.estado !== 'pendiente') {
+        return Response.json({ error: 'Ya está resuelta: los cambios hay que pedírselos a secretaría' }, { status: 409 });
+      }
+      const cambios = {};
+      for (const k of ['tipo', 'proveedor', 'articulos', 'albaran_url', 'total_estimado']) {
+        if (k in datos) cambios[k] = datos[k];
+      }
+      const { data, error } = await cliente.from('compras').update(cambios)
+        .eq('id', id).eq('estado', 'pendiente').select('id');
+      if (error) return Response.json({ error: error.message }, { status: 500 });
+      if (!(data || []).length) return Response.json({ error: 'Ya está resuelta: los cambios hay que pedírselos a secretaría' }, { status: 409 });
+      return Response.json({ ok: true });
+    }
+
     // ─── Resolver: cambiar estado y dejar comentario ───
     if (accion === 'resolver') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });

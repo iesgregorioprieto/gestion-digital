@@ -32,6 +32,8 @@ export default function Compras() {
   const [proveedor, setProveedor] = useState('');
   const [albaran, setAlbaran] = useState(null);
   const [albaranNombre, setAlbaranNombre] = useState('');
+  const [albaranUrlPrevio, setAlbaranUrlPrevio] = useState(null); // al editar, el que ya tenía
+  const [editando, setEditando] = useState(null); // la solicitud pendiente que se está modificando
   const [sinAcceso, setSinAcceso] = useState(false);
   const [articulos, setArticulos] = useState([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
 
@@ -106,12 +108,15 @@ export default function Compras() {
     let albaranUrl = null;
     if (tipo === 'ya_comprado' && albaran) {
       albaranUrl = await subirArchivo(albaran, 'albaranes');
+    } else if (tipo === 'ya_comprado' && albaranNombre && albaranUrlPrevio) {
+      albaranUrl = albaranUrlPrevio;   // al editar, se conserva el que había
     }
 
     // Subir archivos de cada artículo (presupuestos para tipo=pedir)
     const articulosConUrl = await Promise.all(articulosValidos.map(async (a) => {
       let urlArchivo = null;
       if (tipo === 'pedir' && a.archivo) urlArchivo = await subirArchivo(a.archivo, 'presupuestos');
+      else if (tipo === 'pedir' && a.archivoNombre && a.archivoUrl) urlArchivo = a.archivoUrl;
       return {
         nombre: a.nombre.trim(),
         descripcion: a.descripcion?.trim() || null,
@@ -135,7 +140,8 @@ export default function Compras() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         tabla: 'compras',
-        accion: 'crear',
+        accion: editando ? 'editar' : 'crear',
+        id: editando?.id,
         datos: {
           profesor_nombre: profesorNombre,
           departamento,
@@ -153,7 +159,11 @@ export default function Compras() {
     setEnviando(false);
     if (error) { mostrarMensaje(`Error: ${error.error || 'no se pudo enviar'}`, 'error'); return; }
 
-    mostrarMensaje(_cuerpo.numero ? `✅ Solicitud nº ${_cuerpo.numero} enviada correctamente.` : '✅ Solicitud enviada correctamente.', 'ok');
+    mostrarMensaje(editando
+      ? `✅ Solicitud${editando.numero ? ' nº ' + editando.numero : ''} modificada.`
+      : (_cuerpo.numero ? `✅ Solicitud nº ${_cuerpo.numero} enviada correctamente.` : '✅ Solicitud enviada correctamente.'), 'ok');
+    setEditando(null);
+    setAlbaranUrlPrevio(null);
     // Resetear formulario
     setTipo('');
     setProveedor('');
@@ -162,6 +172,33 @@ export default function Compras() {
     setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
     cargarHistorial(profesorId, esDirectivo);
     setTimeout(() => setVista('historial'), 1500);
+  }
+
+  // Cargar una solicitud pendiente en el formulario para modificarla (#216)
+  function empezarEdicion(s) {
+    setEditando({ id: s.id, numero: s.numero });
+    setTipo(s.tipo || '');
+    setProveedor(s.proveedor || '');
+    setAlbaran(null);
+    setAlbaranUrlPrevio(s.albaran_url || null);
+    setAlbaranNombre(s.albaran_url ? 'Albarán ya adjunto' : '');
+    const arts = Array.isArray(s.articulos) && s.articulos.length ? s.articulos : [{}];
+    setArticulos(arts.map(a => ({
+      nombre: a.nombre || '', descripcion: a.descripcion || '', cantidad: a.cantidad || 1,
+      precio: a.precio != null ? String(a.precio) : '', iva: String(a.iva ?? '21'),
+      enlace: a.enlace || '', archivo: null,
+      archivoNombre: a.archivo_url ? (a.archivo_nombre || 'Archivo ya adjunto') : '',
+      archivoUrl: a.archivo_url || null,
+    })));
+    setVista('formulario');
+  }
+
+  function cancelarEdicion() {
+    setEditando(null);
+    setTipo(''); setProveedor('');
+    setAlbaran(null); setAlbaranNombre(''); setAlbaranUrlPrevio(null);
+    setArticulos([{ nombre: '', descripcion: '', cantidad: 1, precio: '', iva: '21', enlace: '', archivo: null, archivoNombre: '' }]);
+    setVista('historial');
   }
 
   const totalEstimado = articulos.reduce((sum, a) => {
@@ -219,7 +256,7 @@ export default function Compras() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 8, padding: '16px 16px 0' }}>
-        {[{ id: 'formulario', label: '📝 Nueva solicitud' }, { id: 'historial', label: `📋 ${esDirectivo ? 'Todas las solicitudes' : 'Mis solicitudes'} (${historial.length})` }].map(t => (
+        {[{ id: 'formulario', label: editando ? `✏️ Editando${editando.numero ? ' nº ' + editando.numero : ''}` : '📝 Nueva solicitud' }, { id: 'historial', label: `📋 ${esDirectivo ? 'Todas las solicitudes' : 'Mis solicitudes'} (${historial.length})` }].map(t => (
           <button key={t.id} onClick={() => setVista(t.id)} style={{ padding: '9px 18px', borderRadius: 10, border: `2px solid ${vista === t.id ? verde : '#ddd'}`, backgroundColor: vista === t.id ? verde : 'white', color: vista === t.id ? 'white' : '#555', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
             {t.label}
           </button>
@@ -230,6 +267,15 @@ export default function Compras() {
         {/* =================== FORMULARIO =================== */}
         {vista === 'formulario' && (
           <div style={{ backgroundColor: 'white', borderRadius: 14, padding: 20, boxShadow: '0 2px 12px rgba(0,0,0,0.07)' }}>
+
+            {editando && (
+              <div style={{ marginBottom: 18, padding: '12px 14px', borderRadius: 10, backgroundColor: '#eff6ff', border: '1.5px solid #93c5fd', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, fontSize: 13, color: '#1e40af' }}>
+                  <strong>✏️ Modificando la solicitud{editando.numero ? ` nº ${editando.numero}` : ''}.</strong> Puedes cambiarla mientras secretaría no la haya aprobado.
+                </div>
+                <button onClick={cancelarEdicion} style={{ padding: '6px 12px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: 'white', color: '#1e40af', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>Cancelar</button>
+              </div>
+            )}
 
             {/* TIPO */}
             <div style={{ marginBottom: 24 }}>
@@ -318,7 +364,7 @@ export default function Compras() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', backgroundColor: '#d1fae5', borderRadius: 8, border: '1.5px solid #6ee7b7' }}>
                               <span>✅</span>
                               <span style={{ fontSize: 12, color: verde, fontWeight: 600, flex: 1 }}>📎 {a.archivoNombre}</span>
-                              <button onClick={() => { updateArticulo(i, 'archivo', null); updateArticulo(i, 'archivoNombre', ''); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 5, color: '#888', fontSize: 11, cursor: 'pointer', padding: '3px 7px' }}>✕</button>
+                              <button onClick={() => { updateArticulo(i, 'archivo', null); updateArticulo(i, 'archivoNombre', ''); updateArticulo(i, 'archivoUrl', null); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 5, color: '#888', fontSize: 11, cursor: 'pointer', padding: '3px 7px' }}>✕</button>
                             </div>
                           )}
                         </div>
@@ -383,7 +429,7 @@ export default function Compras() {
                           <div style={{ fontSize: 13, fontWeight: 700, color: verde }}>Albarán adjunto</div>
                           <div style={{ fontSize: 11, color: '#555', marginTop: 2 }}>📎 {albaranNombre}</div>
                         </div>
-                        <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 6, color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ Quitar</button>
+                        <button onClick={() => { setAlbaran(null); setAlbaranNombre(''); setAlbaranUrlPrevio(null); }} style={{ background: 'none', border: '1.5px solid #aaa', borderRadius: 6, color: '#888', fontSize: 12, cursor: 'pointer', padding: '4px 8px' }}>✕ Quitar</button>
                       </div>
                     )}
                   </div>
@@ -407,7 +453,7 @@ export default function Compras() {
 
                 {/* ENVIAR */}
                 <button onClick={enviar} disabled={enviando} style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 800, fontSize: 15, cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1 }}>
-                  {enviando ? '⏳ Enviando...' : '🛒 Enviar solicitud'}
+                  {enviando ? '⏳ Enviando...' : editando ? '💾 Guardar cambios' : '🛒 Enviar solicitud'}
                 </button>
               </>
             )}
@@ -462,6 +508,12 @@ export default function Compras() {
                       <a href={s.albaran_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', borderRadius: 7, color: '#92400e', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>
                         🧾 Ver albarán adjunto
                       </a>
+                    </div>
+                  )}
+
+                  {s.estado === 'pendiente' && s.profesor_id === profesorId && (
+                    <div style={{ marginTop: 10 }}>
+                      <button onClick={() => empezarEdicion(s)} style={{ padding: '7px 14px', borderRadius: 7, border: '1.5px solid #93c5fd', backgroundColor: '#eff6ff', color: '#1e40af', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>✏️ Editar</button>
                     </div>
                   )}
 
