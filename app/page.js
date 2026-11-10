@@ -132,7 +132,7 @@ export default function Home() {
             backgroundColor: 'white',
             borderRadius: 16,
             padding: 28,
-            marginBottom: 16,
+            marginBottom: 32,
             boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
             border: '2px solid #0891b2',
             display: 'flex',
@@ -158,38 +158,6 @@ export default function Home() {
             <div style={{ marginLeft: 'auto', fontSize: 22, color: '#0891b2' }}>→</div>
           </div>
         </a>
-
-        {/* TARJETA ALUMNOS */}
-        <div style={{
-          backgroundColor: 'white',
-          borderRadius: 16,
-          padding: 28,
-          marginBottom: 32,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-          border: '2px solid #e0e0e0',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 20,
-          opacity: 0.7,
-        }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: '50%',
-            backgroundColor: '#f5f5f5',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 32, flexShrink: 0,
-          }}>🎒</div>
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700, color: '#aaa', marginBottom: 4 }}>
-              Soy Alumno/a
-            </div>
-            <div style={{ fontSize: 14, color: '#bbb', lineHeight: 1.4 }}>
-              Área de alumnos — próximamente disponible
-            </div>
-          </div>
-          <div style={{ marginLeft: 'auto', fontSize: 13, color: '#bbb', fontWeight: 600 }}>
-            Próximo
-          </div>
-        </div>
 
         {/* INFO DEL CENTRO */}
         <div style={{
