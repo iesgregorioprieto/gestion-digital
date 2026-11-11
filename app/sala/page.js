@@ -36,6 +36,9 @@ export default function SalaProfesores() {
   // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
   const [modoPanel, setModoPanel] = useState('avisos');
   const modosRef = useRef([]);
+  const pasoRef = useRef({ modo: 'avisos', pasos: 0, noticia: 0 });
+  const nNoticiasRef = useRef(0);
+  const [noticiaIdx, setNoticiaIdx] = useState(0);
   // Carteles (avisos con foto): salen a pantalla completa 10 segundos
   // cada vez que la caja de la derecha cambia, uno cada vez, por turnos.
   const [cartel, setCartel] = useState(null);
@@ -152,13 +155,29 @@ export default function SalaProfesores() {
     // Cada minuto la banda de arriba pasa a la siguiente sección, pero solo
     // entre las que tienen algo que mostrar: si no hay avisos, no se pierde
     // un minuto enseñando "Sin avisos".
+    // Cada 20 segundos avanza la banda de arriba. Avisos y extraescolares
+    // se quedan un minuto (tres pasos); las noticias pasan de una en una,
+    // 20 segundos cada una. Todo ocurre en la tele, sin pedir nada al
+    // servidor: no gasta nada en Vercel.
     const alternancia = setInterval(() => {
-      setModoPanel(m => {
-        const ms = modosRef.current;
-        if (ms.length === 0) return m;
-        const i = ms.indexOf(m);
-        return ms[(i + 1) % ms.length];
-      });
+      const ms = modosRef.current;
+      if (ms.length === 0) return;
+      const st = pasoRef.current;
+      if (!ms.includes(st.modo)) {
+        st.modo = ms[0]; st.pasos = 0; st.noticia = 0;
+        setModoPanel(st.modo); setNoticiaIdx(0);
+        return;
+      }
+      st.pasos++;
+      const duracion = st.modo === 'noticias' ? Math.max(1, nNoticiasRef.current) : 3;
+      if (st.pasos < duracion) {
+        if (st.modo === 'noticias') { st.noticia++; setNoticiaIdx(st.noticia); }
+        return;
+      }
+      // Cambio de sección
+      st.modo = ms[(ms.indexOf(st.modo) + 1) % ms.length];
+      st.pasos = 0; st.noticia = 0;
+      setModoPanel(st.modo); setNoticiaIdx(0);
       if (cajaAvisosRef.current) cajaAvisosRef.current.scrollTop = 0;
       const carteles = cartelesRef.current;
       if (carteles.length > 0) {
@@ -167,7 +186,7 @@ export default function SalaProfesores() {
         setCartel(c);
         setTimeout(() => setCartel(null), 10000);
       }
-    }, 60000);
+    }, 20000);
     const relojInterval = setInterval(() => setReloj(new Date()), 1000);
 
     // Los tres listados bajan y suben solos: la pantalla está en la
@@ -257,6 +276,7 @@ export default function SalaProfesores() {
     noticias.length > 0 && 'noticias',
   ].filter(Boolean);
   modosRef.current = modos;
+  nNoticiasRef.current = noticias.length;
   const modoVisible = modos.includes(modoPanel) ? modoPanel : modos[0];
 
   const azul = '#1e3a5f';
@@ -282,9 +302,11 @@ export default function SalaProfesores() {
             style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', boxShadow: '0 0 40px rgba(0,0,0,0.6)' }} />
         </div>
       )}
+      <style>{`@keyframes salaEntrada { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }`}</style>
       {/* Precarga de los carteles, para que salgan al instante */}
       <div style={{ display: 'none' }}>
         {avisos.filter(a => a.imagen_url).map(a => <img key={a.id} src={a.imagen_url} alt="" />)}
+        {noticias.filter(n => n.imagen).map((n, i) => <img key={'n' + i} src={n.imagen} alt="" />)}
       </div>
 
       {/* ARRIBA: a la izquierda APrieto, la fecha, el reloj y las seis
@@ -345,7 +367,7 @@ export default function SalaProfesores() {
         </div>
 
         {modos.length > 0 && (
-          <div ref={cajaAvisosRef} style={{ flex: 1, minWidth: 0, maxHeight: '28vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
+          <div ref={cajaAvisosRef} style={{ flex: 1, minWidth: 0, maxHeight: '34vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
             {modos.length > 1 && (
               <div style={{ position: 'absolute', top: 14, right: 16, display: 'flex', gap: 6 }}>
                 {modos.map(m => (
@@ -440,30 +462,39 @@ export default function SalaProfesores() {
                     📰 Sin noticias que mostrar
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
-                    {noticias.map((n, i) => (
-                      <div key={n.id || i} style={{
-                        backgroundColor: '#0f172a', borderRadius: 8, padding: '8px 12px',
-                        borderLeft: '4px solid #10b981',
-                        display: 'flex', gap: 12, alignItems: 'flex-start',
+                  (() => {
+                    const n = noticias[noticiaIdx % noticias.length];
+                    return (
+                      <div key={noticiaIdx} style={{
+                        backgroundColor: '#0f172a', borderRadius: 10, padding: 12,
+                        borderLeft: '5px solid #10b981',
+                        display: 'flex', gap: 16, alignItems: 'stretch',
+                        animation: 'salaEntrada 0.6s ease',
                       }}>
                         {n.imagen && (
                           <img src={n.imagen} alt="" style={{
-                            width: 52, height: 52, objectFit: 'cover', borderRadius: 6, flexShrink: 0,
+                            width: 260, height: 170, objectFit: 'cover', borderRadius: 8, flexShrink: 0,
                           }} />
                         )}
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 3, lineHeight: 1.3,
-                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          <div style={{ fontWeight: 800, fontSize: 24, marginBottom: 8, lineHeight: 1.25,
+                            display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                             {n.titulo}
                           </div>
-                          <div style={{ fontSize: 11, opacity: 0.45 }}>
+                          {n.resumen && (
+                            <div style={{ fontSize: 16, opacity: 0.8, lineHeight: 1.4,
+                              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                              {n.resumen}
+                            </div>
+                          )}
+                          <div style={{ fontSize: 13, opacity: 0.5, marginTop: 8 }}>
                             {n.fecha ? new Date(n.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }) : ''}
+                            {noticias.length > 1 ? `  ·  ${(noticiaIdx % noticias.length) + 1} de ${noticias.length}` : ''}
                           </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })()
                 )}
               </>
             )}
@@ -480,12 +511,12 @@ export default function SalaProfesores() {
           {/* LISTA DE AUSENTES */}
           <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>🏥 Faltan {esHoy ? 'hoy' : 'ese día'}</h2>
-              <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fbbf24', fontSize: 15, fontWeight: 800 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>🏥 Faltan {esHoy ? 'hoy' : 'ese día'}</h2>
+              <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fbbf24', fontSize: 13, fontWeight: 800 }}>
                 {totalAusentesHoy} {esHoy ? 'hoy' : 'ese día'}
               </span>
               {esHoy && (
-                <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', fontSize: 15, fontWeight: 800 }}>
+                <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', fontSize: 13, fontWeight: 800 }}>
                   {totalAusentesAhora} a {HORAS.find(h => h.id === horaEfectiva)?.label || ''}
                 </span>
               )}
@@ -495,7 +526,7 @@ export default function SalaProfesores() {
                 ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
               </div>
             ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 6 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 4 }}>
                 {Object.entries(profesAusentes).sort((a,b) => {
                   // Primero quien falta a la hora que se está mirando
                   const fa = a[1].horas.includes(horaEfectiva) ? 0 : 1;
@@ -504,12 +535,12 @@ export default function SalaProfesores() {
                 }).map(([nombre, info]) => (
                   <div key={nombre} style={{
                     backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
-                    borderRadius: 8, padding: '5px 10px', gap: 8,
+                    borderRadius: 7, padding: '3px 10px', gap: 8,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
                   }}>
                     <div style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ fontWeight: 700, fontSize: 17 }}>{nombre}</span>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{nombre}</span>
                       <span style={{
                         marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4,
                         backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
@@ -521,7 +552,7 @@ export default function SalaProfesores() {
                     <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
                       {HORAS.map(h => (
                         <span key={h.id} style={{
-                          width: 22, height: 22, borderRadius: '50%',
+                          width: 20, height: 20, borderRadius: '50%',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
                           fontSize: 11, fontWeight: 700,
                           backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
@@ -541,7 +572,7 @@ export default function SalaProfesores() {
 
           {/* COLUMNA DERECHA: GUARDIAS CON LAS CLASES ASIGNADAS */}
           <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
+            <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
             {(() => {
               // Siempre tres horas fijas, una debajo de otra y sin moverse: la
               // actual y las dos siguientes. A 4ª, 5ª y 6ª se ven 4ª, 5ª y 6ª.
@@ -549,7 +580,7 @@ export default function SalaProfesores() {
               const desde = Math.min(i, HORAS.length - 3);
               const ventana = HORAS.slice(desde, desde + 3);
               return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {ventana.map(h => {
                     // La columna es 'hora', no 'hora_id'.
                     const apoyosHora = apoyos.filter(a => {
@@ -560,10 +591,10 @@ export default function SalaProfesores() {
                     return (
                       <div key={h.id} style={{
                         backgroundColor: activa ? '#1e3a5f' : '#0f172a',
-                        borderRadius: 8, padding: '6px 12px',
+                        borderRadius: 8, padding: '4px 12px',
                         border: activa ? '2px solid #3b82f6' : '1px solid #334155',
                       }}>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: activa ? '#93c5fd' : '#94a3b8', marginBottom: 4 }}>
+                        <div style={{ fontSize: 13, fontWeight: 800, color: activa ? '#93c5fd' : '#94a3b8', marginBottom: 2 }}>
                           {h.label} <span style={{ fontSize: 12, fontWeight: 600 }}>{h.rango}</span>
                           {activa && esHoy && !horaVista ? ' · AHORA' : ''}
                         </div>
@@ -577,12 +608,12 @@ export default function SalaProfesores() {
                                 paddingLeft: 8, minWidth: 0,
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
                               }}>
-                                <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap', flexShrink: 0,
+                                <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap', flexShrink: 0,
                                   color: a.estado === 'confirmado' ? '#4ade80' : '#fca5a5' }}>
                                   {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
                                   {a.nombre_completo || nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
                                 </div>
-                                <div style={{ fontSize: 15, fontWeight: 600, color: '#cbd5e1', textAlign: 'right',
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1', textAlign: 'right',
                                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                                   {/* Basta con un grupo y el aula: «ESO-4A · A141». Cuando son
                                       varios grupos juntos en la misma aula, con el primero y el
