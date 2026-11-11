@@ -49,10 +49,10 @@ export default function SalaProfesores() {
 
   const hoy = hoyLocal();
 
-  // Día que se está mirando. Normalmente hoy, pero se puede adelantar o
-  // retrasar para ver cómo queda el escenario otro día. Al volver a
-  // "Hoy" la pantalla sigue sola con sus refrescos, como siempre.
-  const [dia, setDia] = useState(hoyLocal());
+  // La sala es siempre el escenario de hoy. Se recalcula en cada
+  // render (el reloj refresca cada segundo), así que a medianoche cambia
+  // solo de día aunque la tele se quede encendida.
+  const dia = hoy;
   const esHoy = dia === hoy;
 
   const diaIdx = new Date(dia + 'T12:00:00').getDay();
@@ -73,15 +73,6 @@ export default function SalaProfesores() {
     const ap = (apellidos || '').trim().split(/\s+/)[0] || '';
     const no = (nombre || '').trim().split(/\s+/)[0] || '';
     return `${no} ${ap}`.trim();
-  }
-
-  function moverDia(saltos) {
-    const d = new Date(dia + 'T12:00:00');
-    d.setDate(d.getDate() + saltos);
-    // Sábados y domingos se saltan: en la sala no interesan
-    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + (saltos >= 0 ? 1 : -1));
-    const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), n = String(d.getDate()).padStart(2, '0');
-    setDia(`${y}-${m}-${n}`);
   }
 
   const cargarDatos = useCallback(async () => {
@@ -213,14 +204,6 @@ export default function SalaProfesores() {
   // Al cambiar de día, resetear la hora seleccionada
   useEffect(() => { setHoraVista(null); }, [dia]);
 
-  // Si alguien se va y deja la pantalla en otro día, vuelve sola a hoy
-  // a los tres minutos. Está en la pared: nadie va a acordarse.
-  useEffect(() => {
-    if (esHoy) return;
-    const t = setTimeout(() => setDia(hoy), 180000);
-    return () => clearTimeout(t);
-  }, [esHoy, dia, hoy]);
-
   // Profesores ausentes con sus horas
   const profesAusentes = {};
   for (const a of ausencias) {
@@ -284,14 +267,6 @@ export default function SalaProfesores() {
   const azul = '#1e3a5f';
   const verde = '#16a34a';
 
-  const btnDia = {
-    width: 34, height: 34, borderRadius: 9, cursor: 'pointer',
-    backgroundColor: 'rgba(255,255,255,0.10)', color: 'white',
-    border: '1px solid rgba(255,255,255,0.28)',
-    fontSize: 20, fontWeight: 800, lineHeight: 1,
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-  };
-
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
 
@@ -317,35 +292,52 @@ export default function SalaProfesores() {
         {avisos.filter(a => a.imagen_url).map(a => <img key={a.id} src={a.imagen_url} alt="" />)}
       </div>
 
-      {/* HEADER */}
-      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '8px 20px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
+      {/* ARRIBA: a la izquierda APrieto, la fecha, el reloj y las seis
+          horas; a la derecha, todo el ancho que queda para avisos,
+          extraescolares y noticias (solo las que tienen contenido). */}
+      <div style={{ display: 'flex', gap: 14, padding: '12px 14px 0', flexShrink: 0, alignItems: 'stretch' }}>
 
-          {/* Fecha y paso de día. En la pared se queda siempre en hoy;
-              los botones son para quien se acerca a consultar. */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
-            <button onClick={() => moverDia(-1)} aria-label="Día anterior" style={btnDia}>‹</button>
-            <span style={{ fontSize: 16, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</span>
-            <button onClick={() => moverDia(1)} aria-label="Día siguiente" style={btnDia}>›</button>
-            {!esHoy && (
-              <button onClick={() => setDia(hoy)}
-                style={{ ...btnDia, width: 'auto', padding: '0 13px', fontSize: 13, fontWeight: 700,
-                  backgroundColor: '#f59e0b', color: '#0f172a', borderColor: '#f59e0b' }}>
-                ← Volver a hoy
-              </button>
-            )}
+        <div style={{ flexShrink: 0, background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`,
+          borderRadius: 12, border: '1px solid #334155', padding: '10px 16px',
+          display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, whiteSpace: 'nowrap' }}>📋 APrieto · Sala de Profesores</h1>
+          <div style={{ fontSize: 16, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 2 }}>
+            <div>
+              <div style={{ fontSize: 58, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.5, marginTop: 2 }}>
+                Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
+              </div>
+            </div>
+
+            {/* Las seis horas: se tocan para ver otra franja */}
+            <div style={{ display: 'flex', gap: 4 }}>
+              {HORAS.map(h => {
+                const ausEstaHora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(h.id)).length;
+                const activa = h.id === horaEfectiva;
+                return (
+                  <div key={h.id} onClick={() => setHoraVista(activa && horaVista ? null : h.id)}
+                    title={h.rango}
+                    style={{
+                      width: 46, textAlign: 'center', padding: '5px 0', borderRadius: 7, cursor: 'pointer',
+                      backgroundColor: activa ? '#1d4ed8' : '#0f172a',
+                      border: activa ? '2px solid #3b82f6' : '1px solid #334155',
+                    }}>
+                    <div style={{ fontSize: 16, fontWeight: 800 }}>{h.label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: ausEstaHora > 0 ? '#ef4444' : '#22c55e' }}>
+                      {ausEstaHora > 0 ? `⚠️${ausEstaHora}` : '✓'}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
-          {!esHoy && (
-            <div style={{ marginTop: 7, display: 'inline-block', padding: '4px 11px', borderRadius: 7,
-              backgroundColor: 'rgba(245,158,11,0.18)', border: '1px solid #f59e0b',
-              fontSize: 13.5, fontWeight: 700, color: '#fbbf24' }}>
-              👁️ Estás viendo otro día, no el de hoy
-            </div>
-          )}
           {esHoy && horaVista && (
-            <div style={{ marginTop: 7, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 11px', borderRadius: 7,
+            <div style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 11px', borderRadius: 7,
               backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid #3b82f6',
               fontSize: 13.5, fontWeight: 700, color: '#93c5fd' }}>
               👁️ Mostrando {HORAS.find(h => h.id === horaVista)?.label || horaVista}
@@ -356,47 +348,9 @@ export default function SalaProfesores() {
             </div>
           )}
         </div>
-        {/* FRANJAS HORARIAS (se tocan para ver otra hora) */}
-        <div style={{ flex: 1, maxWidth: 720, margin: '0 24px' }}>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {HORAS.map(h => (
-                <div key={h.id} onClick={() => setHoraVista(h.id === horaEfectiva && horaVista ? null : h.id)}
-                  style={{
-                  flex: 1, textAlign: 'center', padding: '5px 3px', borderRadius: 7,
-                  backgroundColor: h.id === horaEfectiva ? '#1d4ed8' : '#0f172a',
-                  border: h.id === horaEfectiva ? '2px solid #3b82f6' : '1px solid #334155',
-                  transition: 'all 0.3s', cursor: 'pointer',
-                }}>
-                  <div style={{ fontSize: 15, fontWeight: 800 }}>{h.label}</div>
-                  <div style={{ fontSize: 10, opacity: 0.55 }}>{h.rango}</div>
-                  {(() => {
-                    const ausEstaHora = Object.entries(profesAusentes).filter(([_, v]) => v.horas.includes(h.id)).length;
-                    return ausEstaHora > 0 ? (
-                      <div style={{ marginTop: 3, fontSize: 12, fontWeight: 700, color: '#ef4444' }}>⚠️ {ausEstaHora}</div>
-                    ) : (
-                      <div style={{ marginTop: 3, fontSize: 12, color: '#22c55e' }}>✓</div>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-        </div>
 
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 60, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-            {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-          <div style={{ fontSize: 13, opacity: 0.55 }}>
-            Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
-          </div>
-        </div>
-      </div>
-
-      {/* BANDA DE ARRIBA: avisos, extraescolares y noticias. Solo las
-          secciones con contenido; si no hay ninguna, no aparece. */}
-      {modos.length > 0 && (
-        <div style={{ padding: '10px 14px 0', flexShrink: 0 }}>
-          <div ref={cajaAvisosRef} style={{ maxHeight: '24vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
+        {modos.length > 0 && (
+          <div ref={cajaAvisosRef} style={{ flex: 1, minWidth: 0, maxHeight: '28vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
             {modos.length > 1 && (
               <div style={{ position: 'absolute', top: 14, right: 16, display: 'flex', gap: 6 }}>
                 {modos.map(m => (
@@ -518,8 +472,8 @@ export default function SalaProfesores() {
               </>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* DOS COLUMNAS: ausentes a la izquierda, guardias a la derecha */}
       <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: 14 }}>
