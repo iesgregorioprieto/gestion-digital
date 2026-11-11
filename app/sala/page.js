@@ -139,8 +139,23 @@ export default function SalaProfesores() {
       const m = d.getHours() * 60 + d.getMinutes();
       return d.getDay() >= 1 && d.getDay() <= 5 && m >= 450 && m < 840;
     };
+    // Recarga inteligente: cada 2 minutos en los primeros 15 de cada
+    // franja (es cuando se ficha y se reparten guardias) y cada 10
+    // minutos el resto del tiempo. Unas 85 llamadas al día en vez de 195.
+    const INICIOS = [510, 565, 620, 675, 705, 760, 815]; // 8:30 9:25 10:20 11:15 11:45 12:40 13:35
+    let ultima = Date.now();
     cargarDatos();
-    const intervalo = setInterval(() => { if (enHorario()) cargarDatos(); }, 120000); // cada 2 minutos: sobra para una tele
+    const intervalo = setInterval(() => {
+      if (!enHorario()) return;
+      const d = new Date();
+      const m = d.getHours() * 60 + d.getMinutes();
+      const caliente = INICIOS.some(i => m >= i && m < i + 15);
+      const espera = caliente ? 2 : 10;
+      if (Date.now() - ultima >= espera * 60000 - 5000) {
+        ultima = Date.now();
+        cargarDatos();
+      }
+    }, 60000);
 
     // Noticias de la web del centro (se refrescan cada media hora)
     const traerNoticias = () => {
