@@ -543,13 +543,13 @@ export default function SalaProfesores() {
           <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
             {(() => {
-              // Siempre tres horas fijas, sin moverse: la actual y las dos
-              // siguientes. A 4ª, 5ª y 6ª se ven 4ª, 5ª y 6ª.
+              // Siempre tres horas fijas, una debajo de otra y sin moverse: la
+              // actual y las dos siguientes. A 4ª, 5ª y 6ª se ven 4ª, 5ª y 6ª.
               const i = Math.max(0, HORAS.findIndex(h => h.id === horaEfectiva));
               const desde = Math.min(i, HORAS.length - 3);
               const ventana = HORAS.slice(desde, desde + 3);
               return (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, height: 'calc(100% - 40px)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {ventana.map(h => {
                     // La columna es 'hora', no 'hora_id'.
                     const apoyosHora = apoyos.filter(a => {
@@ -560,30 +560,30 @@ export default function SalaProfesores() {
                     return (
                       <div key={h.id} style={{
                         backgroundColor: activa ? '#1e3a5f' : '#0f172a',
-                        borderRadius: 8, padding: '8px 10px', minHeight: 0, overflow: 'hidden',
+                        borderRadius: 8, padding: '6px 12px',
                         border: activa ? '2px solid #3b82f6' : '1px solid #334155',
                       }}>
-                        <div style={{ fontSize: 16, fontWeight: 800, color: activa ? '#93c5fd' : '#94a3b8', marginBottom: 6 }}>
+                        <div style={{ fontSize: 15, fontWeight: 800, color: activa ? '#93c5fd' : '#94a3b8', marginBottom: 4 }}>
                           {h.label} <span style={{ fontSize: 12, fontWeight: 600 }}>{h.rango}</span>
                           {activa && esHoy && !horaVista ? ' · AHORA' : ''}
                         </div>
                         {apoyosHora.length === 0 ? (
                           <div style={{ fontSize: 13, opacity: 0.45 }}>Sin guardias a esta hora</div>
                         ) : (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                             {apoyosHora.map((a, k) => (
                               <div key={k} style={{
                                 borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
                                 paddingLeft: 8, minWidth: 0,
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
                               }}>
-                                <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25,
-                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                <div style={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3, whiteSpace: 'nowrap', flexShrink: 0,
                                   color: a.estado === 'confirmado' ? '#4ade80' : '#fca5a5' }}>
                                   {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
                                   {a.nombre_completo || nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
                                 </div>
-                                <div style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1',
-                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                <div style={{ fontSize: 15, fontWeight: 600, color: '#cbd5e1', textAlign: 'right',
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                                   {a.grupo || ''}{a.aula ? ` · ${a.aula}` : ''}
                                 </div>
                               </div>
