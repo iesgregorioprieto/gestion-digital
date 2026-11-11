@@ -584,7 +584,10 @@ export default function SalaProfesores() {
                                 </div>
                                 <div style={{ fontSize: 15, fontWeight: 600, color: '#cbd5e1', textAlign: 'right',
                                   whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-                                  {a.grupo || ''}{a.aula ? ` · ${a.aula}` : ''}
+                                  {/* Basta con un grupo y el aula: «ESO-4A · A141». Cuando son
+                                      varios grupos juntos en la misma aula, con el primero y el
+                                      aula ya se sabe adónde ir. */}
+                                  {(a.grupo || '').split(',')[0].trim()}{a.aula ? ` · ${a.aula}` : ''}
                                 </div>
                               </div>
                             ))}
