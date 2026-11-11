@@ -25,6 +25,30 @@ function supa() {
   );
 }
 
+// «1a», «1ª hora», {hora: '1ª'} → '1'
+function numHora(h) {
+  const v = typeof h === 'object' && h ? h.hora : h;
+  const m = String(v ?? '').match(/\d+/);
+  return m ? m[0] : null;
+}
+
+/**
+ * A qué horas falta hoy. Primero la columna 'dias' (las horas reales de
+ * ese día, sacadas del horario al registrar); si no la hay, la lista
+ * antigua 'horas'. null = el día entero. Antes solo se miraba 'horas',
+ * que en las bajas y días completos está vacía: salían en la sala sin
+ * ninguna hora marcada y el contador de «ahora» se quedaba en 0.
+ */
+function horasDeHoy(a, hoy) {
+  const unir = lista => [...new Set(lista.map(numHora).filter(Boolean))];
+  if (Array.isArray(a.dias)) {
+    const delDia = a.dias.find(d => d && d.fecha === hoy);
+    if (delDia && Array.isArray(delDia.horas) && delDia.horas.length > 0) return unir(delDia.horas);
+  }
+  if (Array.isArray(a.horas) && a.horas.length > 0) return unir(a.horas);
+  return null;
+}
+
 export async function GET(request) {
   try {
     // Se puede pedir otro día para ver cómo queda el escenario. Solo la
@@ -45,7 +69,7 @@ export async function GET(request) {
 
     const [aus, dlds, apoyos, avisos, actividades] = await Promise.all([
       cliente.from('ausencias')
-        .select('profesor_nombre, horas, fecha_inicio, fecha_fin')
+        .select('profesor_nombre, horas, dias, fecha_inicio, fecha_fin')
         .lte('fecha_inicio', hoy)
         .or(`fecha_fin.gte.${hoy},fecha_fin.is.null`),
 
@@ -73,7 +97,13 @@ export async function GET(request) {
 
     return Response.json({
       fecha: hoy,
-      ausencias: aus.data || [],
+      // Solo el nombre y los números de hora de HOY. La columna 'dias'
+      // lleva tareas y archivos, que no pueden salir por una ruta sin
+      // sesión: se resuelve aquí y no se envía.
+      ausencias: (aus.data || []).map(a => ({
+        profesor_nombre: a.profesor_nombre,
+        horas_hoy: horasDeHoy(a, hoy),
+      })),
       dlds: dlds.data || [],
       // Las anuladas por jefatura no se cubren: no se enseñan en la sala.
       apoyos: (apoyos.data || []).filter(a => a.estado !== 'anulada'),

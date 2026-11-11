@@ -209,17 +209,11 @@ export default function SalaProfesores() {
   for (const a of ausencias) {
     const nombre = a.profesor_nombre || '?';
     if (!profesAusentes[nombre]) profesAusentes[nombre] = { horas: [], tipo: 'ausencia' };
-    if (Array.isArray(a.horas)) {
-      a.horas.forEach(h => {
-        const horaId = typeof h === 'object' ? (h.hora || '').toString().replace(/[aª]/g, '') : h.toString().replace(/[aª]/g, '');
-        if (horaId && !profesAusentes[nombre].horas.includes(horaId)) {
-          profesAusentes[nombre].horas.push(horaId);
-        }
-      });
-    } else {
-      // Ausencia prolongada sin horas específicas → todas las horas
-      HORAS.forEach(h => { if (!profesAusentes[nombre].horas.includes(h.id)) profesAusentes[nombre].horas.push(h.id); });
-    }
+    // El servidor ya da las horas de hoy; null = el día entero
+    const horasHoy = Array.isArray(a.horas_hoy) ? a.horas_hoy : HORAS.map(h => h.id);
+    horasHoy.forEach(h => {
+      if (!profesAusentes[nombre].horas.includes(h)) profesAusentes[nombre].horas.push(h);
+    });
   }
   for (const d of dlds) {
     const nombre = d.profesor_nombre || '?';
@@ -415,7 +409,7 @@ export default function SalaProfesores() {
                           backgroundColor: '#0f172a', borderRadius: 8, padding: '8px 12px',
                           borderLeft: `4px solid ${a.estado === 'pendiente' ? '#f59e0b' : '#0ea5e9'}`,
                         }}>
-                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 2, lineHeight: 1.3 }}>
+                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 2, lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {a.titulo || 'Actividad'}
                             {a.estado === 'pendiente' && (
                               <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', marginLeft: 8 }}>pendiente</span>
@@ -454,11 +448,12 @@ export default function SalaProfesores() {
                       }}>
                         {n.imagen && (
                           <img src={n.imagen} alt="" style={{
-                            width: 64, height: 64, objectFit: 'cover', borderRadius: 6, flexShrink: 0,
+                            width: 52, height: 52, objectFit: 'cover', borderRadius: 6, flexShrink: 0,
                           }} />
                         )}
                         <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4, lineHeight: 1.3 }}>
+                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 3, lineHeight: 1.3,
+                            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                             {n.titulo}
                           </div>
                           <div style={{ fontSize: 11, opacity: 0.45 }}>
