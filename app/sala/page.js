@@ -35,6 +35,7 @@ export default function SalaProfesores() {
   const [semana, setSemana] = useState(null);
   // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
   const [modoPanel, setModoPanel] = useState('avisos');
+  const modosRef = useRef([]);
   // Carteles (avisos con foto): salen a pantalla completa 10 segundos
   // cada vez que la caja de la derecha cambia, uno cada vez, por turnos.
   const [cartel, setCartel] = useState(null);
@@ -157,10 +158,16 @@ export default function SalaProfesores() {
     traerNoticias();
     const intervaloNoticias = setInterval(() => { if (enHorario()) traerNoticias(); }, 1800000);
 
-    // Cada minuto cambia de avisos a noticias y vuelta
-    const CICLO = ['avisos', 'extraescolares', 'noticias'];
+    // Cada minuto la banda de arriba pasa a la siguiente sección, pero solo
+    // entre las que tienen algo que mostrar: si no hay avisos, no se pierde
+    // un minuto enseñando "Sin avisos".
     const alternancia = setInterval(() => {
-      setModoPanel(m => CICLO[(CICLO.indexOf(m) + 1) % CICLO.length]);
+      setModoPanel(m => {
+        const ms = modosRef.current;
+        if (ms.length === 0) return m;
+        const i = ms.indexOf(m);
+        return ms[(i + 1) % ms.length];
+      });
       if (cajaAvisosRef.current) cajaAvisosRef.current.scrollTop = 0;
       const carteles = cartelesRef.current;
       if (carteles.length > 0) {
@@ -263,6 +270,17 @@ export default function SalaProfesores() {
     return new Date(dia + 'T12:00:00').toLocaleDateString('es-ES', opciones);
   };
 
+  // Secciones de la banda de arriba que tienen contenido. Las vacías no
+  // salen; si no hay ninguna, la banda desaparece y las columnas crecen.
+  const avisosTexto = avisos.filter(a => !a.imagen_url);
+  const modos = [
+    avisosTexto.length > 0 && 'avisos',
+    actividades.length > 0 && 'extraescolares',
+    noticias.length > 0 && 'noticias',
+  ].filter(Boolean);
+  modosRef.current = modos;
+  const modoVisible = modos.includes(modoPanel) ? modoPanel : modos[0];
+
   const azul = '#1e3a5f';
   const verde = '#16a34a';
 
@@ -275,7 +293,7 @@ export default function SalaProfesores() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: '#0f172a', fontFamily: 'system-ui, sans-serif', color: 'white', padding: 0, overflow: 'hidden' }}>
 
       {/* CARTEL A PANTALLA COMPLETA (10 segundos) */}
       {cartel && (
@@ -300,7 +318,7 @@ export default function SalaProfesores() {
       </div>
 
       {/* HEADER */}
-      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '20px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '14px 26px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
 
@@ -338,135 +356,8 @@ export default function SalaProfesores() {
             </div>
           )}
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 96, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-            {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-          <div style={{ fontSize: 16, opacity: 0.55 }}>
-            Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, padding: 20, height: 'calc(100vh - 110px)' }}>
-
-        {/* COLUMNA IZQUIERDA: AUSENCIAS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
-
-          {/* RESUMEN */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>{esHoy ? 'Ausentes hoy' : 'Ausentes ese día'}</div>
-            </div>
-            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: esHoy ? '#ef4444' : '#475569' }}>{esHoy ? totalAusentesAhora : '—'}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
-                {esHoy ? `Ausentes ahora (${HORAS.find(h => h.id === horaAct)?.label || ''})` : 'Solo cuenta en el día de hoy'}
-              </div>
-            </div>
-          </div>
-
-          {/* LISTA DE AUSENTES */}
-          <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🏥 Profesores ausentes {esHoy ? 'hoy' : 'ese día'}</h2>
-            {totalAusentesHoy === 0 ? (
-              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {Object.entries(profesAusentes).sort((a,b) => a[0].localeCompare(b[0])).map(([nombre, info]) => (
-                  <div key={nombre} style={{
-                    backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
-                    borderRadius: 8, padding: '10px 14px',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
-                  }}>
-                    <div>
-                      <span style={{ fontWeight: 600, fontSize: 14 }}>{nombre}</span>
-                      <span style={{
-                        marginLeft: 8, fontSize: 10, padding: '2px 6px', borderRadius: 4,
-                        backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
-                        color: 'white',
-                      }}>
-                        {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
-                      {HORAS.map(h => (
-                        <span key={h.id} style={{
-                          width: 26, height: 26, borderRadius: '50%',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 700,
-                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
-                          color: info.horas.includes(h.id) ? 'white' : '#475569',
-                          border: h.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
-                        }}>
-                          {h.label.replace('ª','')}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          {/* GUARDIAS ASIGNADAS */}
-          <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 800 }}>🛡️ Quién cubre cada hora</h2>
-            {apoyos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                🛡️ Sin guardias asignadas
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {HORAS.map(h => {
-                  // La columna es 'hora', no 'hora_id', y el nombre de quien
-                  // cubre viene en 'profesor_nombre_pdf'. Con los nombres
-                  // antiguos este recuadro salía siempre vacío.
-                  const apoyosHora = apoyos.filter(a => {
-                    const hid = (a.hora || '').toString().toLowerCase().replace(/[aª\s]/g, '');
-                    return hid === h.id || (hid.includes('recreo') && h.id === 'recreo');
-                  });
-                  if (apoyosHora.length === 0) return null;
-                  return (
-                    <div key={h.id} style={{
-                      backgroundColor: h.id === horaEfectiva ? '#1e3a5f' : '#0f172a',
-                      borderRadius: 8, padding: '8px 12px',
-                      border: h.id === horaEfectiva ? '1.5px solid #3b82f6' : '1px solid #334155',
-                    }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', marginBottom: 4 }}>{h.label} ({h.rango})</div>
-                      {apoyosHora.map((a, i) => (
-                        <div key={i} style={{
-                          fontSize: 13, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0',
-                          borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
-                          paddingLeft: 8, marginLeft: -4,
-                        }}>
-                          <span style={{ fontWeight: 600,
-                            color: a.estado === 'confirmado' ? '#22c55e' : '#fca5a5' }}>
-                            {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
-                            {nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
-                          </span>
-                          <span style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right' }}>
-                            {a.grupo ? a.grupo : ''}{a.aula ? ` · ${a.aula}` : ''}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-        </div>
-
-        {/* COLUMNA DERECHA: GUARDIAS + AVISOS */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden' }}>
-
-          {/* FRANJA HORARIA ACTUAL */}
-          <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155' }}>
+        {/* FRANJAS HORARIAS (se tocan para ver otra hora) */}
+        <div style={{ flex: 1, maxWidth: 720, margin: '0 24px' }}>
             <div style={{ display: 'flex', gap: 6 }}>
               {HORAS.map(h => (
                 <div key={h.id} onClick={() => setHoraVista(h.id === horaEfectiva && horaVista ? null : h.id)}
@@ -489,21 +380,41 @@ export default function SalaProfesores() {
                 </div>
               ))}
             </div>
+        </div>
+
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 80, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+            {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
+          <div style={{ fontSize: 16, opacity: 0.55 }}>
+            Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
+          </div>
+        </div>
+      </div>
 
-          {/* AVISOS / NOTICIAS: la caja alterna sola cada minuto */}
-          <div ref={cajaAvisosRef} style={{ flex: 1, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-
-            {modoPanel === 'avisos' ? (
+      {/* BANDA DE ARRIBA: avisos, extraescolares y noticias. Solo las
+          secciones con contenido; si no hay ninguna, no aparece. */}
+      {modos.length > 0 && (
+        <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
+          <div ref={cajaAvisosRef} style={{ maxHeight: '30vh', backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
+            {modos.length > 1 && (
+              <div style={{ position: 'absolute', top: 14, right: 16, display: 'flex', gap: 6 }}>
+                {modos.map(m => (
+                  <span key={m} style={{ width: 10, height: 10, borderRadius: '50%',
+                    backgroundColor: m === modoVisible ? '#3b82f6' : '#334155' }} />
+                ))}
+              </div>
+            )}
+            {modoVisible === 'avisos' ? (
               <>
                 <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
-                {avisos.filter(a => !a.imagen_url).length === 0 ? (
+                {avisosTexto.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                     📌 Sin avisos
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {avisos.filter(a => !a.imagen_url).map((a, i) => (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
+                    {avisosTexto.map((a, i) => (
                       <div key={a.id || i} style={{
                         backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
                         borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
@@ -518,7 +429,7 @@ export default function SalaProfesores() {
                   </div>
                 )}
               </>
-            ) : modoPanel === 'extraescolares' ? (
+            ) : modoVisible === 'extraescolares' ? (
               <>
                 <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>
                   🚌 Extraescolares de la semana
@@ -535,7 +446,7 @@ export default function SalaProfesores() {
                     🚌 Ninguna actividad esta semana
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
                     {actividades.map((a, i) => {
                       const ini = a.fecha_inicio ? new Date(a.fecha_inicio + 'T12:00:00') : null;
                       const fin = a.fecha_fin ? new Date(a.fecha_fin + 'T12:00:00') : null;
@@ -580,7 +491,7 @@ export default function SalaProfesores() {
                     📰 Sin noticias que mostrar
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
                     {noticias.map((n, i) => (
                       <div key={n.id || i} style={{
                         backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
@@ -608,6 +519,123 @@ export default function SalaProfesores() {
             )}
           </div>
         </div>
+      )}
+
+      {/* DOS COLUMNAS: ausentes a la izquierda, guardias a la derecha */}
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, padding: 20 }}>
+
+        {/* COLUMNA IZQUIERDA: PROFESORES QUE FALTAN */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden', minHeight: 0 }}>
+
+          {/* RESUMEN */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #334155' }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>{esHoy ? 'Ausentes hoy' : 'Ausentes ese día'}</div>
+            </div>
+            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
+              <div style={{ fontSize: 28, fontWeight: 800, color: esHoy ? '#ef4444' : '#475569' }}>{esHoy ? totalAusentesAhora : '—'}</div>
+              <div style={{ fontSize: 13, opacity: 0.75 }}>
+                {esHoy ? `Ausentes ahora (${HORAS.find(h => h.id === horaAct)?.label || ''})` : 'Solo cuenta en el día de hoy'}
+              </div>
+            </div>
+          </div>
+
+          {/* LISTA DE AUSENTES */}
+          <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 800 }}>🏥 Profesores ausentes {esHoy ? 'hoy' : 'ese día'}</h2>
+            {totalAusentesHoy === 0 ? (
+              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {Object.entries(profesAusentes).sort((a,b) => a[0].localeCompare(b[0])).map(([nombre, info]) => (
+                  <div key={nombre} style={{
+                    backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
+                    borderRadius: 8, padding: '10px 14px',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
+                  }}>
+                    <div>
+                      <span style={{ fontWeight: 700, fontSize: 19 }}>{nombre}</span>
+                      <span style={{
+                        marginLeft: 8, fontSize: 12, padding: '2px 7px', borderRadius: 4,
+                        backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
+                        color: 'white',
+                      }}>
+                        {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      {HORAS.map(h => (
+                        <span key={h.id} style={{
+                          width: 30, height: 30, borderRadius: '50%',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 13, fontWeight: 700,
+                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
+                          color: info.horas.includes(h.id) ? 'white' : '#475569',
+                          border: h.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
+                        }}>
+                          {h.label.replace('ª','')}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+          {/* COLUMNA DERECHA: GUARDIAS CON LAS CLASES ASIGNADAS */}
+          <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
+            <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
+            {apoyos.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
+                🛡️ Sin guardias asignadas
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {HORAS.map(h => {
+                  // La columna es 'hora', no 'hora_id', y el nombre de quien
+                  // cubre viene en 'profesor_nombre_pdf'. Con los nombres
+                  // antiguos este recuadro salía siempre vacío.
+                  const apoyosHora = apoyos.filter(a => {
+                    const hid = (a.hora || '').toString().toLowerCase().replace(/[aª\s]/g, '');
+                    return hid === h.id || (hid.includes('recreo') && h.id === 'recreo');
+                  });
+                  if (apoyosHora.length === 0) return null;
+                  return (
+                    <div key={h.id} style={{
+                      backgroundColor: h.id === horaEfectiva ? '#1e3a5f' : '#0f172a',
+                      borderRadius: 8, padding: '8px 12px',
+                      border: h.id === horaEfectiva ? '1.5px solid #3b82f6' : '1px solid #334155',
+                    }}>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: '#94a3b8', marginBottom: 6 }}>{h.label} ({h.rango})</div>
+                      {apoyosHora.map((a, i) => (
+                        <div key={i} style={{
+                          fontSize: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '5px 0',
+                          borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
+                          paddingLeft: 8, marginLeft: -4,
+                        }}>
+                          <span style={{ fontWeight: 600,
+                            color: a.estado === 'confirmado' ? '#22c55e' : '#fca5a5' }}>
+                            {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
+                            {nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
+                          </span>
+                          <span style={{ fontSize: 16, fontWeight: 600, color: '#cbd5e1', textAlign: 'right' }}>
+                            {a.grupo ? a.grupo : ''}{a.aula ? ` · ${a.aula}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
       </div>
     </div>
   );
