@@ -318,15 +318,15 @@ export default function SalaProfesores() {
       </div>
 
       {/* HEADER */}
-      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '14px 26px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: `linear-gradient(135deg, ${azul} 0%, #0f172a 100%)`, padding: '8px 20px', flexShrink: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 26, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
+          <h1 style={{ margin: 0, fontSize: 21, fontWeight: 800 }}>📋 APrieto · Sala de Profesores</h1>
 
           {/* Fecha y paso de día. En la pared se queda siempre en hoy;
               los botones son para quien se acerca a consultar. */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 5, flexWrap: 'wrap' }}>
             <button onClick={() => moverDia(-1)} aria-label="Día anterior" style={btnDia}>‹</button>
-            <span style={{ fontSize: 18, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</span>
+            <span style={{ fontSize: 16, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</span>
             <button onClick={() => moverDia(1)} aria-label="Día siguiente" style={btnDia}>›</button>
             {!esHoy && (
               <button onClick={() => setDia(hoy)}
@@ -383,10 +383,10 @@ export default function SalaProfesores() {
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 80, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+          <div style={{ fontSize: 60, fontWeight: 800, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
             {reloj.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
           </div>
-          <div style={{ fontSize: 16, opacity: 0.55 }}>
+          <div style={{ fontSize: 13, opacity: 0.55 }}>
             Actualizado {ultimaCarga ? ultimaCarga.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '—'}
           </div>
         </div>
@@ -395,8 +395,8 @@ export default function SalaProfesores() {
       {/* BANDA DE ARRIBA: avisos, extraescolares y noticias. Solo las
           secciones con contenido; si no hay ninguna, no aparece. */}
       {modos.length > 0 && (
-        <div style={{ padding: '14px 20px 0', flexShrink: 0 }}>
-          <div ref={cajaAvisosRef} style={{ maxHeight: '30vh', backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
+        <div style={{ padding: '10px 14px 0', flexShrink: 0 }}>
+          <div ref={cajaAvisosRef} style={{ maxHeight: '24vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
             {modos.length > 1 && (
               <div style={{ position: 'absolute', top: 14, right: 16, display: 'flex', gap: 6 }}>
                 {modos.map(m => (
@@ -407,16 +407,16 @@ export default function SalaProfesores() {
             )}
             {modoVisible === 'avisos' ? (
               <>
-                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
+                <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 800 }}>📢 Avisos del equipo directivo</h2>
                 {avisosTexto.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                     📌 Sin avisos
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
                     {avisosTexto.map((a, i) => (
                       <div key={a.id || i} style={{
-                        backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                        backgroundColor: '#0f172a', borderRadius: 8, padding: '8px 12px',
                         borderLeft: `4px solid ${a.urgente ? '#ef4444' : '#3b82f6'}`,
                       }}>
                         <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 5 }}>
@@ -431,7 +431,7 @@ export default function SalaProfesores() {
               </>
             ) : modoVisible === 'extraescolares' ? (
               <>
-                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>
+                <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 800 }}>
                   🚌 Extraescolares de la semana
                   {semana && (
                     <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.5, marginLeft: 8 }}>
@@ -446,7 +446,7 @@ export default function SalaProfesores() {
                     🚌 Ninguna actividad esta semana
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
                     {actividades.map((a, i) => {
                       const ini = a.fecha_inicio ? new Date(a.fecha_inicio + 'T12:00:00') : null;
                       const fin = a.fecha_fin ? new Date(a.fecha_fin + 'T12:00:00') : null;
@@ -458,20 +458,20 @@ export default function SalaProfesores() {
                       const acomp = Array.isArray(a.acompanantes) ? a.acompanantes.length : 0;
                       return (
                         <div key={i} style={{
-                          backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                          backgroundColor: '#0f172a', borderRadius: 8, padding: '8px 12px',
                           borderLeft: `4px solid ${a.estado === 'pendiente' ? '#f59e0b' : '#0ea5e9'}`,
                         }}>
-                          <div style={{ fontWeight: 800, fontSize: 17, marginBottom: 4, lineHeight: 1.3 }}>
+                          <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 2, lineHeight: 1.3 }}>
                             {a.titulo || 'Actividad'}
                             {a.estado === 'pendiente' && (
                               <span style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', marginLeft: 8 }}>pendiente</span>
                             )}
                           </div>
-                          <div style={{ fontSize: 15, opacity: 0.88, lineHeight: 1.45, textTransform: 'capitalize' }}>
-                            📅 {cuando}
+                          <div style={{ fontSize: 14, opacity: 0.88, lineHeight: 1.35 }}>
+                            <span style={{ textTransform: 'capitalize' }}>📅 {cuando}</span>
+                            {grupos && <span style={{ marginLeft: 10 }}>👥 {grupos}</span>}
                           </div>
-                          {grupos && <div style={{ fontSize: 14, opacity: 0.8, marginTop: 2 }}>👥 {grupos}</div>}
-                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 6 }}>
+                          <div style={{ fontSize: 11, opacity: 0.45, marginTop: 3 }}>
                             {a.profesor_nombre || ''}{acomp > 0 ? ` +${acomp}` : ''}{a.lugar ? ` · ${a.lugar}` : ''}
                           </div>
                         </div>
@@ -482,7 +482,7 @@ export default function SalaProfesores() {
               </>
             ) : (
               <>
-                <h2 style={{ margin: '0 0 12px', fontSize: 18, fontWeight: 800 }}>
+                <h2 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 800 }}>
                   📰 Noticias del centro
                   <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.5, marginLeft: 8 }}>somosdelprieto.com</span>
                 </h2>
@@ -491,10 +491,10 @@ export default function SalaProfesores() {
                     📰 Sin noticias que mostrar
                   </div>
                 ) : (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 8 }}>
                     {noticias.map((n, i) => (
                       <div key={n.id || i} style={{
-                        backgroundColor: '#0f172a', borderRadius: 8, padding: '12px 14px',
+                        backgroundColor: '#0f172a', borderRadius: 8, padding: '8px 12px',
                         borderLeft: '4px solid #10b981',
                         display: 'flex', gap: 12, alignItems: 'flex-start',
                       }}>
@@ -522,57 +522,58 @@ export default function SalaProfesores() {
       )}
 
       {/* DOS COLUMNAS: ausentes a la izquierda, guardias a la derecha */}
-      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, padding: 20 }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, padding: 14 }}>
 
         {/* COLUMNA IZQUIERDA: PROFESORES QUE FALTAN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, overflow: 'hidden', minHeight: 0 }}>
 
-          {/* RESUMEN */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 12px', textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: '#f59e0b' }}>{totalAusentesHoy}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>{esHoy ? 'Ausentes hoy' : 'Ausentes ese día'}</div>
-            </div>
-            <div style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 16, textAlign: 'center', border: '1px solid #334155' }}>
-              <div style={{ fontSize: 28, fontWeight: 800, color: esHoy ? '#ef4444' : '#475569' }}>{esHoy ? totalAusentesAhora : '—'}</div>
-              <div style={{ fontSize: 13, opacity: 0.75 }}>
-                {esHoy ? `Ausentes ahora (${HORAS.find(h => h.id === horaAct)?.label || ''})` : 'Solo cuenta en el día de hoy'}
-              </div>
-            </div>
-          </div>
-
           {/* LISTA DE AUSENTES */}
-          <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 800 }}>🏥 Profesores ausentes {esHoy ? 'hoy' : 'ese día'}</h2>
+          <div ref={cajaAusentesRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>🏥 Faltan {esHoy ? 'hoy' : 'ese día'}</h2>
+              <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(245,158,11,0.15)', border: '1px solid #f59e0b', color: '#fbbf24', fontSize: 15, fontWeight: 800 }}>
+                {totalAusentesHoy} {esHoy ? 'hoy' : 'ese día'}
+              </span>
+              {esHoy && (
+                <span style={{ padding: '2px 10px', borderRadius: 20, backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#fca5a5', fontSize: 15, fontWeight: 800 }}>
+                  {totalAusentesAhora} a {HORAS.find(h => h.id === horaEfectiva)?.label || ''}
+                </span>
+              )}
+            </div>
             {totalAusentesHoy === 0 ? (
               <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                 ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {Object.entries(profesAusentes).sort((a,b) => a[0].localeCompare(b[0])).map(([nombre, info]) => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 6 }}>
+                {Object.entries(profesAusentes).sort((a,b) => {
+                  // Primero quien falta a la hora que se está mirando
+                  const fa = a[1].horas.includes(horaEfectiva) ? 0 : 1;
+                  const fb = b[1].horas.includes(horaEfectiva) ? 0 : 1;
+                  return fa - fb || a[0].localeCompare(b[0]);
+                }).map(([nombre, info]) => (
                   <div key={nombre} style={{
                     backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
-                    borderRadius: 8, padding: '10px 14px',
+                    borderRadius: 8, padding: '5px 10px', gap: 8,
                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
                   }}>
-                    <div>
-                      <span style={{ fontWeight: 700, fontSize: 19 }}>{nombre}</span>
+                    <div style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontWeight: 700, fontSize: 17 }}>{nombre}</span>
                       <span style={{
-                        marginLeft: 8, fontSize: 12, padding: '2px 7px', borderRadius: 4,
+                        marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4,
                         backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
                         color: 'white',
                       }}>
                         {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: 4 }}>
+                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
                       {HORAS.map(h => (
                         <span key={h.id} style={{
-                          width: 30, height: 30, borderRadius: '50%',
+                          width: 22, height: 22, borderRadius: '50%',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 13, fontWeight: 700,
+                          fontSize: 11, fontWeight: 700,
                           backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
                           color: info.horas.includes(h.id) ? 'white' : '#475569',
                           border: h.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
@@ -589,15 +590,20 @@ export default function SalaProfesores() {
         </div>
 
           {/* COLUMNA DERECHA: GUARDIAS CON LAS CLASES ASIGNADAS */}
-          <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 16, border: '1px solid #334155', overflow: 'hidden' }}>
-            <h2 style={{ margin: '0 0 12px', fontSize: 22, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
+          <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
+            <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
             {apoyos.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
                 🛡️ Sin guardias asignadas
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {HORAS.map(h => {
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 8, alignItems: 'start' }}>
+                {/* La hora que se está mirando va la primera; después las
+                    siguientes y al final las que ya pasaron. */}
+                {(() => {
+                  const i = Math.max(0, HORAS.findIndex(h => h.id === horaEfectiva));
+                  return [...HORAS.slice(i), ...HORAS.slice(0, i)];
+                })().map(h => {
                   // La columna es 'hora', no 'hora_id', y el nombre de quien
                   // cubre viene en 'profesor_nombre_pdf'. Con los nombres
                   // antiguos este recuadro salía siempre vacío.
@@ -609,22 +615,23 @@ export default function SalaProfesores() {
                   return (
                     <div key={h.id} style={{
                       backgroundColor: h.id === horaEfectiva ? '#1e3a5f' : '#0f172a',
-                      borderRadius: 8, padding: '8px 12px',
+                      borderRadius: 8, padding: '6px 10px',
                       border: h.id === horaEfectiva ? '1.5px solid #3b82f6' : '1px solid #334155',
+                      opacity: esHoy && Number(h.id) < Number(horaAct) ? 0.55 : 1,
                     }}>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: '#94a3b8', marginBottom: 6 }}>{h.label} ({h.rango})</div>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: h.id === horaEfectiva ? '#93c5fd' : '#94a3b8', marginBottom: 3 }}>{h.label} ({h.rango}){h.id === horaEfectiva && esHoy && !horaVista ? ' · AHORA' : ''}</div>
                       {apoyosHora.map((a, i) => (
                         <div key={i} style={{
-                          fontSize: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '5px 0',
+                          fontSize: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '2px 0',
                           borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
                           paddingLeft: 8, marginLeft: -4,
                         }}>
-                          <span style={{ fontWeight: 600,
+                          <span style={{ fontWeight: 700, whiteSpace: 'nowrap',
                             color: a.estado === 'confirmado' ? '#22c55e' : '#fca5a5' }}>
                             {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
                             {nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
                           </span>
-                          <span style={{ fontSize: 16, fontWeight: 600, color: '#cbd5e1', textAlign: 'right' }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: '#cbd5e1', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {a.grupo ? a.grupo : ''}{a.aula ? ` · ${a.aula}` : ''}
                           </span>
                         </div>
