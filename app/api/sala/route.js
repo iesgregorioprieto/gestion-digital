@@ -95,6 +95,23 @@ export async function GET(request) {
         .order('fecha_inicio', { ascending: true }),
     ]);
 
+    // Nombre completo de quien cubre. En la fila se guarda la abreviatura
+    // del cuadrante («M Núñ.»), y en la tele así no se sabe quién es.
+    // Primero por su ficha (profesor_id); si la guardia aún no tiene
+    // dueño, por las equivalencias del cuadrante ya confirmadas.
+    const listaApoyos = (apoyos.data || []).filter(a => a.estado !== 'anulada');
+    const ids = [...new Set(listaApoyos.map(a => a.profesor_id).filter(Boolean))];
+    const sinId = [...new Set(listaApoyos.filter(a => !a.profesor_id && a.profesor_nombre_pdf).map(a => a.profesor_nombre_pdf))];
+    const equivs = sinId.length
+      ? ((await cliente.from('equivalencias_horario').select('nombre_horario, profesor_id').in('nombre_horario', sinId)).data || [])
+      : [];
+    const todosIds = [...new Set([...ids, ...equivs.map(e => e.profesor_id).filter(Boolean)])];
+    const fichas = todosIds.length
+      ? ((await cliente.from('profesores').select('id, nombre, apellidos').in('id', todosIds)).data || [])
+      : [];
+    const porId = Object.fromEntries(fichas.map(f => [f.id, `${(f.nombre || '').trim()} ${(f.apellidos || '').trim()}`.trim()]));
+    const porPdf = Object.fromEntries(equivs.map(e => [e.nombre_horario, porId[e.profesor_id]]));
+
     return Response.json({
       fecha: hoy,
       // Solo el nombre y los números de hora de HOY. La columna 'dias'
@@ -106,7 +123,15 @@ export async function GET(request) {
       })),
       dlds: dlds.data || [],
       // Las anuladas por jefatura no se cubren: no se enseñan en la sala.
-      apoyos: (apoyos.data || []).filter(a => a.estado !== 'anulada'),
+      // Solo lo que se pinta en la tele: nada de tareas ni motivos.
+      apoyos: listaApoyos.map(a => ({
+        hora: a.hora,
+        estado: a.estado,
+        grupo: a.grupo,
+        aula: a.aula,
+        profesor_nombre_pdf: a.profesor_nombre_pdf,
+        nombre_completo: porId[a.profesor_id] || porPdf[a.profesor_nombre_pdf] || null,
+      })),
       // Un aviso con fecha «visible hasta» sale ese día incluido y
       // desaparece solo al siguiente.
       avisos: (avisos.data || []).filter(a => !a.visible_hasta || a.visible_hasta >= hoy),

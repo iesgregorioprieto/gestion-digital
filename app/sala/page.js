@@ -172,10 +172,11 @@ export default function SalaProfesores() {
 
     // Los tres listados bajan y suben solos: la pantalla está en la
     // pared y nadie va a mover la barra. Si cabe todo, no se mueve nada.
+    // Guardias y noticias ya no se mueven: con tanto movimiento la
+    // pantalla mareaba y despistaba. Solo baja sola la lista de ausentes,
+    // y únicamente si no cabe entera.
     const cajas = [
-      { ref: cajaAvisosRef,   bajando: true, espera: 0 },
       { ref: cajaAusentesRef, bajando: true, espera: 0 },
-      { ref: cajaGuardiasRef, bajando: true, espera: 0 },
     ];
     const vaiven = setInterval(() => {
       for (const c of cajas) {
@@ -541,55 +542,60 @@ export default function SalaProfesores() {
           {/* COLUMNA DERECHA: GUARDIAS CON LAS CLASES ASIGNADAS */}
           <div ref={cajaGuardiasRef} style={{ flex: 1, minHeight: 0, backgroundColor: '#1e293b', borderRadius: 12, padding: 12, border: '1px solid #334155', overflow: 'hidden' }}>
             <h2 style={{ margin: '0 0 10px', fontSize: 20, fontWeight: 800 }}>🛡️ Guardias: quién cubre cada clase</h2>
-            {apoyos.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                🛡️ Sin guardias asignadas
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 8, alignItems: 'start' }}>
-                {/* La hora que se está mirando va la primera; después las
-                    siguientes y al final las que ya pasaron. */}
-                {(() => {
-                  const i = Math.max(0, HORAS.findIndex(h => h.id === horaEfectiva));
-                  return [...HORAS.slice(i), ...HORAS.slice(0, i)];
-                })().map(h => {
-                  // La columna es 'hora', no 'hora_id', y el nombre de quien
-                  // cubre viene en 'profesor_nombre_pdf'. Con los nombres
-                  // antiguos este recuadro salía siempre vacío.
-                  const apoyosHora = apoyos.filter(a => {
-                    const hid = (a.hora || '').toString().toLowerCase().replace(/[aª\s]/g, '');
-                    return hid === h.id || (hid.includes('recreo') && h.id === 'recreo');
-                  });
-                  if (apoyosHora.length === 0) return null;
-                  return (
-                    <div key={h.id} style={{
-                      backgroundColor: h.id === horaEfectiva ? '#1e3a5f' : '#0f172a',
-                      borderRadius: 8, padding: '6px 10px',
-                      border: h.id === horaEfectiva ? '1.5px solid #3b82f6' : '1px solid #334155',
-                      opacity: esHoy && Number(h.id) < Number(horaAct) ? 0.55 : 1,
-                    }}>
-                      <div style={{ fontSize: 13, fontWeight: 800, color: h.id === horaEfectiva ? '#93c5fd' : '#94a3b8', marginBottom: 3 }}>{h.label} ({h.rango}){h.id === horaEfectiva && esHoy && !horaVista ? ' · AHORA' : ''}</div>
-                      {apoyosHora.map((a, i) => (
-                        <div key={i} style={{
-                          fontSize: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '2px 0',
-                          borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
-                          paddingLeft: 8, marginLeft: -4,
-                        }}>
-                          <span style={{ fontWeight: 700, whiteSpace: 'nowrap',
-                            color: a.estado === 'confirmado' ? '#22c55e' : '#fca5a5' }}>
-                            {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
-                            {nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
-                          </span>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: '#cbd5e1', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {a.grupo ? a.grupo : ''}{a.aula ? ` · ${a.aula}` : ''}
-                          </span>
+            {(() => {
+              // Siempre tres horas fijas, sin moverse: la actual y las dos
+              // siguientes. A 4ª, 5ª y 6ª se ven 4ª, 5ª y 6ª.
+              const i = Math.max(0, HORAS.findIndex(h => h.id === horaEfectiva));
+              const desde = Math.min(i, HORAS.length - 3);
+              const ventana = HORAS.slice(desde, desde + 3);
+              return (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10, height: 'calc(100% - 40px)' }}>
+                  {ventana.map(h => {
+                    // La columna es 'hora', no 'hora_id'.
+                    const apoyosHora = apoyos.filter(a => {
+                      const hid = (a.hora || '').toString().toLowerCase().replace(/[aª\s]/g, '');
+                      return hid === h.id;
+                    });
+                    const activa = h.id === horaEfectiva;
+                    return (
+                      <div key={h.id} style={{
+                        backgroundColor: activa ? '#1e3a5f' : '#0f172a',
+                        borderRadius: 8, padding: '8px 10px', minHeight: 0, overflow: 'hidden',
+                        border: activa ? '2px solid #3b82f6' : '1px solid #334155',
+                      }}>
+                        <div style={{ fontSize: 16, fontWeight: 800, color: activa ? '#93c5fd' : '#94a3b8', marginBottom: 6 }}>
+                          {h.label} <span style={{ fontSize: 12, fontWeight: 600 }}>{h.rango}</span>
+                          {activa && esHoy && !horaVista ? ' · AHORA' : ''}
                         </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                        {apoyosHora.length === 0 ? (
+                          <div style={{ fontSize: 13, opacity: 0.45 }}>Sin guardias a esta hora</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {apoyosHora.map((a, k) => (
+                              <div key={k} style={{
+                                borderLeft: `3px solid ${a.estado === 'confirmado' ? '#22c55e' : a.estado === 'incidencia' ? '#f97316' : '#ef4444'}`,
+                                paddingLeft: 8, minWidth: 0,
+                              }}>
+                                <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.25,
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                                  color: a.estado === 'confirmado' ? '#4ade80' : '#fca5a5' }}>
+                                  {a.estado === 'confirmado' ? '✅' : '🔴'}{' '}
+                                  {a.nombre_completo || nombreCortoSala(a.profesor_nombre_pdf) || 'Sin asignar'}
+                                </div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: '#cbd5e1',
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {a.grupo || ''}{a.aula ? ` · ${a.aula}` : ''}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
       </div>
