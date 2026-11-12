@@ -316,25 +316,44 @@ export default function GestionDatos() {
     }
     setProcesando(true);
 
-    if (reemplazar) {
-      await fetch('/api/centro', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tabla: 'actividades_pga', accion: 'borrar', filtro: { curso_academico: curso } }),
-      });
+    // Lo que ya hay de este curso, por si hay que restaurarlo
+    const { data: anteriores } = await consulta('actividades_pga')
+      .select('actividad, localidad, departamento, descripcion, curso_academico')
+      .eq('curso_academico', curso);
+    const clave = a => `${a.actividad}|${a.localidad || ''}`.toLowerCase();
+
+    // Al añadir, las que ya están no se repiten (la tabla no lo admite)
+    let lista = previewPGA;
+    if (!reemplazar) {
+      const ya = new Set((anteriores || []).map(clave));
+      lista = previewPGA.filter(a => !ya.has(clave(a)));
+      if (lista.length === 0) {
+        mostrarMensaje('ℹ️ Todas esas actividades ya estaban cargadas.', 'ok');
+        setPreviewPGA(null); setProcesando(false); return;
+      }
     }
 
-    const r = await fetch('/api/centro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tabla: 'actividades_pga', accion: 'crear', lista: previewPGA }),
+    const llamar = cuerpo => fetch('/api/centro', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(cuerpo),
     });
+
+    if (reemplazar) {
+      await llamar({ tabla: 'actividades_pga', accion: 'borrar', filtro: { curso_academico: curso } });
+    }
+
+    const r = await llamar({ tabla: 'actividades_pga', accion: 'crear', lista });
 
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
-      mostrarMensaje('❌ Error: ' + (err.error || 'no se pudo guardar'), 'error');
+      // Si se había borrado lo anterior, se vuelve a poner: nunca dejar la lista vacía
+      if (reemplazar && (anteriores || []).length) {
+        await llamar({ tabla: 'actividades_pga', accion: 'crear', lista: anteriores });
+      }
+      mostrarMensaje('❌ No se ha guardado nada' + (reemplazar ? ' (se ha dejado la lista anterior)' : '')
+        + ': ' + (err.error || 'error'), 'error');
     } else {
-      mostrarMensaje(`✅ ${previewPGA.length} actividades guardadas.`, 'ok');
+      const saltadas = previewPGA.length - lista.length;
+      mostrarMensaje(`✅ ${lista.length} actividades guardadas.` + (saltadas ? ` ${saltadas} ya estaban.` : ''), 'ok');
       setPreviewPGA(null);
       await cargarPGA();
     }
