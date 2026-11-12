@@ -1265,6 +1265,12 @@ export default function PanelDirector() {
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontSize: 16 }}>{solicitudAbierta.profesor_nombre} ha solicitado el {new Date(solicitudAbierta.fecha_solicitada).toLocaleDateString('es-ES', { day: 'numeric', month: 'long' })} como {etiquetaTipoDLD(solicitudAbierta.tipo_dld)}.</div>
             </div>
+
+            {/* #246 (José María): las clases que deja ese día, igual que en
+                la tarjeta antes de pulsar «Revisar». */}
+            {Array.isArray(solicitudAbierta.grupos_afectados) && solicitudAbierta.grupos_afectados.length > 0
+              ? <GruposAfectados grupos={solicitudAbierta.grupos_afectados} />
+              : <div style={{ marginBottom: 16, fontSize: 13, color: '#888' }}>📚 No consta ninguna clase con alumnos ese día.</div>}
             
             {/* AVISO DE PLAZO — parpadea para que no pase desapercibido.
                 La norma permite flexibilizar el mínimo por causa
