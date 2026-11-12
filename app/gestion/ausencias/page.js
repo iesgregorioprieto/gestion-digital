@@ -353,7 +353,9 @@ export default function GestionAusencias() {
                  : '<span class="pend">Pendiente</span>';
       const enlaces = urls.length
         ? urls.map((u, i) => `<a href="${location.origin}/api/documento?url=${encodeURIComponent(u)}" target="_blank" rel="noopener">📎${urls.length > 1 ? (i + 1) : ''}</a>`).join(' ')
-        : '—';
+        : a.justificantes_eliminados_en
+          ? `<span title="Justificante eliminado del servidor el ${fmt(a.justificantes_eliminados_en)}">🗑️ Eliminado</span>`
+          : '—';
       const yaTram = a.tramitado ? 'checked' : '';
       const idAt = String(a.id).replace(/"/g, '&quot;');
       const obsAt = (a.tramitado_obs || '').replace(/"/g, '&quot;');
@@ -375,6 +377,7 @@ export default function GestionAusencias() {
       </tr>`;
     };
 
+    const mesActual = hoyLocal().slice(0, 7);
     const bloquesMes = meses.map(clave => {
       // Orden pedido por Elena: alfabético por apellidos y nombre, y
       // dentro de cada profesor, todas sus ausencias seguidas por fecha
@@ -383,8 +386,14 @@ export default function GestionAusencias() {
         (a.apellidos || '').localeCompare(b.apellidos || '', 'es')
         || (a.nombre || '').localeCompare(b.nombre || '', 'es')
         || (a.fecha_inicio || '').localeCompare(b.fecha_inicio || ''));
+      // #247: borrar del servidor los justificantes del mes. Solo en
+      // meses ya terminados y si queda alguno por borrar.
+      const conDocs = delMes.filter(a => !a.esDLD && urlsDe(a).length > 0).length;
+      const botonBorrar = clave < mesActual && conDocs > 0
+        ? `<button class="btn btn-borrar" onclick="eliminarJustificantes('${clave}', ${JSON.stringify(mesLargo(clave)).replace(/"/g, '&quot;')}, this)">🗑️ Eliminar justificantes del mes</button>`
+        : '';
       return `
-      <h2>${mesLargo(clave)} <span class="mes-total">· ${delMes.length} ausencias</span></h2>
+      <h2>${mesLargo(clave)} <span class="mes-total">· ${delMes.length} ausencias</span>${botonBorrar}</h2>
       <table>
         <thead><tr>
           <th>Profesor/a</th><th>Fecha</th><th>Motivo</th><th>Horas de clase</th>
@@ -419,6 +428,8 @@ export default function GestionAusencias() {
   .btn-s { background: white; color: #1e3a5f; border: 1.5px solid #1e3a5f; }
   h2 { font-size: 14px; color: #1e3a5f; margin: 22px 0 8px; padding-bottom: 5px; border-bottom: 2px solid #dbeafe; text-transform: capitalize; }
   h2 .mes-total { font-weight: 500; font-size: 12px; color: #666; }
+  .btn-borrar { float: right; background: white; color: #991b1b; border: 1.5px solid #991b1b;
+    padding: 4px 10px; font-size: 11.5px; text-transform: none; }
   table { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-bottom: 12px; }
   th { background: #1e3a5f; color: white; text-align: left; padding: 7px 8px; font-size: 11px; }
   td { padding: 6px 8px; border-bottom: 1px solid #e8e8e8; vertical-align: top; }
@@ -454,6 +465,50 @@ export default function GestionAusencias() {
 ${bloquesMes || '<p>No hay ausencias en el periodo.</p>'}
 
 <script>
+// #247 — Eliminar del servidor los justificantes de un mes, con doble
+// confirmación: primero un aviso con las cifras reales que da el
+// servidor; después hay que escribir el nombre del mes. El servidor
+// vuelve a comprobarlo todo (rol, mes terminado y confirmación).
+function eliminarJustificantes(mes, nombreMes, boton) {
+  boton.disabled = true;
+  fetch('/api/ausencias/justificantes-eliminar?mes=' + mes)
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (res) {
+      var d = res.d;
+      if (!res.ok) { alert(d.error || 'No se ha podido consultar.'); boton.disabled = false; return; }
+      if (!d.archivos) { alert('No quedan justificantes en el servidor de ' + nombreMes + '.'); boton.disabled = false; return; }
+      var aviso = '⚠️ PRIMERA CONFIRMACIÓN\\n\\n' +
+        'Se van a ELIMINAR DEL SERVIDOR ' + d.archivos + ' justificante(s) de ' + d.ausencias +
+        ' ausencia(s) de ' + nombreMes + '.\\n\\n' +
+        (d.sinTramitar ? '❗ ' + d.sinTramitar + ' de esas ausencias aún NO están marcadas como tramitadas.\\n\\n' : '') +
+        'No se puede deshacer y las copias de seguridad no guardan los archivos. ' +
+        'Descarga antes el zip si los necesitas.\\n\\n¿Continuar?';
+      if (!confirm(aviso)) { boton.disabled = false; return; }
+      var escrito = prompt('SEGUNDA CONFIRMACIÓN\\n\\nPara confirmar, escribe el nombre del mes: ' + nombreMes.split(' ')[0]);
+      if (escrito === null) { boton.disabled = false; return; }
+      var limpio = function (t) { return String(t).toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').trim(); };
+      if (limpio(escrito) !== limpio(nombreMes.split(' ')[0])) {
+        alert('No coincide. No se ha borrado nada.'); boton.disabled = false; return;
+      }
+      boton.textContent = 'Eliminando…';
+      return fetch('/api/ausencias/justificantes-eliminar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mes: mes, confirmacion: mes }),
+      }).then(function (r) { return r.json().then(function (x) { return { ok: r.ok, x: x }; }); })
+        .then(function (res2) {
+          if (!res2.ok) {
+            alert(res2.x.error || 'No se ha podido eliminar.');
+            boton.disabled = false; boton.textContent = '🗑️ Eliminar justificantes del mes';
+            return;
+          }
+          alert('✅ Eliminados ' + res2.x.borrados + ' justificante(s) de ' + res2.x.ausencias + ' ausencia(s) de ' + nombreMes + '.\\n\\nLas ausencias siguen justificadas y tramitadas. Vuelve a generar el informe para verlo actualizado.');
+          boton.textContent = '✔ Justificantes eliminados';
+        });
+    })
+    .catch(function () { alert('Error de conexión. No se ha borrado nada.'); boton.disabled = false; });
+}
+
 // Se guarda en la base de datos (quien lo marca y cuándo), no en el
 // navegador: así lo ve igual todo el equipo directivo, lo marque quien
 // lo marque y desde donde lo marque. Los DLD van a /api/dld (su id
@@ -633,7 +688,9 @@ ${just ? `
 </div>` : `
 <div class="salto"></div>
 <h1>Documento justificativo</h1>
-<div class="aviso">No consta documento justificativo adjunto a esta ausencia en el momento de generar el informe.</div>`}
+<div class="aviso">${a.justificantes_eliminados_en
+  ? `El documento justificativo se eliminó del servidor el ${fmt(a.justificantes_eliminados_en)}, una vez tramitada la ausencia.`
+  : 'No consta documento justificativo adjunto a esta ausencia en el momento de generar el informe.'}</div>`}
 
 <script>
 function descargarInforme() {
