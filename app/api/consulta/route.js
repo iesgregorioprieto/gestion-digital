@@ -64,7 +64,7 @@ const TABLAS = {
     directivo: false,
   },
   actividades_pga: {
-    columns: 'id, actividad, localidad, departamento, curso_academico',
+    columns: 'id, actividad, localidad, departamento, descripcion, curso_academico',
     directivo: false,
   },
   // Personal: cada uno ve las suyas. Dirección las ve todas.

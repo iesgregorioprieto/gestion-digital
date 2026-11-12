@@ -165,14 +165,16 @@ export default function Actividades() {
       const [{ data: acts }, { data: gs }, { data: pga }, { data: profs }, { data: yo }] = await Promise.all([
         consulta('actividades').select('*').order('fecha_inicio', { ascending: true }),
         consulta('grupos').select('codigo').order('codigo'),
-        consulta('actividades_pga').select('id, actividad, localidad, departamento').order('departamento').order('actividad'),
+        consulta('actividades_pga').select('id, actividad, localidad, departamento, descripcion, curso_academico').order('departamento').order('actividad'),
         consulta('profesores').select('id, nombre, apellidos').eq('estado', 'activo').order('apellidos'),
         consulta('profesores').select('departamento').eq('id', id),
       ]);
 
       setActividades(acts || []);
       setGrupos((gs || []).map(g => g.codigo).filter(Boolean));
-      setPgaLista(pga || []);
+      // Solo la PGA del curso más reciente: las de cursos anteriores no valen.
+      const ultimoCurso = (pga || []).map(a => a.curso_academico || '').sort().pop();
+      setPgaLista((pga || []).filter(a => (a.curso_academico || '') === ultimoCurso));
 
       // Para saber de qué actividades falta por registrar la ausencia.
       // El sistema no la crea solo a propósito: las tareas para el
@@ -531,6 +533,15 @@ export default function Actividades() {
                       })()}
                     </select>
                   )}
+                  {(() => {
+                    const elegida = pgaLista.find(a => String(a.id) === form.pga_seleccionada);
+                    if (!elegida?.descripcion) return null;
+                    return (
+                      <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 8, backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', fontSize: 12.5, color: '#14532d', lineHeight: 1.55, whiteSpace: 'pre-line', maxHeight: 220, overflowY: 'auto' }}>
+                        <strong>Aprobada en la PGA ({elegida.departamento || 'sin departamento'}):</strong>{'\n'}{elegida.descripcion}
+                      </div>
+                    );
+                  })()}
                 </Campo>
               )}
 

@@ -8,6 +8,7 @@ import CambioCurso from '@/components/CambioCurso';
 import { getCursoActual } from '@/lib/curso';
 import { leerTextoDelphos, parsearCsvDelphos, tipoFicheroDelphos, cruzarFicheros } from '@/lib/csvDelphos';
 import { indiceProfesores, buscaProfesor } from '@/lib/asignacionGuardias';
+import { leerPGA } from '@/lib/pga';
 // Nombre de sector comparable: sin tildes ni mayúsculas («HOSTELERÍA» = «Hosteleria»)
 function claveSector(s) {
   const n = String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
@@ -284,8 +285,8 @@ export default function GestionDatos() {
 
   async function cargarPGA() {
     const { data } = await consulta('actividades_pga')
-      .select('id, actividad, localidad, departamento, curso_academico')
-      .order('actividad');
+      .select('id, actividad, localidad, departamento, descripcion, curso_academico')
+      .order('departamento').order('actividad');
     setPgaLista(data || []);
   }
 
@@ -294,51 +295,11 @@ export default function GestionDatos() {
     if (!file) return;
     setProcesando(true);
     try {
-      const buffer = await file.arrayBuffer();
-      // Los CSV de Excel en español suelen venir en ISO-8859-1
-      let texto = new TextDecoder('utf-8').decode(buffer);
-      if (texto.includes('\uFFFD')) texto = new TextDecoder('iso-8859-1').decode(buffer);
-
-      const sep = texto.includes(';') ? ';' : ',';
-      const lineas = texto.split(/\r?\n/).filter(l => l.trim());
-      if (lineas.length < 2) {
-        mostrarMensaje('❌ El archivo no tiene filas de datos.', 'error');
-        setProcesando(false); e.target.value = ''; return;
-      }
-
-      const limpia = c => (c || '').trim().replace(/^"|"$/g, '').trim();
-      const cabecera = lineas[0].split(sep).map(c => limpia(c).toUpperCase());
-      const iAct = cabecera.findIndex(c => c.startsWith('ACTIVIDAD') || c.startsWith('VISITA'));
-      const iLoc = cabecera.findIndex(c => c.startsWith('LOCALIDAD') || c.startsWith('LUGAR'));
-      const iDep = cabecera.findIndex(c => c.startsWith('DEPARTAMENTO') || c.startsWith('DPTO'));
-
-      if (iAct === -1) {
-        mostrarMensaje('❌ Falta la columna ACTIVIDAD (o VISITA) en la primera fila.', 'error');
-        setProcesando(false); e.target.value = ''; return;
-      }
-
-      const vistas = new Set();
-      const filas = [];
-      for (let i = 1; i < lineas.length; i++) {
-        const cols = lineas[i].split(sep).map(limpia);
-        const actividad = cols[iAct];
-        if (!actividad) continue;
-        const localidad = iLoc !== -1 ? (cols[iLoc] || '') : '';
-        const clave = `${actividad}|${localidad}`.toLowerCase();
-        if (vistas.has(clave)) continue;
-        vistas.add(clave);
-        filas.push({
-          actividad, localidad,
-          departamento: iDep !== -1 ? (cols[iDep] || null) : null,
-          curso_academico: cursoNuevo || stats.cursoActual,
-        });
-      }
-
-      if (filas.length === 0) {
-        mostrarMensaje('❌ No se ha encontrado ninguna actividad en el archivo.', 'error');
-        setProcesando(false); e.target.value = ''; return;
-      }
-      setPreviewPGA(filas);
+      // lib/pga.js: tildes de cualquier CSV de Excel (también «CSV MS-DOS»),
+      // celdas con saltos de línea, departamentos igualados y título corto.
+      const r = leerPGA(await file.arrayBuffer(), cursoNuevo || stats.cursoActual);
+      if (r.error) mostrarMensaje('❌ ' + r.error, 'error');
+      else setPreviewPGA(r.filas);
     } catch (err) {
       mostrarMensaje('❌ No se ha podido leer el archivo.', 'error');
     }
@@ -1400,11 +1361,11 @@ export default function GestionDatos() {
             </p>
 
             <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 14, marginBottom: 18, fontSize: 13, color: '#475569', lineHeight: 1.7 }}>
-              <strong>El archivo debe ser un CSV</strong> con la primera fila de títulos y dos columnas:
-              <br />· <strong>ACTIVIDAD</strong> — qué se visita (obligatoria)
-              <br />· <strong>LOCALIDAD</strong> — dónde (opcional)
-              <br />· <strong>DEPARTAMENTO</strong> — qué departamento la propone (opcional, pero
-              ayuda: el profesorado las verá agrupadas)
+              <strong>El archivo debe ser un CSV</strong> con la primera fila de títulos y estas columnas:
+              <br />· <strong>DEPARTAMENTO</strong> — qué departamento la propone (el profesorado ve primero las de su departamento)
+              <br />· <strong>ACTIVIDAD</strong> o <strong>Breve descripción de la actividad</strong> — obligatoria; puede ser larga
+              y tener varias líneas: el desplegable muestra la primera frase y, al elegirla, la descripción completa
+              <br />· <strong>LOCALIDAD</strong> o <strong>Localidad de realización</strong> — opcional
               <br /><span style={{ color: '#94a3b8' }}>En Excel: Archivo → Guardar como → CSV.</span>
             </div>
 
