@@ -280,9 +280,18 @@ export default function GestionActividades() {
       const e = await r.json().catch(() => ({}));
       aviso('No se ha podido guardar: ' + (e.error || 'error'), 'error');
     } else {
+      const d = await r.json().catch(() => ({}));
       setActividades(prev => prev.map(a => (a.id === id ? { ...a, estado: nuevoEstado } : a)));
       setAbierta(null);
-      aviso(nuevoEstado === 'aprobada' ? '✅ Actividad aprobada' : '❌ Actividad rechazada', 'ok');
+      if (nuevoEstado === 'aprobada') {
+        const n = d.ausencias?.creadas || 0;
+        const sin = d.ausencias?.sinCrear || [];
+        aviso('✅ Actividad aprobada'
+          + (n ? ` · ${n} ${n === 1 ? 'ausencia creada' : 'ausencias creadas'} y guardias generadas` : '')
+          + (sin.length ? ` · ⚠️ Ya tenían otra ausencia esos días: ${sin.join(', ')}` : ''), 'ok');
+      } else {
+        aviso('❌ Actividad rechazada', 'ok');
+      }
     }
     setProcesando(null);
   }

@@ -8,7 +8,7 @@
  * profesor que la vuelva a enviar.
  *
  * Lo usa el equipo directivo y, con `deProfesor`, el propio profesor
- * que la propuso mientras siga pendiente de autorizar (/actividades).
+ * que la propuso hasta el día de la actividad, autorizada o no (/actividades).
  * El servidor (/api/centro, acción «actualizar») comprueba ambas cosas.
  *
  * Lo que NO hace: tocar las ausencias ya registradas por esa actividad.
@@ -176,7 +176,9 @@ export default function EditarActividad({ actividad, onCerrar, onGuardada, dePro
         </div>
         <div style={{ fontSize: 12.5, color: '#666', marginBottom: 14 }}>
           {deProfesor
-            ? 'Puedes corregirla mientras esté pendiente de autorizar. Una vez autorizada, los cambios se piden a jefatura.'
+            ? (a.estado === 'aprobada'
+              ? 'Ya está autorizada: puedes corregirla hasta el día de la actividad. Las ausencias y guardias de quienes van se ajustan solas y se avisa a dirección.'
+              : 'Puedes corregirla hasta el día de la actividad. Sigue pendiente de que la autorice el director.')
             : <>Propuesta por <strong>{a.profesor_nombre || '—'}</strong></>}
         </div>
 

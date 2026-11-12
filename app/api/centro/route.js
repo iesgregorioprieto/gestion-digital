@@ -19,6 +19,8 @@ import { claveServidor } from '@/lib/claveServidor';
 
 import { enviarAviso, AVISOS_ACTIVIDADES } from '@/lib/notificaciones';
 import { enviarPushA } from '@/lib/pushServidor';
+import { sincronizarAusenciasActividad } from '@/lib/ausenciasActividad';
+import { hoyLocal } from '@/lib/fechas';
 import { coincidenciasEnServidor, horarioActividad } from '@/lib/coincidenciasEventos';
 
 const TABLAS = ['grupos', 'actividades', 'avisos_sala', 'config_centro', 'periodos_no_lectivos', 'actividades_pga'];
@@ -158,36 +160,70 @@ export async function POST(request) {
         return Response.json({ error: 'Solo el director puede autorizar o rechazar una actividad' }, { status: 403 });
       }
 
-      // El profesorado solo edita su propia propuesta y solo mientras
-      // no esté autorizada ni rechazada. Una vez resuelta, se pide a
-      // jefatura. Nunca puede tocar el estado ni el autor.
+      // El profesorado edita su propia actividad hasta el día en que se
+      // realiza, esté pendiente o ya autorizada (decisión de Luis Javier,
+      // 13 nov. 2026). Si está autorizada, no vuelve a autorización: se
+      // guardan los cambios, se rehacen sus ausencias y guardias y se
+      // avisa a dirección. Una rechazada ya no se edita. Nunca puede tocar
+      // el estado ni el autor.
       if (tabla === 'actividades' && !esDirectivo(sesion)) {
         const { data: filas } = await supa().from('actividades')
-          .select('profesor_id, estado').eq('id', id);
+          .select('profesor_id, estado, fecha_inicio, titulo').eq('id', id);
         const act = (filas || [])[0];
         if (!act || act.profesor_id !== sesion.id) {
           return Response.json({ error: 'Solo puedes editar las actividades que has propuesto tú' }, { status: 403 });
         }
-        if ((act.estado || 'pendiente') !== 'pendiente') {
-          return Response.json({ error: 'La actividad ya está resuelta: pide el cambio a jefatura' }, { status: 409 });
+        if (act.estado === 'rechazada') {
+          return Response.json({ error: 'La actividad está rechazada: no se puede editar' }, { status: 409 });
+        }
+        if (act.fecha_inicio && act.fecha_inicio < hoyLocal()) {
+          return Response.json({ error: 'La actividad ya se ha realizado: pide el cambio a jefatura' }, { status: 409 });
         }
         const PERMITIDOS = ['titulo', 'en_pga', 'fecha_inicio', 'fecha_fin', 'hora_salida', 'hora_regreso',
           'lugar', 'transporte', 'financiacion', 'coste_alumno', 'relacion_curricular', 'descripcion',
           'grupos', 'acompanantes', 'alumnos_asistentes', 'necesita_guardia', 'profesor_guardia'];
         const limpios = Object.fromEntries(Object.entries(datos).filter(([k]) => PERMITIDOS.includes(k)));
-        // Se vuelve a exigir «pendiente» en la propia escritura, por si el
-        // director la resuelve justo mientras el profesor la está editando.
         const { data: hechas, error } = await supa().from('actividades').update(limpios)
-          .eq('id', id).eq('profesor_id', sesion.id).or('estado.is.null,estado.eq.pendiente').select('id');
+          .eq('id', id).eq('profesor_id', sesion.id)
+          .or('estado.is.null,estado.in.(pendiente,aprobada)').select('id, estado');
         if (error) return Response.json({ error: error.message }, { status: 500 });
         if (!hechas?.length) {
-          return Response.json({ error: 'La actividad acaba de resolverse: pide el cambio a jefatura' }, { status: 409 });
+          return Response.json({ error: 'La actividad acaba de rechazarse: no se puede editar' }, { status: 409 });
+        }
+
+        // Autorizada: sus ausencias y guardias siguen a la actividad, y
+        // dirección se entera del cambio. Si está pendiente no se avisa a
+        // nadie (decisión de oct. 2026).
+        if (hechas[0].estado === 'aprobada') {
+          const r = await sincronizarAusenciasActividad(supa(), request, id);
+          try {
+            const { data: dirs } = await supa().from('profesores').select('id').eq('rol_gestion', 'director');
+            const ids = (dirs || []).map(d => d.id).filter(x => x !== sesion.id);
+            if (ids.length) {
+              await enviarPushA(supa(), ids, {
+                titulo: '✏️ Actividad autorizada modificada',
+                cuerpo: `${sesion.nombre || 'Un profesor/a'} ha cambiado «${limpios.titulo || act.titulo || 'una actividad'}». Las guardias se han ajustado.`,
+                url: '/gestion/actividades',
+              });
+            }
+          } catch (err) {
+            console.error('push actividad modificada:', err?.message);
+          }
+          return Response.json({ ok: true, ausencias: r });
         }
         return Response.json({ ok: true });
       }
 
       const { error } = await supa().from(tabla).update(datos).eq('id', id);
       if (error) return Response.json({ error: error.message }, { status: 500 });
+
+      // Autorizar, rechazar, devolver a pendiente o corregir una actividad:
+      // las ausencias de quienes van (y con ellas las guardias) se crean,
+      // se ajustan o se borran solas, como con el DLD concedido.
+      if (tabla === 'actividades') {
+        const r = await sincronizarAusenciasActividad(supa(), request, id);
+        return Response.json({ ok: true, ausencias: r });
+      }
       return Response.json({ ok: true });
     }
 
@@ -272,6 +308,11 @@ export async function POST(request) {
         const { data: filas } = await supa().from('avisos_sala').select('imagen_url').eq('id', id);
         const m = (filas?.[0]?.imagen_url || '').match(/\/object\/public\/carteles\/(.+)$/);
         if (m) await supa().storage.from('carteles').remove([decodeURIComponent(m[1])]);
+      }
+
+      // Una actividad borrada se lleva sus ausencias automáticas
+      if (tabla === 'actividades' && id) {
+        await sincronizarAusenciasActividad(supa(), request, id, { anulada: true });
       }
 
       let consulta = supa().from(tabla).delete();

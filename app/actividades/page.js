@@ -816,8 +816,10 @@ export default function Actividades() {
           onCerrar={() => setEditando(null)}
           onGuardada={(_act, cambiaronHoras) => {
             setEditando(null);
-            aviso(cambiaronHoras
-              ? 'Actividad corregida. Si ya habías registrado la ausencia, corrígela también con la nueva fecha u horas.'
+            aviso(_act.estado === 'aprobada'
+              ? (cambiaronHoras
+                ? 'Actividad corregida. Tus ausencias y las de los acompañantes se han ajustado solas, y dirección ha recibido el aviso.'
+                : 'Actividad corregida. Dirección ha recibido el aviso.')
               : 'Actividad corregida.', 'ok');
             cargar(profId);
           }}
@@ -926,7 +928,7 @@ function Tarjeta({ a, profesores = [], profId = '', onEditar }) {
             <span style={{ fontSize: 11.5, color: VERDE, fontWeight: 700 }}>
               {abierta ? '▲ Ocultar' : '▼ Ver grupos y alumnado'}
             </span>
-            {onEditar && a.profesor_id === profId && (a.estado || 'pendiente') === 'pendiente' && (
+            {onEditar && a.profesor_id === profId && a.estado !== 'rechazada' && a.fecha_inicio >= hoyLocal() && (
               <button type="button" onClick={e => { e.stopPropagation(); onEditar(a); }} style={{
                 padding: '3px 11px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: 'pointer',
                 border: '1.5px solid #1e3a5f', backgroundColor: 'white', color: '#1e3a5f',
