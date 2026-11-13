@@ -5,7 +5,7 @@ import { computaComoFalta } from '@/lib/motivosAusencia';
 import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
-import { diasDeLaAusencia } from '@/lib/diasAusencia';
+import { diasDeLaAusencia, tareaPara } from '@/lib/diasAusencia';
 import { normClave, normHora, ahoraEnCentro } from '@/lib/asignacionGuardias';
 import { adjuntosDe, MAX_ADJUNTOS } from '@/lib/adjuntos';
 import { hoyLocal, sumarDias } from '@/lib/fechas';
@@ -628,6 +628,102 @@ export async function POST(request) {
       if (cambiaCuandoFalta) await rehacerReparto(request);
 
       return Response.json({ ok: true });
+    }
+
+    /**
+     * SE INCORPORA ANTES DE TIEMPO (petición de Delia, nov. 2026)
+     *
+     * Ausencia de varios días y el profesor vuelve antes de la fecha
+     * prevista. Jefatura indica el día y la hora a la que se incorpora:
+     *
+     *   · A 1ª hora → la ausencia termina el día anterior.
+     *   · A otra hora → ese día pasa a ser una ausencia aparte de las horas
+     *     anteriores (los días parciales nunca se agrupan con los
+     *     completos), con las tareas que dejó para esos grupos. Si el día
+     *     de vuelta es el primero de la ausencia, la propia ausencia se
+     *     queda en ese día con esas horas.
+     *
+     * Las guardias pendientes de los días que ya no falta se borran y el
+     * reparto se rehace. Lo fichado no se toca.
+     */
+    if (accion === 'incorporar') {
+      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      const fecha = datos?.fecha;
+      const hora = parseInt(datos?.hora, 10);
+      if (!id || !fecha || !(hora >= 1 && hora <= 6)) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+      const { data: filas } = await supa().from('ausencias').select('*').eq('id', id);
+      const orig = (filas || [])[0];
+      if (!orig) return Response.json({ error: 'No se encuentra la ausencia' }, { status: 404 });
+
+      const ini = orig.fecha_inicio;
+      const fin = orig.fecha_fin;
+      const error = texto => Response.json({ error: texto, message: texto }, { status: 400 });
+      if (!fin || fin === ini) return error('Solo para ausencias de varios días. En las de un día usa «Cambiar horas».');
+      if (problemaFechas(fecha, null)) return error(problemaFechas(fecha, null));
+      if (fecha < ini || fecha > fin) return error('El día de incorporación tiene que estar dentro de las fechas de la ausencia.');
+      if (fecha === ini && hora === 1) return error('Si se incorpora el primer día a 1ª hora, no llega a faltar: borra la ausencia.');
+
+      // Horas de ese día anteriores a la de incorporación, con su tarea
+      let horasDia = [];
+      if (hora > 1) {
+        let dias = null;
+        try { dias = await calcularDias({ profesor_id: orig.profesor_id, fecha_inicio: fecha, fecha_fin: fecha, horas: [] }); }
+        catch (e) { console.error('incorporar: horario:', e?.message); }
+        const declaradas = Array.isArray(orig.horas) ? orig.horas : [];
+        horasDia = ((dias || [])[0]?.horas || [])
+          .filter(h => { const n = parseInt(String(h.hora).match(/\d/)?.[0] || '0', 10); return n >= 1 && n < hora; })
+          .map(h => {
+            const n = String(h.hora).match(/\d/)[0];
+            const t = h.tipo === 'clase' ? tareaPara({ hora_id: n + 'a', grupo: h.grupo, materia: h.materia }, declaradas) : {};
+            return {
+              hora: `${n}ª hora`, tipo: h.tipo, grupo: h.grupo || null, materia: h.materia || null,
+              instrucciones: t.instrucciones || null,
+              archivo_url: t.archivo_url || null, archivo_nombre: t.archivo_nombre || null,
+              ...(Array.isArray(t.archivos) ? { archivos: t.archivos } : {}),
+            };
+          });
+      }
+
+      const nota = `Se incorpora el ${fecha.split('-').reverse().join('/')}${hora > 1 ? ` a ${hora}ª hora` : ''} (registrado por jefatura).`;
+      const obs = orig.observaciones ? `${orig.observaciones}\n${nota}` : nota;
+
+      if (fecha === ini) {
+        // Solo falta parte del primer día: la ausencia se queda en ese día
+        if (!horasDia.length) return error(`No tiene horas antes de ${hora}ª ese día: no llega a faltar. Borra la ausencia.`);
+        const cambios = { fecha_fin: ini, horas: horasDia, observaciones: obs };
+        try { cambios.dias = await calcularDias({ ...orig, ...cambios }); } catch {}
+        const { error: e1 } = await supa().from('ausencias').update(cambios).eq('id', id);
+        if (e1) return Response.json({ error: e1.message }, { status: 500 });
+      } else {
+        // Termina el día anterior…
+        const nuevoFin = sumarDias(fecha, -1);
+        const cambios = { fecha_fin: nuevoFin, observaciones: obs };
+        try { cambios.dias = await calcularDias({ ...orig, ...cambios }); } catch {}
+        const { error: e1 } = await supa().from('ausencias').update(cambios).eq('id', id);
+        if (e1) return Response.json({ error: e1.message }, { status: 500 });
+
+        // …y el día de vuelta, si falta a alguna hora, va aparte
+        if (horasDia.length) {
+          const nueva = { ...orig, fecha_inicio: fecha, fecha_fin: fecha, horas: horasDia, observaciones: obs };
+          delete nueva.id; delete nueva.created_at; delete nueva.updated_at;
+          try { nueva.dias = await calcularDias(nueva); } catch {}
+          const { error: e2 } = await supa().from('ausencias').insert([nueva]);
+          if (e2) {
+            // Que no se quede a medias: se deshace el recorte
+            await supa().from('ausencias').update({ fecha_fin: fin, observaciones: orig.observaciones, dias: orig.dias }).eq('id', id);
+            return Response.json({ error: e2.message }, { status: 500 });
+          }
+        }
+      }
+
+      // Guardias pendientes de los días que ya no falta. El día de vuelta
+      // se conserva si falta a alguna hora: lo rehace el reparto.
+      await limpiarGuardias(orig.profesor_id, hora > 1 ? fecha : sumarDias(fecha, -1));
+      await rehacerReparto(request);
+
+      return Response.json({ ok: true, horas_dia: horasDia.length });
     }
 
     /**

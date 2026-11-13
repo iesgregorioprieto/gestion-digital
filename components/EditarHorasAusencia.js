@@ -31,6 +31,8 @@ export default function EditarHorasAusencia({ ausencia, onCerrar, onGuardado }) 
         // Lo que ya tenía la ausencia aunque no esté en el horario actual
         (ausencia.horas || []).forEach(h => { const n = num(h.hora || h.hora_id); if (n && !porHora[n]) porHora[n] = { hora_id: n + 'a', tipo: h.tipo, grupo: h.grupo, materia: h.materia }; });
         setHorario(porHora);
+        // Registrada sin horas concretas = falta el día entero
+        if (!(ausencia.horas || []).length) setMarcadas(new Set(Object.keys(porHora)));
       })
       .catch(() => setError('No se ha podido cargar su horario de ese día.'));
   }, [ausencia]);
@@ -83,7 +85,7 @@ export default function EditarHorasAusencia({ ausencia, onCerrar, onGuardado }) 
         {horasDia.map(n => {
           const h = horario[n];
           const on = marcadas.has(n);
-          const antes = (ausencia.horas || []).some(x => num(x.hora || x.hora_id) === n);
+          const antes = !(ausencia.horas || []).length || (ausencia.horas || []).some(x => num(x.hora || x.hora_id) === n);
           return (
             <label key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', marginBottom: 5, borderRadius: 8, cursor: 'pointer',
               border: `1.5px solid ${on ? '#fca5a5' : '#e2e8f0'}`, backgroundColor: on ? '#fef2f2' : 'white' }}>

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { adjuntosDe, enlaceDocumento } from '@/lib/adjuntos';
 import EditarHorasAusencia from '@/components/EditarHorasAusencia';
 import EditarTareasAusencia from '@/components/EditarTareasAusencia';
+import IncorporarAusencia from '@/components/IncorporarAusencia';
 import { hoyLocal } from '@/lib/fechas';
 import { MOTIVOS_AUSENCIA, MOTIVOS_MAP, etiquetaMotivo, tipoDeMotivo, computaComoFalta } from '@/lib/motivosAusencia';
 import EscenarioDia from '@/components/EscenarioDia';
@@ -80,6 +81,7 @@ export default function GestionAusencias() {
   const [dldAprobados, setDldAprobados] = useState([]);
   const [periodoInforme, setPeriodoInforme] = useState(null);   // ventana para elegir el periodo
   const [editandoHoras, setEditandoHoras] = useState(null);
+  const [incorporando, setIncorporando] = useState(null);
   const [editandoTareas, setEditandoTareas] = useState(null);
   const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
   const [filtroJustificado, setFiltroJustificado] = useState('todos'); // 'todos' | 'justificado' | 'pendiente'
@@ -1103,6 +1105,14 @@ ${a.observaciones_directivo ? `
             mostrarMensaje('Horas cambiadas y guardias recalculadas', 'ok');
           }} />
       )}
+      {incorporando && (
+        <IncorporarAusencia ausencia={incorporando} onCerrar={() => setIncorporando(null)}
+          onGuardado={() => {
+            setIncorporando(null);
+            mostrarMensaje('✅ Incorporación registrada. Se han quitado las guardias que ya no hacen falta y se ha recalculado el reparto.', 'ok');
+            cargarTodo();
+          }} />
+      )}
       {mensaje && (
         <div style={{ margin: '12px 16px 0', padding: '12px 16px', borderRadius: 10, backgroundColor: mensaje.tipo === 'ok' ? '#d1fae5' : '#fee2e2', color: mensaje.tipo === 'ok' ? '#065f46' : rojo, fontWeight: 600, fontSize: 14 }}>
           {mensaje.texto}
@@ -1390,12 +1400,19 @@ ${a.observaciones_directivo ? `
                   {/* Informe para la Delegación */}
                   <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {/* Cambiar horas: solo ausencias de un día, de hoy o futuras */}
-                    {(a.fecha_inicio === (a.fecha_fin || a.fecha_inicio)) && Array.isArray(a.horas) && a.horas.length > 0
+                    {(a.fecha_inicio === (a.fecha_fin || a.fecha_inicio)) && a.fecha_fin
                       && a.fecha_inicio >= new Date().toLocaleDateString('sv-SE') && (
                       <button onClick={() => setEditandoHoras(a)} style={{
                         padding: '7px 14px', borderRadius: 7, border: '1.5px solid #b45309', backgroundColor: '#fffbeb',
                         color: '#92400e', fontSize: 12, fontWeight: 700, cursor: 'pointer',
                       }} title="Añadir o quitar horas (p. ej. el médico se retrasa o sale antes)">🕐 Cambiar horas</button>
+                    )}
+                    {/* Se incorpora antes de tiempo: ausencias de varios días aún en curso (Delia, nov. 2026) */}
+                    {a.fecha_fin && a.fecha_fin !== a.fecha_inicio && a.fecha_fin >= new Date().toLocaleDateString('sv-SE') && (
+                      <button onClick={() => setIncorporando(a)} style={{
+                        padding: '7px 14px', borderRadius: 7, border: '1.5px solid #15803d', backgroundColor: '#f0fdf4',
+                        color: '#166534', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                      }} title="Vuelve antes de la fecha prevista: indica el día y la hora a la que se incorpora">↩️ Se incorpora antes</button>
                     )}
                     {/* Tareas: las que el profesor manda después por correo (Sebas, oct. 2026) */}
                     {(!a.fecha_fin || a.fecha_fin >= new Date().toLocaleDateString('sv-SE')) && (
