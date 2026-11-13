@@ -3,6 +3,7 @@ import { fichajeAbierto, franjaEmpezada } from '@/lib/asignacionGuardias';
 import { departamentoASector } from '@/lib/sectores';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
+import { getCursoActual } from '@/lib/curso';
 
 /**
  * APOYOS DE GUARDIA
@@ -195,8 +196,13 @@ export async function POST(request) {
         if (activo) return Response.json({ error: 'Esa persona ya tiene algo asignado a esa hora ese día.' }, { status: 409 });
       }
 
-      // Quién asigna lo decide el servidor, no el navegador
-      const conAutor = filas.map(f => ({ ...f, asignado_por: sesion.id }));
+      // Quién asigna lo decide el servidor, no el navegador.
+      // El curso también: «Crear guardia ahora» no lo mandaba y la guardia
+      // quedaba sin curso, fuera del cuadrante (que filtra por curso), sin
+      // poder ficharse desde Mis guardias y sin contar para la rotación
+      // (guardia de Alberto a Antonia, 12/11/2026).
+      const curso = await getCursoActual();
+      const conAutor = filas.map(f => ({ ...f, curso_academico: f.curso_academico || curso, asignado_por: sesion.id }));
 
       const { data, error } = await supa().from('apoyos_asignados').insert(conAutor).select();
       if (error) return Response.json({ error: error.message }, { status: 500 });

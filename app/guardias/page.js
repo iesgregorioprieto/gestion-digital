@@ -941,7 +941,8 @@ export default function Guardias() {
                         {lista.map(g => {
                           const destino = limpiarGrupo(g.grupo);
                           const aula = g.aula || destino.aula;
-                          const ausenteNombre = nombreEntero(fichaPorId(g.profesor_ausente_id)) || 'Profesor no identificado';
+                          const ausenteNombre = nombreEntero(fichaPorId(g.profesor_ausente_id))
+                            || (g.tipo_apoyo === 'imprevisto' ? 'Grupo sin profesor (guardia creada por jefatura)' : 'Profesor no identificado');
                           const fichaCubre = fichaPorId(g.profesor_id);
                           const cubreNombre = nombreEntero(fichaCubre)
                             || nombreLargo(mapaProfesores, g.profesor_nombre_pdf) || '—';
