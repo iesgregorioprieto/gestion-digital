@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
-import { getConfigCurso, calcularAntiguedad, calcularDiasDLD, plazoSolicitudDLD } from '@/lib/curso';
+import { getConfigCurso, calcularAntiguedad, calcularDiasDLD, plazoSolicitudDLD, sePuedePedirDLD, clasificarDia } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
 import { rehacerReparto } from '@/lib/rehacerReparto';
 import { enviarPushA } from '@/lib/pushServidor';
@@ -239,8 +239,47 @@ export async function POST(request) {
 
     // ─── Pedir un día ───
     if (accion === 'solicitar') {
-      if (!datos?.fecha_solicitada) {
+      if (!datos?.fecha_solicitada || !/^\d{4}-\d{2}-\d{2}$/.test(String(datos.fecha_solicitada))) {
         return Response.json({ error: 'Falta la fecha' }, { status: 400 });
+      }
+
+      /**
+       * Tipo y día válidos, comprobados también aquí (no solo en el
+       * formulario): una pantalla vieja o en caché podía mandar un tipo
+       * retirado, un fin de semana o un día de vacaciones.
+       */
+      const TIPOS_DLD = ['no_lectivo', '1_lectivo', '2_lectivo', 'canoso'];
+      if (!TIPOS_DLD.includes(datos.tipo_dld)) {
+        return Response.json({ error: 'Elige el tipo de día que solicitas.' }, { status: 400 });
+      }
+      {
+        const cfgDia = await getConfigCurso();
+        if (!sePuedePedirDLD(datos.fecha_solicitada, cfgDia)) {
+          const motivo = clasificarDia(datos.fecha_solicitada, cfgDia).motivo;
+          return Response.json({ error: `Ese día no se puede pedir${motivo ? ': ' + motivo.toLowerCase() : ''}.` }, { status: 400 });
+        }
+      }
+
+      /**
+       * Un mismo tipo de día no se puede pedir dos veces en el curso
+       * mientras haya otra solicitud de ese tipo pendiente o concedida.
+       * El formulario solo miraba las concedidas, y el servidor nada:
+       * salían dos «1º lectivo» pendientes a la vez.
+       */
+      {
+        const { data: previas } = await supa().from('dld')
+          .select('id, estado, fecha_solicitada')
+          .eq('profesor_id', sesion.id)
+          .eq('tipo_dld', datos.tipo_dld)
+          .is('curso_archivado', null)
+          .in('estado', ['pendiente', 'aprobada'])
+          .limit(1);
+        const previa = (previas || [])[0];
+        if (previa) {
+          return Response.json({ error: previa.estado === 'aprobada'
+            ? 'Ya tienes concedido este tipo de día en este curso.'
+            : `Ya tienes una solicitud pendiente de este tipo (${previa.fecha_solicitada}). Si quieres cambiar la fecha, retírala primero.` }, { status: 400 });
+        }
       }
 
       /**
@@ -280,14 +319,17 @@ export async function POST(request) {
         }
       }
 
-      const fila = { ...datos };
-      // Siempre a nombre de quien tiene la sesión, y siempre pendiente:
-      // ni el dueño ni el estado se aceptan del navegador.
+      // Solo los campos del formulario: el resto de columnas (estado,
+      // resolución, archivado…) nunca se aceptan del navegador.
+      const CAMPOS = ['profesor_nombre', 'tipo_contrato', 'tipo_dld', 'fecha_solicitada',
+        'grupos_afectados', 'guardias_horario', 'horas', 'tipo_guardia', 'causa_sobrevenida',
+        'descripcion_causa', 'antiguedad_centro', 'antiguedad_cuerpo', 'departamento'];
+      const fila = {};
+      for (const k of CAMPOS) if (datos[k] !== undefined) fila[k] = datos[k];
+      // Siempre a nombre de quien tiene la sesión, y siempre pendiente.
       fila.profesor_id = sesion.id;
+      if (sesion.nombre) fila.profesor_nombre = sesion.nombre;
       fila.estado = 'pendiente';
-      delete fila.resuelto_at;
-      delete fila.resuelto_por;
-      delete fila.motivo_rechazo;
 
       const { data, error } = await supa().from('dld').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
