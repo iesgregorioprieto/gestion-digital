@@ -77,6 +77,12 @@ export async function GET(request) {
 
   const { bucket, ruta } = partes;
 
+  // Una ruta con «..» podría salir de tareas/ hacia los justificantes de
+  // otro profesor. Ninguna ruta legítima lo lleva: se rechaza.
+  if (ruta.includes('..') || ruta.includes('\\') || ruta.startsWith('/')) {
+    return Response.json({ error: 'Documento no reconocido' }, { status: 400 });
+  }
+
   // ─── Comprobar permiso ───
   let autorizado = esDirectivo(sesion);
 

@@ -30,6 +30,10 @@ export default function AvisoConvocatoria() {
   const [hecho, setHecho] = useState('');
 
   const fuera = !ruta || ruta.startsWith('/gestion') || ruta.startsWith('/login') || ruta.startsWith('/sala') || ruta === '/';
+  // Solo se vuelve a preguntar al servidor al entrar en una zona donde
+  // el aviso puede salir, o al llegar a /fichar; no en cada cambio de
+  // pantalla (con 150 profesores navegando era mucho gasto de Vercel).
+  const enFichar = !!ruta && ruta.startsWith('/fichar');
 
   /**
    * CUÁNDO SE VUELVE A MIRAR
@@ -89,7 +93,7 @@ export default function AvisoConvocatoria() {
       document.removeEventListener('visibilitychange', alVolver);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ruta]);
+  }, [fuera, enFichar]);
 
   // Confirmación del voto, que se va sola
   useEffect(() => {
