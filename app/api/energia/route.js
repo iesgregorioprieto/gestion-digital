@@ -57,11 +57,15 @@ export async function POST(req) {
     return Response.json({ error: 'no configurado' }, { status: 503 });
   }
   if (!autorizado(req)) {
+    // Sin enseñar la clave: solo cómo llega, para saber qué falla.
+    const cab = req.headers.get('authorization') ?? '';
+    console.warn(`energia: clave rechazada (cabecera ${cab ? `«${cab.split(' ')[0]}», ${cab.length} caracteres` : 'ausente'}; se esperan ${7 + process.env.ENERGIA_TOKEN.length})`);
     return Response.json({ error: 'no autorizado' }, { status: 401 });
   }
   let datos;
   try { datos = await req.json(); } catch { datos = null; }
   if (!datos || typeof datos !== 'object' || !datos.ahora || typeof datos.ahora !== 'object') {
+    console.warn('energia: JSON no válido —', JSON.stringify(datos)?.slice(0, 300));
     return Response.json({ error: 'JSON no válido' }, { status: 400 });
   }
   try {
@@ -82,6 +86,7 @@ export async function GET() {
     const salida = fila ? { ...fila.datos, recibido: fila.recibido } : {};
     return Response.json(salida, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) {
+    console.error('energia GET:', e.message);
     return Response.json({}, { status: 500, headers: { 'Cache-Control': 'no-store' } });
   }
 }
