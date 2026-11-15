@@ -328,6 +328,24 @@ async function calcularDias(fila) {
   });
 }
 
+/** ¿Tiene esa persona una actividad complementaria autorizada (o una comisión de servicio autorizada) en esas fechas? */
+async function actividadAutorizadaPara(profesorId, ini, fin, comisionId) {
+  if (!ini) return false;
+  if (comisionId) {
+    const { data } = await supa().from('comisiones_servicio')
+      .select('id').eq('id', comisionId).eq('profesor_id', profesorId).eq('estado', 'autorizada');
+    if ((data || []).length) return true;
+  }
+  const { data: acts } = await supa().from('actividades')
+    .select('profesor_id, acompanantes, fecha_inicio, fecha_fin')
+    .eq('estado', 'aprobada')
+    .lte('fecha_inicio', fin)
+    .gte('fecha_inicio', sumarDias(ini, -60));
+  return (acts || []).some(a =>
+    (a.profesor_id === profesorId || (Array.isArray(a.acompanantes) && a.acompanantes.includes(profesorId)))
+    && (a.fecha_fin || a.fecha_inicio) >= ini);
+}
+
 export async function POST(request) {
   try {
     const sesion = await sesionDe(request);
@@ -452,6 +470,20 @@ export async function POST(request) {
       // Comisión de servicio autorizada que origina esta ausencia (no es columna)
       const comisionId = fila.comision_id || null;
       delete fila.comision_id;
+      /**
+       * ACTIVIDAD COMPLEMENTARIA: no computa como falta ni sale en el
+       * informe de la Delegación, así que el profesorado solo puede
+       * registrarla si de verdad hay una autorizada para él ese día (como
+       * responsable o acompañante) o viene de una comisión de servicio
+       * autorizada. Las de Actividades ya se crean solas al autorizarse.
+       */
+      if (fila.subtipo === 'act_complementarias' && !esDirectivo(sesion)) {
+        if (!(await actividadAutorizadaPara(dueño, fila.fecha_inicio, finNueva || fila.fecha_inicio, comisionId))) {
+          const texto = 'No hay ninguna actividad complementaria autorizada a tu nombre en esas fechas. Las actividades autorizadas aparecen solas en tus ausencias; si la tuya no está, consulta con jefatura de estudios.';
+          return Response.json({ error: texto, message: texto }, { status: 403 });
+        }
+      }
+
       let solicitudFormacion = null;
       if (['permiso_formacion', 'act_formacion'].includes(fila.subtipo) && !esDirectivo(sesion)) {
         const { data: autorizadas } = await supa().from('solicitudes_formacion')
@@ -540,8 +572,10 @@ export async function POST(request) {
       // Licencia por enfermedad: aviso a dirección y jefatura de estudios
       // con lo administrativo, para que valoren la sustitución y lo
       // tramiten ellos con Inspección. El portal no escribe a Inspección.
+      // Con await: sin él, Vercel podía cerrar la función antes de que
+      // saliera el correo y el aviso de la baja no llegaba.
       if (fila.subtipo === 'lic_enfermedad') {
-        avisarBaja(fila).catch(err => console.error('aviso baja:', err?.message));
+        await avisarBaja(fila).catch(err => console.error('aviso baja:', err?.message));
       }
 
       return Response.json({ ok: true, id: (data || [])[0]?.id });
@@ -558,6 +592,22 @@ export async function POST(request) {
         delete cambios.observaciones_directivo;
         delete cambios.comentario_secretario;
         delete cambios.profesor_id;      // no se puede cambiar de dueño
+        // El estado solo lo puede dejar en pendiente o justificada; lo
+        // demás (tramitada, aprobada…) es cosa de dirección.
+        if ('estado' in cambios && !['pendiente', 'justificada', 'sin_justificar'].includes(cambios.estado)) {
+          delete cambios.estado;
+        }
+        // Pasar una ausencia a DLD o a actividad complementaria la sacaría
+        // del cómputo de faltas: eso solo llega por su propio camino.
+        if (['dld', 'act_complementarias'].includes(cambios.subtipo)) {
+          const { data: act } = await supa().from('ausencias').select('subtipo').eq('id', id);
+          if ((act || [])[0]?.subtipo !== cambios.subtipo) {
+            const texto = cambios.subtipo === 'dld'
+              ? 'El DLD no se registra a mano: aparece solo en tus ausencias cuando dirección lo concede.'
+              : 'Una ausencia no se puede cambiar a actividad complementaria: las autorizadas aparecen solas en tus ausencias.';
+            return Response.json({ error: texto, message: texto }, { status: 400 });
+          }
+        }
       }
 
       // Al justificar, el plazo de 3 días desde el día de la falta se
