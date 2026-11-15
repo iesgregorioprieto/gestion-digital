@@ -26,6 +26,21 @@ function horaActual() {
   return '6';
 }
 
+/**
+ * Horario en que la tele de la sala consulta al servidor: de lunes a
+ * jueves de 7:30 a 14:30 (hasta el final de 6ª) y el viernes de 7:30 a
+ * 14:00. Desde el viernes a las 14:00 hasta el lunes a las 7:30 no hace
+ * ninguna llamada: se queda con lo último que cargó y no gasta Vercel.
+ */
+function enHorario() {
+  const d = new Date();
+  const dia = d.getDay();               // 0 domingo … 5 viernes, 6 sábado
+  const m = d.getHours() * 60 + d.getMinutes();
+  if (dia < 1 || dia > 5) return false;
+  const fin = dia === 5 ? 840 : 870;    // viernes 14:00; resto 14:30
+  return m >= 450 && m < fin;
+}
+
 export default function SalaProfesores() {
   const [ausencias, setAusencias] = useState([]);
   const [dlds, setDlds] = useState([]);
@@ -117,6 +132,9 @@ export default function SalaProfesores() {
     // en el límite gratuito de Vercel: pasado ese límite, pausan la
     // aplicación entera.
     const VENTANAS = [[535,565],[590,620],[645,675],[675,705],[730,760],[785,815],[840,870]];
+    // Fuera del horario de centro (noches, fines de semana y el viernes
+    // desde las 14:00) no se lanza nada: no hay guardias que repartir y
+    // cada llamada cuenta en Vercel.
     // Y una sola llamada por ventana: el servidor solo recalcula la primera
     // vez, así que las otras 29 de cada media hora eran gasto de Vercel sin
     // ningún efecto. Si la llamada falla, se reintenta al minuto siguiente.
@@ -124,6 +142,7 @@ export default function SalaProfesores() {
     const alDia = () => {
       const d = new Date();
       const m = d.getHours() * 60 + d.getMinutes();
+      if (!enHorario()) return;
       const v = VENTANAS.findIndex(([a, b]) => m >= a && m < b);
       if (v < 0) return;
       const clave = `${d.toDateString()}|${v}`;
@@ -139,14 +158,9 @@ export default function SalaProfesores() {
   }, []);
 
   useEffect(() => {
-    // Solo refresca en horario de centro: de lunes a viernes, de 7:30 a
-    // 14:00. Fuera de ahí la tele se queda con lo último que cargó; si
-    // está encendida por la noche o el fin de semana, no gasta nada.
-    const enHorario = () => {
-      const d = new Date();
-      const m = d.getHours() * 60 + d.getMinutes();
-      return d.getDay() >= 1 && d.getDay() <= 5 && m >= 450 && m < 840;
-    };
+    // Solo refresca en horario de centro (ver enHorario, arriba). Fuera de
+    // ahí la tele se queda con lo último que cargó; si está encendida por
+    // la noche o el fin de semana, no gasta nada.
     // Recarga inteligente: cada 2 minutos en los primeros 15 de cada
     // franja (es cuando se ficha y se reparten guardias) y cada 10
     // minutos el resto del tiempo. Unas 85 llamadas al día en vez de 195.

@@ -239,7 +239,8 @@ export async function POST(request) {
     if (body.accion === 'ampliar') {
       // Cambiar la fecha de cierre: ampliar una abierta o reabrir una cerrada
       const cierra = String(body.cierra || '');
-      const { data: r } = await c.from('valoracion_rondas').select('abre').eq('id', body.id).single();
+      const { data: filas } = await c.from('valoracion_rondas').select('abre').eq('id', body.id).limit(1);
+      const r = (filas || [])[0];
       if (!r) return Response.json({ error: 'La ronda no existe.' }, { status: 404 });
       if (!/^\d{4}-\d{2}-\d{2}$/.test(cierra) || cierra < hoy || cierra > sumarDias(r.abre, 90)) {
         return Response.json({ error: 'La nueva fecha debe ser de hoy en adelante y como mucho 90 días después de abrirla.' }, { status: 400 });

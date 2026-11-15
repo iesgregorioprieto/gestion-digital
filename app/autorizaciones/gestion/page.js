@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { resolverGrupo } from '@/lib/grupos';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
+import { hoyLocal } from '@/lib/fechas';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 const rojo = '#991b1b';
@@ -201,7 +202,7 @@ export default function GestionAutorizaciones() {
           .then(r => r.json()).catch(() => ({ alumnos: [] }));
         (data || []).forEach(a => filas.push(filaDe(a)));
       }
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyLocal();
       bajarCsv(filas, `copia-autorizaciones-${hoy}.csv`);
       alert(
         `Copia descargada: ${filas.length} alumnos de ${grupos.length} grupos.\n\n` +
@@ -328,7 +329,7 @@ export default function GestionAutorizaciones() {
         ...c[alumnoId],
         seguro_pagado: !pagadoAhora,
         seguro_forma_pago: !pagadoAhora ? (getValor(alumno, 'seguro_forma_pago') || null) : null,
-        seguro_fecha: !pagadoAhora ? new Date().toISOString().slice(0, 10) : null,
+        seguro_fecha: !pagadoAhora ? hoyLocal() : null,
         // Pagar y estar exento se excluyen: si paga, ya no está exento.
         ...(!pagadoAhora ? { seguro_exento: false } : {}),
       },
@@ -365,7 +366,7 @@ export default function GestionAutorizaciones() {
         ...c[alumnoId],
         seguro_pagado: true,
         seguro_forma_pago: forma,
-        seguro_fecha: c[alumnoId]?.seguro_fecha || new Date().toISOString().slice(0, 10),
+        seguro_fecha: c[alumnoId]?.seguro_fecha || hoyLocal(),
       },
     }));
   }

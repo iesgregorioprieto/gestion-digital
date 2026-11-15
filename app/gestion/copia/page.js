@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { useState, useEffect } from 'react';
 import { TABLAS_COPIA } from '@/lib/tablasCopia';
 import { getCursoActual } from '@/lib/curso';
+import { hoyLocal } from '@/lib/fechas';
 
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
@@ -243,7 +244,7 @@ export default function CopiaSeguridad() {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
 
-    const fecha = ahora.toISOString().split('T')[0] + (completa ? '' : '-INCOMPLETA');
+    const fecha = hoyLocal() + (completa ? '' : '-INCOMPLETA');
     const enlace = document.createElement('a');
     enlace.href = url;
     enlace.download = `copia-portal-ies-${fecha}.json`;

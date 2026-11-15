@@ -32,7 +32,9 @@ function ultimoDiaSemana(f) {
 function primerDiaMes(f) { return f.slice(0, 8) + '01'; }
 function ultimoDiaMes(f) {
   const d = new Date(f + 'T12:00:00');
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
+  // A mediodía: a medianoche, al pasarlo a UTC, salía el día anterior
+  // y el informe del mes se dejaba fuera el último día.
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 12).toISOString().slice(0, 10);
 }
 function fechaLarga(f) {
   if (!f) return '';

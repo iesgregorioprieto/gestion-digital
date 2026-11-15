@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { resolverGrupo } from '@/lib/grupos';
 import { getSupabase } from '@/lib/supabase';
 import { consulta, consultaRpc } from '@/lib/consulta';
+import { hoyLocal } from '@/lib/fechas';
 const azul = '#1e3a5f';
 const verde = '#1e6b2e';
 const rojo = '#991b1b';
@@ -259,7 +260,7 @@ export default function GestionAutorizaciones() {
           .then(r => r.json()).catch(() => ({ alumnos: [] }));
         (data || []).forEach(a => filas.push(filaDe(a)));
       }
-      const hoy = new Date().toISOString().slice(0, 10);
+      const hoy = hoyLocal();
       bajarCsv(filas, `copia-autorizaciones-${hoy}.csv`);
       alert(
         `Copia descargada: ${filas.length} alumnos de ${grupos.length} grupos.\n\n` +
@@ -480,7 +481,7 @@ export default function GestionAutorizaciones() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `seguros-escolares-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `seguros-escolares-${hoyLocal()}.csv`;
       a.click();
       URL.revokeObjectURL(url);
 
