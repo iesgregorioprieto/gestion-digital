@@ -3,6 +3,7 @@ import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
 import { claveServidor } from '@/lib/claveServidor';
 import { getConfigCurso, calcularAntiguedad, calcularDiasDLD, plazoSolicitudDLD, sePuedePedirDLD, clasificarDia } from '@/lib/curso';
 import { avisarDireccion } from '@/lib/notificaciones';
+import { coincidenciasEnServidor } from '@/lib/coincidenciasEventos';
 import { rehacerReparto } from '@/lib/rehacerReparto';
 import { enviarPushA } from '@/lib/pushServidor';
 
@@ -342,6 +343,9 @@ export async function POST(request) {
           fecha: fila.fecha_solicitada,
           tipo_dld: fila.tipo_dld || '',
           departamento: fila.departamento || '',
+          // Norma (apdo. 4): no se concede si coincide con una jornada
+          // obligatoria (claustro, evaluación…). Se avisa a dirección.
+          coincidencias: await coincidenciasEnServidor(supa(), { fecha_inicio: fila.fecha_solicitada }),
         });
       } catch (e) {
         console.error('aviso dld_solicitada:', e?.message);
@@ -431,6 +435,9 @@ export async function POST(request) {
           fecha: fila.fecha_solicitada,
           tipo_dld: fila.tipo_dld || '',
           departamento: fila.departamento || '',
+          // Norma (apdo. 4): no se concede si coincide con una jornada
+          // obligatoria (claustro, evaluación…). Se avisa a dirección.
+          coincidencias: await coincidenciasEnServidor(supa(), { fecha_inicio: fila.fecha_solicitada }),
         });
       } catch (e) {
         console.error('aviso dld_solicitada (papel):', e?.message);

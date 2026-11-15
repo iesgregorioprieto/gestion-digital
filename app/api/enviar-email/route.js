@@ -688,6 +688,7 @@ export async function POST(request) {
 
     } else if (tipo === 'dld_solicitada') {
       subject = `\uD83D\uDCC4 Nueva solicitud de día de libre disposición — ${datos.profesor}`;
+      if (datos.coincidencias?.length) subject = '⚠️ ' + subject + ' · coincide con el calendario';
       html = `
         <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
           <div style="background:#1e6b2e;padding:20px;text-align:center">
@@ -714,6 +715,7 @@ export async function POST(request) {
                 <td style="padding:10px">${e(datos.departamento)}</td>
               </tr>` : ''}
             </table>
+            ${bloqueCoincidencias(datos.coincidencias)}
             <div style="text-align:center;margin:26px 0">
               <a href="${BASE_URL}/gestion/dld"
                  style="background:#1e6b2e;color:white;padding:14px 35px;border-radius:6px;text-decoration:none;font-size:16px;font-weight:bold">

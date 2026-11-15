@@ -8,6 +8,7 @@ import ResolverDiaDLD from '@/components/ResolverDiaDLD';
 import { getConfigCurso, numProfesores, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import EscenarioDia from '@/components/EscenarioDia';
 import { hoyLocal } from '@/lib/fechas';
+import { eventosCoincidentes, textoEvento } from '@/lib/coincidenciasEventos';
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const DIAS_SEMANA = ['L','M','X','J','V','S','D'];
 const azul = '#1a3a6b';
@@ -221,6 +222,7 @@ export default function PanelDirector() {
   const [mensaje, setMensaje] = useState(null);
   const [solicitudAbierta, setSolicitudAbierta] = useState(null);
   const [plazoAbierta, setPlazoAbierta] = useState(null);
+  const [coincAbierta, setCoincAbierta] = useState([]);   // eventos del calendario ese día
   // Análisis de grupos del día con el horario real (#231): null = cargando
   const [analisisGrupos, setAnalisisGrupos] = useState(null);
 
@@ -230,7 +232,14 @@ export default function PanelDirector() {
     setSolicitudAbierta(s);
     setMotivoRechazo('');
     setPlazoAbierta(null);
+    setCoincAbierta([]);
     cargarAnalisisGrupos(s);
+    // ¿Coincide con un claustro, una evaluación…? La norma (apdo. 4) no
+    // concede el DLD en una jornada de asistencia obligatoria.
+    fetch(`/api/eventos?desde=${s.fecha_solicitada}&hasta=${s.fecha_solicitada}`)
+      .then(r => r.ok ? r.json() : { eventos: [] })
+      .then(d => setCoincAbierta(eventosCoincidentes({ fecha_inicio: s.fecha_solicitada }, d.eventos || []).map(textoEvento)))
+      .catch(() => {});
     try {
       const cfg = await getConfigCurso();
       const base = (s.created_at || '').slice(0, 10) || undefined;
@@ -1275,6 +1284,16 @@ export default function PanelDirector() {
             {/* AVISO DE PLAZO — parpadea para que no pase desapercibido.
                 La norma permite flexibilizar el mínimo por causa
                 sobrevenida, así que solo se avisa: decide el director. */}
+            {coincAbierta.length > 0 && (
+              <div style={{ marginBottom: 16, fontSize: 13.5, color: '#9a3412', backgroundColor: '#fff7ed',
+                border: '1.5px solid #fdba74', borderRadius: 10, padding: '10px 14px', lineHeight: 1.5 }}>
+                ⚠️ <strong>Coincide con el calendario:</strong> {coincAbierta.join(' · ')}
+                <div style={{ fontSize: 12.5, marginTop: 4, color: '#7c2d12' }}>
+                  Si es una jornada de asistencia obligatoria (claustro, evaluación…), la norma no permite concederlo.
+                </div>
+              </div>
+            )}
+
             {plazoAbierta && plazoAbierta.estado !== 'ok' && (
               <>
               <style>{`
