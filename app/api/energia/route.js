@@ -42,13 +42,23 @@ const num = v => (typeof v === 'number' && Number.isFinite(v) ? v : (v != null &
 
 // Se guardan solo los campos que pinta el panel, nada más de lo que
 // llegue en el JSON.
+// Home Assistant manda el formato plano { solar, red, consumo, ts };
+// también se acepta el del documento de José María { ahora: {...}, hoy: {...} }.
 function limpiar(d) {
-  const a = d.ahora || {}, h = d.hoy || {};
+  const a = (d.ahora && typeof d.ahora === 'object') ? d.ahora : d;
+  const h = (d.hoy && typeof d.hoy === 'object') ? d.hoy : {};
   return {
     ts: typeof d.ts === 'string' ? d.ts.slice(0, 40) : null,
     ahora: { solar: num(a.solar), red: num(a.red), consumo: num(a.consumo) },
     hoy: { solar: num(h.solar), importada: num(h.importada), exportada: num(h.exportada), consumo: num(h.consumo) },
   };
+}
+
+// Vale si trae al menos una potencia numérica.
+function valido(d) {
+  if (!d || typeof d !== 'object') return false;
+  const a = limpiar(d).ahora;
+  return a.solar != null || a.red != null || a.consumo != null;
 }
 
 export async function POST(req) {
@@ -64,7 +74,7 @@ export async function POST(req) {
   }
   let datos;
   try { datos = await req.json(); } catch { datos = null; }
-  if (!datos || typeof datos !== 'object' || !datos.ahora || typeof datos.ahora !== 'object') {
+  if (!valido(datos)) {
     console.warn('energia: JSON no válido —', JSON.stringify(datos)?.slice(0, 300));
     return Response.json({ error: 'JSON no válido' }, { status: 400 });
   }

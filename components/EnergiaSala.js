@@ -41,6 +41,8 @@ export default function EnergiaSala({ datos, ahora = new Date() }) {
   const a = datos.ahora || {}, h = datos.hoy || {};
   const solar = a.solar || 0, red = a.red || 0, consumo = a.consumo || 0;
 
+  // Los totales del día solo salen si Home Assistant los manda.
+  const hayHoy = h.consumo != null || h.solar != null;
   const exporta = red < 0 ? -red : 0;
   const total = h.consumo || 0;
   const fSolar = total > 0 ? Math.min(Math.max(((h.solar || 0) - (h.exportada || 0)) / total, 0), 1) : 0;
@@ -75,13 +77,13 @@ export default function EnergiaSala({ datos, ahora = new Date() }) {
         <circle cx="165" cy="57" r="38" fill="#14233a" stroke="#f5a623" strokeWidth={3} />
         <text style={ico} x="165" y="44">☀️</text>
         <text style={kwS} x="165" y="64">{fkw(solar)}</text>
-        <text style={kwhS} x="165" y="79">{fkwh(h.solar)} kWh hoy</text>
+        {hayHoy && <text style={kwhS} x="165" y="79">{fkwh(h.solar)} kWh hoy</text>}
 
         {/* Red */}
         <circle cx="55" cy="137" r="38" fill="#14233a" stroke="#4ea1ff" strokeWidth={3} />
         <text style={ico} x="55" y="122">⚡</text>
         <text style={kwS} x="55" y="142">{fkw(Math.abs(red))}</text>
-        <text style={kwhS} x="55" y="157">{'→' + fkwh(h.importada) + '  ←' + fkwh(h.exportada)}</text>
+        {hayHoy && <text style={kwhS} x="55" y="157">{'→' + fkwh(h.importada) + '  ←' + fkwh(h.exportada)}</text>}
         <text style={lbl} x="55" y="191">Red</text>
 
         {/* Centro: anillo con el reparto solar / red del día */}
@@ -92,7 +94,7 @@ export default function EnergiaSala({ datos, ahora = new Date() }) {
           transform="rotate(-90 285 137)" strokeDasharray={`${fSolar * CIRC} ${CIRC}`} />
         <text style={ico} x="285" y="122">🏫</text>
         <text style={kwS} x="285" y="142">{fkw(consumo)}</text>
-        <text style={kwhS} x="285" y="157">{fkwh(h.consumo)} kWh hoy</text>
+        {hayHoy && <text style={kwhS} x="285" y="157">{fkwh(h.consumo)} kWh hoy</text>}
         <text style={lbl} x="285" y="191">Centro</text>
       </svg>
     </div>
