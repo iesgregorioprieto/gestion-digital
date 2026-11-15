@@ -67,7 +67,7 @@ export async function GET(request) {
     const iso = f => f.toISOString().slice(0, 10);
     const lunesStr = iso(lunes), domingoStr = iso(domingo);
 
-    const [aus, dlds, apoyos, avisos, actividades] = await Promise.all([
+    const [aus, dlds, apoyos, avisos, actividades, energia] = await Promise.all([
       cliente.from('ausencias')
         .select('profesor_nombre, horas, dias, fecha_inicio, fecha_fin')
         .lte('fecha_inicio', hoy)
@@ -93,6 +93,10 @@ export async function GET(request) {
         .lte('fecha_inicio', domingoStr)
         .or(`fecha_fin.gte.${lunesStr},fecha_fin.is.null`)
         .order('fecha_inicio', { ascending: true }),
+
+      // Último dato de energía que mandó Home Assistant (una sola fila).
+      // Si la tabla aún no existe, sale vacío y el panel no se pinta.
+      cliente.from('energia').select('datos, recibido').eq('id', 1).limit(1),
     ]);
 
     // Nombre completo de quien cubre. En la fila se guarda la abreviatura
@@ -137,6 +141,9 @@ export async function GET(request) {
       avisos: (avisos.data || []).filter(a => !a.visible_hasta || a.visible_hasta >= hoy),
       actividades: (actividades.data || []).filter(a => a.estado !== 'rechazada'),
       semana: { desde: lunesStr, hasta: domingoStr },
+      energia: (energia.data || [])[0]
+        ? { ...energia.data[0].datos, recibido: energia.data[0].recibido }
+        : null,
     });
   } catch (e) {
     return Response.json({ error: e.message, ausencias: [], dlds: [], apoyos: [], avisos: [] }, { status: 500 });

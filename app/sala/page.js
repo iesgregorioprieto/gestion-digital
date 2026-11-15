@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { hoyLocal } from '@/lib/fechas';
+import EnergiaSala from '@/components/EnergiaSala';
 
 const HORAS = [
   { id: '1', label: '1ª', rango: '8:30–9:25' },
@@ -33,6 +34,7 @@ export default function SalaProfesores() {
   const [noticias, setNoticias] = useState([]);
   const [actividades, setActividades] = useState([]);
   const [semana, setSemana] = useState(null);
+  const [energia, setEnergia] = useState(null);
   // La caja de la derecha alterna sola: un minuto avisos, un minuto noticias
   const [modoPanel, setModoPanel] = useState('avisos');
   const modosRef = useRef([]);
@@ -92,6 +94,12 @@ export default function SalaProfesores() {
       cartelesRef.current = (d.avisos || []).filter(a => a.imagen_url);
       setActividades(d.actividades || []);
       setSemana(d.semana || null);
+      // Para verlo con datos de ejemplo: /sala?demoEnergia=1
+      const demoEnergia = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('demoEnergia');
+      setEnergia(demoEnergia
+        ? { recibido: new Date().toISOString(), ahora: { solar: 6200, red: 14300, consumo: 20500 },
+            hoy: { solar: 9.57, importada: 208.4, exportada: 0, consumo: 218.0 } }
+        : (d.energia || null));
     } catch (e) {
       console.error('No se pudieron cargar los datos de la sala:', e);
     }
@@ -380,6 +388,9 @@ export default function SalaProfesores() {
             </div>
           )}
         </div>
+
+        {/* Energía del centro (Home Assistant). Solo sale si ha llegado algún dato. */}
+        <EnergiaSala datos={energia} ahora={reloj} />
 
         {modos.length > 0 && (
           <div ref={cajaAvisosRef} style={{ flex: 1, minWidth: 0, maxHeight: '34vh', backgroundColor: '#1e293b', borderRadius: 12, padding: '10px 14px', border: '1px solid #334155', overflow: 'hidden', position: 'relative' }}>
