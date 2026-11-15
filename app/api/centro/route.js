@@ -60,7 +60,10 @@ export async function POST(request) {
     // Además, quien propuso una actividad puede corregirla mientras siga
     // pendiente de autorizar (se comprueba abajo, en «actualizar»).
     const puede = esDirectivo(sesion)
-      || ((accion === 'crear' || accion === 'insertar_lista') && ABIERTAS_A_PROFESORADO.includes(tabla))
+      // Solo «crear»: «insertar_lista» (cargas masivas) es de gestión; al
+      // profesorado le dejaba meter actividades a nombre de cualquiera,
+      // ya autorizadas y sin avisar a nadie.
+      || (accion === 'crear' && ABIERTAS_A_PROFESORADO.includes(tabla))
       || (accion === 'actualizar' && tabla === 'actividades');
     if (!puede) return Response.json({ error: 'sin_permisos' }, { status: 403 });
 
@@ -71,9 +74,18 @@ export async function POST(request) {
       if (filas.length > 600) return Response.json({ error: 'Lote demasiado grande' }, { status: 400 });
 
       // En actividades, quien la propone sale de la sesión
-      const conAutor = ABIERTAS_A_PROFESORADO.includes(tabla) && !esDirectivo(sesion)
-        ? filas.map(f => ({ ...f, profesor_id: sesion.id }))
-        : filas;
+      // y sin estado (queda pendiente, como siempre): autorizarla es cosa
+      // del director, no de quien la propone (antes podía mandarla ya
+      // «aprobada»).
+      // Jefatura puede crearlas a nombre de otro, pero tampoco autorizarlas.
+      const sinEstado = f => {
+        const { estado, motivo_rechazo, resuelto_por, resuelto_at, ...resto } = f;
+        return resto;
+      };
+      const conAutor = tabla !== 'actividades' ? filas
+        : !esDirectivo(sesion)
+          ? filas.slice(0, 1).map(f => ({ ...sinEstado(f), profesor_id: sesion.id, profesor_nombre: sesion.nombre || f.profesor_nombre }))
+          : sesion.rol !== 'director' ? filas.map(sinEstado) : filas;
 
       const { data, error } = await supa().from(tabla).insert(conAutor).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
