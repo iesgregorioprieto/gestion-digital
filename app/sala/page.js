@@ -229,10 +229,9 @@ export default function SalaProfesores() {
     // Los tres listados bajan y suben solos: la pantalla está en la
     // pared y nadie va a mover la barra. Si cabe todo, no se mueve nada.
     // Guardias y noticias ya no se mueven: con tanto movimiento la
-    // pantalla mareaba y despistaba. Solo baja sola la lista de ausentes,
-    // y únicamente si no cabe entera.
+    // pantalla mareaba y despistaba. Las ausentes tampoco: ahora van
+    // fijas por horas, como las guardias.
     const cajas = [
-      { ref: cajaAusentesRef, bajando: true, espera: 0 },
     ];
     const vaiven = setInterval(() => {
       for (const c of cajas) {
@@ -561,52 +560,60 @@ export default function SalaProfesores() {
                 </span>
               )}
             </div>
-            {totalAusentesHoy === 0 ? (
-              <div style={{ textAlign: 'center', padding: '8px 0', opacity: 0.5, fontSize: 14 }}>
-                ✅ Sin ausencias {esHoy ? 'hoy' : 'ese día'}
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 4 }}>
-                {Object.entries(profesAusentes).sort((a,b) => {
-                  // Primero quien falta a la hora que se está mirando
-                  const fa = a[1].horas.includes(horaEfectiva) ? 0 : 1;
-                  const fb = b[1].horas.includes(horaEfectiva) ? 0 : 1;
-                  return fa - fb || a[0].localeCompare(b[0]);
-                }).map(([nombre, info]) => (
-                  <div key={nombre} style={{
-                    backgroundColor: info.horas.includes(horaEfectiva) ? '#7f1d1d' : '#0f172a',
-                    borderRadius: 7, padding: '3px 10px', gap: 8,
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    border: info.horas.includes(horaEfectiva) ? '1px solid #ef4444' : '1px solid #334155',
-                  }}>
-                    <div style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>{nombre}</span>
-                      <span style={{
-                        marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4,
-                        backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e',
-                        color: 'white',
+            {(() => {
+              // Igual que la columna de guardias: fija, sin moverse, con la
+              // hora actual y las dos siguientes, una debajo de otra. A 4ª,
+              // 5ª y 6ª se ven 4ª, 5ª y 6ª.
+              const i = Math.max(0, HORAS.findIndex(h => h.id === horaEfectiva));
+              const desde = Math.min(i, HORAS.length - 3);
+              const ventana = HORAS.slice(desde, desde + 3);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {ventana.map(h => {
+                    const ausentesHora = Object.entries(profesAusentes)
+                      .filter(([_, v]) => v.horas.includes(h.id))
+                      .sort((a, b) => a[0].localeCompare(b[0]));
+                    const activa = h.id === horaEfectiva;
+                    return (
+                      <div key={h.id} style={{
+                        backgroundColor: activa ? '#3f1d1d' : '#0f172a',
+                        borderRadius: 8, padding: '4px 12px',
+                        border: activa ? '2px solid #ef4444' : '1px solid #334155',
                       }}>
-                        {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                      {HORAS.map(h => (
-                        <span key={h.id} style={{
-                          width: 20, height: 20, borderRadius: '50%',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 11, fontWeight: 700,
-                          backgroundColor: info.horas.includes(h.id) ? (h.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
-                          color: info.horas.includes(h.id) ? 'white' : '#475569',
-                          border: h.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
-                        }}>
-                          {h.label.replace('ª','')}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                        <div style={{ fontSize: 13, fontWeight: 800, color: activa ? '#fca5a5' : '#94a3b8', marginBottom: 2 }}>
+                          {h.label} <span style={{ fontSize: 12, fontWeight: 600 }}>{h.rango}</span>
+                          {activa && esHoy && !horaVista ? ' · AHORA' : ''}
+                        </div>
+                        {ausentesHora.length === 0 ? (
+                          <div style={{ fontSize: 13, opacity: 0.45 }}>✅ Nadie falta a esta hora</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                            {ausentesHora.map(([nombre, info]) => (
+                              <div key={nombre} style={{
+                                borderLeft: `3px solid ${info.tipo === 'dld' ? '#3b82f6' : '#f59e0b'}`,
+                                paddingLeft: 8, minWidth: 0,
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
+                              }}>
+                                <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3, minWidth: 0,
+                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {nombre}
+                                </div>
+                                <span style={{
+                                  fontSize: 10, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
+                                  backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e', color: 'white',
+                                }}>
+                                  {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
 
