@@ -60,7 +60,7 @@ export async function GET(request) {
       todas(() => cliente.from('horarios_profesores')
         .select('profesor_nombre_pdf,hora_id,dia,tipo,grupo,materia,aula')
         .eq('curso_academico', curso).eq('tipo', 'guardia')),
-      todas(() => cliente.from('profesores').select('id,nombre,apellidos,departamento,especialidad')),
+      todas(() => cliente.from('profesores').select('id,nombre,apellidos,departamento,especialidad,en_baja,tipo_contrato')),
       todas(() => cliente.from('equivalencias_horario').select('nombre_horario, profesor_id')),
       todas(() => cliente.from('apoyos_asignados')
         .select('profesor_id,cuenta_para,profesor_nombre_pdf,estado,fecha,sector_apoyo,sector_destino,cuenta_reparto')
