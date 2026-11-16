@@ -594,16 +594,30 @@ export default function SalaProfesores() {
                                 paddingLeft: 8, minWidth: 0,
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12,
                               }}>
-                                <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.3, minWidth: 0,
-                                  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {nombre}
+                                <div style={{ minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>
+                                  <span style={{ fontSize: 15, fontWeight: 700 }}>{nombre}</span>
+                                  <span style={{
+                                    marginLeft: 6, fontSize: 10, padding: '1px 5px', borderRadius: 4,
+                                    backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e', color: 'white',
+                                  }}>
+                                    {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
+                                  </span>
                                 </div>
-                                <span style={{
-                                  fontSize: 10, padding: '1px 5px', borderRadius: 4, flexShrink: 0,
-                                  backgroundColor: info.tipo === 'dld' ? '#1e40af' : '#92400e', color: 'white',
-                                }}>
-                                  {info.tipo === 'dld' ? 'DLD' : 'Ausencia'}
-                                </span>
+                                {/* Círculos: horas en que falta (generan guardia) y la hora actual */}
+                                <div style={{ display: 'flex', gap: 3, flexShrink: 0, alignSelf: 'center' }}>
+                                  {HORAS.map(hh => (
+                                    <span key={hh.id} style={{
+                                      width: 20, height: 20, borderRadius: '50%',
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: 11, fontWeight: 700,
+                                      backgroundColor: info.horas.includes(hh.id) ? (hh.id === horaEfectiva ? '#ef4444' : '#475569') : 'transparent',
+                                      color: info.horas.includes(hh.id) ? 'white' : '#475569',
+                                      border: hh.id === horaEfectiva ? '2px solid #ef4444' : '1px solid #475569',
+                                    }}>
+                                      {hh.label.replace('ª','')}
+                                    </span>
+                                  ))}
+                                </div>
                               </div>
                             ))}
                           </div>
