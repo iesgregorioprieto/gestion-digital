@@ -50,6 +50,11 @@ function HorarioContenido() {
   const [busqueda, setBusqueda] = useState('');
   const [companyeros, setCompanyeros] = useState([]);
   const [profVista, setProfVista] = useState(null); // null = el mío propio
+  // 'mio' (mi horario o el de un compañero) · 'tutoria' · 'curso'
+  const [modo, setModo] = useState('mio');
+  const [infoGrupo, setInfoGrupo] = useState(null);   // { grupo, heredadaDe }
+  const [listaGrupos, setListaGrupos] = useState([]);
+  const [grupoElegido, setGrupoElegido] = useState('');
 
   const verde = '#0f766e';
   const azul = '#1e3a5f';
@@ -65,6 +70,8 @@ function HorarioContenido() {
   }, []);
 
   async function verHorarioProf(prof) {
+    setModo('mio');
+    setError('');
     setProfVista(prof);
     setBusqueda('');
     setCargando(true);
@@ -73,6 +80,56 @@ function HorarioContenido() {
     setHorario(data || []);
     setNombre(prof.apellidos + ', ' + prof.nombre);
     setCargando(false);
+  }
+
+  /* ─── Mi tutoría: el horario de clase de los alumnos de mi tutoría ─── */
+  async function verTutoria() {
+    setModo('tutoria'); setProfVista(null); setBusqueda(''); setError('');
+    setCargando(true); setHorario([]); setInfoGrupo(null);
+    const r = await fetch('/api/horario-grupo?grupo=tutoria').then(x => x.json()).catch(() => ({ error: 'red' }));
+    if (r.sinTutoria) {
+      setInfoGrupo({ sinTutoria: true });
+    } else if (r.error) {
+      setError('No se ha podido cargar el horario de tu tutoría.');
+    } else {
+      setInfoGrupo({ grupo: r.grupo || r.tutoria, tutoria: r.tutoria, heredadaDe: r.heredadaDe });
+      setHorario(r.horas || []);
+    }
+    setCargando(false);
+  }
+
+  /* ─── Horario de cualquier curso ─── */
+  async function abrirCursos() {
+    setModo('curso'); setProfVista(null); setBusqueda(''); setError('');
+    setHorario([]); setInfoGrupo(null);
+    let lista = listaGrupos;
+    if (!lista.length) {
+      setCargando(true);
+      const r = await fetch('/api/horario-grupo?lista=1').then(x => x.json()).catch(() => ({}));
+      lista = r.grupos || [];
+      setListaGrupos(lista);
+      setCargando(false);
+    }
+    let ultimo = '';
+    try { ultimo = localStorage.getItem('horario_ultimo_curso') || ''; } catch {}
+    if (ultimo && lista.includes(ultimo)) verCurso(ultimo);
+  }
+
+  async function verCurso(g) {
+    setGrupoElegido(g);
+    if (!g) { setHorario([]); setInfoGrupo(null); return; }
+    try { localStorage.setItem('horario_ultimo_curso', g); } catch {}
+    setCargando(true); setError('');
+    const r = await fetch(`/api/horario-grupo?grupo=${encodeURIComponent(g)}`).then(x => x.json()).catch(() => ({ error: 'red' }));
+    if (r.error) setError('No se ha podido cargar el horario de ese curso.');
+    setInfoGrupo({ grupo: r.grupo || g });
+    setHorario(r.horas || []);
+    setCargando(false);
+  }
+
+  function volverAMiHorario() {
+    setModo('mio'); setProfVista(null); setInfoGrupo(null); setError('');
+    cargarHorario();
   }
 
   async function cargarHorario() {
@@ -143,6 +200,8 @@ function HorarioContenido() {
                 : c.tipo === 'clase' ? 'Clase' : c.tipo === 'complementaria' ? 'Complementaria' : c.tipo) || '—'}
           </div>
           {c.grupo && <div style={{ fontSize: 11, color: '#555' }}>{c.grupo}</div>}
+          {c.profesor && <div style={{ fontSize: 11, color: '#555' }}>👤 {c.profesor}{c.sustituye ? ` (sust. ${c.sustituye})` : ''}</div>}
+          {c.compartida && <div style={{ fontSize: 10, color: '#888' }}>con {c.compartida}</div>}
           {c.aula && <div style={{ fontSize: 10, color: '#888' }}>📍 {c.aula}</div>}
         </div>
       );
@@ -163,7 +222,7 @@ function HorarioContenido() {
             fontSize: 14, boxSizing: 'border-box', outline: 'none' }}
         />
         {profVista && (
-          <button onClick={() => { setProfVista(null); cargarHorario(); }}
+          <button onClick={volverAMiHorario}
             style={{ marginTop: 6, background: 'none', border: 'none', color: verde,
               fontSize: 13, fontWeight: 700, cursor: 'pointer', padding: 0 }}>
             ← Ver mi horario
@@ -191,14 +250,63 @@ function HorarioContenido() {
         )}
       </div>
 
+      {/* MI HORARIO · MI TUTORÍA · HORARIO DE UN CURSO */}
+      <div style={{ backgroundColor: 'white', borderBottom: '1px solid #d1fae5', padding: '8px 16px',
+        display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        {[
+          { id: 'mio', icono: '🕐', texto: 'Mi horario', accion: volverAMiHorario },
+          { id: 'tutoria', icono: '🤝', texto: 'Mi tutoría', accion: verTutoria },
+          { id: 'curso', icono: '🏫', texto: 'Horario de un curso', accion: abrirCursos },
+        ].map(b => {
+          const activo = modo === b.id && !(b.id === 'mio' && profVista);
+          return (
+            <button key={b.id} onClick={b.accion} style={{
+              padding: '8px 14px', borderRadius: 20, cursor: 'pointer', fontSize: 13, fontWeight: 700,
+              border: `1.5px solid ${activo ? verde : '#a7f3d0'}`,
+              backgroundColor: activo ? verde : 'white', color: activo ? 'white' : verde,
+            }}>{b.icono} {b.texto}</button>
+          );
+        })}
+        {modo === 'curso' && (
+          <select value={grupoElegido} onChange={e => verCurso(e.target.value)} style={{
+            padding: '8px 10px', borderRadius: 10, border: '1.5px solid #a7f3d0', fontSize: 14,
+            fontWeight: 600, color: '#134e4a', backgroundColor: 'white', minWidth: 180 }}>
+            <option value="">— Elige un curso —</option>
+            {['ESO', 'BTO', 'GB', 'GM', 'GS', 'FPPE'].map(et => {
+              const delaEtapa = listaGrupos.filter(g => g.startsWith(et + '-'));
+              if (!delaEtapa.length) return null;
+              const NOMBRE = { ESO: 'ESO', BTO: 'Bachillerato', GB: 'Grado Básico', GM: 'Grado Medio', GS: 'Grado Superior', FPPE: 'FP para el empleo' };
+              return (
+                <optgroup key={et} label={NOMBRE[et]}>
+                  {delaEtapa.map(g => <option key={g} value={g}>{g}</option>)}
+                </optgroup>
+              );
+            })}
+            {listaGrupos.filter(g => !/^(ESO|BTO|GB|GM|GS|FPPE)-/.test(g)).length > 0 && (
+              <optgroup label="Otros">
+                {listaGrupos.filter(g => !/^(ESO|BTO|GB|GM|GS|FPPE)-/.test(g)).map(g => <option key={g} value={g}>{g}</option>)}
+              </optgroup>
+            )}
+          </select>
+        )}
+      </div>
+
       {/* HEADER */}
       <div style={{ backgroundColor: verde, color: 'white', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={() => window.location.href = '/profesor'} style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer' }}>←</button>
           <span style={{ fontSize: 22 }}>🕐</span>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 17 }}>{profVista ? profVista.apellidos + ', ' + profVista.nombre : 'Mi Horario'}</div>
-            <div style={{ fontSize: 12, opacity: 0.85 }}>{nombre}</div>
+            <div style={{ fontWeight: 800, fontSize: 17 }}>
+              {modo === 'tutoria' ? `Mi tutoría${infoGrupo?.grupo ? ' · ' + infoGrupo.grupo : ''}`
+                : modo === 'curso' ? `Horario de ${infoGrupo?.grupo || 'un curso'}`
+                : profVista ? profVista.apellidos + ', ' + profVista.nombre : 'Mi Horario'}
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              {modo === 'tutoria' ? (infoGrupo?.heredadaDe ? `Tutoría de ${infoGrupo.heredadaDe} (sustitución)` : 'Horario de clase de tus alumnos')
+                : modo === 'curso' ? 'Horario de clase del grupo'
+                : nombre}
+            </div>
           </div>
         </div>
         {/* SELECTOR HOY / SEMANA */}
@@ -224,10 +332,24 @@ function HorarioContenido() {
 
       {cargando ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>⏳ Cargando horario...</div>
+      ) : modo === 'tutoria' && infoGrupo?.sinTutoria ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+          <div style={{ fontSize: 40 }}>🤝</div>
+          <p>No tienes ninguna tutoría asignada.</p>
+          <p style={{ fontSize: 13 }}>Si eres tutor/a, márcalo y elige tu grupo en{' '}
+            <a href="/mis-datos#tutoria" style={{ color: verde, fontWeight: 700 }}>Mis datos</a>.</p>
+        </div>
+      ) : modo === 'curso' && !grupoElegido ? (
+        <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
+          <div style={{ fontSize: 40 }}>🏫</div>
+          <p>Elige un curso en el desplegable para ver su horario.</p>
+        </div>
       ) : horario.length === 0 && !error ? (
         <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
           <div style={{ fontSize: 40 }}>📭</div>
-          <p>No se ha encontrado tu horario.</p>
+          <p>{modo === 'tutoria' ? `No se ha encontrado el horario de tu tutoría (${infoGrupo?.tutoria || ''}) en los horarios del centro.`
+            : modo === 'curso' ? 'No se ha encontrado el horario de ese curso.'
+            : 'No se ha encontrado tu horario.'}</p>
         </div>
       ) : vista === 'hoy' ? (
 
