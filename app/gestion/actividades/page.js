@@ -594,9 +594,9 @@ export default function GestionActividades() {
                           </div>
                         )}
 
-                        {/* Documentación */}
+                        {/* Documentación (solo actividades antiguas que la adjuntaron) */}
+                        {a.comision_servicio && (
                         <div style={{ marginBottom: 10 }}>
-                          {a.comision_servicio ? (
                             <a href={`/api/documento?url=${encodeURIComponent(a.comision_servicio)}`}
                               target="_blank" rel="noopener noreferrer"
                               style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 18px',
@@ -604,10 +604,8 @@ export default function GestionActividades() {
                                 border: '1.5px solid #bfdbfe', color: '#1e40af', fontWeight: 700, fontSize: 13.5 }}>
                               📎 Ver comisiones de servicio
                             </a>
-                          ) : (
-                            <div style={{ fontSize: 12.5, color: '#94a3b8' }}>📎 Sin documento de comisiones de servicio</div>
-                          )}
                         </div>
+                        )}
 
                         {a.necesita_guardia && (
                           <div style={{ padding: '10px 13px', borderRadius: 9, backgroundColor: '#fffbeb', border: '1.5px solid #fcd34d', color: '#78350f', fontSize: 13, lineHeight: 1.55 }}>

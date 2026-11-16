@@ -90,8 +90,6 @@ export default function Actividades() {
   });
   const [pgaLista, setPgaLista] = useState([]);
   const [misAusencias, setMisAusencias] = useState([]);
-  const [comision, setComision] = useState(null);   // documento de comisiones de servicio
-  const [subiendoDoc, setSubiendoDoc] = useState(false);
   const [alumnosPorGrupo, setAlumnosPorGrupo] = useState({});
   const [asistentes, setAsistentes] = useState({});
   const [cargandoAlumnos, setCargandoAlumnos] = useState(false);
@@ -218,19 +216,6 @@ export default function Actividades() {
     set(campo, lista.includes(valor) ? lista.filter(x => x !== valor) : [...lista, valor]);
   }
 
-  async function subirComision() {
-    if (!comision) return null;
-    const form = new FormData();
-    form.append('archivo', comision);
-    form.append('carpeta', 'comisiones');
-    form.append('bucket', 'actividades-docs');
-    try {
-      const r = await fetch('/api/documento', { method: 'POST', body: form });
-      const d = await r.json();
-      return d.url || null;
-    } catch { return null; }
-  }
-
   async function enviar() {
     if (form.en_pga === null)  return aviso('Indica si la actividad está aprobada en la PGA.', 'error');
     if (form.en_pga === true && !form.pga_seleccionada) return aviso('Elige la actividad de la PGA.', 'error');
@@ -246,19 +231,6 @@ export default function Actividades() {
     }
 
     setEnviando(true);
-    setSubiendoDoc(!!comision);
-    let urlComision = null;
-    try {
-      urlComision = await subirComision();
-    } catch (e) {
-      console.error('subir comisión:', e);
-    }
-    setSubiendoDoc(false);
-    if (comision && !urlComision) {
-      setEnviando(false);
-      return aviso('No se ha podido subir el documento. Inténtalo de nuevo o envía la actividad sin él.', 'error');
-    }
-
     try {
       const cfg = await getConfigCurso();
       const _ra = await fetch('/api/centro', {
@@ -272,7 +244,6 @@ export default function Actividades() {
         relacion_curricular: form.relacion_curricular.trim() || null,
         descripcion: form.descripcion.trim(),
         financiacion: form.financiacion,
-        comision_servicio: urlComision,
         fecha_inicio: form.fecha_inicio,
         fecha_fin: form.fecha_fin || form.fecha_inicio,
         horas: form.horas,
@@ -302,7 +273,6 @@ export default function Actividades() {
         fecha_inicio: '', fecha_fin: '', horas: [], hora_salida: '', hora_regreso: '',
         grupos: [], acompanantes: [], lugar: '', transporte: '', coste_alumno: '', descripcion: '', financiacion: '',
       });
-      setComision(null);
       setAsistentes({});
       setAlumnosPorGrupo({});
       setAvisoFecha(null);
@@ -773,36 +743,13 @@ export default function Actividades() {
                 </select>
               </Campo>
 
-              <Campo label="Comisiones de servicio">
-                <label style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 9,
-                  padding: '12px 22px', borderRadius: 10, cursor: 'pointer',
-                  backgroundColor: '#eff6ff', color: '#1e40af',
-                  border: '1.5px solid #bfdbfe', fontWeight: 700, fontSize: 14,
-                }}>
-                  <span style={{ fontSize: 18 }}>📎</span>
-                  {comision ? 'Cambiar el documento' : 'Adjuntar documento'}
-                  <input type="file" accept=".pdf,.doc,.docx,image/*"
-                    onChange={e => setComision(e.target.files[0] || null)}
-                    style={{ display: 'none' }} />
-                </label>
-                <Pista>
-                  Opcional. Si ya tienes el documento de comisiones de servicio, adjúntalo
-                  aquí y quedará junto a la actividad.
-                </Pista>
-                {comision && (
-                  <div style={{ marginTop: 6, fontSize: 12.5, color: VERDE, fontWeight: 600 }}>
-                    📎 {comision.name}
-                  </div>
-                )}
-              </Campo>
             </div>
 
             <button onClick={enviar} disabled={enviando} style={{
               ...boton, width: '100%', padding: 14, fontSize: 15,
               cursor: enviando ? 'not-allowed' : 'pointer', opacity: enviando ? 0.7 : 1,
             }}>
-              {subiendoDoc ? '⏳ Subiendo el documento...' : enviando ? '⏳ Enviando...' : '📨 Enviar al director para su autorización'}
+              {enviando ? '⏳ Enviando...' : '📨 Enviar al director para su autorización'}
             </button>
           </div>
         )}
