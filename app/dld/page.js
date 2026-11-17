@@ -5,6 +5,8 @@ import { useState, useEffect } from 'react';
 import { getConfigCurso, esDiaLectivo, limiteDLD, plazoSolicitudDLD, calcularDiasDLD } from '@/lib/curso';
 import CalendarioDLD from '@/components/CalendarioDLD';
 import { HORAS_EXTRA } from '@/lib/horasExtra';
+import { hoyLocal } from '@/lib/fechas';
+import { enlaceDocumento } from '@/lib/adjuntos';
 const HORAS = [
   { id: '1', label: '1ª hora', emoji: '🕘' },
   { id: '2', label: '2ª hora', emoji: '🕙' },
@@ -86,6 +88,10 @@ export default function DLD() {
   const [, setNombrePdf] = useState('');
   const [cargandoHorario, setCargandoHorario] = useState(false);
   const [avisoPlazo, setAvisoPlazo] = useState(null);
+  // Tareas de una solicitud ya enviada (pendiente o concedida)
+  const [tareasDe, setTareasDe] = useState(null);       // id del DLD que se edita
+  const [tareasEdit, setTareasEdit] = useState({});     // hora → { instrucciones, archivo_url, archivo_nombre, archivo }
+  const [guardandoTareas, setGuardandoTareas] = useState(false);
   const DIAS_SEMANA = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
   const [form, setForm] = useState({
@@ -414,6 +420,78 @@ export default function DLD() {
     cargarDatos(profesorId);
   }
 
+  /**
+   * AÑADIR O CAMBIAR TAREAS DE UN DLD YA ENVIADO (nov. 2026)
+   *
+   * Hasta el mismo día puede cambiar lo que tienen que hacer los alumnos,
+   * también con el DLD ya concedido. Solo las tareas: el día y las horas
+   * son los que autorizó el director.
+   */
+  const horasDeClase = s => (Array.isArray(s.horas) ? s.horas : []).filter(h => h?.tipo === 'clase');
+  const puedeCambiarTareas = s =>
+    ['pendiente', 'aprobada'].includes(s.estado)
+    && s.fecha_solicitada >= hoyLocal()
+    && horasDeClase(s).length > 0;
+
+  function abrirTareas(s) {
+    const t = {};
+    horasDeClase(s).forEach(h => {
+      t[h.hora] = {
+        instrucciones: h.instrucciones || '',
+        archivo_url: h.archivo_url || (Array.isArray(h.archivos) && h.archivos[0]?.url) || '',
+        archivo_nombre: h.archivo_nombre || (Array.isArray(h.archivos) && h.archivos[0]?.nombre) || '',
+        archivo: null,
+      };
+    });
+    setTareasEdit(t);
+    setTareasDe(s.id);
+    setError('');
+  }
+
+  async function guardarTareas(s) {
+    setGuardandoTareas(true);
+    setError('');
+    try {
+      const tareas = [];
+      for (const [hora, t] of Object.entries(tareasEdit)) {
+        let url = t.archivo_url || '';
+        let nombre = t.archivo_nombre || '';
+        if (t.archivo instanceof File) {
+          const fd = new FormData();
+          fd.append('archivo', t.archivo);
+          fd.append('carpeta', 'dld_tareas');
+          fd.append('bucket', 'dld-archivos');
+          const up = await fetch('/api/documento', { method: 'POST', body: fd }).then(r => r.json()).catch(() => ({}));
+          if (!up.url) {
+            setError(`⚠️ No se pudo subir el archivo de ${hora}: ${up.error || 'fallo'}. No se ha guardado nada.`);
+            setGuardandoTareas(false);
+            return;
+          }
+          url = up.url;
+          nombre = t.archivo.name;
+        }
+        tareas.push({ hora, instrucciones: t.instrucciones || '', archivo_url: url || null, archivo_nombre: nombre || null });
+      }
+      const r = await fetch('/api/dld', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accion: 'editar_tareas', id: s.id, datos: { tareas } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { setError('No se pudieron guardar las tareas: ' + (j.message || j.error || 'inténtalo de nuevo')); setGuardandoTareas(false); return; }
+      setTareasDe(null);
+      setTareasEdit({});
+      setMsgOk(s.estado === 'aprobada'
+        ? '✅ Tareas guardadas. Ya las ve el profesorado de guardia que cubre tus grupos.'
+        : '✅ Tareas guardadas en tu solicitud.');
+      setTimeout(() => setMsgOk(''), 5000);
+      cargarDatos(profesorId);
+    } catch (e) {
+      setError('Error inesperado: ' + e.message);
+    }
+    setGuardandoTareas(false);
+  }
+
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f0f4f0', fontFamily: 'system-ui, sans-serif' }}>
 
@@ -562,6 +640,74 @@ export default function DLD() {
                         })}
                       </div>
                     )}
+                    {/* Tareas: se pueden añadir o cambiar hasta el mismo día */}
+                    {puedeCambiarTareas(s) && tareasDe !== s.id && (
+                      <button
+                        onClick={() => abrirTareas(s)}
+                        style={{
+                          marginTop: 10, marginRight: 8, padding: '8px 16px', borderRadius: 8,
+                          border: '1.5px solid #1e40af', backgroundColor: '#eff6ff',
+                          color: '#1e40af', fontWeight: 700, fontSize: 12.5, cursor: 'pointer',
+                        }}
+                      >
+                        ✏️ Añadir o cambiar tareas
+                      </button>
+                    )}
+                    {tareasDe === s.id && (
+                      <div style={{ marginTop: 10, backgroundColor: '#f8fafc', border: '1.5px solid #bfdbfe', borderRadius: 10, padding: '12px 14px' }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 800, color: '#1e40af', marginBottom: 4 }}>✏️ Tareas para tus grupos</div>
+                        <div style={{ fontSize: 11.5, color: '#475569', marginBottom: 10, lineHeight: 1.5 }}>
+                          Puedes cambiarlas hasta el mismo día.
+                          {s.estado === 'aprobada' && ' Al guardar, las ve al momento el profesorado de guardia que cubre tus grupos.'}
+                        </div>
+                        {horasDeClase(s).map(h => {
+                          const t = tareasEdit[h.hora] || {};
+                          const cambia = (campo, valor) => setTareasEdit(prev => ({ ...prev, [h.hora]: { ...prev[h.hora], [campo]: valor } }));
+                          return (
+                            <div key={h.hora} style={{ marginBottom: 12 }}>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>
+                                {h.hora} · {h.grupo}{h.materia ? ` · ${h.materia}` : ''}
+                              </div>
+                              <textarea
+                                value={t.instrucciones || ''}
+                                onChange={e => cambia('instrucciones', e.target.value)}
+                                placeholder="Qué deben hacer tus alumnos en esta hora…"
+                                rows={2}
+                                style={{ ...inputEstilo, fontSize: 13, resize: 'vertical' }}
+                              />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap', fontSize: 12 }}>
+                                {t.archivo ? (
+                                  <span style={{ color: '#1e40af', fontWeight: 600 }}>📎 {t.archivo.name} (nuevo)</span>
+                                ) : t.archivo_url ? (
+                                  <a href={enlaceDocumento(t.archivo_url)} target="_blank" rel="noopener noreferrer" style={{ color: '#1e40af', fontWeight: 600, textDecoration: 'none' }}>📎 {t.archivo_nombre || 'Archivo'}</a>
+                                ) : null}
+                                {(t.archivo || t.archivo_url) && (
+                                  <button onClick={() => { cambia('archivo', null); cambia('archivo_url', ''); cambia('archivo_nombre', ''); }}
+                                    style={{ border: 'none', background: 'none', color: '#b91c1c', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+                                    ✕ Quitar
+                                  </button>
+                                )}
+                                <label style={{ color: '#475569', cursor: 'pointer', textDecoration: 'underline' }}>
+                                  {t.archivo || t.archivo_url ? 'Cambiar archivo' : '📎 Adjuntar archivo'}
+                                  <input type="file" style={{ display: 'none' }}
+                                    onChange={e => { const f = e.target.files?.[0]; if (f) cambia('archivo', f); e.target.value = ''; }} />
+                                </label>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => guardarTareas(s)} disabled={guardandoTareas}
+                            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', backgroundColor: verde, color: 'white', fontWeight: 700, fontSize: 13, cursor: guardandoTareas ? 'wait' : 'pointer', opacity: guardandoTareas ? 0.7 : 1 }}>
+                            {guardandoTareas ? 'Guardando…' : '💾 Guardar tareas'}
+                          </button>
+                          <button onClick={() => { setTareasDe(null); setTareasEdit({}); }} disabled={guardandoTareas}
+                            style={{ padding: '9px 14px', borderRadius: 8, border: '1.5px solid #d1d5db', backgroundColor: 'white', color: '#6b7280', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                            Cancelar
+                          </button>
+                        </div>
+                      </div>
+                    )}
                     {s.estado === 'rechazada' && s.motivo_rechazo && (
                       <div style={{ marginTop: 10, backgroundColor: '#fef2f2', border: '1.5px solid #fca5a5', borderRadius: 10, padding: '12px 14px' }}>
                         <div style={{ fontSize: 12, fontWeight: 800, color: '#b91c1c', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -602,7 +748,7 @@ export default function DLD() {
                           </div>
                         )}
                         <div style={{ fontSize: 11, color: '#166534', marginTop: 6 }}>
-                          ℹ️ Recuerda entregar el plan de actividades a Jefatura de Estudios con antelación.
+                          ℹ️ Puedes añadir o cambiar las tareas de tus grupos hasta el mismo día.
                         </div>
                       </div>
                     )}

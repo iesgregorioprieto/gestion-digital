@@ -1524,7 +1524,7 @@ export default function Ausencias() {
                     </div>
                   )}
 
-                  {/* Botón editar tareas — solo si aún no ha pasado la fecha o está pendiente */}
+                  {/* Botón de tareas: siempre, hasta el último día de la ausencia (o si sigue pendiente) */}
                   {(() => {
                     const hoyStr = hoyLocal();
                     const finAusencia = a.fecha_fin || a.fecha_inicio;
@@ -1541,8 +1541,11 @@ export default function Ausencias() {
                             display: 'inline-flex', alignItems: 'center', gap: 6,
                           }}
                         >
-                          ✏️ Editar tareas y horario
+                          ✏️ Añadir o cambiar tareas
                         </button>
+                        <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>
+                          Puedes cambiarlas hasta el mismo día{a.subtipo === 'dld' ? ', también con el DLD ya concedido' : ''}.
+                        </div>
                       </div>
                     );
                   })()}

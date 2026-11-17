@@ -328,6 +328,98 @@ async function calcularDias(fila) {
   });
 }
 
+/**
+ * LAS TAREAS LLEGAN A LAS GUARDIAS YA REPARTIDAS (nov. 2026)
+ *
+ * El profesorado puede añadir o cambiar sus tareas hasta el mismo día de
+ * la ausencia, también en un DLD ya concedido: hasta el último momento
+ * puede cambiar lo que tienen que hacer sus alumnos. Rehacer el reparto
+ * no basta, porque no toca lo fichado, lo puesto a mano por jefatura ni
+ * la hora en curso; y justo el mismo día es cuando más cuenta que quien
+ * está en el aula vea la tarea buena. Aquí se escribe la tarea en todas
+ * sus guardias de hoy en adelante, sin mover a nadie.
+ *
+ * Nunca lanza: la ausencia ya está guardada. Devuelve cuántas cambió.
+ */
+async function llevarTareasAGuardias(aus, nuevas) {
+  let cambiadas = 0;
+  try {
+    const numHora = h => String(h?.hora || h?.hora_id || '').trim().match(/^(\d)/)?.[1] || '';
+    const porHoras = (nuevas || []).some(h => numHora(h) || /^tarde/i.test(String(h?.hora || h?.hora_id || '').trim()));
+    const hoy = hoyLocal();
+    const desde = aus.fecha_inicio > hoy ? aus.fecha_inicio : hoy;
+    const hasta = porHoras ? (aus.fecha_fin || aus.fecha_inicio) : aus.fecha_fin;
+    if (hasta && hasta < desde) return 0;
+
+    let q = supa().from('apoyos_asignados')
+      .select('id, fecha, hora, grupo, materia, tarea, tarea_archivos')
+      .eq('profesor_ausente_id', aus.profesor_id)
+      .gte('fecha', desde);
+    if (hasta) q = q.lte('fecha', hasta);
+    const { data: apoyos } = await q;
+
+    const bloques = (nuevas || []).filter(h => !numHora(h));
+    const unico = bloques.length === 1 ? bloques[0] : null;
+    const n = s => normClave(s || '');
+
+    for (const ap of apoyos || []) {
+      const t = porHoras
+        ? nuevas.find(h => numHora(h) && numHora(h) === normHora(ap.hora))
+        : (bloques.find(b => n(b.grupo) === n(ap.grupo) && n(b.materia) === n(ap.materia))
+          || bloques.find(b => n(b.grupo) === n(ap.grupo))
+          || unico);
+      if (!t) continue;
+      const tarea = t.instrucciones || null;
+      const archivos = adjuntosDe(t);
+      const antes = JSON.stringify((ap.tarea_archivos || []).map(a => a?.url));
+      if ((ap.tarea || null) === tarea && antes === JSON.stringify(archivos.map(a => a.url))) continue;
+      const { error } = await supa().from('apoyos_asignados')
+        .update({ tarea, tarea_archivos: archivos.length ? archivos : null })
+        .eq('id', ap.id);
+      if (!error) cambiadas++;
+    }
+  } catch (e) {
+    console.error('llevar tareas a las guardias:', e?.message);
+  }
+  return cambiadas;
+}
+
+/**
+ * AUSENCIA DE UN DLD → SU SOLICITUD
+ *
+ * Si el profesor cambia las tareas desde «Mis ausencias», el DLD tiene
+ * que quedarse con las mismas: es lo que ve José María en Gestión → DLD
+ * y lo que vuelve a ver el profesor en su módulo DLD. Nunca lanza.
+ */
+async function copiarTareasAlDld(ausId) {
+  try {
+    const { data } = await supa().from('ausencias')
+      .select('subtipo, datos_extra, horas').eq('id', ausId);
+    const a = (data || [])[0];
+    const dldId = a?.subtipo === 'dld' ? a?.datos_extra?.dld_id : null;
+    if (!dldId) return;
+    const horas = Array.isArray(a.horas) ? a.horas : [];
+    const porGrupo = {};
+    horas.forEach(h => {
+      if (h?.tipo !== 'clase' || !h.grupo) return;
+      const adj = adjuntosDe(h);
+      (porGrupo[h.grupo] ||= []).push({
+        hora: h.hora,
+        instrucciones: h.instrucciones || '',
+        archivoUrl: adj[0]?.url || '',
+        archivoNombre: adj[0]?.nombre || '',
+      });
+    });
+    const { error } = await supa().from('dld').update({
+      horas,
+      grupos_afectados: Object.entries(porGrupo).map(([grupo, hs]) => ({ grupo, horas: hs })),
+    }).eq('id', dldId);
+    if (error) console.error('copiar tareas al DLD:', error.message);
+  } catch (e) {
+    console.error('copiar tareas al DLD:', e?.message);
+  }
+}
+
 /** ¿Tiene esa persona una actividad complementaria autorizada (o una comisión de servicio autorizada) en esas fechas? */
 async function actividadAutorizadaPara(profesorId, ini, fin, comisionId) {
   if (!ini) return false;
@@ -677,6 +769,17 @@ export async function POST(request) {
       // (solo estado y documentos) no cambia nada y no lo dispara.
       if (cambiaCuandoFalta) await rehacerReparto(request);
 
+      // Las tareas nuevas, también en las guardias que el reparto no
+      // rehace (fichadas, puestas a mano o de la hora en curso), y en el
+      // DLD si la ausencia viene de uno.
+      if ('horas' in cambios) {
+        const { data: tras } = await supa().from('ausencias')
+          .select('profesor_id, fecha_inicio, fecha_fin, horas').eq('id', id);
+        const fila = (tras || [])[0];
+        if (fila) await llevarTareasAGuardias(fila, Array.isArray(fila.horas) ? fila.horas : []);
+        await copiarTareasAlDld(id);
+      }
+
       return Response.json({ ok: true });
     }
 
@@ -796,7 +899,8 @@ export async function POST(request) {
      * para que no parezca que la dejó el profesor.
      */
     if (accion === 'editar_tareas') {
-      if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      // Jefatura con cualquier ausencia; el profesor, con las suyas, siempre
+      // (también un DLD ya concedido): hasta el mismo día puede cambiar.
       if (!id || !Array.isArray(datos?.tareas)) {
         return Response.json({ error: 'Faltan datos' }, { status: 400 });
       }
@@ -808,6 +912,10 @@ export async function POST(request) {
       if (errLee) return Response.json({ error: errLee.message }, { status: 500 });
       const aus = (filas || [])[0];
       if (!aus) return Response.json({ error: 'no_encontrada' }, { status: 404 });
+      const directivo = esDirectivo(sesion);
+      if (!directivo && aus.profesor_id !== sesion.id) {
+        return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      }
 
       const numHora = h => String(h?.hora || h?.hora_id || '').trim().match(/^(\d)/)?.[1] || '';
       const limpia = t => ({
@@ -823,14 +931,20 @@ export async function POST(request) {
         textoDe(h) === t.instrucciones
         && JSON.stringify(adjuntosDe(h).map(a => a.url)) === JSON.stringify(t.archivos.map(a => a.url));
       const firma = { por: sesion.nombre || 'Jefatura', en: new Date().toISOString() };
-      const conTarea = (h, t) => ({
-        ...h,
-        instrucciones: t.instrucciones,
-        archivos: t.archivos,
-        archivo_url: t.archivos[0]?.url || null,
-        archivo_nombre: t.archivos[0]?.nombre || null,
-        tarea_jefatura: firma,
-      });
+      const conTarea = (h, t) => {
+        const fila = {
+          ...h,
+          instrucciones: t.instrucciones,
+          archivos: t.archivos,
+          archivo_url: t.archivos[0]?.url || null,
+          archivo_nombre: t.archivos[0]?.nombre || null,
+        };
+        // La firma de jefatura solo cuando la pone jefatura; si la cambia
+        // el propio profesor, la tarea vuelve a ser suya.
+        if (directivo) fila.tarea_jefatura = firma;
+        else delete fila.tarea_jefatura;
+        return fila;
+      };
 
       const horas = Array.isArray(aus.horas) ? aus.horas : [];
       // Por horas si marcó alguna hora concreta (también de tarde); si no, por módulos
@@ -884,43 +998,9 @@ export async function POST(request) {
       if (errGuarda) return Response.json({ error: errGuarda.message }, { status: 500 });
 
       // Llevar la tarea a las guardias ya repartidas, de hoy en adelante
-      let guardiasActualizadas = 0;
-      try {
-        const hoy = hoyLocal();
-        const desde = aus.fecha_inicio > hoy ? aus.fecha_inicio : hoy;
-        const hasta = porHoras ? (aus.fecha_fin || aus.fecha_inicio) : aus.fecha_fin;
-        if (!hasta || hasta >= desde) {
-          let q = supa().from('apoyos_asignados')
-            .select('id, fecha, hora, grupo, materia, tarea, tarea_archivos')
-            .eq('profesor_ausente_id', aus.profesor_id)
-            .gte('fecha', desde);
-          if (hasta) q = q.lte('fecha', hasta);
-          const { data: apoyos } = await q;
-
-          const bloques = nuevas.filter(h => !numHora(h));
-          const unico = bloques.length === 1 ? bloques[0] : null;
-          const n = s => normClave(s || '');
-
-          for (const ap of apoyos || []) {
-            const t = porHoras
-              ? nuevas.find(h => numHora(h) && numHora(h) === normHora(ap.hora))
-              : (bloques.find(b => n(b.grupo) === n(ap.grupo) && n(b.materia) === n(ap.materia))
-                || bloques.find(b => n(b.grupo) === n(ap.grupo))
-                || unico);
-            if (!t) continue;
-            const tarea = t.instrucciones || null;
-            const archivos = adjuntosDe(t);
-            const antes = JSON.stringify((ap.tarea_archivos || []).map(a => a?.url));
-            if ((ap.tarea || null) === tarea && antes === JSON.stringify(archivos.map(a => a.url))) continue;
-            const { error } = await supa().from('apoyos_asignados')
-              .update({ tarea, tarea_archivos: archivos.length ? archivos : null })
-              .eq('id', ap.id);
-            if (!error) guardiasActualizadas++;
-          }
-        }
-      } catch (e) {
-        console.error('editar_tareas: no se han podido actualizar las guardias:', e?.message);
-      }
+      const guardiasActualizadas = await llevarTareasAGuardias(aus, nuevas);
+      // Si es la ausencia de un DLD, la solicitud se queda con las mismas
+      await copiarTareasAlDld(id);
 
       return Response.json({ ok: true, horas: nuevas, cambiadas, guardias_actualizadas: guardiasActualizadas });
     }

@@ -623,6 +623,110 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
+    /**
+     * EL PROFESOR AÑADE O CAMBIA SUS TAREAS (nov. 2026)
+     *
+     * Hasta el mismo día del DLD puede cambiar lo que deben hacer sus
+     * alumnos, esté pendiente o ya concedido. Solo se tocan las tareas
+     * (texto y archivo) de las horas que ya tenía: el día, las horas y
+     * los grupos son lo que autorizó el director y no se mueven.
+     *
+     * Si ya está concedido, el cambio pasa también a su ausencia y a las
+     * guardias repartidas, por el mismo camino que «Mis ausencias».
+     */
+    if (accion === 'editar_tareas') {
+      if (!id || !Array.isArray(datos?.tareas)) {
+        return Response.json({ error: 'Faltan datos' }, { status: 400 });
+      }
+      const { data: filas, error: errLee } = await supa().from('dld')
+        .select('id, profesor_id, estado, fecha_solicitada, horas').eq('id', id);
+      if (errLee) return Response.json({ error: errLee.message }, { status: 500 });
+      const d = (filas || [])[0];
+      if (!d) return Response.json({ error: 'no_encontrada' }, { status: 404 });
+      if (d.profesor_id !== sesion.id && !esDirectivo(sesion)) {
+        return Response.json({ error: 'sin_permisos' }, { status: 403 });
+      }
+      if (!['pendiente', 'aprobada'].includes(d.estado)) {
+        const texto = 'Solo se pueden cambiar las tareas de un DLD pendiente o concedido.';
+        return Response.json({ error: texto, message: texto }, { status: 400 });
+      }
+      const hoy = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Europe/Madrid', year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date());
+      if (d.fecha_solicitada < hoy) {
+        const texto = 'Ese día ya ha pasado: las tareas ya no se pueden cambiar.';
+        return Response.json({ error: texto, message: texto }, { status: 400 });
+      }
+
+      const numHora = h => String(h?.hora || '').trim().match(/^(\d)/)?.[1] || String(h?.hora || '').trim();
+      const horas = Array.isArray(d.horas) ? d.horas : [];
+      const nuevas = horas.map(h => {
+        const llega = datos.tareas.find(t => numHora(t) === numHora(h));
+        if (!llega || h?.tipo !== 'clase') return h;
+        const url = llega.archivo_url ? String(llega.archivo_url) : null;
+        const nombre = url ? String(llega.archivo_nombre || 'Archivo') : null;
+        const fila = {
+          ...h,
+          instrucciones: String(llega.instrucciones || '').trim() || null,
+          archivo_url: url,
+          archivo_nombre: nombre,
+        };
+        delete fila.archivos;  // el DLD guarda un solo archivo por hora
+        return fila;
+      });
+
+      const porGrupo = {};
+      nuevas.forEach(h => {
+        if (h?.tipo !== 'clase' || !h.grupo) return;
+        (porGrupo[h.grupo] ||= []).push({
+          hora: h.hora, instrucciones: h.instrucciones || '',
+          archivoUrl: h.archivo_url || '', archivoNombre: h.archivo_nombre || '',
+        });
+      });
+
+      const { error: errGuarda } = await supa().from('dld').update({
+        horas: nuevas,
+        grupos_afectados: Object.entries(porGrupo).map(([grupo, hs]) => ({ grupo, horas: hs })),
+      }).eq('id', id);
+      if (errGuarda) return Response.json({ error: errGuarda.message }, { status: 500 });
+
+      // Concedido: la ausencia y sus guardias, con las mismas tareas
+      let guardias = 0;
+      if (d.estado === 'aprobada') {
+        const { data: aus } = await supa().from('ausencias').select('id')
+          .eq('subtipo', 'dld').eq('datos_extra->>dld_id', String(id));
+        const ausId = (aus || [])[0]?.id;
+        if (ausId) {
+          const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://app.iesgregorioprieto.com';
+          try {
+            const r = await fetch(`${baseUrl}/api/ausencias`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Cookie': request.headers.get('cookie') || '' },
+              body: JSON.stringify({
+                accion: 'editar_tareas', id: ausId,
+                datos: {
+                  tareas: nuevas.filter(h => h?.tipo === 'clase').map(h => ({
+                    hora: numHora(h),
+                    instrucciones: h.instrucciones || '',
+                    archivos: h.archivo_url ? [{ url: h.archivo_url, nombre: h.archivo_nombre || 'Archivo' }] : [],
+                  })),
+                },
+              }),
+            });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) console.error('tareas DLD → ausencia:', r.status, j?.error);
+            guardias = j?.guardias_actualizadas || 0;
+          } catch (e) {
+            console.error('tareas DLD → ausencia:', e?.message);
+          }
+        } else {
+          // Aprobado sin ausencia (antiguo): el reparto lee el propio DLD
+          await rehacerReparto(request);
+        }
+      }
+      return Response.json({ ok: true, guardias_actualizadas: guardias });
+    }
+
     // ─── Archivar las solicitudes al cambiar de curso ───
     if (accion === 'archivar_curso') {
       if (!esDirectivo(sesion)) return Response.json({ error: 'sin_permisos' }, { status: 403 });
