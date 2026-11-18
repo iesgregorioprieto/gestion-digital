@@ -11,7 +11,7 @@ import { consulta } from '@/lib/consulta';
 import { departamentoASector } from '@/lib/sectores';
 import { getCursoActual } from '@/lib/curso';
 import RepartoGuardias from '@/components/RepartoGuardias';
-import { esHoraSinAlumnos, actividadOcupaHora } from '@/lib/asignacionGuardias';
+import { esHoraSinAlumnos, actividadOcupaHora, grupoSinGuardiaPorActividad } from '@/lib/asignacionGuardias';
 import { esGrupoCiclo, normGrupo } from '@/lib/grupos';
 import { esSectorFP } from '@/lib/sectores';
 
@@ -309,9 +309,8 @@ export default function GestionGuardias() {
       (acts || [])
         .filter(a => a.estado !== 'rechazada' && (a.fecha_fin || a.fecha_inicio) >= f)
         .forEach(a => {
-          const asistentes = a.alumnos_asistentes || {};
           (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
-            if (asistentes[g] === 'todos') fuera.push({ g: normGrupo(g), titulo: a.titulo || 'una actividad', act: a });
+            if (grupoSinGuardiaPorActividad(a, g)) fuera.push({ g: normGrupo(g), titulo: a.titulo || 'una actividad', act: a });
           });
         });
       setGruposFueraDia(fuera);
@@ -432,7 +431,7 @@ export default function GestionGuardias() {
         // Solo a las horas que dura la actividad (queja #230).
         const act = t && gruposFueraDia.find(x => x.g && t.includes(x.g) && actividadOcupaHora(x.act, hid));
         if (act) {
-          grises.push({ a, hh, motivo: `El grupo está en la actividad «${act.titulo}»: no hay que cubrirlo.` });
+          grises.push({ a, hh, motivo: `El grupo está en la actividad «${act.titulo}»: no se cubre (si quedan alumnos, siguen con su profesor de clase).` });
           return;
         }
         const ciclo = esGrupoCiclo(hh.grupo);

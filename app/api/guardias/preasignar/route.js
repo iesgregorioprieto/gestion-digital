@@ -23,7 +23,7 @@ import {
   HORAS_GUARDIA, diaSemanaEs, construirCuadrante, prepararHuecos,
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
-  pesoFranja, claveFranja, FRANJAS, actividadOcupaHora,
+  pesoFranja, claveFranja, FRANJAS, actividadOcupaHora, grupoSinGuardiaPorActividad,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo, separarGrupoAula } from '@/lib/grupos';
@@ -504,17 +504,21 @@ export async function POST(request) {
        *
        * El dato ya lo recoge el módulo de actividades: por cada grupo se
        * guarda la lista de alumnos que van, o la palabra 'todos' si va el
-       * grupo completo. Si va solo una parte, el resto se queda en el
-       * centro y esa clase se cubre como cualquier otra.
+       * grupo completo. Si va solo una parte, solo se cubre con guardia
+       * cuando la actividad es de un único grupo y de una sola hora; si es
+       * de varios grupos o de varias horas, los que se quedan siguen con el
+       * profesor con el que tengan clase (jefatura, 18/11/2026). Ver
+       * grupoSinGuardiaPorActividad().
        */
       const gruposFuera = [];
       (rAct.data || [])
         .filter(a => a.estado !== 'rechazada' && afectaA(a, diaFecha))
         .forEach(a => {
-          const asistentes = a.alumnos_asistentes || {};
           (Array.isArray(a.grupos) ? a.grupos : []).forEach(g => {
             // Con la actividad, para saber A QUÉ HORAS está fuera el grupo.
-            if (asistentes[g] === 'todos') gruposFuera.push({ g: normGrupo(g), act: a });
+            // Va entero, o es de varios grupos o varias horas (criterio de
+            // jefatura, 18/11/2026): esa clase no genera guardia.
+            if (grupoSinGuardiaPorActividad(a, g)) gruposFuera.push({ g: normGrupo(g), act: a });
           });
         });
 
