@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react';
 import { fichajeAbierto, fichajeCerrado, MARGEN_FICHAJE_MIN, MARGEN_CREADA_TARDE_MIN } from '@/lib/asignacionGuardias';
 import { enlaceDocumento } from '@/lib/adjuntos';
 import MiContadorGuardias from '@/components/MiContadorGuardias';
+import MisFranjasGuardia from '@/components/MisFranjasGuardia';
 import RepartoGuardias from '@/components/RepartoGuardias';
 import { hoyLocal } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
@@ -660,7 +661,11 @@ export default function Guardias() {
 
 
       {/* Cuántas lleva y la media de su sector */}
-      <div style={{ padding: '12px 16px 0' }}><MiContadorGuardias /></div>
+      <div style={{ padding: '12px 16px 0' }}>
+        <MiContadorGuardias />
+        {/* #186: cuántas lleva cada compañero en tus franjas */}
+        <MisFranjasGuardia />
+      </div>
 
       {/* LO TUYO, ANTES QUE NADA
           Quien entra entre clase y clase quiere saber si le toca algo y
