@@ -310,7 +310,18 @@ export default function GestionActividades() {
   }
 
   const pendientes = actividades.filter(a => (a.estado || 'pendiente') === 'pendiente');
-  const resueltas  = actividades.filter(a => (a.estado || 'pendiente') !== 'pendiente');
+  // Resueltas: arriba las que están por venir (la más cercana primero) y
+  // abajo las ya pasadas, de la más reciente a la más antigua. Así las de
+  // septiembre no tapan lo que interesa hoy.
+  const hoyStr = hoyLocal();
+  const resueltasTodas = actividades.filter(a => (a.estado || 'pendiente') !== 'pendiente');
+  const finDe = a => a.fecha_fin || a.fecha_inicio || '';
+  const resueltas = [
+    ...resueltasTodas.filter(a => finDe(a) >= hoyStr)
+      .sort((x, y) => (x.fecha_inicio || '').localeCompare(y.fecha_inicio || '')),
+    ...resueltasTodas.filter(a => finDe(a) < hoyStr)
+      .sort((x, y) => (y.fecha_inicio || '').localeCompare(x.fecha_inicio || '')),
+  ];
   const sinPga     = pendientes.filter(a => a.en_pga === false);
 
   const lista = vista === 'pendientes' ? pendientes
