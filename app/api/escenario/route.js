@@ -149,7 +149,8 @@ export async function GET(request) {
 
   (rAct.data || []).filter(a => a.estado !== 'rechazada').forEach(a => {
     const acomp = Array.isArray(a.acompanantes) ? a.acompanantes : [];
-    const nombres = [a.profesor_nombre, ...acomp.map(comoNombre)].filter(Boolean);
+    // Sin repetir al responsable si además se marcó como acompañante (#253)
+    const nombres = [...new Set([a.profesor_nombre, ...acomp.map(comoNombre)].filter(Boolean))];
     const grupos = Array.isArray(a.grupos) && a.grupos.length ? ` · ${a.grupos.join(', ')}` : '';
     nombres.forEach(n => {
       items.push({

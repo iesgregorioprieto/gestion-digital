@@ -451,7 +451,11 @@ export default function GestionActividades() {
             lista.map(a => {
               const est = ESTADOS[a.estado || 'pendiente'];
               const enPga = a.en_pga === true;
-              const nAcomp = Array.isArray(a.acompanantes) ? a.acompanantes.length : 0;
+              // Acompañantes sin el responsable: al proponer, algunos se marcan
+              // también a sí mismos y la cabecera contaba uno de más (#253).
+              const idsAcomp = (Array.isArray(a.acompanantes) ? a.acompanantes : [])
+                .filter(id => id && id !== a.profesor_id);
+              const nombresAcomp = idsAcomp.map(id => nombresProf[id] || 'Profesor/a sin ficha');
               const grupos = Array.isArray(a.grupos) ? a.grupos.join(', ') : '';
               const abiertaEsta = abierta === a.id;
               const coinciden = (a.estado || 'pendiente') === 'pendiente'
@@ -477,9 +481,13 @@ export default function GestionActividades() {
                         </div>
                         <div style={{ fontSize: 12.5, color: '#777', marginTop: 3 }}>
                           {a.profesor_nombre}
-                          {nAcomp > 0 ? ` + ${nAcomp} ${nAcomp === 1 ? 'acompañante' : 'acompañantes'}` : ''}
                           {grupos ? ` · ${grupos}` : ''}
                           {a.departamento ? ` · ${a.departamento}` : ''}
+                        </div>
+                        {/* Quién acompaña, a la vista sin desplegar la tarjeta (#253) */}
+                        <div style={{ fontSize: 12.5, color: '#5b21b6', marginTop: 4, lineHeight: 1.5 }}>
+                          👩‍🏫 <strong>Acompañan{nombresAcomp.length ? ` (${nombresAcomp.length})` : ''}:</strong>{' '}
+                          {nombresAcomp.length ? nombresAcomp.join(' · ') : <span style={{ color: '#94a3b8' }}>nadie más</span>}
                         </div>
                         {coinciden.length > 0 && (
                           <div style={{ marginTop: 7, fontSize: 12.5, color: '#9a3412', backgroundColor: '#fff7ed',

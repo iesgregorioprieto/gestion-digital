@@ -118,6 +118,7 @@ export async function POST(request) {
         for (const [n, act] of conAutor.entries()) {
           const responsable = act.profesor_nombre || sesion.nombre || 'Un profesor/a';
           const acomp = (Array.isArray(act.acompanantes) ? act.acompanantes : [])
+            .filter(id => id !== act.profesor_id)
             .map(id => nombrePorId[id]).filter(Boolean);
           enviarAviso('actividad_sin_pga', AVISOS_ACTIVIDADES, {
             profesor: responsable,
@@ -147,9 +148,11 @@ export async function POST(request) {
               titulo: '🎒 Actividad por autorizar',
               cuerpo: `${primera.profesor_nombre || sesion.nombre || 'Un profesor/a'}: ${primera.titulo || 'actividad complementaria'}`
                 + (primera.fecha_inicio ? ` (${primera.fecha_inicio})` : '')
-                + (Array.isArray(primera.acompanantes) && primera.acompanantes.length
-                  ? ` · ${primera.acompanantes.length + 1} profesores`
-                  : '')
+                + (() => {
+                  // Sin contar dos veces al responsable si se marcó como acompañante (#253)
+                  const n = new Set([primera.profesor_id, ...(Array.isArray(primera.acompanantes) ? primera.acompanantes : [])].filter(Boolean)).size;
+                  return n > 1 ? ` · ${n} profesores` : '';
+                })()
                 + (coincidenDe[0]?.length ? ` · ⚠️ Coincide con: ${coincidenDe[0].join('; ')}` : ''),
               url: '/gestion/actividades',
             });
