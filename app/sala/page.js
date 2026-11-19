@@ -14,6 +14,21 @@ const HORAS = [
 
 const DIAS = ['domingo','lunes','martes','miercoles','jueves','viernes','sabado'];
 
+// Fecha local YYYY-MM-DD (nunca toISOString, que va en UTC)
+function fechaLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// Siguiente (+1) o anterior (-1) día lectivo, saltando sábados y domingos
+function moverDiaLectivo(fecha, paso) {
+  const d = new Date(fecha + 'T12:00:00');
+  do { d.setDate(d.getDate() + paso); } while (d.getDay() === 0 || d.getDay() === 6);
+  return fechaLocal(d);
+}
+
+// Si nadie toca la tele, vuelve sola a hoy pasado este tiempo
+const VUELTA_A_HOY_MS = 2 * 60 * 1000;
+
 function horaActual() {
   const h = new Date().getHours();
   const m = new Date().getMinutes();
@@ -69,11 +84,23 @@ export default function SalaProfesores() {
 
   const hoy = hoyLocal();
 
-  // La sala es siempre el escenario de hoy. Se recalcula en cada
-  // render (el reloj refresca cada segundo), así que a medianoche cambia
-  // solo de día aunque la tele se quede encendida.
-  const dia = hoy;
+  // La sala enseña el escenario de hoy. Con las flechas ‹ › junto a la
+  // fecha se puede mirar otro día lectivo (incidencia #251); si nadie la
+  // vuelve a tocar, a los 2 minutos regresa sola a hoy. Se recalcula en
+  // cada render (el reloj refresca cada segundo), así que a medianoche
+  // cambia sola de día aunque la tele se quede encendida.
+  const [diaElegido, setDiaElegido] = useState(null); // null = hoy
+  const [toqueDia, setToqueDia] = useState(0);
+  const dia = diaElegido || hoy;
   const esHoy = dia === hoy;
+  const diaRef = useRef(dia);
+  diaRef.current = dia;
+
+  function cambiarDia(paso) {
+    const nuevo = moverDiaLectivo(dia, paso);
+    setDiaElegido(nuevo === hoy ? null : nuevo);
+    setToqueDia(t => t + 1);
+  }
 
   const diaIdx = new Date(dia + 'T12:00:00').getDay();
   const diaNombre = DIAS[diaIdx];
@@ -99,9 +126,12 @@ export default function SalaProfesores() {
     // Todo llega de una sola llamada al servidor. Esta pantalla no tiene
     // sesión (la enciende cualquiera por la mañana), así que el servidor
     // devuelve solo lo del día y sin motivos ni justificaciones.
+    const pedido = diaRef.current;
     try {
-      const r = await fetch(`/api/sala?fecha=${dia}`);
+      const r = await fetch(`/api/sala?fecha=${pedido}`);
       const d = await r.json();
+      // Si mientras tanto se ha cambiado de día, esta respuesta ya no vale
+      if (pedido !== diaRef.current) return;
       setAusencias(d.ausencias || []);
       setDlds(d.dlds || []);
       setApoyos(d.apoyos || []);
@@ -120,7 +150,7 @@ export default function SalaProfesores() {
     }
 
     setUltimaCarga(new Date());
-  }, [dia]);
+  }, []);
 
   // El cuadrante se pone al día treinta minutos antes de que acabe cada
   // hora. Esta pantalla está encendida todo el día en la sala de
@@ -257,8 +287,22 @@ export default function SalaProfesores() {
     return () => { clearInterval(intervalo); clearInterval(relojInterval); clearInterval(vaiven); clearInterval(intervaloNoticias); clearInterval(alternancia); };
   }, [cargarDatos]);
 
-  // Al cambiar de día, resetear la hora seleccionada
-  useEffect(() => { setHoraVista(null); }, [dia]);
+  // Al cambiar de día, resetear la hora seleccionada y cargar ese día.
+  // La primera carga la hace el efecto de arriba; aquí solo los cambios,
+  // para no pedir dos veces lo mismo al encender la tele.
+  const primerDiaRef = useRef(true);
+  useEffect(() => {
+    setHoraVista(null);
+    if (primerDiaRef.current) { primerDiaRef.current = false; return; }
+    cargarDatos();
+  }, [dia, cargarDatos]);
+
+  // Mirando otro día: a los 2 minutos sin tocar las flechas, vuelve a hoy
+  useEffect(() => {
+    if (!diaElegido) return;
+    const t = setTimeout(() => setDiaElegido(null), VUELTA_A_HOY_MS);
+    return () => clearTimeout(t);
+  }, [diaElegido, toqueDia]);
 
   // Profesores ausentes con sus horas
   const profesAusentes = {};
@@ -316,6 +360,11 @@ export default function SalaProfesores() {
   const modoVisible = modos.includes(modoPanel) ? modoPanel : modos[0];
 
   const azul = '#1e3a5f';
+  const flechaDia = {
+    width: 28, height: 28, borderRadius: 7, border: '1px solid #334155', backgroundColor: '#0f172a',
+    color: 'white', fontSize: 18, fontWeight: 800, lineHeight: 1, cursor: 'pointer', padding: 0,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  };
   const verde = '#16a34a';
 
   return (
@@ -354,7 +403,24 @@ export default function SalaProfesores() {
           borderRadius: 12, border: '1px solid #334155', padding: '10px 16px',
           display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 6 }}>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, whiteSpace: 'nowrap' }}>📋 APrieto · Sala de Profesores</h1>
-          <div style={{ fontSize: 16, opacity: 0.85, textTransform: 'capitalize' }}>{formatFecha()}</div>
+          {/* Fecha con flechas para mirar otro día lectivo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={() => cambiarDia(-1)} title="Día lectivo anterior" style={flechaDia}>‹</button>
+            <div style={{ fontSize: 16, opacity: esHoy ? 0.85 : 1, textTransform: 'capitalize',
+              color: esHoy ? 'white' : '#fbbf24', fontWeight: esHoy ? 400 : 700 }}>{formatFecha()}</div>
+            <button onClick={() => cambiarDia(1)} title="Día lectivo siguiente" style={flechaDia}>›</button>
+          </div>
+          {!esHoy && (
+            <div style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 8, padding: '4px 11px', borderRadius: 7,
+              backgroundColor: 'rgba(251,191,36,0.15)', border: '1px solid #fbbf24',
+              fontSize: 13.5, fontWeight: 700, color: '#fcd34d' }}>
+              📅 Viendo otro día
+              <button onClick={() => setDiaElegido(null)} style={{ background: 'none', border: 'none',
+                color: '#fcd34d', cursor: 'pointer', fontSize: 13, fontWeight: 700, padding: 0 }}>
+                ← Volver a hoy
+              </button>
+            </div>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 2 }}>
             <div>
