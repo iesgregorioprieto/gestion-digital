@@ -309,19 +309,18 @@ export default function GestionActividades() {
     ));
   }
 
-  const pendientes = actividades.filter(a => (a.estado || 'pendiente') === 'pendiente');
-  // Resueltas: arriba las que están por venir (la más cercana primero) y
-  // abajo las ya pasadas, de la más reciente a la más antigua. Así las de
-  // septiembre no tapan lo que interesa hoy.
-  const hoyStr = hoyLocal();
-  const resueltasTodas = actividades.filter(a => (a.estado || 'pendiente') !== 'pendiente');
-  const finDe = a => a.fecha_fin || a.fecha_inicio || '';
-  const resueltas = [
-    ...resueltasTodas.filter(a => finDe(a) >= hoyStr)
-      .sort((x, y) => (x.fecha_inicio || '').localeCompare(y.fecha_inicio || '')),
-    ...resueltasTodas.filter(a => finDe(a) < hoyStr)
-      .sort((x, y) => (y.fecha_inicio || '').localeCompare(x.fecha_inicio || '')),
-  ];
+  // Orden de las dos listas: arriba la última en entrar y abajo las
+  // primeras (petición de Luis Javier, 19 nov. 2026). Si una fila no
+  // tuviera fecha de alta, se ordena por la fecha de la actividad.
+  const porEntrada = (x, y) =>
+    (y.created_at || '').localeCompare(x.created_at || '') ||
+    (y.fecha_inicio || '').localeCompare(x.fecha_inicio || '');
+  const pendientes = actividades
+    .filter(a => (a.estado || 'pendiente') === 'pendiente')
+    .sort(porEntrada);
+  const resueltas = actividades
+    .filter(a => (a.estado || 'pendiente') !== 'pendiente')
+    .sort(porEntrada);
   const sinPga     = pendientes.filter(a => a.en_pga === false);
 
   const lista = vista === 'pendientes' ? pendientes
