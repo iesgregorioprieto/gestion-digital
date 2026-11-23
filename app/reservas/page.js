@@ -14,6 +14,11 @@ import { hoyLocal } from '@/lib/fechas';
  *                       los días en el calendario (sin tope).
  *   · Aulas libres    → día y hora, y salen las aulas sin clase ni reserva
  *   · Mis solicitudes → estado de cada una; retirar o anular
+ *   · Gestionar       → solo responsables de un recurso y equipo directivo:
+ *                       pendientes (aceptar, ajustar quitando días o
+ *                       denegar), próximas (cambiar o anular), ahora en
+ *                       las aulas y registro descargable.
+ *                       Las altas directas se hacen desde «Reservar».
  *
  * Todo pasa por /api/reservas, que es quien comprueba huecos y permisos.
  */
@@ -64,6 +69,9 @@ export default function Reservas() {
   const [mensaje, setMensaje]   = useState(null);
   const [mias, setMias]         = useState([]);
   const [enviando, setEnviando] = useState(false);
+  const [gest, setGest]         = useState([]);
+  const [profesores, setProfesores] = useState([]);
+  const [alta, setAlta]         = useState({ activa: false, profesor_id: '' });
 
   // Reservar
   const [recursoId, setRecursoId] = useState('');
@@ -94,7 +102,7 @@ export default function Reservas() {
   useEffect(() => {
     if (!sessionStorage.getItem('profesor_id')) { window.location.href = '/login'; return; }
     const p = new URLSearchParams(window.location.search).get('vista');
-    if (['reservar', 'libres', 'mias'].includes(p)) setVista(p);
+    if (['reservar', 'libres', 'mias', 'gestion'].includes(p)) setVista(p);
     cargar();
   }, []);
 
@@ -119,6 +127,11 @@ export default function Reservas() {
       setRecursos(d.recursos || []);
       setMias(m?.solicitudes || []);
       setGrupos(g?.grupos || []);
+      if ((d.misRecursos || []).length) {
+        const [ge, pr] = await Promise.all([leer('vista=gestion'), leer('vista=profesores')]);
+        setGest(ge?.solicitudes || []);
+        setProfesores(pr?.profesores || []);
+      }
     } catch (e) {
       avisar(e.message);
     } finally {
@@ -129,6 +142,14 @@ export default function Reservas() {
   async function recargarMias() {
     try { const m = await leer('vista=mias'); setMias(m?.solicitudes || []); } catch (e) {}
   }
+
+  async function recargarGestion() {
+    if (!perfil.misRecursos.length) return;
+    try { const g = await leer('vista=gestion'); setGest(g?.solicitudes || []); } catch (e) {}
+  }
+
+  const gestiono = id => perfil.misRecursos.includes(id);
+  const esAlta = id => alta.activa && gestiono(id);
 
   async function post(accion, d) {
     const r = await fetch('/api/reservas', {
@@ -158,6 +179,7 @@ export default function Reservas() {
 
   function elegirRecurso(id) {
     setRecursoId(id);
+    setAlta({ activa: false, profesor_id: '' });
     setOcu({});
     setHoras([]);
     setDias([]);
@@ -236,15 +258,19 @@ export default function Reservas() {
 
     setEnviando(true);
     try {
-      const r = await post('solicitar', {
+      const directa = esAlta(recursoId);
+      const r = await post(directa ? 'alta' : 'solicitar', {
         recurso_id: recursoId, fechas, horas,
         actividad: datos.actividad, grupos: datos.grupos, recursos_uso: datos.recursos_uso,
+        ...(directa && alta.profesor_id ? { profesor_id: alta.profesor_id } : {}),
       });
-      avisar(`Solicitud enviada (${r.horas} ${r.horas === 1 ? 'hora' : 'horas'}). Te llegará un aviso cuando la resuelvan.`, 'ok');
+      avisar(directa
+        ? `Reserva dada de alta (${r.horas} ${r.horas === 1 ? 'hora' : 'horas'}). Se ha avisado al profesor.`
+        : `Solicitud enviada (${r.horas} ${r.horas === 1 ? 'hora' : 'horas'}). Te llegará un aviso cuando la resuelvan.`, 'ok');
       elegirRecurso('');
       setDatos(DATOS_VACIOS);
-      await recargarMias();
-      setVista('mias');
+      await Promise.all([recargarMias(), recargarGestion()]);
+      setVista(directa ? 'gestion' : 'mias');
     } catch (e) {
       avisar(e.message);
       if (modo === 'puntual' && fecha) cargarOcupacion(recursoId, fecha, fecha);
@@ -274,15 +300,18 @@ export default function Reservas() {
     if (falta) return avisar(falta);
     setEnviando(true);
     try {
-      await post('solicitar', {
+      const directa = esAlta('LIBRES');
+      await post(directa ? 'alta' : 'solicitar', {
         recurso_id: 'LIBRES', aula_libre: aulaLibre, fechas: [libFecha], horas: libHoras,
         actividad: datos.actividad, grupos: datos.grupos, recursos_uso: datos.recursos_uso,
+        ...(directa && alta.profesor_id ? { profesor_id: alta.profesor_id } : {}),
       });
-      avisar(`Solicitud del aula ${aulaLibre} enviada al equipo directivo.`, 'ok');
+      avisar(directa ? `Aula ${aulaLibre} dada de alta.` : `Solicitud del aula ${aulaLibre} enviada al equipo directivo.`, 'ok');
       setLibFecha(''); setLibHoras([]); setLibres(null); setAulaLibre('');
+      setAlta({ activa: false, profesor_id: '' });
       setDatos(DATOS_VACIOS);
-      await recargarMias();
-      setVista('mias');
+      await Promise.all([recargarMias(), recargarGestion()]);
+      setVista(directa ? 'gestion' : 'mias');
     } catch (e) {
       avisar(e.message);
     } finally {
@@ -324,7 +353,8 @@ export default function Reservas() {
     { id: 'reservar', label: '📅 Reservar' },
     { id: 'libres',   label: '🔎 Aulas libres' },
     { id: 'mias',     label: '📋 Mis solicitudes', n: pendientes },
-  ];
+    perfil.misRecursos.length > 0 && { id: 'gestion', label: '🛠️ Gestionar', n: gest.filter(s => s.filas.some(f => f.estado === 'pendiente')).length, rojo: true },
+  ].filter(Boolean);
 
   const aulas = recursos.filter(r => r.tipo === 'aula');
   const materiales = recursos.filter(r => r.tipo === 'material');
@@ -363,7 +393,7 @@ export default function Reservas() {
             }}>
               {t.label}
               {t.n > 0 && (
-                <span style={{ marginLeft: 7, backgroundColor: '#f59e0b', color: 'white', borderRadius: 20, padding: '1px 8px', fontSize: 12 }}>{t.n}</span>
+                <span style={{ marginLeft: 7, backgroundColor: t.rojo ? '#dc2626' : '#f59e0b', color: 'white', borderRadius: 20, padding: '1px 8px', fontSize: 12 }}>{t.n}</span>
               )}
             </button>
           ))}
@@ -450,10 +480,11 @@ export default function Reservas() {
             {recurso && (modo === 'puntual' ? horasMarcadasPuntual.length > 0 : (dias.length > 0 && horas.length > 0)) && (
               <div style={tarjeta}>
                 <Sub2>3 · Datos de la actividad</Sub2>
+                {gestiono(recurso.id) && <CajaAlta alta={alta} setAlta={setAlta} profesores={profesores} />}
                 <FormDatos datos={datos} setDatos={setDatos} grupos={grupos} perfil={perfil}
-                  material={recurso.tipo === 'material'} />
+                  material={recurso.tipo === 'material'} titular={esAlta(recurso.id) ? profesores.find(p => p.id === alta.profesor_id) : null} />
                 <button onClick={solicitar} disabled={enviando} style={{ ...boton, width: '100%', opacity: enviando ? 0.6 : 1 }}>
-                  {enviando ? '⏳ Enviando…' : '📨 Enviar solicitud'}
+                  {enviando ? '⏳ Enviando…' : esAlta(recurso.id) ? '✅ Dar de alta la reserva' : '📨 Enviar solicitud'}
                 </button>
               </div>
             )}
@@ -508,9 +539,11 @@ export default function Reservas() {
             {aulaLibre && (
               <div style={tarjeta}>
                 <Sub2>Aula {aulaLibre} · {fmtFechaLarga(libFecha)} · {libHoras.map(h => h + 'ª').join(', ')}</Sub2>
-                <FormDatos datos={datos} setDatos={setDatos} grupos={grupos} perfil={perfil} />
+                {gestiono('LIBRES') && <CajaAlta alta={alta} setAlta={setAlta} profesores={profesores} />}
+                <FormDatos datos={datos} setDatos={setDatos} grupos={grupos} perfil={perfil}
+                  titular={esAlta('LIBRES') ? profesores.find(p => p.id === alta.profesor_id) : null} />
                 <button onClick={solicitarLibre} disabled={enviando} style={{ ...boton, width: '100%', opacity: enviando ? 0.6 : 1 }}>
-                  {enviando ? '⏳ Enviando…' : '📨 Pedir el aula'}
+                  {enviando ? '⏳ Enviando…' : esAlta('LIBRES') ? '✅ Dar de alta el aula' : '📨 Pedir el aula'}
                 </button>
               </div>
             )}
@@ -540,6 +573,12 @@ export default function Reservas() {
               </>
             )}
           </div>
+        )}
+
+        {/* ══ GESTIONAR ══ */}
+        {vista === 'gestion' && perfil.misRecursos.length > 0 && (
+          <Gestionar gest={gest} recursos={recursos} perfil={perfil} hoy={hoy}
+            post={post} leer={leer} avisar={avisar} recargar={recargarGestion} />
         )}
       </div>
     </div>
@@ -656,7 +695,7 @@ function Leyenda({ bg, borde, children }) {
   );
 }
 
-function FormDatos({ datos, setDatos, grupos, perfil, material = false }) {
+function FormDatos({ datos, setDatos, grupos, perfil, material = false, titular = null }) {
   const [elegido, setElegido] = useState('');
   const set = (k, v) => setDatos(d => ({ ...d, [k]: v }));
   const añadir = g => {
@@ -666,7 +705,7 @@ function FormDatos({ datos, setDatos, grupos, perfil, material = false }) {
   return (
     <>
       <div style={{ fontSize: 12.5, color: '#4b5563', marginBottom: 14, padding: '8px 12px', backgroundColor: '#f9fafb', borderRadius: 8 }}>
-        Solicitante: <strong>{perfil.nombre}</strong> · {perfil.email}
+        {titular ? 'A nombre de' : 'Solicitante'}: <strong>{titular ? titular.nombre : perfil.nombre}</strong> · {titular ? titular.email : perfil.email}
       </div>
       <Campo label="Actividad o proyecto *">
         <textarea style={{ ...input, minHeight: 64, resize: 'vertical' }} value={datos.actividad} maxLength={1000}
@@ -764,6 +803,313 @@ function TarjetaSolicitud({ s, hoy, retirar }) {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function CajaAlta({ alta, setAlta, profesores }) {
+  return (
+    <div style={{ marginBottom: 16, padding: '12px 14px', borderRadius: 10, border: `1.5px dashed ${COLOR}`, backgroundColor: FONDO }}>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 700, color: COLOR, cursor: 'pointer' }}>
+        <input type="checkbox" checked={alta.activa} onChange={e => setAlta(a => ({ ...a, activa: e.target.checked }))} />
+        Gestionas este recurso: darla de alta ya aceptada
+      </label>
+      {alta.activa && (
+        <div style={{ marginTop: 10 }}>
+          <select style={{ ...input, maxWidth: 420 }} value={alta.profesor_id} onChange={e => setAlta(a => ({ ...a, profesor_id: e.target.value }))}>
+            <option value="">A mi nombre</option>
+            {profesores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <Pista>No pasa por solicitud: entra directamente en el calendario y se avisa al profesor, a los responsables y al equipo directivo.</Pista>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Gestionar (responsables y equipo directivo) ──────────────────
+
+function Gestionar({ gest, recursos, perfil, hoy, post, leer, avisar, recargar }) {
+  const [sub, setSub] = useState('pendientes');
+  const [filtro, setFiltro] = useState('');
+  const mios = recursos.filter(r => perfil.misRecursos.includes(r.id));
+  const delFiltro = s => !filtro || s.recurso_id === filtro;
+  const pendientes = gest.filter(s => s.filas.some(f => f.estado === 'pendiente')).filter(delFiltro)
+    .sort((a, b) => a.creada_en.localeCompare(b.creada_en));
+  const proximas = gest.filter(s => s.filas.some(f => f.estado === 'aceptada' && f.fecha >= hoy)).filter(delFiltro)
+    .sort((a, b) => (a.filas.find(f => f.estado === 'aceptada' && f.fecha >= hoy)?.fecha || '')
+      .localeCompare(b.filas.find(f => f.estado === 'aceptada' && f.fecha >= hoy)?.fecha || ''));
+
+  const subs = [
+    { id: 'pendientes', label: '⏳ Pendientes', n: pendientes.length },
+    { id: 'proximas',   label: '📆 Próximas' },
+    { id: 'ahora',      label: '📍 Ahora en las aulas' },
+    { id: 'registro',   label: '📥 Registro' },
+  ];
+
+  return (
+    <div>
+      <div style={nota('#f0fdfa', '#99f6e4', '#134e4a')}>
+        {perfil.soyDirectivo
+          ? 'Como equipo directivo gestionas todos los recursos.'
+          : `Gestionas: ${mios.map(r => r.nombre).join(', ')}.`}
+        {' '}Para dar de alta una reserva directamente, hazlo desde «Reservar».
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+        {subs.map(t => (
+          <Chip key={t.id} activo={sub === t.id} onClick={() => setSub(t.id)}>
+            {t.label}{t.n > 0 && <span style={{ marginLeft: 6, backgroundColor: '#dc2626', color: 'white', borderRadius: 20, padding: '0 7px', fontSize: 11 }}>{t.n}</span>}
+          </Chip>
+        ))}
+      </div>
+
+      {(sub === 'pendientes' || sub === 'proximas') && mios.length > 1 && (
+        <select style={{ ...input, maxWidth: 360, marginBottom: 14 }} value={filtro} onChange={e => setFiltro(e.target.value)}>
+          <option value="">Todos mis recursos</option>
+          {mios.map(r => <option key={r.id} value={r.id}>{r.nombre}</option>)}
+        </select>
+      )}
+
+      {sub === 'pendientes' && (
+        pendientes.length === 0 ? <Vacio texto="No hay solicitudes pendientes." />
+          : pendientes.map(s => <TarjetaResolver key={s.serie_id} s={s} hoy={hoy} post={post} avisar={avisar} recargar={recargar} />)
+      )}
+
+      {sub === 'proximas' && (
+        proximas.length === 0 ? <Vacio texto="No hay reservas aceptadas próximas." />
+          : proximas.map(s => <TarjetaProxima key={s.serie_id} s={s} hoy={hoy} post={post} avisar={avisar} recargar={recargar} />)
+      )}
+
+      {sub === 'ahora' && <AhoraEnAulas leer={leer} avisar={avisar} />}
+      {sub === 'registro' && <Registro leer={leer} avisar={avisar} hoy={hoy} />}
+    </div>
+  );
+}
+
+function CabeceraGestion({ s }) {
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontWeight: 800, color: '#111', fontSize: 15 }}>{s.recurso}{s.aula_libre ? ` · ${s.aula_libre}` : ''}</div>
+        <div style={{ fontSize: 11.5, color: '#9ca3af' }}>Pedida el {new Date(s.creada_en).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+      </div>
+      <div style={{ fontSize: 13.5, color: '#111', marginTop: 4 }}>👤 <strong>{s.solicitante_nombre}</strong> <span style={{ color: '#6b7280', fontSize: 12.5 }}>· {s.solicitante_email}</span></div>
+      <div style={{ fontSize: 13, color: '#374151', marginTop: 4 }}>{s.actividad}</div>
+      {s.grupos?.length > 0 && <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 3 }}>Grupos: {s.grupos.join(', ')}</div>}
+      {s.recursos_uso && <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 3 }}>Usará: {s.recursos_uso}</div>}
+    </>
+  );
+}
+
+function TarjetaResolver({ s, hoy, post, avisar, recargar }) {
+  const pend = s.filas.filter(f => f.estado === 'pendiente');
+  const [marcadas, setMarcadas] = useState(() => pend.map(f => f.id));
+  const [motivo, setMotivo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const alternar = id => setMarcadas(m => m.includes(id) ? m.filter(x => x !== id) : [...m, id]);
+  const quitadas = pend.filter(f => !marcadas.includes(f.id));
+
+  async function resolver(decision) {
+    if (decision === 'denegar' && !motivo.trim()) return avisar('Para denegar hay que escribir el motivo.');
+    if (decision === 'aceptar' && !marcadas.length) return avisar('No has dejado ninguna hora marcada: si no aceptas nada, deniégala con el motivo.');
+    setEnviando(true);
+    try {
+      const r = await post('resolver', { serie_id: s.serie_id, decision, quitar: quitadas.map(f => f.id), motivo: motivo.trim() });
+      avisar(decision === 'denegar'
+        ? 'Solicitud denegada. Se ha avisado al profesor.'
+        : `Aceptadas ${r.aceptadas} horas${r.denegadas ? `, ${r.denegadas} quitadas` : ''}${r.conflictos ? ` (${r.conflictos} ya estaban reservadas por otro)` : ''}. Se ha avisado al profesor.`, 'ok');
+      await recargar();
+    } catch (e) {
+      avisar(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div style={{ ...tarjeta, borderLeft: '5px solid #fcd34d', padding: 16 }}>
+      <CabeceraGestion s={s} />
+      <div style={{ fontSize: 12.5, fontWeight: 600, color: '#4b5563', margin: '12px 0 6px' }}>
+        {pend.length === 1 ? 'Hora pedida:' : `${pend.length} horas pedidas. Desmarca las que quieras quitar:`}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 4, maxHeight: 260, overflowY: 'auto' }}>
+        {pend.map(f => (
+          <label key={f.id} style={{
+            display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, padding: '6px 9px', borderRadius: 8, cursor: 'pointer',
+            backgroundColor: marcadas.includes(f.id) ? FONDO : '#f9fafb',
+            border: `1.5px solid ${marcadas.includes(f.id) ? COLOR : '#e5e7eb'}`,
+            textDecoration: marcadas.includes(f.id) ? 'none' : 'line-through', color: f.fecha < hoy ? '#9ca3af' : '#111',
+          }}>
+            <input type="checkbox" checked={marcadas.includes(f.id)} onChange={() => alternar(f.id)} />
+            <span style={{ textTransform: 'capitalize' }}>{fmtFecha(f.fecha)}</span> · <strong>{f.hora}ª</strong>
+          </label>
+        ))}
+      </div>
+      <textarea style={{ ...input, minHeight: 52, fontSize: 13, resize: 'vertical', marginTop: 10 }} value={motivo} maxLength={1000}
+        placeholder={quitadas.length ? 'Motivo de los días quitados (opcional; obligatorio si deniegas)' : 'Motivo (obligatorio si deniegas)'}
+        onChange={e => setMotivo(e.target.value)} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+        <button disabled={enviando} onClick={() => resolver('aceptar')} style={{ ...boton, flex: 1, backgroundColor: VERDE, opacity: enviando ? 0.6 : 1 }}>
+          {enviando ? '⏳' : quitadas.length ? `✅ Aceptar ${marcadas.length} de ${pend.length}` : '✅ Aceptar'}
+        </button>
+        <button disabled={enviando} onClick={() => resolver('denegar')} style={{ ...boton, flex: 1, backgroundColor: ROJO, opacity: enviando ? 0.6 : 1 }}>
+          {enviando ? '⏳' : '❌ Denegar'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TarjetaProxima({ s, hoy, post, avisar, recargar }) {
+  const vivas = s.filas.filter(f => f.estado === 'aceptada' && f.fecha >= hoy);
+  const [editando, setEditando] = useState(null);   // { id, fecha, hora }
+  const [abierta, setAbierta] = useState(vivas.length <= 6);
+
+  async function hacer(accion, d, ok) {
+    try {
+      await post(accion, { serie_id: s.serie_id, ...d });
+      avisar(ok, 'ok');
+      setEditando(null);
+      await recargar();
+    } catch (e) {
+      avisar(e.message);
+    }
+  }
+
+  function anular(ids) {
+    const motivo = prompt(ids.length === 1 ? 'Motivo para anular esta hora:' : `Motivo para anular las ${ids.length} horas que quedan:`);
+    if (motivo == null) return;
+    if (!motivo.trim()) return avisar('Hay que escribir el motivo.');
+    hacer('anular', { ids, motivo: motivo.trim() }, 'Anulada. Se ha avisado al profesor.');
+  }
+
+  function editarActividad() {
+    const nueva = prompt('Actividad o proyecto:', s.actividad || '');
+    if (nueva == null || !nueva.trim() || nueva.trim() === s.actividad) return;
+    hacer('modificar', { id: vivas[0].id, actividad: nueva.trim() }, 'Actividad cambiada.');
+  }
+
+  return (
+    <div style={{ ...tarjeta, borderLeft: '5px solid #86efac', padding: 16 }}>
+      <CabeceraGestion s={s} />
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        {vivas.length > 6 && <button onClick={() => setAbierta(a => !a)} style={botonSec}>{abierta ? '▲ Ocultar' : `▼ Ver las ${vivas.length} horas`}</button>}
+        <button onClick={editarActividad} style={botonSec}>✏️ Cambiar actividad</button>
+        <button onClick={() => anular(vivas.map(f => f.id))} style={{ ...botonSec, color: ROJO }}>🚫 Anular todo lo que queda</button>
+      </div>
+      {abierta && (
+        <div style={{ marginTop: 10, display: 'grid', gap: 4 }}>
+          {vivas.map(f => (
+            <div key={f.id} style={{ fontSize: 12.5, padding: '6px 10px', borderRadius: 8, backgroundColor: '#f0fdf4' }}>
+              {editando?.id === f.id ? (
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input type="date" min={hoy} value={editando.fecha} onChange={e => setEditando(x => ({ ...x, fecha: e.target.value }))} style={{ ...input, width: 160, padding: '6px 8px', fontSize: 13 }} />
+                  <select value={editando.hora} onChange={e => setEditando(x => ({ ...x, hora: Number(e.target.value) }))} style={{ ...input, width: 90, padding: '6px 8px', fontSize: 13 }}>
+                    {HORAS.map(h => <option key={h} value={h}>{h}ª</option>)}
+                  </select>
+                  <button onClick={() => hacer('modificar', { id: f.id, fecha: editando.fecha, hora: editando.hora }, 'Cambiada. Se ha avisado al profesor.')} style={{ ...boton, padding: '6px 12px', fontSize: 12.5 }}>Guardar</button>
+                  <button onClick={() => setEditando(null)} style={{ ...botonSec, padding: '6px 10px' }}>Cancelar</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ width: 120, textTransform: 'capitalize', fontWeight: 600 }}>{fmtFecha(f.fecha)}</span>
+                  <span style={{ width: 30, fontWeight: 700 }}>{f.hora}ª</span>
+                  <span style={{ flex: 1, color: '#6b7280' }}>{TRAMOS[f.hora]}</span>
+                  <button onClick={() => setEditando({ id: f.id, fecha: f.fecha, hora: f.hora })} title="Cambiar día u hora" style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 14 }}>✏️</button>
+                  <button onClick={() => anular([f.id])} title="Anular esta hora" style={{ background: 'none', border: 'none', color: ROJO, cursor: 'pointer', fontSize: 15 }}>×</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AhoraEnAulas({ leer, avisar }) {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    leer('vista=ahora').then(setD).catch(e => avisar(e.message));
+  }, []);
+  if (!d) return <Vacio texto="⏳ Cargando…" />;
+  const porHora = HORAS.map(h => ({ h, filas: (d.reservas || []).filter(r => r.hora === h) }));
+  return (
+    <div style={tarjeta}>
+      <Sub2>Hoy, {fmtFechaLarga(d.fecha)}{d.hora ? ` · ahora es ${d.hora}ª hora` : ' · fuera del horario lectivo'}</Sub2>
+      {porHora.map(({ h, filas }) => (
+        <div key={h} style={{
+          display: 'flex', gap: 12, padding: '9px 10px', borderRadius: 10, marginBottom: 6,
+          backgroundColor: d.hora === h ? FONDO : 'white', border: `2px solid ${d.hora === h ? COLOR : '#f3f4f6'}`,
+        }}>
+          <div style={{ width: 70, flexShrink: 0 }}>
+            <div style={{ fontWeight: 800 }}>{h}ª</div>
+            <div style={{ fontSize: 11, color: '#9ca3af' }}>{TRAMOS[h]}</div>
+          </div>
+          <div style={{ flex: 1, fontSize: 13 }}>
+            {filas.length === 0 ? <span style={{ color: '#9ca3af' }}>Sin reservas</span> : filas.map(r => (
+              <div key={r.id} style={{ marginBottom: 3 }}>
+                <strong>{r.recurso}{r.aula_libre ? ` · ${r.aula_libre}` : ''}</strong> — {r.solicitante_nombre}
+                <span style={{ color: '#6b7280' }}> · {(r.grupos || []).join(', ')} · {r.actividad}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      <Pista>Solo salen las reservas aceptadas de los recursos que gestionas. Las clases fijas del horario no aparecen aquí.</Pista>
+    </div>
+  );
+}
+
+function Registro({ leer, avisar, hoy }) {
+  const [desde, setDesde] = useState(hoy.slice(0, 8) + '01');
+  const [hasta, setHasta] = useState(hoy);
+  const [filas, setFilas] = useState(null);
+
+  async function buscar() {
+    try {
+      const d = await leer(`vista=registro&desde=${desde}&hasta=${hasta}`);
+      setFilas(d?.filas || []);
+    } catch (e) {
+      avisar(e.message);
+    }
+  }
+
+  function descargar() {
+    const cab = ['Fecha', 'Hora', 'Recurso', 'Aula', 'Profesor', 'Correo', 'Actividad', 'Grupos', 'Recursos usados', 'Estado', 'Motivo'];
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+    const lineas = (filas || []).map(r => [
+      r.fecha, `${r.hora}ª`, r.recurso, r.aula_libre || '', r.solicitante_nombre, r.solicitante_email,
+      r.actividad, (r.grupos || []).join(', '), r.recursos_uso || '', ESTADOS[r.estado]?.label || r.estado, r.motivo || '',
+    ].map(esc).join(';'));
+    const csv = '﻿' + [cab.map(esc).join(';'), ...lineas].join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = `reservas_${desde}_${hasta}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  const cuenta = e => (filas || []).filter(r => r.estado === e).length;
+
+  return (
+    <div style={tarjeta}>
+      <Sub2>Registro de uso por fechas</Sub2>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <Campo label="Desde"><input type="date" style={{ ...input, width: 170 }} value={desde} onChange={e => { setDesde(e.target.value); setFilas(null); }} /></Campo>
+        <Campo label="Hasta"><input type="date" style={{ ...input, width: 170 }} value={hasta} onChange={e => { setHasta(e.target.value); setFilas(null); }} /></Campo>
+        <div style={{ marginBottom: 14 }}><button onClick={buscar} style={boton}>Buscar</button></div>
+      </div>
+      {filas && (
+        <div>
+          <div style={{ fontSize: 13, color: '#374151', marginBottom: 10 }}>
+            {filas.length} horas en total · ✅ {cuenta('aceptada')} aceptadas · ⏳ {cuenta('pendiente')} pendientes · ❌ {cuenta('denegada')} denegadas · ↩️ {cuenta('anulada')} anuladas
+          </div>
+          {filas.length > 0 && <button onClick={descargar} style={boton}>📥 Descargar CSV (Excel)</button>}
+        </div>
+      )}
+      <Pista>Una fila por hora reservada, con quién, para qué, con qué grupos y cómo terminó.</Pista>
     </div>
   );
 }

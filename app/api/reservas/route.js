@@ -379,6 +379,15 @@ export async function GET(request) {
       return Response.json({ ...perfil, filas: (data || []).map(r => ({ ...r, recurso: porId[r.recurso_id]?.nombre || r.recurso_id })) });
     }
 
+    // Para dar de alta una reserva a nombre de otro profesor
+    if (vista === 'profesores') {
+      if (!misRecursos.length) return Response.json({ error: 'Sin acceso' }, { status: 403 });
+      const filas = await todas(() => sb.from('profesores').select('id, nombre, apellidos, email').order('apellidos'));
+      return Response.json({
+        profesores: filas.map(f => ({ id: f.id, nombre: `${f.apellidos || ''}, ${f.nombre || ''}`.replace(/^, |, $/g, '').trim(), email: f.email || '' })),
+      });
+    }
+
     return Response.json({ error: 'Vista desconocida' }, { status: 400 });
   } catch (e) {
     return Response.json({ error: e.message }, { status: 500 });
@@ -495,12 +504,12 @@ export async function POST(request) {
       if (accion === 'solicitar') {
         const ids = (await idsResponsables(sb, recurso)).filter(id => id !== sesion.id);
         await avisar(sb, ids, '📅 Nueva solicitud de reserva',
-          `${nombreDe(yo)} pide ${nombreRecurso}: ${resumen}`, '/gestion/reservas');
+          `${nombreDe(yo)} pide ${nombreRecurso}: ${resumen}`, '/reservas?vista=gestion');
       } else {
         const ids = [titular.id, ...(await idsResponsables(sb, recurso)), ...(await idsDirectivos(sb))]
           .filter(id => id !== sesion.id);
         await avisar(sb, ids, '📅 Reserva dada de alta',
-          `${nombreRecurso} para ${nombreDe(titular)}: ${resumen}`, '/reservas');
+          `${nombreRecurso} para ${nombreDe(titular)}: ${resumen}`, '/reservas?vista=mias');
       }
       return Response.json({ ok: true, serie_id: serie, horas: filas.length });
     }
@@ -527,7 +536,7 @@ export async function POST(request) {
       if (error) throw new Error(error.message);
       if (vivas.some(f => f.estado === 'aceptada')) {
         const ids = (await idsResponsables(sb, recurso)).filter(id => id !== sesion.id);
-        await avisar(sb, ids, '📅 Reserva anulada', `${nombreDe(yo)} anula ${nombreRecurso}: ${resumenDias(vivas)}`, '/gestion/reservas');
+        await avisar(sb, ids, '📅 Reserva anulada', `${nombreDe(yo)} anula ${nombreRecurso}: ${resumenDias(vivas)}`, '/reservas?vista=gestion');
       }
       return Response.json({ ok: true });
     }
@@ -575,7 +584,7 @@ export async function POST(request) {
           ? `Aceptada en parte: ${nombreRecurso}, ${aceptadas} de ${pendientes.length} horas. ${motivoDenegar}`
           : `Aceptada: ${nombreRecurso}, ${resumenDias(aceptar)}`;
       if (base.profesor_id && base.profesor_id !== sesion.id) {
-        await avisar(sb, [base.profesor_id], '📅 Tu solicitud de reserva', cuerpo, '/reservas');
+        await avisar(sb, [base.profesor_id], '📅 Tu solicitud de reserva', cuerpo, '/reservas?vista=mias');
       }
       return Response.json({ ok: true, aceptadas, denegadas: idsDenegar.length, conflictos: conflictos.length });
     }
@@ -613,7 +622,7 @@ export async function POST(request) {
       const detalle = cambios.fecha ? `pasa al ${resumenDias([{ fecha, hora }])}` : 'cambian los datos de la actividad';
       const ids = [base.profesor_id, ...(await idsResponsables(sb, recurso)), ...(await idsDirectivos(sb))]
         .filter(id => id && id !== sesion.id);
-      await avisar(sb, ids, '📅 Reserva modificada', `${nombreRecurso} de ${base.solicitante_nombre}: ${detalle}`, '/reservas');
+      await avisar(sb, ids, '📅 Reserva modificada', `${nombreRecurso} de ${base.solicitante_nombre}: ${detalle}`, '/reservas?vista=mias');
       return Response.json({ ok: true });
     }
 
@@ -631,7 +640,7 @@ export async function POST(request) {
       const ids = [base.profesor_id, ...(await idsResponsables(sb, recurso)), ...(await idsDirectivos(sb))]
         .filter(id => id && id !== sesion.id);
       await avisar(sb, ids, '📅 Reserva anulada',
-        `${nombreRecurso} de ${base.solicitante_nombre}: ${resumenDias(vivas)}. ${motivo}`, '/reservas');
+        `${nombreRecurso} de ${base.solicitante_nombre}: ${resumenDias(vivas)}. ${motivo}`, '/reservas?vista=mias');
       return Response.json({ ok: true, anuladas: vivas.length });
     }
 
