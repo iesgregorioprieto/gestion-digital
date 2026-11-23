@@ -303,12 +303,21 @@ export async function GET(request) {
     };
 
     if (vista === 'recursos') {
+      // Nombre del responsable a partir de su correo (si aún no está registrado, el correo)
+      const correos = [...new Set(lista.map(r => (r.responsable_email || '').toLowerCase()).filter(Boolean))];
+      const { data: fichas } = correos.length
+        ? await sb.from('profesores').select('nombre, apellidos, email').in('email', correos)
+        : { data: [] };
+      const nombrePorCorreo = Object.fromEntries((fichas || []).map(f => [(f.email || '').toLowerCase(), nombreDe(f)]));
       return Response.json({
         ...perfil,
-        recursos: lista.map(r => ({
-          id: r.id, nombre: r.nombre, tipo: r.tipo, aula_horario: r.aula_horario,
-          responsable: r.responsable_email ? r.responsable_email : 'Equipo directivo',
-        })),
+        recursos: lista.map(r => {
+          const c = (r.responsable_email || '').toLowerCase();
+          return {
+            id: r.id, nombre: r.nombre, tipo: r.tipo, aula_horario: r.aula_horario,
+            responsable: c ? (nombrePorCorreo[c] || r.responsable_email) : 'Equipo directivo',
+          };
+        }),
       });
     }
 
