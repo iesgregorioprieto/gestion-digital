@@ -232,6 +232,18 @@ export default function PanelProfesor() {
       color: '#c2410c', bg: '#fff7ed', border: '#fdba74',
     },
     {
+      id: 'reservas',
+      emoji: '🏫',
+      titulo: 'Aulas Diversificadas y Materiales',
+      descripcion: 'Reserva aulas, salones, carros de Chromebooks y tablets o material de robótica',
+      href: '/reservas',
+      disponible: true,
+      // En prueba: de momento solo la ve el equipo directivo. Para abrirla
+      // a todo el claustro, cambiar a ['todos'].
+      roles: ['director', 'secretario', 'jefe_estudios'],
+      color: '#1d4ed8', bg: '#eff6ff', border: '#93c5fd',
+    },
+    {
       id: 'mantenimiento',
       emoji: '🔧',
       titulo: 'Incidencias de mantenimiento',
