@@ -129,6 +129,15 @@ export default function Ausencias() {
     if (!pideLicencia) avisadoLicencia.current = false;
   }, [pideLicencia]);
 
+  // Una Licencia por enfermedad es siempre de días completos (baja hasta
+  // el alta): no tiene sentido «algunas horas».
+  useEffect(() => {
+    if (subtipo === 'lic_enfermedad' && !diaCompleto) {
+      setDiaCompleto(true);
+      setHorario(h => Object.fromEntries(Object.entries(h).map(([k, v]) => [k, { ...v, incluida: true }])));
+    }
+  }, [subtipo]);
+
   function pasarALicencia() {
     setSubtipo('lic_enfermedad');
     setTipo(tipoDeMotivo('lic_enfermedad'));
@@ -1297,7 +1306,7 @@ export default function Ausencias() {
               )}
 
               {/* DÍA COMPLETO / ALGUNAS HORAS — solo para ausencias de un día */}
-              {gruposUnicos.length === 0 && (modoManual || Object.values(horario).some(h => h.precargado)) && (
+              {gruposUnicos.length === 0 && subtipo !== 'lic_enfermedad' && (modoManual || Object.values(horario).some(h => h.precargado)) && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                   {[
                     { id: true, label: '📅 Día completo' },

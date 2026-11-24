@@ -546,6 +546,7 @@ export async function POST(request) {
       if (esBaja) {
         fila.fecha_fin = null;
         fila.categoria = 'baja_sin_sustituto';
+        fila.horas = horasDeBaja(fila.horas);
       }
 
       // Dos ausencias el mismo día = dos guardias por hora. No se permite.
@@ -742,6 +743,10 @@ export async function POST(request) {
             cambios.fecha_fin = null;
             cambios.categoria = 'baja_sin_sustituto';
             pasaABaja = true;
+          }
+          // Una baja abierta lleva las tareas por grupo, nunca por hora.
+          if ((pasaABaja || bajaAbierta) && 'horas' in cambios) {
+            cambios.horas = horasDeBaja(cambios.horas);
           }
         }
       }
@@ -1265,6 +1270,51 @@ export async function POST(request) {
  * se prevé y si el interesado ve recomendable sustituir. Ellos deciden
  * qué se manda a Inspección y por dónde.
  */
+/**
+ * #254: una baja abierta lleva las tareas POR GRUPO, no por hora.
+ *
+ * Si el profesor la notifica poniendo un solo día, el formulario manda
+ * sus horas de ese día («1ª hora», «2ª hora»…). Abierta hasta el alta, el
+ * motor de guardias tomaría esas horas concretas como las únicas a cubrir
+ * TODOS los días, con los grupos del primer día. Se pasan a bloques por
+ * grupo («Ausencia larga»), como en las de varios días: así cada día se
+ * sacan sus clases del horario y a cada grupo le llega su tarea.
+ * Las horas de guardia se quitan: no llevan tarea.
+ */
+function horasDeBaja(horas) {
+  if (!Array.isArray(horas) || horas.length === 0) return horas ?? null;
+  if (horas.every(h => h?.hora === 'Ausencia larga')) return horas;
+  const bloques = new Map();
+  for (const h of horas) {
+    if (!h || h.tipo === 'guardia' || !h.grupo) continue;
+    const clave = `${h.grupo}|${h.materia || ''}`;
+    const previo = bloques.get(clave);
+    if (previo) {
+      // Mismo grupo a varias horas: se juntan las tareas sin repetirlas.
+      if (h.instrucciones && !(previo.instrucciones || '').includes(h.instrucciones)) {
+        previo.instrucciones = [previo.instrucciones, h.instrucciones].filter(Boolean).join('\n');
+      }
+      const arch = [...(previo.archivos || []), ...(h.archivos || [])];
+      previo.archivos = arch.filter((a, i) => arch.findIndex(b => b?.url === a?.url) === i);
+      continue;
+    }
+    bloques.set(clave, {
+      hora: 'Ausencia larga', tipo: 'clase',
+      grupo: h.grupo, materia: h.materia || null,
+      instrucciones: h.instrucciones || null,
+      archivos: Array.isArray(h.archivos) ? [...h.archivos] : [],
+      archivo_url: h.archivo_url || null,
+      archivo_nombre: h.archivo_nombre || null,
+    });
+  }
+  const lista = [...bloques.values()].map(b => ({
+    ...b,
+    archivo_url: b.archivos[0]?.url || b.archivo_url,
+    archivo_nombre: b.archivos[0]?.nombre || b.archivo_nombre,
+  }));
+  return lista.length > 0 ? lista : null;
+}
+
 /**
  * #254: marca la ficha como de baja, igual que «Registrar baja» en
  * Bajas y sustituciones, para que jefatura la vea allí y pueda asignar
