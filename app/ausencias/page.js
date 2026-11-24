@@ -1,13 +1,13 @@
 'use client';
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { HORAS_EXTRA } from '@/lib/horasExtra';
 import { adjuntosDe, enlaceDocumento, MAX_ADJUNTOS } from '@/lib/adjuntos';
-import { hoyLocal } from '@/lib/fechas';
+import { hoyLocal, sumarDias } from '@/lib/fechas';
 import { consulta } from '@/lib/consulta';
 import { cursoPorFecha, getConfigCurso, esDiaLectivo } from '@/lib/curso';
-import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe } from '@/lib/motivosAusencia';
+import { MOTIVOS_AUSENCIA, etiquetaMotivo, tipoDeMotivo, avisoDeMotivo, camposExtraDe, exigeLicencia, AVISO_VARIOS_DIAS } from '@/lib/motivosAusencia';
 import { problemaFechas } from '@/lib/validarFechas';
 const verde = '#1e6b2e';
 const verdeClaro = '#f0fdf4';
@@ -115,6 +115,26 @@ export default function Ausencias() {
   const [, setTipo] = useState('');
   const [subtipo, setSubtipo] = useState('');
   const [datosExtra, setDatosExtra] = useState({});
+  // Baja abierta (Licencia por enfermedad, hasta el alta) que se está
+  // editando: la fecha de fin que se ve es solo para dejar las tareas.
+  const [bajaAbierta, setBajaAbierta] = useState(false);
+  // #254: motivo de salud de un día puesto en varios días.
+  const pideLicencia = exigeLicencia(subtipo, fechaInicio, fechaFin);
+  const avisadoLicencia = useRef(false);
+  useEffect(() => {
+    if (pideLicencia && !avisadoLicencia.current) {
+      avisadoLicencia.current = true;
+      alert(`⚠️ ${AVISO_VARIOS_DIAS}`);
+    }
+    if (!pideLicencia) avisadoLicencia.current = false;
+  }, [pideLicencia]);
+
+  function pasarALicencia() {
+    setSubtipo('lic_enfermedad');
+    setTipo(tipoDeMotivo('lic_enfermedad'));
+    setDatosExtra({ fecha_inicio_baja: fechaInicio });
+    setFormacionId(''); setComisionId('');
+  }
   // Formación: solo con solicitud autorizada en el módulo de Formación
   const [formacionesAut, setFormacionesAut] = useState([]);
   const [formacionId, setFormacionId] = useState('');
@@ -480,6 +500,7 @@ export default function Ausencias() {
     const malFechas = problemaFechas(fechaInicio, fechaFin);
     if (malFechas) { mostrarMensaje(`No se puede crear esta ausencia. ${malFechas}`, 'error'); return; }
     if (!subtipo) { mostrarMensaje('Selecciona el motivo de la ausencia.', 'error'); return; }
+    if (exigeLicencia(subtipo, fechaInicio, fechaFin)) { mostrarMensaje(AVISO_VARIOS_DIAS, 'error'); return; }
     if (subtipo === 'otros' && !motivo.trim()) { mostrarMensaje('Especifica el motivo en el campo de observaciones.', 'error'); return; }
     if (formacionBloqueada && !formacionId) {
       mostrarMensaje('Para una ausencia por formación, elige la formación autorizada. Si aún no la tienes, pídela en el módulo de Formación.', 'error');
@@ -623,6 +644,7 @@ export default function Ausencias() {
       'ok'
     );
     setEditandoId(null);
+    setBajaAbierta(false);
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setHorario({}); setModoManual(false); setDiaCompleto(true);
     setFormacionId(''); setComisionId('');
     setGruposUnicos([]); setTareasBloque({});
@@ -637,7 +659,15 @@ export default function Ausencias() {
     // como incluidas, sea cual fuese el modo con el que se enviaron.
     setDiaCompleto(true);
     setFechaInicio(a.fecha_inicio || '');
-    setFechaFin(a.fecha_fin || a.fecha_inicio || '');
+    // Baja abierta (sin fecha de fin): se muestra como de varios días para
+    // que salgan las tareas por grupo; el servidor la mantiene abierta.
+    const abierta = !a.fecha_fin && a.categoria === 'baja_sin_sustituto';
+    setBajaAbierta(abierta);
+    const hoyStr = hoyLocal();
+    const finVista = abierta
+      ? (hoyStr > a.fecha_inicio ? hoyStr : sumarDias(a.fecha_inicio, 1))
+      : (a.fecha_fin || a.fecha_inicio || '');
+    setFechaFin(finVista);
     setMotivo(observacionesDe(a.motivo, a.subtipo));
     setDatosExtra(a.datos_extra || {});
     setTipo(a.tipo || '');
@@ -695,6 +725,7 @@ export default function Ausencias() {
 
   function cancelarEdicion() {
     setEditandoId(null);
+    setBajaAbierta(false);
     setFechaInicio(''); setFechaFin(''); setMotivo(''); setTipo(''); setSubtipo(''); setDatosExtra({}); setFormacionId(''); setComisionId('');
     setHorario({}); setModoManual(false); setGruposUnicos([]); setTareasBloque({});
     setVista('historial');
@@ -940,7 +971,7 @@ export default function Ausencias() {
               </div>
               <div>
                 <label style={{ fontSize: 13, fontWeight: 700, color: azul, display: 'block', marginBottom: 5 }}>📅 Fecha fin *</label>
-                <input type="date" value={fechaFin} min={fechaInicio} onChange={async e => {
+                <input type="date" value={fechaFin} min={fechaInicio} disabled={bajaAbierta} onChange={async e => {
                 const nuevaFechaFin = e.target.value;
                 setFechaFin(nuevaFechaFin);
                 setHorario({});
@@ -988,6 +1019,21 @@ export default function Ausencias() {
                   🗓️ <strong>Día de libre disposición:</strong> no se registra aquí. Se solicita en el módulo
                   <strong> DLD</strong> y lo autoriza el director. Cuando te lo conceda, aparecerá solo en tus
                   ausencias: entra entonces en ella y marca las actividades que deben hacer tus alumnos.
+                </div>
+              )}
+              {pideLicencia && (
+                <div style={{ marginTop: 8, padding: '12px 14px', borderRadius: 8, backgroundColor: '#fef2f2', border: '2px solid #fca5a5', color: '#991b1b', fontSize: 13, lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 800, marginBottom: 4 }}>⛔ Ausencia de más de 1 día</div>
+                  {AVISO_VARIOS_DIAS} Así queda registrada como baja y dirección puede valorar la sustitución.
+                  <button type="button" onClick={pasarALicencia} style={{ display: 'block', marginTop: 9, padding: '8px 13px', borderRadius: 7, border: 'none', backgroundColor: '#991b1b', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    🏥 Cambiar a Licencia por enfermedad
+                  </button>
+                  <div style={{ marginTop: 6, fontSize: 12 }}>Si en realidad es un solo día, corrige la fecha de fin.</div>
+                </div>
+              )}
+              {bajaAbierta && (
+                <div style={{ marginTop: 8, padding: '9px 12px', borderRadius: 8, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', fontSize: 12.5, color: '#1e40af', lineHeight: 1.45 }}>
+                  🏥 Estás de baja hasta tu alta: la fecha de fin no se cambia desde aquí. Puedes añadir o cambiar las tareas de tus grupos.
                 </div>
               )}
               {subtipo && avisoDeMotivo(subtipo) && (
@@ -1488,7 +1534,9 @@ export default function Ausencias() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 15, color: azul }}>
-                        {a.fecha_inicio === a.fecha_fin
+                        {!a.fecha_fin
+                          ? `Desde el ${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })} · hasta el alta`
+                          : a.fecha_inicio === a.fecha_fin
                           ? new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })
                           : `${new Date(a.fecha_inicio + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} — ${new Date(a.fecha_fin + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`}
                       </div>

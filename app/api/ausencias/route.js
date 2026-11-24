@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { nombresEnHorario } from '@/lib/horarioDeProfesor';
 import { verificarSesion, esDirectivo, COOKIE } from '@/lib/sesion';
-import { computaComoFalta } from '@/lib/motivosAusencia';
+import { computaComoFalta, exigeLicencia, AVISO_VARIOS_DIAS } from '@/lib/motivosAusencia';
 import { AVISOS_BAJAS, enviarAviso } from '@/lib/notificaciones';
 import { claveServidor } from '@/lib/claveServidor';
 import { getCursoActual } from '@/lib/curso';
@@ -532,6 +532,22 @@ export async function POST(request) {
         return Response.json({ error: texto, message: texto }, { status: 400 });
       }
 
+      // #254: un motivo de salud de un día puesto en varios días es una
+      // baja. Se comprueba también aquí, no solo en el navegador.
+      if (exigeLicencia(fila.subtipo, fila.fecha_inicio, fila.fecha_fin)) {
+        return Response.json({ error: AVISO_VARIOS_DIAS, message: AVISO_VARIOS_DIAS }, { status: 400 });
+      }
+
+      // #254: la Licencia por enfermedad queda grabada como baja, igual que
+      // la que abre jefatura en Bajas y sustituciones: abierta hasta el
+      // alta (o hasta que llegue sustituto). La duración probable se queda
+      // solo como dato para dirección, en datos_extra.
+      const esBaja = fila.subtipo === 'lic_enfermedad';
+      if (esBaja) {
+        fila.fecha_fin = null;
+        fila.categoria = 'baja_sin_sustituto';
+      }
+
       // Dos ausencias el mismo día = dos guardias por hora. No se permite.
       // fecha_fin null = baja abierta (igual que la lee el motor); vacía = un solo día.
       const finNueva = fila.fecha_fin === '' ? fila.fecha_inicio : (fila.fecha_fin ?? null);
@@ -629,6 +645,9 @@ export async function POST(request) {
       const { data, error } = await supa().from('ausencias').insert([fila]).select('id');
       if (error) return Response.json({ error: error.message }, { status: 500 });
 
+      // #254: la ficha queda de baja y sale en Bajas y sustituciones.
+      if (esBaja) await marcarDeBaja(dueño, fila);
+
       // Dejar enlazada la solicitud de formación con su (primera) ausencia
       if (solicitudFormacion && !solicitudFormacion.ausencia_id && (data || [])[0]?.id) {
         await supa().from('solicitudes_formacion')
@@ -702,6 +721,31 @@ export async function POST(request) {
         }
       }
 
+      // #254 al editar: la misma regla, y una baja abierta se queda
+      // abierta. El formulario del profesor siempre manda una fecha de fin;
+      // sin esto, abrir la baja para añadir una tarea la cerraría.
+      let pasaABaja = false;
+      {
+        const { data: act254 } = await supa().from('ausencias')
+          .select('subtipo, fecha_inicio, fecha_fin, categoria').eq('id', id);
+        const a = (act254 || [])[0];
+        if (a) {
+          const bajaAbierta = a.categoria === 'baja_sin_sustituto' && !a.fecha_fin;
+          if (bajaAbierta && !esDirectivo(sesion)) delete cambios.fecha_fin;
+          const sub = cambios.subtipo ?? a.subtipo;
+          const ini = cambios.fecha_inicio ?? a.fecha_inicio;
+          const fin = 'fecha_fin' in cambios ? cambios.fecha_fin : a.fecha_fin;
+          if (exigeLicencia(sub, ini, fin)) {
+            return Response.json({ error: AVISO_VARIOS_DIAS, message: AVISO_VARIOS_DIAS }, { status: 400 });
+          }
+          if (cambios.subtipo === 'lic_enfermedad' && a.subtipo !== 'lic_enfermedad') {
+            cambios.fecha_fin = null;
+            cambios.categoria = 'baja_sin_sustituto';
+            pasaABaja = true;
+          }
+        }
+      }
+
       // Al justificar, el plazo de 3 días desde el día de la falta se
       // vuelve a comprobar aquí. El navegador ya lo calcula para avisar
       // al profesor, pero es solo una ayuda visual: si se llamara a esta
@@ -763,6 +807,17 @@ export async function POST(request) {
       if (error) return Response.json({ error: error.message }, { status: 500 });
       if (!data || data.length === 0) {
         return Response.json({ error: 'no_encontrada_o_ajena' }, { status: 403 });
+      }
+
+      // #254: ha pasado a Licencia por enfermedad al editarla.
+      if (pasaABaja) {
+        const { data: tras } = await supa().from('ausencias')
+          .select('*').eq('id', id);
+        const filaBaja = (tras || [])[0];
+        if (filaBaja) {
+          await marcarDeBaja(filaBaja.profesor_id, filaBaja);
+          await avisarBaja(filaBaja).catch(err => console.error('aviso baja:', err?.message));
+        }
       }
 
       // Si ha cambiado cuándo falta, el reparto de hoy ya no vale. Justificar
@@ -1210,6 +1265,28 @@ export async function POST(request) {
  * se prevé y si el interesado ve recomendable sustituir. Ellos deciden
  * qué se manda a Inspección y por dónde.
  */
+/**
+ * #254: marca la ficha como de baja, igual que «Registrar baja» en
+ * Bajas y sustituciones, para que jefatura la vea allí y pueda asignar
+ * sustituto. Si ya estaba de baja no se toca (no se pisa la fecha).
+ * Fecha de baja: la del parte, si la ha puesto; si no, la de la ausencia.
+ */
+async function marcarDeBaja(profesorId, fila) {
+  try {
+    const { data } = await supa().from('profesores').select('en_baja').eq('id', profesorId);
+    const p = (data || [])[0];
+    if (!p || p.en_baja) return;
+    const delParte = fila?.datos_extra?.fecha_inicio_baja;
+    const fecha = /^\d{4}-\d{2}-\d{2}$/.test(delParte || '') ? delParte : fila.fecha_inicio;
+    await supa().from('profesores')
+      .update({ en_baja: true, tipo_baja: 'temporal', fecha_baja: fecha })
+      .eq('id', profesorId);
+  } catch (e) {
+    // Que esto falle no puede deshacer la ausencia ya guardada.
+    console.error('marcar de baja:', e?.message);
+  }
+}
+
 async function avisarBaja(fila) {
   const cliente = supa();
 
