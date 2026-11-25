@@ -686,7 +686,28 @@ export default function Ausencias() {
     setTareasBloque({});
 
     // Reconstruir el horario desde las horas guardadas
-    const horas = Array.isArray(a.horas) ? a.horas : [];
+    let horas = Array.isArray(a.horas) ? a.horas : [];
+    // Ausencias de actividad creadas antes del 25/11/2026: solo guardaban
+    // el número de las horas, sin grupo. Se monta su horario real desde
+    // 'dias', que el servidor calculó contra el horario (fallo de Pilar
+    // Sánchez: salían horas «Complementaria» sin sitio para la tarea).
+    if (a.subtipo === 'act_complementarias' && Array.isArray(a.dias) && !horas.some(h => h?.grupo)) {
+      const unDia = !a.fecha_fin || a.fecha_fin === a.fecha_inicio;
+      if (unDia) {
+        horas = (a.dias[0]?.horas || []).filter(h => /^\d$/.test(String(h.hora))).map(h => ({
+          hora: `${h.hora}ª hora`, tipo: h.tipo, grupo: h.grupo || '', materia: h.materia || '', aula: h.aula || '',
+        }));
+      } else {
+        const vistos = new Set();
+        horas = [];
+        a.dias.forEach(d => (d.horas || []).forEach(h => {
+          const k = `${h.grupo}|${h.materia || ''}`;
+          if (h.tipo !== 'clase' || !h.grupo || vistos.has(k)) return;
+          vistos.add(k);
+          horas.push({ hora: 'Ausencia larga', tipo: 'clase', grupo: h.grupo, materia: h.materia || '' });
+        }));
+      }
+    }
     const esLarga = horas.length > 0 && horas[0].hora === 'Ausencia larga';
 
     if (esLarga) {

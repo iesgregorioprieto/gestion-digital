@@ -722,6 +722,17 @@ export async function POST(request) {
         }
       }
 
+      // El formulario manda datos_extra = null en los motivos sin campos
+      // propios (DLD, actividad). Eso borraba el enlace con su actividad o
+      // su DLD: al anularlos ya no se encontraba la ausencia. Se conserva.
+      if ('datos_extra' in cambios) {
+        const { data: exAnt } = await supa().from('ausencias').select('datos_extra').eq('id', id);
+        const ant = (exAnt || [])[0]?.datos_extra || {};
+        const enlace = {};
+        for (const k of ['actividad_id', 'horas_actividad', 'dld_id']) if (ant[k] !== undefined) enlace[k] = ant[k];
+        if (Object.keys(enlace).length) cambios.datos_extra = { ...(cambios.datos_extra || {}), ...enlace };
+      }
+
       // #254 al editar: la misma regla, y una baja abierta se queda
       // abierta. El formulario del profesor siempre manda una fecha de fin;
       // sin esto, abrir la baja para añadir una tarea la cerraría.
