@@ -20,6 +20,8 @@
  *     para el titular.
  *   - El sustituto ocupa las guardias de su titular de baja y hereda lo
  *     que llevaba en cada franja.
+ *   - Las hechas a horas que no son de guardia suya se reparten a partes
+ *     iguales entre sus franjas (26/11/2026): pueden salir decimales.
  */
 import { createClient } from '@supabase/supabase-js';
 import { verificarSesion, COOKIE } from '@/lib/sesion';
@@ -27,6 +29,7 @@ import { claveServidor } from '@/lib/claveServidor';
 import { hoyLocal } from '@/lib/fechas';
 import {
   construirCuadrante, normHora, diaSemanaEs, nombreDe, pesoFranja, TRANSICION_FRANJA,
+  repartirFueraDeFranja,
 } from '@/lib/asignacionGuardias';
 import { esSectorRecreo, esSectorFP, normSector } from '@/lib/sectores';
 
@@ -139,6 +142,20 @@ export async function GET(request) {
       }
     }
 
+    // Las guardias hechas a horas que no son de guardia suya se reparten
+    // entre sus franjas, igual que en el motor (26/11/2026). Así lo que
+    // suma la planilla cuadra con el total del contador.
+    const franjasDe = new Map();
+    for (const [clave, gente] of Object.entries(porFranja)) {
+      for (const x of gente) {
+        if (!x.id) continue;
+        const id = String(x.id);
+        if (!franjasDe.has(id)) franjasDe.set(id, new Set());
+        franjasDe.get(id).add(clave);
+      }
+    }
+    const fuera = repartirFueraDeFranja(enFranja, franjasDe);
+
     const yo = sesion.id;
     const franjas = [];
     for (const [clave, gente] of Object.entries(porFranja)) {
@@ -168,6 +185,8 @@ export async function GET(request) {
 
     return Response.json({
       franjas,
+      // Guardias que hizo fuera de sus franjas, ya repartidas entre ellas
+      fueraRepartidas: fuera[String(sesion.id)] || 0,
       transicion: { peso: pesoFranja(hoyLocal()), pura: TRANSICION_FRANJA.pura },
     });
   } catch (e) {

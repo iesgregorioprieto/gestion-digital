@@ -24,6 +24,7 @@ import {
   asignacionesDeHora, normHora, ocupadosEnClase, nombreDe,
   indiceProfesores, clavesAmbiguas, franja, ahoraEnCentro, fichajesDeRecreo,
   pesoFranja, claveFranja, FRANJAS, actividadOcupaHora,
+  repartirFueraDeFranja, franjasDelCuadrante,
 } from '@/lib/asignacionGuardias';
 import { normSector, esSectorRecreo, esSectorFP } from '@/lib/sectores';
 import { normGrupo, separarGrupoAula } from '@/lib/grupos';
@@ -377,6 +378,11 @@ export async function POST(request) {
     if (sinResolver.length) {
       console.warn('preasignar: nombres del cuadrante sin ficha →', sinResolver.join(' | '));
     }
+
+    // Las guardias que cada uno hizo a horas que no son de guardia suya
+    // se reparten entre sus franjas (26/11/2026). Mismo id que usa el
+    // motor para leer la cuenta (p.id).
+    repartirFueraDeFranja(apoyosPorFranja, franjasDelCuadrante(cuadrante));
 
     // Dos compañeros con la misma abreviatura ("Gar. M, JL" puede ser
     // García Moreno o García Muñoz): a esos no se les asigna nada, y hay

@@ -25,6 +25,12 @@ function fechaLarga(f) {
   return new Date(f + 'T12:00:00').toLocaleDateString('es-ES', { day: 'numeric', month: 'long' });
 }
 
+// Las guardias hechas fuera de sus franjas se reparten entre ellas y
+// pueden dar decimales: 2,3 en vez de 2.333…
+function numero(n) {
+  return Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toString().replace('.', ',');
+}
+
 function Persona({ p, max }) {
   const ancho = max > 0 ? Math.max(4, Math.round((p.fichadas / max) * 100)) : 4;
   return (
@@ -38,8 +44,8 @@ function Persona({ p, max }) {
         <div style={{ width: `${ancho}%`, height: '100%', borderRadius: 4,
           backgroundColor: p.yo ? '#2563eb' : '#94a3b8' }} />
       </div>
-      <div style={{ width: 22, textAlign: 'right', fontSize: 13, fontWeight: 800,
-        color: p.yo ? azul : '#334155', fontVariantNumeric: 'tabular-nums' }}>{p.fichadas}</div>
+      <div style={{ width: 30, textAlign: 'right', fontSize: 13, fontWeight: 800,
+        color: p.yo ? azul : '#334155', fontVariantNumeric: 'tabular-nums' }}>{numero(p.fichadas)}</div>
     </div>
   );
 }
@@ -83,6 +89,15 @@ export default function MisFranjasGuardia() {
               </div>
             )}
           </div>
+
+          {datos?.fueraRepartidas > 0 && (
+            <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5, marginBottom: 10, padding: '6px 9px',
+              borderRadius: 7, backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}>
+              ➕ Has hecho <strong>{numero(datos.fueraRepartidas)} {datos.fueraRepartidas === 1 ? 'guardia' : 'guardias'} a
+              horas que no son de guardia tuya</strong>. Te cuentan repartidas a partes iguales entre tus franjas,
+              para que te toque salir un poco menos en todas. Por eso puede haber decimales.
+            </div>
+          )}
 
           {error && <div style={{ fontSize: 12.5, color: '#b91c1c' }}>No se ha podido cargar. Prueba otra vez más tarde.</div>}
           {!datos && !error && <div style={{ fontSize: 12.5, color: '#64748b' }}>Cargando…</div>}
